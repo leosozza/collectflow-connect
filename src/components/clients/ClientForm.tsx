@@ -1,0 +1,162 @@
+import { useState } from "react";
+import { ClientFormData } from "@/services/clientService";
+import { formatCPF } from "@/lib/formatters";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface ClientFormProps {
+  defaultValues?: Partial<ClientFormData>;
+  onSubmit: (data: ClientFormData) => void;
+  submitting: boolean;
+}
+
+const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) => {
+  const [credor, setCredor] = useState(defaultValues?.credor || "MAXFAMA");
+  const [nomeCompleto, setNomeCompleto] = useState(defaultValues?.nome_completo || "");
+  const [cpf, setCpf] = useState(defaultValues?.cpf || "");
+  const [numeroParcela, setNumeroParcela] = useState(
+    defaultValues?.numero_parcela?.toString() || "1"
+  );
+  const [valorParcela, setValorParcela] = useState(
+    defaultValues?.valor_parcela?.toString() || ""
+  );
+  const [valorPago, setValorPago] = useState(
+    defaultValues?.valor_pago?.toString() || "0"
+  );
+  const [dataVencimento, setDataVencimento] = useState(
+    defaultValues?.data_vencimento || ""
+  );
+  const [status, setStatus] = useState<"pendente" | "pago" | "quebrado">(
+    defaultValues?.status || "pendente"
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      credor,
+      nome_completo: nomeCompleto.trim(),
+      cpf: cpf.trim(),
+      numero_parcela: parseInt(numeroParcela) || 1,
+      valor_parcela: parseFloat(valorParcela) || 0,
+      valor_pago: parseFloat(valorPago) || 0,
+      data_vencimento: dataVencimento,
+      status,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2 space-y-2">
+          <Label>Nome Completo</Label>
+          <Input
+            value={nomeCompleto}
+            onChange={(e) => setNomeCompleto(e.target.value)}
+            placeholder="Nome do cliente"
+            required
+            maxLength={200}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>CPF</Label>
+          <Input
+            value={cpf}
+            onChange={(e) => setCpf(formatCPF(e.target.value))}
+            placeholder="000.000.000-00"
+            maxLength={14}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Credor</Label>
+          <Select value={credor} onValueChange={setCredor}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MAXFAMA">MAXFAMA</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Nº da Parcela</Label>
+          <Input
+            type="number"
+            min={1}
+            value={numeroParcela}
+            onChange={(e) => setNumeroParcela(e.target.value)}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Data de Vencimento</Label>
+          <Input
+            type="date"
+            value={dataVencimento}
+            onChange={(e) => setDataVencimento(e.target.value)}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Valor da Parcela (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={valorParcela}
+            onChange={(e) => setValorParcela(e.target.value)}
+            placeholder="0,00"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Valor Pago (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={valorPago}
+            onChange={(e) => setValorPago(e.target.value)}
+            placeholder="0,00"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <Select value={status} onValueChange={(v) => setStatus(v as any)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="pago">Pago</SelectItem>
+              <SelectItem value="quebrado">Quebrado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Salvando..." : defaultValues ? "Atualizar" : "Cadastrar"}
+        </Button>
+      </div>
+    </form>
+  );
+};
+
+export default ClientForm;
