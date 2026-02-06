@@ -116,3 +116,30 @@ export const markAsPaid = async (client: Client, valorPago: number): Promise<voi
     status: "pendente",
   });
 };
+
+export const bulkCreateClients = async (
+  clients: Array<{
+    credor: string;
+    nome_completo: string;
+    cpf: string;
+    numero_parcela: number;
+    valor_parcela: number;
+    valor_pago: number;
+    data_vencimento: string;
+    status: "pendente" | "pago" | "quebrado";
+  }>,
+  operatorId: string
+): Promise<void> => {
+  const records = clients.map((c) => ({
+    ...c,
+    operator_id: operatorId,
+  }));
+
+  // Insert in batches of 100
+  const batchSize = 100;
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize);
+    const { error } = await supabase.from("clients").insert(batch);
+    if (error) throw error;
+  }
+};

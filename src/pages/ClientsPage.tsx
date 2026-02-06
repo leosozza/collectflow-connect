@@ -7,15 +7,18 @@ import {
   updateClient,
   deleteClient,
   markAsPaid,
+  bulkCreateClients,
   Client,
   ClientFormData,
 } from "@/services/clientService";
+import type { ImportedRow } from "@/services/importService";
 import ClientTable from "@/components/clients/ClientTable";
 import ClientForm from "@/components/clients/ClientForm";
 import ClientFilters from "@/components/clients/ClientFilters";
 import PaymentDialog from "@/components/clients/PaymentDialog";
+import ImportDialog from "@/components/clients/ImportDialog";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -36,6 +39,7 @@ const ClientsPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
@@ -84,6 +88,16 @@ const ClientsPage = () => {
     onError: () => toast.error("Erro ao registrar pagamento"),
   });
 
+  const importMutation = useMutation({
+    mutationFn: (rows: ImportedRow[]) => bulkCreateClients(rows, profile!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Clientes importados com sucesso!");
+      setImportOpen(false);
+    },
+    onError: () => toast.error("Erro ao importar clientes"),
+  });
+
   const handleSubmit = (data: ClientFormData) => {
     if (editingClient) {
       updateMutation.mutate({ id: editingClient.id, data });
@@ -109,10 +123,16 @@ const ClientsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground text-sm">Gerencie as parcelas e clientes</p>
         </div>
-        <Button onClick={() => setFormOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Novo Cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
+            <FileSpreadsheet className="w-4 h-4" />
+            Importar
+          </Button>
+          <Button onClick={() => setFormOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Novo Cliente
+          </Button>
+        </div>
       </div>
 
       <ClientFilters filters={filters} onChange={setFilters} />
@@ -147,6 +167,13 @@ const ClientsPage = () => {
           }
         }}
         submitting={paymentMutation.isPending}
+      />
+
+      <ImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onConfirm={(rows) => importMutation.mutate(rows)}
+        submitting={importMutation.isPending}
       />
     </div>
   );
