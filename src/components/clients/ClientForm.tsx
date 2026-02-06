@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ClientFormData } from "@/services/clientService";
 import { formatCPF } from "@/lib/formatters";
+import { clientSchema } from "@/lib/validations";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +42,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
+    const formData = {
       credor,
       nome_completo: nomeCompleto.trim(),
       cpf: cpf.trim(),
@@ -49,7 +51,16 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       valor_pago: parseFloat(valorPago) || 0,
       data_vencimento: dataVencimento,
       status,
-    });
+    };
+
+    const result = clientSchema.safeParse(formData);
+    if (!result.success) {
+      const firstError = result.error.issues[0]?.message || "Dados inválidos";
+      toast.error(firstError);
+      return;
+    }
+
+    onSubmit(formData);
   };
 
   return (
