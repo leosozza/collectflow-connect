@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Zap, Mail, Lock, User } from "lucide-react";
+import { Mail, Lock, User } from "lucide-react";
 import { z } from "zod";
+import logoCc from "@/assets/logo-cc.png";
 
 const loginSchema = z.object({
   email: z.string().trim().email("E-mail inválido").max(255),
@@ -75,8 +76,8 @@ const AuthPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-secondary p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-lg gradient-orange flex items-center justify-center">
-            <Zap className="w-6 h-6 text-primary-foreground" />
+          <div className="w-10 h-10 rounded-lg gradient-orange flex items-center justify-center overflow-hidden">
+            <img src={logoCc} alt="Connect Control" className="w-6 h-6 object-contain brightness-0 invert" />
           </div>
           <h1 className="text-2xl font-bold text-secondary-foreground">Connect Control</h1>
         </div>

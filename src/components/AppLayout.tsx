@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import logoCc from "@/assets/logo-cc.png";
 import { useAuth } from "@/hooks/useAuth";
 import { 
   LayoutDashboard, 
@@ -59,8 +60,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>
         <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded-lg gradient-orange flex items-center justify-center">
-            <Zap className="w-5 h-5 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg gradient-orange flex items-center justify-center overflow-hidden">
+            <img src={logoCc} alt="Connect Control" className="w-5 h-5 object-contain brightness-0 invert" />
           </div>
           <span className="text-lg font-bold text-sidebar-foreground">Connect Control</span>
         </div>
