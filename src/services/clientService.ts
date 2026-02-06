@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { addMonths } from "date-fns";
+import { validateClientData, validateImportRows } from "@/lib/validations";
 
 export interface Client {
   id: string;
@@ -58,12 +59,14 @@ export const createClient = async (
   data: ClientFormData,
   operatorId: string
 ): Promise<Client> => {
+  const validated = validateClientData(data);
+
   const { data: result, error } = await supabase
     .from("clients")
     .insert({
-      ...data,
+      ...validated,
       operator_id: operatorId,
-    })
+    } as any)
     .select()
     .single();
 
@@ -75,9 +78,15 @@ export const updateClient = async (
   id: string,
   data: Partial<ClientFormData>
 ): Promise<Client> => {
+  // Validate the partial data against the schema (only validate provided fields)
+  const { z } = await import("zod");
+  const { clientSchema } = await import("@/lib/validations");
+  const partialSchema = clientSchema.partial();
+  const validated = partialSchema.parse(data);
+
   const { data: result, error } = await supabase
     .from("clients")
-    .update(data)
+    .update(validated)
     .eq("id", id)
     .select()
     .single();
@@ -130,7 +139,15 @@ export const bulkCreateClients = async (
   }>,
   operatorId: string
 ): Promise<void> => {
-  const records = clients.map((c) => ({
+  // Validate all rows before inserting
+  const { valid, errors } = validateImportRows(clients);
+
+  if (errors.length > 0) {
+    const firstErrors = errors.slice(0, 5).map((e) => `Linha ${e.index}: ${e.message}`).join("\n");
+    throw new Error(`Dados inválidos encontrados:\n${firstErrors}${errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : ""}`);
+  }
+
+  const records = valid.map((c) => ({
     ...c,
     operator_id: operatorId,
   }));
@@ -139,7 +156,7 @@ export const bulkCreateClients = async (
   const batchSize = 100;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    const { error } = await supabase.from("clients").insert(batch);
+    const { error } = await supabase.from("clients").insert(batch as any);
     if (error) throw error;
   }
 };
