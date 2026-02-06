@@ -9,7 +9,8 @@ import {
   X, 
   Zap,
   Settings,
-  UserCog
+  UserCog,
+  Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -27,6 +28,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+    { label: "Carteira", icon: Wallet, path: "/carteira" },
     { label: "Clientes", icon: Users, path: "/clientes" },
     ...(isAdmin ? [
       { label: "Usuários", icon: UserCog, path: "/usuarios" },

@@ -9,6 +9,7 @@ import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import ClientsPage from "./pages/ClientsPage";
+import CarteiraPage from "./pages/CarteiraPage";
 import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +30,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Index />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/carteira"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CarteiraPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
