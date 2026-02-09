@@ -1,90 +1,130 @@
 
 
-# Plano de Implementacao - Connect Control
+## Integração CobCloud API v3 - Sincronização Bidirecional
 
-## Problema 1: Erro ao cadastrar cliente
+### Visão Geral
 
-**Causa raiz identificada:** Os logs do banco mostram o erro `infinite recursion detected in policy for relation "profiles"`. As politicas RLS da tabela `profiles` fazem consultas na propria tabela `profiles` para verificar se o usuario e admin, criando um loop infinito.
+Integrar o sistema com a API CobCloud v3 (`api-v3.cob.cloud`) para permitir sincronização bidirecional de devedores, títulos, pagamentos e devoluções.
 
-**Solucao:** Reescrever as politicas RLS para usar a funcao `has_role()` que ja existe no banco e opera com `SECURITY DEFINER` (ignora RLS, quebrando o loop).
+A API CobCloud usa autenticação via **duas API Keys** enviadas como headers:
+- `token_assessoria` - identifica a assessoria
+- `token_client` - identifica o credor/cliente
 
-### Alteracoes no banco de dados (migracao SQL):
-- Remover as politicas atuais de `profiles` e `clients` que causam recursao
-- Recriar todas as politicas usando `public.has_role(auth.uid(), 'admin')` no lugar de `EXISTS (SELECT 1 FROM profiles ...)`
-- Isso resolve tanto o erro de cadastro quanto qualquer consulta que dependa de verificacao de perfil
+### Pré-requisito: Credenciais
 
----
+Antes de implementar, você precisará solicitar ao CobCloud as suas credenciais de API. Entre em contato com o suporte em `desenvolvimento@cobcloud.com.br` ou acesse `https://dev.cob.cloud/` para obter:
+- **token_assessoria**: token da assessoria
+- **token_client**: token do credor
 
-## Funcionalidade 2: Aba "Carteira"
-
-Nova pagina acessivel pelo menu lateral, posicionada abaixo de "Dashboard", com foco operacional para o negociador acompanhar seus clientes por periodo.
-
-### Comportamento:
-- Filtros por **Mes**, **Semana** e **Dia** (botoes de selecao rapida)
-- Exibe apenas clientes com parcelas **pendentes** no periodo selecionado
-- Lista com: Nome, CPF, Credor, Parcela, Valor, Data de Vencimento
-- Destaque visual para vencimentos do dia atual
-- O Dashboard perde a secao de "Clientes Inadimplentes" (que passa a existir apenas na Carteira)
-
-### Arquivos envolvidos:
-- **Novo:** `src/pages/CarteiraPage.tsx` - pagina com filtros e lista
-- **Novo:** `src/components/carteira/CarteiraFilters.tsx` - botoes de filtro (Dia/Semana/Mes)
-- **Novo:** `src/components/carteira/CarteiraTable.tsx` - tabela de clientes filtrados
-- **Editar:** `src/App.tsx` - adicionar rota `/carteira`
-- **Editar:** `src/components/AppLayout.tsx` - adicionar item "Carteira" no menu lateral
-- **Editar:** `src/pages/DashboardPage.tsx` - remover secao de inadimplentes
+Após obter, vamos configurar como segredos no backend.
 
 ---
 
-## Funcionalidade 3: Importacao de clientes via planilha
+### Endpoints da API CobCloud v3
 
-Permitir que o negociador faca upload de uma planilha Excel (.xlsx) ou CSV para importar clientes em lote, sem precisar cadastrar um por um.
+Com base na documentação OpenAPI analisada:
 
-### Comportamento:
-- Botao "Importar Planilha" ao lado do "Novo Cliente" na pagina de Clientes
-- Abre um dialog de upload que aceita arquivos .xlsx e .csv
-- Faz o parse da planilha no navegador usando a biblioteca `xlsx` (SheetJS)
-- Mapeia as colunas conforme a estrutura da planilha de referencia:
-  - Coluna A: Credor
-  - Coluna B: Nome
-  - Coluna C: CPF
-  - Coluna D: N. da Parcela
-  - Coluna E: Valor da Parcela
-  - Coluna F: Valor Pago
-  - Coluna G: Quebra (ignorado, e calculado automaticamente)
-  - Coluna H: Data de vencimento
-- Exibe preview dos dados antes de confirmar a importacao
-- Insere todos os registros no banco de uma vez
-- Exibe feedback de sucesso/erro com contagem de registros importados
-
-### Arquivos envolvidos:
-- **Instalar:** pacote `xlsx` para parsing de planilhas
-- **Novo:** `src/components/clients/ImportDialog.tsx` - dialog de upload com preview e confirmacao
-- **Novo:** `src/services/importService.ts` - logica de parsing e mapeamento da planilha
-- **Editar:** `src/pages/ClientsPage.tsx` - adicionar botao de importacao
-- **Editar:** `src/services/clientService.ts` - adicionar funcao `bulkCreateClients` para insercao em lote
+| Recurso | Método | Endpoint | Descrição |
+|---------|--------|----------|-----------|
+| Devedores | POST | `/cli/devedores/cadastrar` | Cadastrar devedor e títulos |
+| Títulos | GET | `/cli/titulos/listar` | Listar títulos |
+| Títulos | PUT | `/cli/titulos/baixar` | Baixar/dar baixa em título |
+| Pagamentos | GET | (a confirmar) | Consultar pagamentos |
+| Devoluções | GET | (a confirmar) | Consultar devoluções |
 
 ---
 
-## Detalhes tecnicos
+### Arquitetura da Integração
 
-### Migracao SQL (resumo):
 ```text
-DROP POLICY "Admins can view all profiles" ON profiles;
-DROP POLICY "Admins can update all profiles" ON profiles;
--- (e as demais politicas de admin em clients)
-
--- Recriar usando has_role():
-CREATE POLICY "Admins can view all profiles" ON profiles
-  FOR SELECT USING (public.has_role(auth.uid(), 'admin'));
--- (mesma abordagem para todas as politicas de admin)
++------------------+       +--------------------+       +------------------+
+|  Frontend React  | ----> | Edge Function      | ----> | api-v3.cob.cloud |
+|  (botões sync)   |       | cobcloud-proxy     |       | (API CobCloud)   |
++------------------+       +--------------------+       +------------------+
+                                    |
+                                    v
+                           +------------------+
+                           | Banco de dados   |
+                           | (tabela clients) |
+                           +------------------+
 ```
 
-### Mapeamento da planilha:
-A importacao detecta automaticamente a linha de cabecalho (linha 3 da planilha, com "CREDOR", "NOME", "CPF", etc.) e ignora linhas anteriores de titulo. Os valores monetarios sao parseados removendo "R$" e tratando separador decimal brasileiro (virgula).
+---
 
-### Filtros da Carteira:
-- **Dia:** filtra por data exata (hoje como padrao)
-- **Semana:** filtra de segunda a domingo da semana selecionada
-- **Mes:** filtra pelo mes/ano selecionado
+### Etapas de Implementação
+
+#### 1. Configurar Segredos
+- Adicionar `COBCLOUD_TOKEN_ASSESSORIA` e `COBCLOUD_TOKEN_CLIENT` como segredos do backend
+- Estes serão acessíveis via `Deno.env.get()` nas funções backend
+
+#### 2. Criar Edge Function `cobcloud-proxy`
+Uma única função backend com rotas internas:
+
+- **POST /import-titulos**: Busca títulos do CobCloud e importa para o banco local
+  - Chama `GET /cli/titulos/listar` na API CobCloud
+  - Mapeia os campos para a estrutura da tabela `clients`
+  - Insere/atualiza registros no banco
+
+- **POST /export-devedores**: Envia devedores do banco local para o CobCloud
+  - Recebe lista de IDs de clientes
+  - Busca dados no banco
+  - Chama `POST /cli/devedores/cadastrar` na API CobCloud
+
+- **POST /baixar-titulo**: Dá baixa em título no CobCloud
+  - Recebe ID do título e informações de pagamento
+  - Chama `PUT /cli/titulos/baixar` na API CobCloud
+
+- **GET /status**: Testa a conexão com a API CobCloud
+
+#### 3. Criar Serviço Frontend `cobcloudService.ts`
+- Funções para chamar a edge function:
+  - `testConnection()` - verificar conectividade
+  - `importTitulos(filters)` - importar títulos
+  - `exportDevedores(clientIds)` - enviar devedores
+  - `baixarTitulo(tituloId, pagamento)` - dar baixa
+
+#### 4. Criar Página de Integração CobCloud
+Nova rota `/integracao` com:
+- Status da conexão (verde/vermelho)
+- Botão "Importar Títulos" com filtros opcionais
+- Botão "Enviar Devedores Selecionados"
+- Log de sincronizações realizadas
+- Acesso restrito a admins
+
+#### 5. Adicionar Ações na Tabela de Clientes
+- Botão "Enviar para CobCloud" em registros individuais
+- Botão "Dar baixa no CobCloud" ao registrar pagamento
+
+---
+
+### Detalhes Técnicos
+
+**Edge Function** (`supabase/functions/cobcloud-proxy/index.ts`):
+- CORS headers padrão
+- Autenticação do usuário via JWT do Supabase
+- Verificação de role admin antes de executar
+- Rate limiting respeitando limites do CobCloud (10 POST/min, 25 GET/min)
+- Headers da API CobCloud: `token_assessoria` e `token_client` via `Deno.env.get()`
+
+**Mapeamento de campos CobCloud -> sistema local**:
+- O mapeamento exato dependerá da estrutura de resposta da API, que será refinado após os primeiros testes com as credenciais
+
+**Nova rota no App.tsx**:
+- `/integracao` protegida, acessível apenas para admins
+- Link no menu lateral (AppLayout)
+
+---
+
+### Ordem de Execução
+
+1. Solicitar as credenciais ao usuário (segredos)
+2. Criar a edge function `cobcloud-proxy` com endpoint de teste
+3. Criar o serviço frontend
+4. Criar a página de integração
+5. Adicionar botões nas telas existentes
+6. Testar conexão e fluxos
+
+### Limitação
+
+Como você ainda **não possui as credenciais**, na implementação inicial criaremos toda a estrutura pronta para funcionar. Assim que você obtiver os tokens do CobCloud, basta configurá-los e o sistema estará operacional.
 
