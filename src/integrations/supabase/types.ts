@@ -70,8 +70,33 @@ export type Database = {
           },
         ]
       }
+      commission_grades: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          tiers: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          tiers?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          tiers?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          commission_grade_id: string | null
           commission_rate: number
           created_at: string
           full_name: string
@@ -81,6 +106,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          commission_grade_id?: string | null
           commission_rate?: number
           created_at?: string
           full_name?: string
@@ -90,6 +116,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          commission_grade_id?: string | null
           commission_rate?: number
           created_at?: string
           full_name?: string
@@ -98,7 +125,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_commission_grade_id_fkey"
+            columns: ["commission_grade_id"]
+            isOneToOne: false
+            referencedRelation: "commission_grades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

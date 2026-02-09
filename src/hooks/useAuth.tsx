@@ -8,6 +8,7 @@ interface Profile {
   full_name: string;
   role: "admin" | "operador";
   commission_rate: number;
+  commission_grade_id: string | null;
 }
 
 interface AuthContextType {

@@ -3,52 +3,51 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchClients, Client } from "@/services/clientService";
 import CarteiraFilters from "@/components/carteira/CarteiraFilters";
 import CarteiraTable from "@/components/carteira/CarteiraTable";
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
-
-export type FilterMode = "dia" | "semana" | "mes";
+import { startOfDay, parseISO } from "date-fns";
+import { format } from "date-fns";
 
 const CarteiraPage = () => {
-  const [mode, setMode] = useState<FilterMode>("dia");
-  const [referenceDate, setReferenceDate] = useState(new Date());
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const [appliedFrom, setAppliedFrom] = useState(today);
+  const [appliedTo, setAppliedTo] = useState(today);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: () => fetchClients(),
   });
 
+  const handleSearch = () => {
+    setAppliedFrom(dateFrom);
+    setAppliedTo(dateTo);
+  };
+
+  const handleClear = () => {
+    setDateFrom("");
+    setDateTo("");
+    setAppliedFrom("");
+    setAppliedTo("");
+  };
+
   const filteredClients = useMemo(() => {
     const pending = clients.filter((c) => c.status === "pendente");
 
-    let start: Date;
-    let end: Date;
-
-    switch (mode) {
-      case "dia":
-        start = startOfDay(referenceDate);
-        end = endOfDay(referenceDate);
-        break;
-      case "semana":
-        start = startOfWeek(referenceDate, { weekStartsOn: 1 });
-        end = endOfWeek(referenceDate, { weekStartsOn: 1 });
-        break;
-      case "mes":
-        start = startOfMonth(referenceDate);
-        end = endOfMonth(referenceDate);
-        break;
-    }
+    if (!appliedFrom && !appliedTo) return pending;
 
     return pending.filter((c) => {
-      const venc = parseISO(c.data_vencimento);
-      return isWithinInterval(venc, { start, end });
+      const venc = c.data_vencimento;
+      if (appliedFrom && venc < appliedFrom) return false;
+      if (appliedTo && venc > appliedTo) return false;
+      return true;
     });
-  }, [clients, mode, referenceDate]);
+  }, [clients, appliedFrom, appliedTo]);
 
   const overdueClients = useMemo(() => {
-    const today = startOfDay(new Date());
+    const todayStr = format(new Date(), "yyyy-MM-dd");
     return clients.filter((c) => {
       if (c.status !== "pendente") return false;
-      const venc = parseISO(c.data_vencimento);
-      return venc < today;
+      return c.data_vencimento < todayStr;
     });
   }, [clients]);
 
@@ -62,10 +61,12 @@ const CarteiraPage = () => {
       </div>
 
       <CarteiraFilters
-        mode={mode}
-        onModeChange={setMode}
-        referenceDate={referenceDate}
-        onDateChange={setReferenceDate}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onSearch={handleSearch}
+        onClear={handleClear}
       />
 
       <CarteiraTable

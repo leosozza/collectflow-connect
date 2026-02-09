@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
+import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
 import StatCard from "@/components/StatCard";
 import {
   Select,
@@ -12,12 +13,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface Profile {
   id: string;
   full_name: string;
   role: string;
   commission_rate: number;
+  commission_grade_id: string | null;
 }
 
 interface ClientRow {
@@ -29,9 +33,24 @@ interface ClientRow {
   data_vencimento: string;
 }
 
+const generateMonthOptions = () => {
+  const options: { value: string; label: string }[] = [
+    { value: "todos", label: "Todos os períodos" },
+  ];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = format(d, "yyyy-MM");
+    const label = format(d, "MMMM yyyy", { locale: ptBR });
+    options.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+  }
+  return options;
+};
+
 const AdminDashboardPage = () => {
   const { profile } = useAuth();
   const [selectedOperator, setSelectedOperator] = useState<string>("todos");
+  const [selectedMonth, setSelectedMonth] = useState<string>("todos");
 
   const { data: allClients = [] } = useQuery({
     queryKey: ["admin-clients"],
@@ -56,11 +75,35 @@ const AdminDashboardPage = () => {
     enabled: profile?.role === "admin",
   });
 
-  // Filter clients based on selected operator
+  const { data: grades = [] } = useQuery({
+    queryKey: ["commission-grades"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("commission_grades").select("*");
+      if (error) throw error;
+      return (data || []).map((d) => ({ ...d, tiers: d.tiers as unknown as CommissionTier[] })) as CommissionGrade[];
+    },
+    enabled: profile?.role === "admin",
+  });
+
+  const monthOptions = useMemo(generateMonthOptions, []);
+
+  // Filter by month
+  const monthFilteredClients = useMemo(() => {
+    if (selectedMonth === "todos") return allClients;
+    const [year, month] = selectedMonth.split("-").map(Number);
+    const start = startOfMonth(new Date(year, month - 1));
+    const end = endOfMonth(start);
+    return allClients.filter((c) => {
+      const d = parseISO(c.data_vencimento);
+      return d >= start && d <= end;
+    });
+  }, [allClients, selectedMonth]);
+
+  // Filter by operator
   const filteredClients =
     selectedOperator === "todos"
-      ? allClients
-      : allClients.filter((c) => c.operator_id === selectedOperator);
+      ? monthFilteredClients
+      : monthFilteredClients.filter((c) => c.operator_id === selectedOperator);
 
   const pendentes = filteredClients.filter((c) => c.status === "pendente");
   const pagos = filteredClients.filter((c) => c.status === "pago" || c.status === "quebrado");
@@ -71,27 +114,40 @@ const AdminDashboardPage = () => {
   const totalQuebra = pagos.reduce((s, c) => s + Number(c.quebra), 0);
   const pctQuebras = pagos.length > 0 ? ((quebrados.length / pagos.length) * 100).toFixed(1) : "0";
 
-  // Find selected operator's commission for individual view
+  // Commission for selected operator
   const selectedOp = operators.find((op) => op.id === selectedOperator);
-  const commissionRate = selectedOp?.commission_rate || 0;
-  const comissao = selectedOperator !== "todos" ? totalRecebido * (commissionRate / 100) : 0;
-  const totalAReceber = selectedOperator !== "todos" ? totalRecebido - comissao : 0;
+  const getOperatorCommission = (op: Profile, received: number) => {
+    const grade = grades.find((g) => g.id === op.commission_grade_id);
+    if (grade) {
+      return calculateTieredCommission(received, grade.tiers as CommissionTier[]);
+    }
+    return {
+      rate: op.commission_rate,
+      commission: received * (op.commission_rate / 100),
+    };
+  };
 
-  // Per-operator stats (always show full breakdown)
+  const selectedCommission = selectedOp
+    ? getOperatorCommission(selectedOp, totalRecebido)
+    : { rate: 0, commission: 0 };
+  const totalAReceber = selectedOperator !== "todos" ? totalRecebido - selectedCommission.commission : 0;
+
+  // Per-operator stats
   const operatorStats = operators.map((op) => {
-    const opClients = allClients.filter((c) => c.operator_id === op.id);
+    const opClients = monthFilteredClients.filter((c) => c.operator_id === op.id);
     const opPagos = opClients.filter((c) => c.status === "pago" || c.status === "quebrado");
     const opRecebido = opPagos.reduce((s, c) => s + Number(c.valor_pago), 0);
     const opQuebra = opPagos.reduce((s, c) => s + Number(c.quebra), 0);
     const opPendente = opClients.filter((c) => c.status === "pendente").reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const opComissao = opRecebido * (op.commission_rate / 100);
+    const { rate, commission } = getOperatorCommission(op, opRecebido);
 
     return {
       ...op,
       totalRecebido: opRecebido,
       totalQuebra: opQuebra,
       totalPendente: opPendente,
-      comissao: opComissao,
+      comissao: commission,
+      commissionRate: rate,
       totalClients: opClients.length,
     };
   });
@@ -116,21 +172,38 @@ const AdminDashboardPage = () => {
           </p>
         </div>
 
-        <div className="space-y-1.5 min-w-[200px]">
-          <Label className="text-xs text-muted-foreground">Filtrar por Operador</Label>
-          <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os Operadores</SelectItem>
-              {operators.map((op) => (
-                <SelectItem key={op.id} value={op.id}>
-                  {op.full_name || "Sem nome"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex gap-3">
+          <div className="space-y-1.5 min-w-[180px]">
+            <Label className="text-xs text-muted-foreground">Período</Label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 min-w-[180px]">
+            <Label className="text-xs text-muted-foreground">Operador</Label>
+            <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os Operadores</SelectItem>
+                {operators.map((op) => (
+                  <SelectItem key={op.id} value={op.id}>
+                    {op.full_name || "Sem nome"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -141,7 +214,7 @@ const AdminDashboardPage = () => {
         <StatCard title="% de Quebras" value={`${pctQuebras}%`} icon="percent" />
         {selectedOperator !== "todos" && (
           <>
-            <StatCard title={`Comissão (${commissionRate}%)`} value={formatCurrency(comissao)} icon="commission" />
+            <StatCard title={`Comissão (${selectedCommission.rate}%)`} value={formatCurrency(selectedCommission.commission)} icon="commission" />
             <StatCard title="Total a Receber" value={formatCurrency(totalAReceber)} icon="receivable" />
           </>
         )}
@@ -188,7 +261,7 @@ const AdminDashboardPage = () => {
                     <td className="px-5 py-3 text-sm text-right">{formatCurrency(op.totalPendente)}</td>
                     <td className="px-5 py-3 text-sm text-right text-success">{formatCurrency(op.totalRecebido)}</td>
                     <td className="px-5 py-3 text-sm text-right text-destructive">{formatCurrency(op.totalQuebra)}</td>
-                    <td className="px-5 py-3 text-sm text-right">{op.commission_rate}%</td>
+                    <td className="px-5 py-3 text-sm text-right">{op.commissionRate}%</td>
                     <td className="px-5 py-3 text-sm text-right text-warning">{formatCurrency(op.comissao)}</td>
                   </tr>
                 ))}
