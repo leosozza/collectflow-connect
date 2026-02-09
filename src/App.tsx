@@ -11,6 +11,7 @@ import AuthPage from "./pages/AuthPage";
 import ClientsPage from "./pages/ClientsPage";
 import CarteiraPage from "./pages/CarteiraPage";
 import UsersPage from "./pages/UsersPage";
+import IntegracaoPage from "./pages/IntegracaoPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <UsersPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/integracao"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <IntegracaoPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

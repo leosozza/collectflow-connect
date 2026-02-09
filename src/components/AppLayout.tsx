@@ -10,7 +10,8 @@ import {
   Zap,
   Settings,
   UserCog,
-  Wallet
+  Wallet,
+  Cloud
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     ...(isAdmin ? [
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },
+      { label: "Integração", icon: Cloud, path: "/integracao" },
     ] : []),
   ];
 
