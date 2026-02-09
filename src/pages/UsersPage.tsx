@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -26,9 +25,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Edit } from "lucide-react";
+import { Edit, Trash2 } from "lucide-react";
+import type { CommissionGrade, CommissionTier } from "@/lib/commission";
 
 interface Profile {
   id: string;
@@ -36,6 +46,7 @@ interface Profile {
   full_name: string;
   role: "admin" | "operador";
   commission_rate: number;
+  commission_grade_id: string | null;
 }
 
 const UsersPage = () => {
@@ -43,7 +54,8 @@ const UsersPage = () => {
   const queryClient = useQueryClient();
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [editRole, setEditRole] = useState<string>("operador");
-  const [editCommission, setEditCommission] = useState<string>("0");
+  const [editGradeId, setEditGradeId] = useState<string>("none");
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
@@ -58,11 +70,23 @@ const UsersPage = () => {
     enabled: profile?.role === "admin",
   });
 
+  const { data: grades = [] } = useQuery({
+    queryKey: ["commission-grades"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("commission_grades")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      return (data || []).map((d) => ({ ...d, tiers: d.tiers as unknown as CommissionTier[] })) as CommissionGrade[];
+    },
+  });
+
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_rate }: { id: string; role: "admin" | "operador"; commission_rate: number }) => {
+    mutationFn: async ({ id, role, commission_grade_id }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null }) => {
       const { error } = await supabase
         .from("profiles")
-        .update({ role, commission_rate })
+        .update({ role, commission_grade_id })
         .eq("id", id);
       if (error) throw error;
     },
@@ -74,10 +98,31 @@ const UsersPage = () => {
     onError: () => toast.error("Erro ao atualizar usuário"),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("Usuário removido!");
+      setDeleteUser(null);
+    },
+    onError: () => toast.error("Erro ao remover usuário"),
+  });
+
   const handleEdit = (user: Profile) => {
     setEditUser(user);
     setEditRole(user.role);
-    setEditCommission(user.commission_rate.toString());
+    setEditGradeId(user.commission_grade_id || "none");
+  };
+
+  const getGradeName = (gradeId: string | null) => {
+    if (!gradeId) return "Nenhuma";
+    return grades.find((g) => g.id === gradeId)?.name || "—";
   };
 
   if (profile?.role !== "admin") {
@@ -101,7 +146,7 @@ const UsersPage = () => {
             <TableRow className="bg-muted/50">
               <TableHead>Nome</TableHead>
               <TableHead>Tipo</TableHead>
-              <TableHead className="text-right">Comissão (%)</TableHead>
+              <TableHead>Grade de Comissão</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -114,11 +159,18 @@ const UsersPage = () => {
               <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium text-card-foreground">{u.full_name || "Sem nome"}</TableCell>
                 <TableCell className="capitalize text-muted-foreground">{u.role}</TableCell>
-                <TableCell className="text-right">{u.commission_rate}%</TableCell>
+                <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
                 <TableCell className="text-right">
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
-                    <Edit className="w-4 h-4" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    {u.id !== profile?.id && (
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -126,6 +178,7 @@ const UsersPage = () => {
         </Table>
       </div>
 
+      {/* Edit Dialog */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -145,15 +198,18 @@ const UsersPage = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Comissão (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={editCommission}
-                onChange={(e) => setEditCommission(e.target.value)}
-              />
+              <Label>Grade de Comissão</Label>
+              <Select value={editGradeId} onValueChange={setEditGradeId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {grades.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -164,7 +220,7 @@ const UsersPage = () => {
                   updateMutation.mutate({
                     id: editUser.id,
                     role: editRole as "admin" | "operador",
-                    commission_rate: parseFloat(editCommission) || 0,
+                    commission_grade_id: editGradeId === "none" ? null : editGradeId,
                   });
                 }
               }}
@@ -175,6 +231,27 @@ const UsersPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover Usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover <strong>{deleteUser?.full_name}</strong>? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
