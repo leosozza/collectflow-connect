@@ -60,12 +60,13 @@ const UsersPage = () => {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [{ data: profiles, error }, { data: emails, error: emailsError }] = await Promise.all([
+        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabase.rpc("get_user_emails"),
+      ]);
       if (error) throw error;
-      return data as Profile[];
+      const emailMap = new Map((emails || []).map((e: { user_id: string; email: string }) => [e.user_id, e.email]));
+      return (profiles || []).map((p) => ({ ...p, email: emailMap.get(p.user_id) || "—" })) as (Profile & { email: string })[];
     },
     enabled: profile?.role === "admin",
   });
@@ -145,6 +146,7 @@ const UsersPage = () => {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead>Nome</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Grade de Comissão</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -153,11 +155,12 @@ const UsersPage = () => {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">Carregando...</TableCell>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
               </TableRow>
             ) : users.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium text-card-foreground">{u.full_name || "Sem nome"}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{u.email}</TableCell>
                 <TableCell className="capitalize text-muted-foreground">{u.role}</TableCell>
                 <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
                 <TableCell className="text-right">
