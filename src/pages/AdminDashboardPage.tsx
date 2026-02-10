@@ -309,7 +309,7 @@ const AdminDashboardPage = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard title="Recebido" value={formatCurrency(totalRecebido)} icon="received" />
         <StatCard title="Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Em Aberto" value={formatCurrency(totalEmAberto)} icon="receivable" />
+        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
         <StatCard title="Comissões a Pagar" value={formatCurrency(totalComissoes)} icon="commission" />
       </div>
 

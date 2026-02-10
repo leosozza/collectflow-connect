@@ -179,7 +179,7 @@ const DashboardPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
         <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Total em Aberto" value={formatCurrency(totalEmAberto)} icon="receivable" />
+        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
       </div>
 
       {/* Row 3: % Recebidos, % Quebras, Comissão */}
