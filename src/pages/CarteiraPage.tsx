@@ -4,15 +4,14 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   fetchClients,
   updateClient,
-  markAsPaid,
   Client,
   ClientFormData,
 } from "@/services/clientService";
 import { formatCurrency, formatDate } from "@/lib/formatters";
-import PaymentDialog from "@/components/clients/PaymentDialog";
+import * as XLSX from "xlsx";
 import ClientFilters from "@/components/clients/ClientFilters";
 import { Button } from "@/components/ui/button";
-import { Edit, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Edit, XCircle, Clock, CheckCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import ClientForm from "@/components/clients/ClientForm";
 import {
@@ -41,7 +40,6 @@ const CarteiraPage = () => {
     dateTo: "",
     search: "",
   });
-  const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -78,16 +76,6 @@ const CarteiraPage = () => {
     onError: () => toast.error("Erro ao atualizar cliente"),
   });
 
-  const paymentMutation = useMutation({
-    mutationFn: ({ client, valor }: { client: Client; valor: number }) =>
-      markAsPaid(client, valor),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Pagamento registrado e próxima parcela criada!");
-      setPaymentClient(null);
-    },
-    onError: () => toast.error("Erro ao registrar pagamento"),
-  });
 
   const handleEdit = (client: Client) => {
     setEditingClient(client);
@@ -112,13 +100,33 @@ const CarteiraPage = () => {
     if (client.status === "quebrado") {
       return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
     }
-    // pendente: yellow only if due date is in the future
     const today = new Date().toISOString().split("T")[0];
     if (client.data_vencimento < today) {
-      // overdue pendente = treat as quebrado visually
       return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
     }
     return <Clock className="w-5 h-5 text-warning mx-auto" />;
+  };
+
+  const handleExportExcel = () => {
+    if (displayClients.length === 0) {
+      toast.error("Nenhum dado para exportar");
+      return;
+    }
+    const rows = displayClients.map((c) => ({
+      Nome: c.nome_completo,
+      CPF: c.cpf,
+      Credor: c.credor,
+      Parcela: c.numero_parcela,
+      Vencimento: formatDate(c.data_vencimento),
+      "Valor Parcela": Number(c.valor_parcela),
+      "Valor Pago": Number(c.valor_pago),
+      Status: c.status,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Carteira");
+    XLSX.writeFile(wb, "carteira.xlsx");
+    toast.success("Exportado com sucesso!");
   };
 
   return (
@@ -130,7 +138,13 @@ const CarteiraPage = () => {
         </p>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} />
+      <div className="flex items-center justify-between gap-4">
+        <ClientFilters filters={filters} onChange={setFilters} />
+        <Button variant="outline" className="gap-1.5 shrink-0" onClick={handleExportExcel}>
+          <Download className="w-4 h-4" />
+          Exportar Excel
+        </Button>
+      </div>
 
       {/* Client table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -166,18 +180,7 @@ const CarteiraPage = () => {
                       {getStatusIcon(client)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        {client.status === "pendente" && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-success hover:text-success"
-                            onClick={() => setPaymentClient(client)}
-                            title="Registrar Pagamento"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                        )}
+                      <div className="flex items-center justify-end">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -211,16 +214,6 @@ const CarteiraPage = () => {
         </DialogContent>
       </Dialog>
 
-      <PaymentDialog
-        client={paymentClient}
-        onClose={() => setPaymentClient(null)}
-        onConfirm={(valor, dataRecebimento) => {
-          if (paymentClient) {
-            paymentMutation.mutate({ client: paymentClient, valor });
-          }
-        }}
-        submitting={paymentMutation.isPending}
-      />
     </div>
   );
 };
