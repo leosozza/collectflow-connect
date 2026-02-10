@@ -15,17 +15,17 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get yesterday's date
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
+    // Get date 48 hours ago
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - 48);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
 
     // Mark all pending clients with due date <= yesterday as quebrado
     const { data, error } = await supabase
       .from("clients")
       .update({ status: "quebrado", valor_pago: 0 })
       .eq("status", "pendente")
-      .lte("data_vencimento", yesterdayStr)
+      .lte("data_vencimento", cutoffStr)
       .select("id");
 
     if (error) {
@@ -37,10 +37,10 @@ Deno.serve(async (req) => {
     }
 
     const count = data?.length || 0;
-    console.log(`Auto-break: ${count} overdue clients marked as quebrado (due <= ${yesterdayStr})`);
+    console.log(`Auto-break: ${count} overdue clients marked as quebrado (due <= ${cutoffStr}, 48h rule)`);
 
     return new Response(
-      JSON.stringify({ success: true, updated: count, cutoff_date: yesterdayStr }),
+      JSON.stringify({ success: true, updated: count, cutoff_date: cutoffStr }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
