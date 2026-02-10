@@ -11,7 +11,8 @@ import {
   Settings,
   UserCog,
   Wallet,
-  Cloud
+  Cloud,
+  ClipboardPlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -30,7 +31,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
-    { label: "Clientes", icon: Users, path: "/clientes" },
+    { label: "Cadastro", icon: ClipboardPlus, path: "/cadastro" },
     ...(isAdmin ? [
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },
@@ -45,7 +46,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-foreground/20 z-40 lg:hidden"
@@ -53,7 +53,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         />
       )}
 
-      {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
         w-64 gradient-dark flex flex-col
@@ -105,7 +104,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
           <Button
