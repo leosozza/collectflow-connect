@@ -138,13 +138,7 @@ const CarteiraPage = () => {
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <ClientFilters filters={filters} onChange={setFilters} />
-        <Button variant="outline" className="gap-1.5 shrink-0" onClick={handleExportExcel}>
-          <Download className="w-4 h-4" />
-          Exportar Excel
-        </Button>
-      </div>
+      <ClientFilters filters={filters} onChange={setFilters} onExportExcel={handleExportExcel} />
 
       {/* Client table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
