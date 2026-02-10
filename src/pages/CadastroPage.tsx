@@ -7,7 +7,8 @@ import type { ImportedRow } from "@/services/importService";
 import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import { Button } from "@/components/ui/button";
-import { Plus, FileSpreadsheet, Trash2 } from "lucide-react";
+import { Plus, FileSpreadsheet, Trash2, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/formatters";
 import {
@@ -122,6 +123,19 @@ const CadastroPage = () => {
     onError: () => toast.error("Erro ao excluir importação"),
   });
 
+  const downloadTemplate = () => {
+    const templateData = [
+      ["Credor", "Nome Completo", "CPF", "Parcela", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento"],
+      ["MAXFAMA", "João da Silva", "123.456.789-00", 1, 500.00, 0, 12, "10/03/2026"],
+      ["MAXFAMA", "Maria Souza", "987.654.321-00", 1, 350.00, 350.00, 6, "10/03/2026"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+    ws["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.writeFile(wb, "modelo_importacao.xlsx");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -130,6 +144,10 @@ const CadastroPage = () => {
           <p className="text-muted-foreground text-sm">Cadastre novos clientes e gerencie importações</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="ghost" onClick={downloadTemplate} className="gap-2 text-muted-foreground" size="sm">
+            <Download className="w-4 h-4" />
+            Planilha Modelo
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
             <FileSpreadsheet className="w-4 h-4" />
             Importar
@@ -163,8 +181,15 @@ const CadastroPage = () => {
               <TableBody>
                 {recentImports.map((imp, i) => (
                   <TableRow key={i} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium text-card-foreground">
-                      {new Date(imp.date).toLocaleString("pt-BR")}
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-primary/10 text-primary text-xs font-semibold">
+                          {new Date(imp.date).toLocaleDateString("pt-BR")}
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-muted text-muted-foreground text-xs font-medium">
+                          {new Date(imp.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">{imp.count} registros</TableCell>
                     <TableCell className="text-right">
