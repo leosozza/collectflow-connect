@@ -100,8 +100,9 @@ export const deleteClient = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
-export const markAsPaid = async (client: Client, valorPago: number): Promise<void> => {
-  const status = valorPago < client.valor_parcela ? "quebrado" : "pago";
+export const markAsPaid = async (client: Client, valorPago: number, dataPagamento?: string): Promise<void> => {
+  const isPaid = valorPago >= client.valor_parcela;
+  const status = isPaid ? "pago" : "quebrado";
 
   // Update current installment
   await updateClient(client.id, {
@@ -109,21 +110,23 @@ export const markAsPaid = async (client: Client, valorPago: number): Promise<voi
     status,
   });
 
-  // Create next installment
-  const nextDate = addMonths(new Date(client.data_vencimento + "T00:00:00"), 1);
-  const nextDateStr = nextDate.toISOString().split("T")[0];
+  // Only create next installment if fully paid (not broken)
+  if (isPaid) {
+    const nextDate = addMonths(new Date(client.data_vencimento + "T00:00:00"), 1);
+    const nextDateStr = nextDate.toISOString().split("T")[0];
 
-  await supabase.from("clients").insert({
-    operator_id: client.operator_id,
-    credor: client.credor,
-    nome_completo: client.nome_completo,
-    cpf: client.cpf,
-    numero_parcela: client.numero_parcela + 1,
-    valor_parcela: client.valor_parcela,
-    valor_pago: 0,
-    data_vencimento: nextDateStr,
-    status: "pendente",
-  });
+    await supabase.from("clients").insert({
+      operator_id: client.operator_id,
+      credor: client.credor,
+      nome_completo: client.nome_completo,
+      cpf: client.cpf,
+      numero_parcela: client.numero_parcela + 1,
+      valor_parcela: client.valor_parcela,
+      valor_pago: 0,
+      data_vencimento: nextDateStr,
+      status: "pendente",
+    });
+  }
 };
 
 export const markAsBroken = async (client: Client): Promise<void> => {
