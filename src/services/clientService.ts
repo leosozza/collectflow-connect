@@ -166,6 +166,7 @@ export const bulkCreateClients = async (
     nome_completo: string;
     cpf: string;
     numero_parcela: number;
+    valor_entrada: number;
     valor_parcela: number;
     valor_pago: number;
     data_vencimento: string;

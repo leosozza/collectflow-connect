@@ -125,12 +125,12 @@ const CadastroPage = () => {
 
   const downloadTemplate = () => {
     const templateData = [
-      ["Credor", "Nome Completo", "CPF", "Parcela", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento"],
-      ["MAXFAMA", "João da Silva", "123.456.789-00", 1, 500.00, 0, 12, "10/03/2026"],
-      ["MAXFAMA", "Maria Souza", "987.654.321-00", 1, 350.00, 350.00, 6, "10/03/2026"],
+      ["Credor", "Nome Completo", "CPF", "Parcela", "Valor Entrada", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento"],
+      ["MAXFAMA", "João da Silva", "123.456.789-00", 1, 600.00, 500.00, 0, 12, "10/03/2026"],
+      ["MAXFAMA", "Maria Souza", "987.654.321-00", 1, 400.00, 350.00, 350.00, 6, "10/03/2026"],
     ];
     const ws = XLSX.utils.aoa_to_sheet(templateData);
-    ws["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Modelo");
     XLSX.writeFile(wb, "modelo_importacao.xlsx");

@@ -6,6 +6,7 @@ export interface ImportedRow {
   nome_completo: string;
   cpf: string;
   numero_parcela: number;
+  valor_entrada: number;
   valor_parcela: number;
   valor_pago: number;
   data_vencimento: string;
@@ -99,9 +100,10 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
     const nome = String(getCell(1) || "").trim();
     if (!nome) continue; // skip empty rows
 
-    const valorParcela = parseBRLCurrency(getCell(4));
-    const valorPago = parseBRLCurrency(getCell(5));
-    const dataVencimento = parseBRDate(getCell(7));
+    const valorEntrada = parseBRLCurrency(getCell(4));
+    const valorParcela = parseBRLCurrency(getCell(5));
+    const valorPago = parseBRLCurrency(getCell(6));
+    const dataVencimento = parseBRDate(getCell(8));
 
     if (!dataVencimento) continue; // skip rows without valid date
 
@@ -117,6 +119,7 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       nome_completo: nome,
       cpf: formatCPFDisplay(cleanCPF(getCell(2))),
       numero_parcela: parseInt(String(getCell(3) || "1"), 10) || 1,
+      valor_entrada: valorEntrada || valorParcela,
       valor_parcela: valorParcela,
       valor_pago: valorPago,
       data_vencimento: dataVencimento,

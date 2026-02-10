@@ -121,7 +121,8 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                       <TableHead>Nome</TableHead>
                       <TableHead>CPF</TableHead>
                       <TableHead className="text-center">Parcela</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Entrada</TableHead>
+                      <TableHead className="text-right">Parcela</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Status</TableHead>
@@ -134,6 +135,7 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                         <TableCell className="font-medium">{row.nome_completo}</TableCell>
                         <TableCell className="text-muted-foreground">{row.cpf}</TableCell>
                         <TableCell className="text-center">{row.numero_parcela}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.valor_entrada)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(row.valor_parcela)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(row.valor_pago)}</TableCell>
                         <TableCell>{row.data_vencimento ? formatDate(row.data_vencimento) : "-"}</TableCell>
