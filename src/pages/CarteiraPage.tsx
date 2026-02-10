@@ -112,7 +112,12 @@ const CarteiraPage = () => {
     if (client.status === "quebrado") {
       return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
     }
-    // pendente
+    // pendente: yellow only if due date is in the future
+    const today = new Date().toISOString().split("T")[0];
+    if (client.data_vencimento < today) {
+      // overdue pendente = treat as quebrado visually
+      return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
+    }
     return <Clock className="w-5 h-5 text-warning mx-auto" />;
   };
 
