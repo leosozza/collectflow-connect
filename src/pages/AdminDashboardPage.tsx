@@ -119,7 +119,6 @@ const AdminDashboardPage = () => {
 
   const yearOptions = useMemo(generateYearOptions, []);
 
-  // Filter by year/month
   const monthFilteredClients = useMemo(() => {
     const year = parseInt(selectedYear);
     const month = parseInt(selectedMonth);
@@ -129,7 +128,6 @@ const AdminDashboardPage = () => {
     });
   }, [allClients, selectedYear, selectedMonth]);
 
-  // Filter by operator
   const filteredClients =
     selectedOperator === "todos"
       ? monthFilteredClients
@@ -148,7 +146,6 @@ const AdminDashboardPage = () => {
   const pctRecebidos = totalPagosQuebrados > 0 ? ((pagos.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
   const pctQuebras = totalPagosQuebrados > 0 ? ((quebrados.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
 
-  // Commission for selected operator
   const selectedOp = operators.find((op) => op.id === selectedOperator);
   const getOperatorCommission = (op: Profile, received: number) => {
     const grade = grades.find((g) => g.id === op.commission_grade_id);
@@ -160,7 +157,6 @@ const AdminDashboardPage = () => {
     ? getOperatorCommission(selectedOp, totalRecebido)
     : { rate: 0, commission: 0 };
 
-  // Browse date for vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const browseClients = useMemo(() => {
     const base = selectedOperator === "todos"
@@ -177,7 +173,6 @@ const AdminDashboardPage = () => {
     });
   };
 
-  // Per-operator stats
   const operatorStats = operators.map((op) => {
     const opClients = monthFilteredClients.filter((c) => c.operator_id === op.id);
     const opPagos = opClients.filter((c) => c.status === "pago");
@@ -205,7 +200,7 @@ const AdminDashboardPage = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Header with filters */}
       <div className="flex items-center justify-between">
         <div>
@@ -253,21 +248,20 @@ const AdminDashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stat: Total Projetado */}
-      <div className="text-center py-2">
-        <p className="text-sm text-muted-foreground font-medium mb-1">Total Projetado no Mês</p>
-        <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+      {/* Main stat: Total Projetado - reduced */}
+      <div className="text-center py-1">
+        <p className="text-xs text-muted-foreground font-medium mb-0.5">Total Projetado no Mês</p>
+        <p className="text-2xl font-bold text-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
       </div>
 
-      {/* Row 2: Recebido, Quebra, Em Aberto */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Stat cards - compact */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
         <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
         <StatCard title="Total em Aberto" value={formatCurrency(totalEmAberto)} icon="receivable" />
       </div>
 
-      {/* Row 3: % Recebidos, % Quebras, Comissão */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard title="% de Recebidos" value={`${pctRecebidos}%`} icon="received" />
         <StatCard title="% de Quebras" value={`${pctQuebras}%`} icon="percent" />
         {selectedOperator !== "todos" ? (
@@ -277,7 +271,56 @@ const AdminDashboardPage = () => {
         )}
       </div>
 
-      {/* Vencimentos - date navigator */}
+      {/* Operators breakdown - right after cards */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-card-foreground">Desempenho por Operador</h2>
+        </div>
+        {operatorStats.length === 0 ? (
+          <div className="p-5 text-center text-muted-foreground text-sm">
+            Nenhum operador cadastrado
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
+                  <th className="px-4 py-2.5 text-left font-medium">Operador</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Clientes</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Projetado</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Recebido</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Quebra</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Comissão (%)</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Comissão (R$)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {operatorStats.map((op) => (
+                  <tr
+                    key={op.id}
+                    className={`border-t border-border transition-colors cursor-pointer ${
+                      selectedOperator === op.id
+                        ? "bg-primary/5 border-l-2 border-l-primary"
+                        : "hover:bg-muted/30"
+                    }`}
+                    onClick={() => setSelectedOperator(selectedOperator === op.id ? "todos" : op.id)}
+                  >
+                    <td className="px-4 py-2.5 text-sm font-medium text-card-foreground">{op.full_name || "Sem nome"}</td>
+                    <td className="px-4 py-2.5 text-sm text-right">{op.totalClients}</td>
+                    <td className="px-4 py-2.5 text-sm text-right">{formatCurrency(op.totalPendente)}</td>
+                    <td className="px-4 py-2.5 text-sm text-right text-success">{formatCurrency(op.totalRecebido)}</td>
+                    <td className="px-4 py-2.5 text-sm text-right text-destructive">{formatCurrency(op.totalQuebra)}</td>
+                    <td className="px-4 py-2.5 text-sm text-right">{op.commissionRate}%</td>
+                    <td className="px-4 py-2.5 text-sm text-right text-warning">{formatCurrency(op.comissao)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Vencimentos - at the bottom */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -364,55 +407,6 @@ const AdminDashboardPage = () => {
                 ))}
               </TableBody>
             </Table>
-          </div>
-        )}
-      </div>
-
-      {/* Operators breakdown */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
-          <h2 className="font-semibold text-card-foreground">Desempenho por Operador</h2>
-        </div>
-        {operatorStats.length === 0 ? (
-          <div className="p-6 text-center text-muted-foreground text-sm">
-            Nenhum operador cadastrado
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
-                  <th className="px-5 py-3 text-left font-medium">Operador</th>
-                  <th className="px-5 py-3 text-right font-medium">Clientes</th>
-                  <th className="px-5 py-3 text-right font-medium">Projetado</th>
-                  <th className="px-5 py-3 text-right font-medium">Recebido</th>
-                  <th className="px-5 py-3 text-right font-medium">Quebra</th>
-                  <th className="px-5 py-3 text-right font-medium">Comissão (%)</th>
-                  <th className="px-5 py-3 text-right font-medium">Comissão (R$)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operatorStats.map((op) => (
-                  <tr
-                    key={op.id}
-                    className={`border-t border-border transition-colors cursor-pointer ${
-                      selectedOperator === op.id
-                        ? "bg-primary/5 border-l-2 border-l-primary"
-                        : "hover:bg-muted/30"
-                    }`}
-                    onClick={() => setSelectedOperator(selectedOperator === op.id ? "todos" : op.id)}
-                  >
-                    <td className="px-5 py-3 text-sm font-medium text-card-foreground">{op.full_name || "Sem nome"}</td>
-                    <td className="px-5 py-3 text-sm text-right">{op.totalClients}</td>
-                    <td className="px-5 py-3 text-sm text-right">{formatCurrency(op.totalPendente)}</td>
-                    <td className="px-5 py-3 text-sm text-right text-success">{formatCurrency(op.totalRecebido)}</td>
-                    <td className="px-5 py-3 text-sm text-right text-destructive">{formatCurrency(op.totalQuebra)}</td>
-                    <td className="px-5 py-3 text-sm text-right">{op.commissionRate}%</td>
-                    <td className="px-5 py-3 text-sm text-right text-warning">{formatCurrency(op.comissao)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>
