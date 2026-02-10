@@ -109,7 +109,7 @@ const AdminDashboardPage = () => {
   const pagos = filteredClients.filter((c) => c.status === "pago" || c.status === "quebrado");
   const quebrados = filteredClients.filter((c) => c.status === "quebrado");
 
-  const totalProjetado = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
+  const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
   const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
   const totalQuebra = pagos.reduce((s, c) => s + Number(c.quebra), 0);
   const pctQuebras = pagos.length > 0 ? ((quebrados.length / pagos.length) * 100).toFixed(1) : "0";

@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   fetchClients,
   updateClient,
+  deleteClient,
   Client,
   ClientFormData,
 } from "@/services/clientService";
@@ -11,7 +12,7 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import ClientFilters from "@/components/clients/ClientFilters";
 import { Button } from "@/components/ui/button";
-import { Edit, XCircle, Clock, CheckCircle, Download } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import ClientForm from "@/components/clients/ClientForm";
 import {
@@ -28,6 +29,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
@@ -42,6 +53,7 @@ const CarteiraPage = () => {
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
@@ -76,6 +88,15 @@ const CarteiraPage = () => {
     onError: () => toast.error("Erro ao atualizar cliente"),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteClient(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Cliente excluído!");
+      setDeletingClient(null);
+    },
+    onError: () => toast.error("Erro ao excluir cliente"),
+  });
 
   const handleEdit = (client: Client) => {
     setEditingClient(client);
@@ -174,7 +195,7 @@ const CarteiraPage = () => {
                       {getStatusIcon(client)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -183,6 +204,15 @@ const CarteiraPage = () => {
                           title="Editar"
                         >
                           <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeletingClient(client)}
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -208,6 +238,27 @@ const CarteiraPage = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deletingClient} onOpenChange={() => setDeletingClient(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deletingClient?.nome_completo}</strong>? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deletingClient && deleteMutation.mutate(deletingClient.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
