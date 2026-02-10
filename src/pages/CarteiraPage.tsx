@@ -233,7 +233,7 @@ const CarteiraPage = () => {
       <PaymentDialog
         client={paymentClient}
         onClose={() => setPaymentClient(null)}
-        onConfirm={(valor) => {
+        onConfirm={(valor, dataRecebimento) => {
           if (paymentClient) {
             paymentMutation.mutate({ client: paymentClient, valor });
           }
