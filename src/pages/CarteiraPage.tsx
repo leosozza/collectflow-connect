@@ -4,7 +4,6 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   fetchClients,
   updateClient,
-  deleteClient,
   markAsPaid,
   Client,
   ClientFormData,
@@ -13,9 +12,8 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import ClientFilters from "@/components/clients/ClientFilters";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, CreditCard, CheckCircle, XCircle } from "lucide-react";
+import { Edit, CheckCircle, XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import ClientForm from "@/components/clients/ClientForm";
 import {
   Table,
@@ -31,17 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
@@ -52,6 +39,7 @@ const CarteiraPage = () => {
     credor: "todos",
     dateFrom: "",
     dateTo: "",
+    search: "",
   });
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -61,6 +49,22 @@ const CarteiraPage = () => {
     queryKey: ["clients", filters],
     queryFn: () => fetchClients(filters),
   });
+
+  // Filter by search term (name or CPF) and sort by data_vencimento ascending
+  const displayClients = useMemo(() => {
+    let filtered = clients;
+    if (filters.search.trim()) {
+      const term = filters.search.trim().toLowerCase();
+      filtered = clients.filter(
+        (c) =>
+          c.nome_completo.toLowerCase().includes(term) ||
+          c.cpf.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
+      );
+    }
+    return [...filtered].sort(
+      (a, b) => a.data_vencimento.localeCompare(b.data_vencimento)
+    );
+  }, [clients, filters.search]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ClientFormData> }) =>
@@ -72,15 +76,6 @@ const CarteiraPage = () => {
       setEditingClient(null);
     },
     onError: () => toast.error("Erro ao atualizar cliente"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteClient,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Cliente removido!");
-    },
-    onError: () => toast.error("Erro ao remover cliente"),
   });
 
   const paymentMutation = useMutation({
@@ -110,6 +105,17 @@ const CarteiraPage = () => {
     }
   };
 
+  const getStatusIcon = (client: Client) => {
+    if (client.status === "pago") {
+      return <CheckCircle className="w-5 h-5 text-success mx-auto" />;
+    }
+    if (client.status === "quebrado") {
+      return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
+    }
+    // pendente
+    return <Clock className="w-5 h-5 text-warning mx-auto" />;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -125,7 +131,7 @@ const CarteiraPage = () => {
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-        ) : clients.length === 0 ? (
+        ) : displayClients.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">Nenhum cliente encontrado</div>
         ) : (
           <div className="overflow-x-auto">
@@ -143,7 +149,7 @@ const CarteiraPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.map((client) => (
+                {displayClients.map((client) => (
                   <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-medium text-card-foreground">{client.nome_completo}</TableCell>
                     <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
@@ -152,11 +158,7 @@ const CarteiraPage = () => {
                     <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
                     <TableCell className="text-center">
-                      {client.status === "pago" || client.status === "quebrado" ? (
-                        <CheckCircle className="w-5 h-5 text-success mx-auto" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-destructive mx-auto" />
-                      )}
+                      {getStatusIcon(client)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
@@ -168,7 +170,7 @@ const CarteiraPage = () => {
                             onClick={() => setPaymentClient(client)}
                             title="Registrar Pagamento"
                           >
-                            <CreditCard className="w-4 h-4" />
+                            <CheckCircle className="w-4 h-4" />
                           </Button>
                         )}
                         <Button
@@ -180,32 +182,6 @@ const CarteiraPage = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Deseja remover o registro de {client.nome_completo} (Parcela {client.numero_parcela})?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate(client.id)}>
-                                Excluir
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
