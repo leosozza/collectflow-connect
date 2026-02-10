@@ -126,6 +126,13 @@ export const markAsPaid = async (client: Client, valorPago: number): Promise<voi
   });
 };
 
+export const markAsBroken = async (client: Client): Promise<void> => {
+  await updateClient(client.id, {
+    valor_pago: 0,
+    status: "quebrado",
+  });
+};
+
 export const bulkCreateClients = async (
   clients: Array<{
     credor: string;
