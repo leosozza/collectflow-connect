@@ -2,22 +2,25 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency } from "@/lib/formatters";
 import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
 import StatCard from "@/components/StatCard";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import { markAsPaid, markAsBroken, Client } from "@/services/clientService";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  CalendarClock, ChevronLeft, ChevronRight, TrendingUp, Users, Wallet,
+  BarChart3, PieChart as PieChartIcon,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, Legend,
+} from "recharts";
 
 interface Profile {
   id: string;
@@ -56,6 +59,12 @@ const monthNames = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
+
+const STATUS_COLORS = {
+  pago: "hsl(142, 71%, 45%)",
+  pendente: "hsl(38, 92%, 50%)",
+  quebrado: "hsl(0, 84%, 60%)",
+};
 
 const AdminDashboardPage = () => {
   const { profile } = useAuth();
@@ -153,10 +162,7 @@ const AdminDashboardPage = () => {
     return { rate: op.commission_rate, commission: received * (op.commission_rate / 100) };
   };
 
-  const selectedCommission = selectedOp
-    ? getOperatorCommission(selectedOp, totalRecebido)
-    : { rate: 0, commission: 0 };
-
+  // Browse date for vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const browseClients = useMemo(() => {
     const base = selectedOperator === "todos"
@@ -173,6 +179,7 @@ const AdminDashboardPage = () => {
     });
   };
 
+  // Per-operator stats
   const operatorStats = operators.map((op) => {
     const opClients = monthFilteredClients.filter((c) => c.operator_id === op.id);
     const opPagos = opClients.filter((c) => c.status === "pago");
@@ -191,6 +198,24 @@ const AdminDashboardPage = () => {
     };
   });
 
+  // Total commission across all operators
+  const totalComissoes = operatorStats.reduce((s, op) => s + op.comissao, 0);
+
+  // Pie chart data
+  const statusPieData = [
+    { name: "Pagos", value: pagos.length, color: STATUS_COLORS.pago },
+    { name: "Pendentes", value: pendentes.length, color: STATUS_COLORS.pendente },
+    { name: "Quebrados", value: quebrados.length, color: STATUS_COLORS.quebrado },
+  ].filter((d) => d.value > 0);
+
+  // Bar chart data - operator performance
+  const operatorBarData = operatorStats.map((op) => ({
+    name: (op.full_name || "").split(" ")[0],
+    recebido: op.totalRecebido,
+    quebra: op.totalQuebra,
+    pendente: op.totalPendente,
+  }));
+
   if (profile?.role !== "admin") {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -200,9 +225,9 @@ const AdminDashboardPage = () => {
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Header with filters */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Painel Administrativo</h1>
           <p className="text-muted-foreground text-sm">
@@ -211,9 +236,9 @@ const AdminDashboardPage = () => {
               : `Visualizando: ${selectedOp?.full_name || "Operador"}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-            <SelectTrigger className="w-[160px] h-9 text-sm">
+            <SelectTrigger className="w-[150px] h-9 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -226,7 +251,7 @@ const AdminDashboardPage = () => {
             </SelectContent>
           </Select>
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[90px] h-9 text-sm">
+            <SelectTrigger className="w-[85px] h-9 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -236,7 +261,7 @@ const AdminDashboardPage = () => {
             </SelectContent>
           </Select>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[120px] h-9 text-sm">
+            <SelectTrigger className="w-[115px] h-9 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -248,33 +273,162 @@ const AdminDashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stat: Total Projetado - reduced */}
-      <div className="text-center py-1">
-        <p className="text-xs text-muted-foreground font-medium mb-0.5">Total Projetado no Mês</p>
-        <p className="text-2xl font-bold text-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+      {/* Hero card: Total Projetado */}
+      <div className="gradient-orange rounded-xl p-5 text-center shadow-lg">
+        <p className="text-xs font-medium text-primary-foreground/80 mb-1 uppercase tracking-wider">Total Projetado no Mês</p>
+        <p className="text-3xl font-extrabold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+        <p className="text-xs text-primary-foreground/70 mt-1">{filteredClients.length} parcelas no período</p>
       </div>
 
-      {/* Stat cards - compact */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
-        <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Total em Aberto" value={formatCurrency(totalEmAberto)} icon="receivable" />
+      {/* Vencimentos strip - header only */}
+      <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-primary" />
+          <span className="text-sm font-semibold text-card-foreground">Vencimentos</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
+            {format(browseDate, "dd/MM/yyyy")}
+          </span>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="text-right">
+          <span className="text-sm font-bold text-foreground">{browseClients.length}</span>
+          <span className="text-xs text-muted-foreground ml-1">registros</span>
+          <span className="text-xs text-muted-foreground mx-1">•</span>
+          <span className="text-sm font-bold text-primary">{formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard title="% de Recebidos" value={`${pctRecebidos}%`} icon="received" />
-        <StatCard title="% de Quebras" value={`${pctQuebras}%`} icon="percent" />
-        {selectedOperator !== "todos" ? (
-          <StatCard title={`Comissão (${selectedCommission.rate}%)`} value={formatCurrency(selectedCommission.commission)} icon="commission" />
-        ) : (
-          <StatCard title="Comissão" value="Selecione operador" icon="commission" />
-        )}
+      {/* Stat cards row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard title="Recebido" value={formatCurrency(totalRecebido)} icon="received" />
+        <StatCard title="Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
+        <StatCard title="Em Aberto" value={formatCurrency(totalEmAberto)} icon="receivable" />
+        <StatCard title="Comissões a Pagar" value={formatCurrency(totalComissoes)} icon="commission" />
       </div>
 
-      {/* Operators breakdown - right after cards */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <h2 className="text-sm font-semibold text-card-foreground">Desempenho por Operador</h2>
+      {/* Percentages row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
+          <p className="text-xs text-muted-foreground mb-1">% Recebidos</p>
+          <p className="text-xl font-bold text-success">{pctRecebidos}%</p>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
+          <p className="text-xs text-muted-foreground mb-1">% Quebras</p>
+          <p className="text-xl font-bold text-destructive">{pctQuebras}%</p>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
+          <p className="text-xs text-muted-foreground mb-1">Total Clientes</p>
+          <p className="text-xl font-bold text-foreground">{filteredClients.length}</p>
+        </div>
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Status Pie Chart */}
+        <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChartIcon className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold text-card-foreground">Distribuição por Status</h3>
+          </div>
+          {statusPieData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={statusPieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {statusPieData.map((entry, index) => (
+                    <Cell key={index} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number, name: string) => [`${value} parcelas`, name]}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "12px" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
+              Sem dados no período
+            </div>
+          )}
+        </div>
+
+        {/* Operator Bar Chart */}
+        <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold text-card-foreground">Recebimento por Operador</h3>
+          </div>
+          {operatorBarData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={operatorBarData} barGap={2}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name === "recebido" ? "Recebido" : name === "quebra" ? "Quebra" : "Pendente",
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Bar dataKey="recebido" fill={STATUS_COLORS.pago} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="quebra" fill={STATUS_COLORS.quebrado} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="pendente" fill={STATUS_COLORS.pendente} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
+              Sem operadores cadastrados
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Operators breakdown table */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-card-foreground">Desempenho por Operador</h2>
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Total comissões: <strong className="text-warning">{formatCurrency(totalComissoes)}</strong></span>
+          </div>
         </div>
         {operatorStats.length === 0 ? (
           <div className="p-5 text-center text-muted-foreground text-sm">
@@ -316,97 +470,6 @@ const AdminDashboardPage = () => {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-      </div>
-
-      {/* Vencimentos - at the bottom */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Vencimentos</h2>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
-              {format(browseDate, "dd/MM/yyyy")}
-            </span>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
-          </span>
-        </div>
-
-        {browseClients.length === 0 ? (
-          <div className="p-5 text-center text-muted-foreground text-xs">
-            Nenhum vencimento para esta data
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="text-xs">Nome</TableHead>
-                  <TableHead className="text-xs">CPF</TableHead>
-                  <TableHead className="text-xs">Credor</TableHead>
-                  <TableHead className="text-xs text-center">Parcela</TableHead>
-                  <TableHead className="text-xs text-right">Valor da Parcela</TableHead>
-                  <TableHead className="text-xs text-center">Status</TableHead>
-                  <TableHead className="text-xs text-center">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {browseClients.map((client) => (
-                  <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="text-xs font-medium text-card-foreground">{client.nome_completo}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{client.cpf}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{client.credor}</TableCell>
-                    <TableCell className="text-xs text-center">{client.numero_parcela}</TableCell>
-                    <TableCell className="text-xs text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
-                    <TableCell className="text-xs text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        client.status === "pago" ? "bg-success/10 text-success border-success/30" :
-                        client.status === "quebrado" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                        "bg-warning/10 text-warning border-warning/30"
-                      }`}>
-                        {client.status === "pago" ? "Pago" : client.status === "quebrado" ? "Quebrado" : "Pendente"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-1">
-                        {client.status === "pendente" && (
-                          <>
-                            <Button
-                              size="icon" variant="ghost"
-                              className="h-7 w-7 text-success hover:text-success hover:bg-success/10"
-                              onClick={() => setPaymentClient(client as unknown as Client)}
-                              title="Registrar pagamento"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon" variant="ghost"
-                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => breakMutation.mutate(client as unknown as Client)}
-                              disabled={breakMutation.isPending}
-                              title="Registrar quebra"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           </div>
         )}
       </div>
