@@ -26,6 +26,7 @@ export type Database = {
           operator_id: string | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
+          total_parcelas: number
           updated_at: string
           valor_pago: number
           valor_parcela: number
@@ -41,6 +42,7 @@ export type Database = {
           operator_id?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          total_parcelas?: number
           updated_at?: string
           valor_pago?: number
           valor_parcela?: number
@@ -56,6 +58,7 @@ export type Database = {
           operator_id?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          total_parcelas?: number
           updated_at?: string
           valor_pago?: number
           valor_parcela?: number

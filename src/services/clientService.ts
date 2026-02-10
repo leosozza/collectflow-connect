@@ -9,6 +9,7 @@ export interface Client {
   nome_completo: string;
   cpf: string;
   numero_parcela: number;
+  total_parcelas: number;
   valor_parcela: number;
   valor_pago: number;
   quebra: number;
@@ -23,6 +24,7 @@ export interface ClientFormData {
   nome_completo: string;
   cpf: string;
   numero_parcela: number;
+  total_parcelas: number;
   valor_parcela: number;
   valor_pago: number;
   data_vencimento: string;
@@ -60,18 +62,34 @@ export const createClient = async (
   operatorId: string
 ): Promise<Client> => {
   const validated = validateClientData(data);
+  const totalParcelas = validated.total_parcelas || data.total_parcelas || 1;
+
+  // Create all installments at once
+  const records = [];
+  for (let i = 0; i < totalParcelas; i++) {
+    const date = addMonths(new Date(validated.data_vencimento + "T00:00:00"), i);
+    const dateStr = date.toISOString().split("T")[0];
+    records.push({
+      credor: validated.credor,
+      nome_completo: validated.nome_completo,
+      cpf: validated.cpf,
+      numero_parcela: validated.numero_parcela + i,
+      total_parcelas: totalParcelas,
+      valor_parcela: validated.valor_parcela,
+      valor_pago: i === 0 ? validated.valor_pago : 0,
+      data_vencimento: dateStr,
+      status: i === 0 ? validated.status : "pendente" as const,
+      operator_id: operatorId,
+    });
+  }
 
   const { data: result, error } = await supabase
     .from("clients")
-    .insert({
-      ...validated,
-      operator_id: operatorId,
-    } as any)
-    .select()
-    .single();
+    .insert(records as any)
+    .select();
 
   if (error) throw error;
-  return result as Client;
+  return (result as Client[])[0];
 };
 
 export const updateClient = async (
@@ -110,22 +128,9 @@ export const markAsPaid = async (client: Client, valorPago: number, dataPagament
     status,
   });
 
-  // Only create next installment if fully paid (not broken)
-  if (isPaid) {
-    const nextDate = addMonths(new Date(client.data_vencimento + "T00:00:00"), 1);
-    const nextDateStr = nextDate.toISOString().split("T")[0];
-
-    await supabase.from("clients").insert({
-      operator_id: client.operator_id,
-      credor: client.credor,
-      nome_completo: client.nome_completo,
-      cpf: client.cpf,
-      numero_parcela: client.numero_parcela + 1,
-      valor_parcela: client.valor_parcela,
-      valor_pago: 0,
-      data_vencimento: nextDateStr,
-      status: "pendente",
-    });
+  // If broken, remove all future pending installments for this client
+  if (!isPaid) {
+    await removeFutureInstallments(client);
   }
 };
 
@@ -134,6 +139,20 @@ export const markAsBroken = async (client: Client): Promise<void> => {
     valor_pago: 0,
     status: "quebrado",
   });
+  // Remove all future pending installments
+  await removeFutureInstallments(client);
+};
+
+/** Remove all future pending installments for a client (same CPF, credor, operator) */
+const removeFutureInstallments = async (client: Client): Promise<void> => {
+  const { error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("cpf", client.cpf)
+    .eq("credor", client.credor)
+    .eq("status", "pendente")
+    .gt("numero_parcela", client.numero_parcela);
+  if (error) throw error;
 };
 
 export const bulkCreateClients = async (
