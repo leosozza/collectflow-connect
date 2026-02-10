@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -55,6 +56,7 @@ const UsersPage = () => {
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [editRole, setEditRole] = useState<string>("operador");
   const [editGradeId, setEditGradeId] = useState<string>("none");
+  const [editName, setEditName] = useState<string>("");
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
 
   const { data: users = [], isLoading } = useQuery({
@@ -84,10 +86,10 @@ const UsersPage = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_grade_id }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null }) => {
+    mutationFn: async ({ id, role, commission_grade_id, full_name }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string }) => {
       const { error } = await supabase
         .from("profiles")
-        .update({ role, commission_grade_id })
+        .update({ role, commission_grade_id, full_name })
         .eq("id", id);
       if (error) throw error;
     },
@@ -119,6 +121,7 @@ const UsersPage = () => {
     setEditUser(user);
     setEditRole(user.role);
     setEditGradeId(user.commission_grade_id || "none");
+    setEditName(user.full_name);
   };
 
   const getGradeName = (gradeId: string | null) => {
@@ -189,6 +192,10 @@ const UsersPage = () => {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
+              <Label>Nome Completo</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome do usuário" />
+            </div>
+            <div className="space-y-2">
               <Label>Tipo de Usuário</Label>
               <Select value={editRole} onValueChange={setEditRole}>
                 <SelectTrigger>
@@ -224,6 +231,7 @@ const UsersPage = () => {
                     id: editUser.id,
                     role: editRole as "admin" | "operador",
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
+                    full_name: editName,
                   });
                 }
               }}

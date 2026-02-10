@@ -12,6 +12,7 @@ import CarteiraPage from "./pages/CarteiraPage";
 import CadastroPage from "./pages/CadastroPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
+import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <UsersPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configuracoes"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ConfiguracoesPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
