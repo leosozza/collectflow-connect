@@ -185,7 +185,9 @@ const DashboardPage = () => {
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-card-foreground">Vencimentos de Hoje</h2>
-          <span className="ml-auto text-xs text-muted-foreground">{todayClients.length} registros</span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {todayClients.length} registros • {formatCurrency(todayClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
+          </span>
         </div>
 
         {todayClients.length === 0 ? (

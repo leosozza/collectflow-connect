@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Download } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -22,9 +22,10 @@ interface ClientFiltersProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
   onSearch?: () => void;
+  onExportExcel?: () => void;
 }
 
-const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
+const ClientFilters = ({ filters, onChange, onSearch, onExportExcel }: ClientFiltersProps) => {
   const update = (key: keyof Filters, value: string) => {
     onChange({ ...filters, [key]: value });
   };
@@ -45,6 +46,12 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
           <Search className="w-4 h-4" />
           Pesquisar
         </Button>
+        {onExportExcel && (
+          <Button variant="outline" size="default" onClick={onExportExcel} className="gap-1.5">
+            <Download className="w-4 h-4" />
+            Exportar Excel
+          </Button>
+        )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="space-y-1.5">
