@@ -32,7 +32,7 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
       <div className="flex items-end gap-2">
-        <div className="flex-1 space-y-1.5">
+        <div className="w-64 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Buscar por nome ou CPF</Label>
           <Input
             placeholder="Nome ou CPF..."
