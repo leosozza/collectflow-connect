@@ -159,7 +159,7 @@ const CarteiraPage = () => {
         </p>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} onExportExcel={handleExportExcel} />
+      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
 
       {/* Client table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
