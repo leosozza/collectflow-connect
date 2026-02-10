@@ -8,8 +8,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
-import ClientsPage from "./pages/ClientsPage";
 import CarteiraPage from "./pages/CarteiraPage";
+import CadastroPage from "./pages/CadastroPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
 import NotFound from "./pages/NotFound";
@@ -46,11 +46,11 @@ const App = () => (
               }
             />
             <Route
-              path="/clientes"
+              path="/cadastro"
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <ClientsPage />
+                    <CadastroPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
