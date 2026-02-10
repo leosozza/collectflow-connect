@@ -8,7 +8,7 @@ import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/li
 import StatCard from "@/components/StatCard";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, CalendarClock } from "lucide-react";
+import { CheckCircle2, XCircle, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -101,11 +101,20 @@ const DashboardPage = () => {
     });
   }, [clients, selectedYear, selectedMonth]);
 
-  // Today's due clients
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const todayClients = useMemo(() => {
-    return clients.filter((c) => c.status === "pendente" && c.data_vencimento === todayStr);
-  }, [clients, todayStr]);
+  // Date navigator for due clients
+  const [browseDate, setBrowseDate] = useState(new Date());
+  const browseDateStr = format(browseDate, "yyyy-MM-dd");
+  const browseClients = useMemo(() => {
+    return clients.filter((c) => c.data_vencimento === browseDateStr);
+  }, [clients, browseDateStr]);
+
+  const navigateDate = (dir: number) => {
+    setBrowseDate((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + dir);
+      return d;
+    });
+  };
 
   const pendentes = filteredClients.filter((c) => c.status === "pendente");
   const pagos = filteredClients.filter((c) => c.status === "pago");
@@ -180,19 +189,32 @@ const DashboardPage = () => {
         <StatCard title={`Comissão a Receber (${commissionRate}%)`} value={formatCurrency(comissao)} icon="commission" />
       </div>
 
-      {/* Today's due clients table */}
+      {/* Date-navigable clients table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-          <CalendarClock className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-semibold text-card-foreground">Vencimentos de Hoje</h2>
-          <span className="ml-auto text-xs text-muted-foreground">
-            {todayClients.length} registros • {formatCurrency(todayClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-card-foreground">Vencimentos</h2>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
+              {format(browseDate, "dd/MM/yyyy")}
+            </span>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
           </span>
         </div>
 
-        {todayClients.length === 0 ? (
+        {browseClients.length === 0 ? (
           <div className="p-5 text-center text-muted-foreground text-xs">
-            Nenhum vencimento para hoje
+            Nenhum vencimento para esta data
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -204,40 +226,52 @@ const DashboardPage = () => {
                   <TableHead className="text-xs">Credor</TableHead>
                   <TableHead className="text-xs text-center">Parcela</TableHead>
                   <TableHead className="text-xs text-right">Valor da Parcela</TableHead>
-                  <TableHead className="text-xs">Vencimento</TableHead>
+                  <TableHead className="text-xs text-center">Status</TableHead>
                   <TableHead className="text-xs text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {todayClients.map((client) => (
+                {browseClients.map((client) => (
                   <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="text-xs font-medium text-card-foreground">{client.nome_completo}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{client.cpf}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{client.credor}</TableCell>
                     <TableCell className="text-xs text-center">{client.numero_parcela}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
-                    <TableCell className="text-xs">{formatDate(client.data_vencimento)}</TableCell>
+                    <TableCell className="text-xs text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        client.status === "pago" ? "bg-success/10 text-success border-success/30" :
+                        client.status === "quebrado" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                        "bg-warning/10 text-warning border-warning/30"
+                      }`}>
+                        {client.status === "pago" ? "Pago" : client.status === "quebrado" ? "Quebrado" : "Pendente"}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-success hover:text-success hover:bg-success/10"
-                          onClick={() => setPaymentClient(client)}
-                          title="Registrar pagamento"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => breakMutation.mutate(client)}
-                          disabled={breakMutation.isPending}
-                          title="Registrar quebra"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </Button>
+                        {client.status === "pendente" && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-success hover:text-success hover:bg-success/10"
+                              onClick={() => setPaymentClient(client)}
+                              title="Registrar pagamento"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => breakMutation.mutate(client)}
+                              disabled={breakMutation.isPending}
+                              title="Registrar quebra"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
