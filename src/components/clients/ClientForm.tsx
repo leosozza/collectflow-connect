@@ -30,6 +30,9 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [totalParcelas, setTotalParcelas] = useState(
     defaultValues?.total_parcelas?.toString() || "1"
   );
+  const [valorEntrada, setValorEntrada] = useState(
+    defaultValues?.valor_entrada?.toString() || ""
+  );
   const [valorParcela, setValorParcela] = useState(
     defaultValues?.valor_parcela?.toString() || ""
   );
@@ -51,6 +54,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       cpf: cpf.trim(),
       numero_parcela: parseInt(numeroParcela) || 1,
       total_parcelas: parseInt(totalParcelas) || 1,
+      valor_entrada: parseFloat(valorEntrada) || 0,
       valor_parcela: parseFloat(valorParcela) || 0,
       valor_pago: parseFloat(valorPago) || 0,
       data_vencimento: dataVencimento,
@@ -138,7 +142,20 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Valor da Parcela (R$)</Label>
+          <Label>Valor de Entrada (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={valorEntrada}
+            onChange={(e) => setValorEntrada(e.target.value)}
+            placeholder="0,00"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Valor das Demais Parcelas (R$)</Label>
           <Input
             type="number"
             step="0.01"
