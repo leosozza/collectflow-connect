@@ -10,6 +10,7 @@ export interface Client {
   cpf: string;
   numero_parcela: number;
   total_parcelas: number;
+  valor_entrada: number;
   valor_parcela: number;
   valor_pago: number;
   quebra: number;
@@ -25,6 +26,7 @@ export interface ClientFormData {
   cpf: string;
   numero_parcela: number;
   total_parcelas: number;
+  valor_entrada: number;
   valor_parcela: number;
   valor_pago: number;
   data_vencimento: string;
@@ -65,20 +67,23 @@ export const createClient = async (
   const totalParcelas = validated.total_parcelas || data.total_parcelas || 1;
 
   // Create all installments at once
+  const valorEntrada = data.valor_entrada || validated.valor_parcela;
   const records = [];
   for (let i = 0; i < totalParcelas; i++) {
     const date = addMonths(new Date(validated.data_vencimento + "T00:00:00"), i);
     const dateStr = date.toISOString().split("T")[0];
+    const isFirst = i === 0;
     records.push({
       credor: validated.credor,
       nome_completo: validated.nome_completo,
       cpf: validated.cpf,
       numero_parcela: validated.numero_parcela + i,
       total_parcelas: totalParcelas,
-      valor_parcela: validated.valor_parcela,
-      valor_pago: i === 0 ? validated.valor_pago : 0,
+      valor_entrada: valorEntrada,
+      valor_parcela: isFirst ? valorEntrada : validated.valor_parcela,
+      valor_pago: isFirst ? validated.valor_pago : 0,
       data_vencimento: dateStr,
-      status: i === 0 ? validated.status : "pendente" as const,
+      status: isFirst ? validated.status : "pendente" as const,
       operator_id: operatorId,
     });
   }
