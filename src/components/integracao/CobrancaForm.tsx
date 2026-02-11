@@ -6,17 +6,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, CreditCard } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Loader2, CreditCard, Check, Copy, ExternalLink } from "lucide-react";
+import { formatCPF, formatPhone, formatCurrency } from "@/lib/formatters";
 
 interface CobrancaFormProps {
   tenantId: string;
   onCreated: () => void;
 }
 
+interface CobrancaResult {
+  tipo: string;
+  id_geral: string;
+  link_boleto?: string;
+  linha_digitavel?: string;
+  pix_copia_cola?: string;
+  link_cartao?: string;
+}
+
 const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [tipo, setTipo] = useState("boleto");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [result, setResult] = useState<CobrancaResult | null>(null);
   const [form, setForm] = useState({
     nome: "",
     cpf: "",
@@ -28,16 +41,39 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
   });
 
   const handleChange = (field: string, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === "cpf") {
+      setForm((prev) => ({ ...prev, cpf: formatCPF(value) }));
+    } else if (field === "telefone") {
+      setForm((prev) => ({ ...prev, telefone: formatPhone(value) }));
+    } else {
+      setForm((prev) => ({ ...prev, [field]: value }));
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validate = (): string | null => {
+    if (!form.nome.trim()) return "Nome é obrigatório";
+    const cpfDigits = form.cpf.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) return "CPF deve ter 11 dígitos";
+    const valor = Number(form.valor);
+    if (!valor || valor <= 0) return "Valor deve ser maior que zero";
+    if (!form.vencimento) return "Vencimento é obrigatório";
+    const today = new Date().toISOString().split("T")[0];
+    if (form.vencimento < today) return "Vencimento não pode ser no passado";
+    return null;
+  };
+
+  const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nome || !form.cpf || !form.valor || !form.vencimento) {
-      toast({ title: "Campos obrigatórios", description: "Preencha nome, CPF, valor e vencimento", variant: "destructive" });
+    const error = validate();
+    if (error) {
+      toast({ title: "Validação", description: error, variant: "destructive" });
       return;
     }
+    setShowConfirm(true);
+  };
 
+  const handleSubmit = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
       const payload = {
@@ -50,29 +86,43 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
         descricao: form.descricao.trim() || `Cobrança ${tipo}`,
       };
 
-      let result;
+      let apiResult;
       if (tipo === "boleto") {
-        result = await negociarieService.novaCobranca(payload);
+        apiResult = await negociarieService.novaCobranca(payload);
       } else if (tipo === "pix") {
-        result = await negociarieService.novaPix(payload);
+        apiResult = await negociarieService.novaPix(payload);
       } else {
-        result = await negociarieService.novaCartao(payload);
+        apiResult = await negociarieService.novaCartao(payload);
       }
 
-      // Save to local DB
+      const idGeral = apiResult.id_geral || apiResult.idGeral || String(apiResult.id || "");
+      const linkBoleto = apiResult.link_boleto || apiResult.linkBoleto || null;
+      const pixCopiaCola = apiResult.pix_copia_cola || apiResult.pixCopiaCola || null;
+      const linkCartao = apiResult.link_cartao || apiResult.linkCartao || null;
+      const linhaDigitavel = apiResult.linha_digitavel || apiResult.linhaDigitavel || null;
+
       await negociarieService.saveCobranca({
         tenant_id: tenantId,
-        client_id: null, // Can be linked later
-        id_geral: result.id_geral || result.idGeral || String(result.id || ""),
-        id_parcela: result.id_parcela || result.idParcela || null,
+        client_id: null,
+        id_geral: idGeral,
+        id_parcela: apiResult.id_parcela || apiResult.idParcela || null,
         tipo,
         status: "pendente",
         valor: Number(form.valor),
         data_vencimento: form.vencimento,
-        link_boleto: result.link_boleto || result.linkBoleto || null,
-        pix_copia_cola: result.pix_copia_cola || result.pixCopiaCola || null,
-        link_cartao: result.link_cartao || result.linkCartao || null,
-        linha_digitavel: result.linha_digitavel || result.linhaDigitavel || null,
+        link_boleto: linkBoleto,
+        pix_copia_cola: pixCopiaCola,
+        link_cartao: linkCartao,
+        linha_digitavel: linhaDigitavel,
+      });
+
+      setResult({
+        tipo,
+        id_geral: idGeral,
+        link_boleto: linkBoleto || undefined,
+        linha_digitavel: linhaDigitavel || undefined,
+        pix_copia_cola: pixCopiaCola || undefined,
+        link_cartao: linkCartao || undefined,
       });
 
       toast({ title: "Cobrança gerada!", description: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} criado com sucesso` });
@@ -85,65 +135,168 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     }
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: `${label} copiado para a área de transferência` });
+  };
+
+  const tipoLabel = tipo === "boleto" ? "Boleto" : tipo === "pix" ? "Pix" : "Cartão de Crédito";
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CreditCard className="w-5 h-5" />
-          Nova Cobrança
-        </CardTitle>
-        <CardDescription>Gerar boleto, pix ou link de cartão via Negociarie</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label>Tipo</Label>
-              <Select value={tipo} onValueChange={setTipo}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                  <SelectItem value="pix">Pix</SelectItem>
-                  <SelectItem value="cartao">Cartão de Crédito</SelectItem>
-                </SelectContent>
-              </Select>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5" />
+            Nova Cobrança
+          </CardTitle>
+          <CardDescription>Gerar boleto, pix ou link de cartão via Negociarie</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePreSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>Tipo</Label>
+                <Select value={tipo} onValueChange={setTipo}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                    <SelectItem value="pix">Pix</SelectItem>
+                    <SelectItem value="cartao">Cartão de Crédito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Nome *</Label>
+                <Input value={form.nome} onChange={(e) => handleChange("nome", e.target.value)} placeholder="Nome completo" maxLength={200} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>CPF *</Label>
+                <Input value={form.cpf} onChange={(e) => handleChange("cpf", e.target.value)} placeholder="000.000.000-00" maxLength={14} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input type="email" value={form.email} onChange={(e) => handleChange("email", e.target.value)} placeholder="email@exemplo.com" maxLength={255} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telefone</Label>
+                <Input value={form.telefone} onChange={(e) => handleChange("telefone", e.target.value)} placeholder="(00) 00000-0000" maxLength={15} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Valor (R$) *</Label>
+                <Input type="number" step="0.01" min="0.01" value={form.valor} onChange={(e) => handleChange("valor", e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Vencimento *</Label>
+                <Input type="date" value={form.vencimento} onChange={(e) => handleChange("vencimento", e.target.value)} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Descrição</Label>
+                <Input value={form.descricao} onChange={(e) => handleChange("descricao", e.target.value)} placeholder="Descrição da cobrança" maxLength={500} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Nome *</Label>
-              <Input value={form.nome} onChange={(e) => handleChange("nome", e.target.value)} placeholder="Nome completo" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>CPF *</Label>
-              <Input value={form.cpf} onChange={(e) => handleChange("cpf", e.target.value)} placeholder="000.000.000-00" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input type="email" value={form.email} onChange={(e) => handleChange("email", e.target.value)} placeholder="email@exemplo.com" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Telefone</Label>
-              <Input value={form.telefone} onChange={(e) => handleChange("telefone", e.target.value)} placeholder="(00) 00000-0000" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Valor (R$) *</Label>
-              <Input type="number" step="0.01" value={form.valor} onChange={(e) => handleChange("valor", e.target.value)} placeholder="0.00" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Vencimento *</Label>
-              <Input type="date" value={form.vencimento} onChange={(e) => handleChange("vencimento", e.target.value)} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Descrição</Label>
-              <Input value={form.descricao} onChange={(e) => handleChange("descricao", e.target.value)} placeholder="Descrição da cobrança" />
-            </div>
-          </div>
-          <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
-            Gerar {tipo === "boleto" ? "Boleto" : tipo === "pix" ? "Pix" : "Link de Cartão"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
+              Gerar {tipoLabel}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Cobrança</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>Confira os dados antes de gerar:</p>
+                <div className="rounded-md border p-3 space-y-1 bg-muted/50">
+                  <p><strong>Tipo:</strong> {tipoLabel}</p>
+                  <p><strong>Nome:</strong> {form.nome}</p>
+                  <p><strong>CPF:</strong> {form.cpf}</p>
+                  <p><strong>Valor:</strong> {formatCurrency(Number(form.valor) || 0)}</p>
+                  <p><strong>Vencimento:</strong> {form.vencimento ? new Date(form.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "-"}</p>
+                  {form.email && <p><strong>Email:</strong> {form.email}</p>}
+                  {form.telefone && <p><strong>Telefone:</strong> {form.telefone}</p>}
+                  {form.descricao && <p><strong>Descrição:</strong> {form.descricao}</p>}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSubmit}>Confirmar e Gerar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Result Card */}
+      {result && (
+        <Card className="border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <Check className="w-5 h-5" />
+              Cobrança Gerada com Sucesso
+            </CardTitle>
+            <CardDescription>ID: {result.id_geral} • Tipo: {result.tipo}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {result.link_boleto && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium min-w-[100px]">Link Boleto:</span>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={result.link_boleto} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" /> Abrir
+                  </a>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.link_boleto!, "Link do boleto")}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+            {result.linha_digitavel && (
+              <div className="space-y-1">
+                <span className="text-sm font-medium">Linha Digitável:</span>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted p-2 rounded flex-1 break-all">{result.linha_digitavel}</code>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.linha_digitavel!, "Linha digitável")}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {result.pix_copia_cola && (
+              <div className="space-y-1">
+                <span className="text-sm font-medium">Pix Copia e Cola:</span>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted p-2 rounded flex-1 break-all">{result.pix_copia_cola}</code>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.pix_copia_cola!, "Pix Copia e Cola")}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {result.link_cartao && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium min-w-[100px]">Link Cartão:</span>
+                <Button size="sm" variant="outline" asChild>
+                  <a href={result.link_cartao} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" /> Abrir
+                  </a>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.link_cartao!, "Link do cartão")}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => setResult(null)} className="mt-2">
+              Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </>
   );
 };
 

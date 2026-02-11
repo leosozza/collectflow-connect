@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { action, ...params } = body;
+    console.log(`[negociarie-proxy] action=${action} user=${user.id}`);
 
     let result;
 
@@ -188,6 +189,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error(`[negociarie-proxy] ERROR: ${e.message}`);
     // Reset token on auth errors
     if (e.message?.includes("401") || e.message?.includes("autenticar")) {
       cachedToken = null;

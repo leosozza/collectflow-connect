@@ -1,0 +1,1 @@
+ALTER TABLE negociarie_cobrancas ALTER COLUMN client_id DROP NOT NULL;
