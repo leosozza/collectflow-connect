@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { negociarieService } from "@/services/negociarieService";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,13 +50,34 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     uf: "",
   });
 
+  const fetchAddressByCep = useCallback(async (cep: string) => {
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setForm((prev) => ({
+          ...prev,
+          endereco: data.logradouro || prev.endereco,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          uf: data.uf || prev.uf,
+        }));
+      }
+    } catch {
+      // silently ignore - user can fill manually
+    }
+  }, []);
+
   const handleChange = (field: string, value: string) => {
     if (field === "cpf") {
       setForm((prev) => ({ ...prev, cpf: formatCPF(value) }));
     } else if (field === "telefone") {
       setForm((prev) => ({ ...prev, telefone: formatPhone(value) }));
     } else if (field === "cep") {
-      setForm((prev) => ({ ...prev, cep: formatCEP(value) }));
+      const formatted = formatCEP(value);
+      setForm((prev) => ({ ...prev, cep: formatted }));
+      const digits = formatted.replace(/\D/g, "");
+      if (digits.length === 8) fetchAddressByCep(digits);
     } else {
       setForm((prev) => ({ ...prev, [field]: value }));
     }
