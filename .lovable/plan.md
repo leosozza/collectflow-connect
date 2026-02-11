@@ -1,130 +1,219 @@
 
 
-## Integração CobCloud API v3 - Sincronização Bidirecional
+# Plano: Transformacao SaaS Multi-Tenant -- Fase 1 (Foundation)
 
-### Visão Geral
+## Resumo
 
-Integrar o sistema com a API CobCloud v3 (`api-v3.cob.cloud`) para permitir sincronização bidirecional de devedores, títulos, pagamentos e devoluções.
-
-A API CobCloud usa autenticação via **duas API Keys** enviadas como headers:
-- `token_assessoria` - identifica a assessoria
-- `token_client` - identifica o credor/cliente
-
-### Pré-requisito: Credenciais
-
-Antes de implementar, você precisará solicitar ao CobCloud as suas credenciais de API. Entre em contato com o suporte em `desenvolvimento@cobcloud.com.br` ou acesse `https://dev.cob.cloud/` para obter:
-- **token_assessoria**: token da assessoria
-- **token_client**: token do credor
-
-Após obter, vamos configurar como segredos no backend.
+Transformar o CollectFlow Connect de uma aplicacao single-tenant em uma plataforma SaaS multi-tenant, onde cada empresa de cobranca (tenant) opera de forma isolada com seus proprios dados, usuarios e configuracoes. Este plano cobre a **Fase 1 -- Foundation**, que e a base critica para todas as fases seguintes.
 
 ---
 
-### Endpoints da API CobCloud v3
+## O que muda para o usuario
 
-Com base na documentação OpenAPI analisada:
-
-| Recurso | Método | Endpoint | Descrição |
-|---------|--------|----------|-----------|
-| Devedores | POST | `/cli/devedores/cadastrar` | Cadastrar devedor e títulos |
-| Títulos | GET | `/cli/titulos/listar` | Listar títulos |
-| Títulos | PUT | `/cli/titulos/baixar` | Baixar/dar baixa em título |
-| Pagamentos | GET | (a confirmar) | Consultar pagamentos |
-| Devoluções | GET | (a confirmar) | Consultar devoluções |
+- Cada empresa tera seu proprio espaco isolado no sistema
+- Um fluxo de onboarding guiara novos tenants (criar empresa, escolher plano)
+- Admins de cada tenant gerenciam apenas seus proprios dados e usuarios
+- Um super-admin podera visualizar e gerenciar todos os tenants
+- Planos (Starter, Professional, Enterprise) definem limites de uso
 
 ---
 
-### Arquitetura da Integração
+## Arquitetura Multi-Tenant
+
+A estrategia sera **tenant_id + RLS** (Row Level Security), onde todas as tabelas compartilham o mesmo schema mas os dados sao isolados por politicas de seguranca no banco.
 
 ```text
-+------------------+       +--------------------+       +------------------+
-|  Frontend React  | ----> | Edge Function      | ----> | api-v3.cob.cloud |
-|  (botões sync)   |       | cobcloud-proxy     |       | (API CobCloud)   |
-+------------------+       +--------------------+       +------------------+
-                                    |
-                                    v
-                           +------------------+
-                           | Banco de dados   |
-                           | (tabela clients) |
-                           +------------------+
++------------------+     +-------------------+     +------------------+
+|   Tenant A       |     |   Tenant B        |     |   Tenant C       |
+|   (Empresa X)    |     |   (Empresa Y)     |     |   (Empresa Z)    |
++--------+---------+     +---------+---------+     +--------+---------+
+         |                         |                        |
+         +------------+------------+------------------------+
+                      |
+              +-------v--------+
+              |  Banco unico   |
+              |  com RLS por   |
+              |  tenant_id     |
+              +----------------+
 ```
 
 ---
 
-### Etapas de Implementação
+## Etapas de Implementacao
 
-#### 1. Configurar Segredos
-- Adicionar `COBCLOUD_TOKEN_ASSESSORIA` e `COBCLOUD_TOKEN_CLIENT` como segredos do backend
-- Estes serão acessíveis via `Deno.env.get()` nas funções backend
+### Etapa 1: Criar tabelas base (Migracoes SQL)
 
-#### 2. Criar Edge Function `cobcloud-proxy`
-Uma única função backend com rotas internas:
+**Tabela `plans`** -- Define os planos SaaS disponiveis:
+- Campos: id, name, slug, price_monthly, limits (JSONB com max_users, max_clients, features)
+- Insercao dos planos iniciais: Starter (R$99,90), Professional (R$299,90), Enterprise (R$799,90)
 
-- **POST /import-titulos**: Busca títulos do CobCloud e importa para o banco local
-  - Chama `GET /cli/titulos/listar` na API CobCloud
-  - Mapeia os campos para a estrutura da tabela `clients`
-  - Insere/atualiza registros no banco
+**Tabela `tenants`** -- Cada empresa de cobranca:
+- Campos: id, name, slug (unico), logo_url, primary_color, plan_id (FK para plans), status (active/suspended/cancelled), settings (JSONB), created_at, updated_at
 
-- **POST /export-devedores**: Envia devedores do banco local para o CobCloud
-  - Recebe lista de IDs de clientes
-  - Busca dados no banco
-  - Chama `POST /cli/devedores/cadastrar` na API CobCloud
+**Tabela `tenant_users`** -- Relacionamento usuario-tenant com role:
+- Campos: id, tenant_id, user_id, role (super_admin/admin/operador), created_at
+- Substitui o campo `role` da tabela `profiles` para contexto multi-tenant
 
-- **POST /baixar-titulo**: Dá baixa em título no CobCloud
-  - Recebe ID do título e informações de pagamento
-  - Chama `PUT /cli/titulos/baixar` na API CobCloud
+### Etapa 2: Atualizar tabelas existentes
 
-- **GET /status**: Testa a conexão com a API CobCloud
+- Adicionar coluna `tenant_id` (UUID, FK para tenants) nas tabelas:
+  - `profiles`
+  - `clients`
+  - `commission_grades`
+- Criar indices em `tenant_id` para performance
+- Migrar dados existentes: criar um tenant padrao e associar todos os registros atuais a ele
 
-#### 3. Criar Serviço Frontend `cobcloudService.ts`
-- Funções para chamar a edge function:
-  - `testConnection()` - verificar conectividade
-  - `importTitulos(filters)` - importar títulos
-  - `exportDevedores(clientIds)` - enviar devedores
-  - `baixarTitulo(tituloId, pagamento)` - dar baixa
+### Etapa 3: Atualizar politicas RLS
 
-#### 4. Criar Página de Integração CobCloud
-Nova rota `/integracao` com:
-- Status da conexão (verde/vermelho)
-- Botão "Importar Títulos" com filtros opcionais
-- Botão "Enviar Devedores Selecionados"
-- Log de sincronizações realizadas
-- Acesso restrito a admins
+Substituir as politicas atuais por politicas baseadas em tenant_id:
 
-#### 5. Adicionar Ações na Tabela de Clientes
-- Botão "Enviar para CobCloud" em registros individuais
-- Botão "Dar baixa no CobCloud" ao registrar pagamento
+- Funcao helper `get_my_tenant_id()` (SECURITY DEFINER) que retorna o tenant_id do usuario logado
+- Funcao helper `has_tenant_role(tenant_id, role)` para verificar roles no contexto do tenant
+- Politicas em `clients`: usuario so ve/edita dados do seu tenant
+- Politicas em `profiles`: usuario so ve perfis do mesmo tenant
+- Politicas em `commission_grades`: isoladas por tenant
+- Politica especial para super_admin ver todos os tenants
+
+### Etapa 4: Criar TenantContext (Frontend)
+
+Novo hook `useTenant.tsx`:
+- Busca o tenant do usuario logado via `tenant_users`
+- Expoe: tenant atual, plano, funcoes `canAccess(feature)` e `checkLimit(resource, count)`
+- Envolve toda a aplicacao via `TenantProvider`
+
+### Etapa 5: Fluxo de Onboarding
+
+Nova pagina `/onboarding` com etapas:
+1. Criar empresa (nome, slug/subdominio)
+2. Selecionar plano
+3. Convidar primeiros usuarios (opcional)
+4. Redirecionamento ao dashboard
+
+### Etapa 6: Pagina de Configuracoes do Tenant
+
+Nova pagina `/tenant/configuracoes` (somente admin do tenant):
+- Dados da empresa (nome, logo, cor primaria)
+- Plano atual e uso vs limites
+- Gerenciamento de usuarios do tenant
+
+### Etapa 7: Super Admin
+
+Nova role `super_admin` com acesso global:
+- Pagina `/admin/tenants` para listar, suspender e gerenciar tenants
+- Visao consolidada de todos os tenants
+
+### Etapa 8: Atualizar servicos e componentes existentes
+
+- `clientService.ts`: incluir tenant_id automaticamente nas queries (via RLS, transparente)
+- `useAuth.tsx`: carregar tambem o tenant do usuario
+- `AppLayout.tsx`: mostrar nome/logo do tenant no sidebar
+- Todas as paginas existentes continuam funcionando, agora filtradas por tenant via RLS
 
 ---
 
-### Detalhes Técnicos
+## Detalhes Tecnicos
 
-**Edge Function** (`supabase/functions/cobcloud-proxy/index.ts`):
-- CORS headers padrão
-- Autenticação do usuário via JWT do Supabase
-- Verificação de role admin antes de executar
-- Rate limiting respeitando limites do CobCloud (10 POST/min, 25 GET/min)
-- Headers da API CobCloud: `token_assessoria` e `token_client` via `Deno.env.get()`
+### Migracoes SQL principais
 
-**Mapeamento de campos CobCloud -> sistema local**:
-- O mapeamento exato dependerá da estrutura de resposta da API, que será refinado após os primeiros testes com as credenciais
+```sql
+-- plans
+CREATE TABLE plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  price_monthly DECIMAL(10,2),
+  limits JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-**Nova rota no App.tsx**:
-- `/integracao` protegida, acessível apenas para admins
-- Link no menu lateral (AppLayout)
+-- tenants
+CREATE TABLE tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  logo_url TEXT,
+  primary_color TEXT DEFAULT '#F97316',
+  plan_id UUID REFERENCES plans(id),
+  status TEXT DEFAULT 'active',
+  settings JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- tenant_users (roles por tenant)
+CREATE TABLE tenant_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'operador',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, user_id)
+);
+
+-- Adicionar tenant_id nas tabelas existentes
+ALTER TABLE profiles ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE clients ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE commission_grades ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+```
+
+### Funcoes helper RLS
+
+```sql
+CREATE OR REPLACE FUNCTION get_my_tenant_id()
+RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT tenant_id FROM tenant_users
+  WHERE user_id = auth.uid() LIMIT 1
+$$;
+```
+
+### Estrutura de arquivos novos
+
+```text
+src/
+  hooks/
+    useTenant.tsx            -- Context do tenant
+  pages/
+    OnboardingPage.tsx       -- Fluxo de criacao de tenant
+    TenantSettingsPage.tsx   -- Config do tenant
+    SuperAdminPage.tsx       -- Gestao global de tenants
+  components/
+    billing/
+      PlanCard.tsx           -- Card de exibicao do plano
+      UsageMeter.tsx         -- Medidor uso vs limites
+    tenant/
+      TenantSelector.tsx     -- Seletor de tenant (se usuario pertence a mais de um)
+  services/
+    tenantService.ts         -- CRUD e queries de tenant
+```
+
+### Compatibilidade retroativa
+
+- Um tenant padrao sera criado com os dados existentes
+- Todos os registros atuais (profiles, clients, commission_grades) recebem o tenant_id do tenant padrao
+- O usuario admin atual se torna super_admin
+- Nenhuma funcionalidade existente e perdida
 
 ---
 
-### Ordem de Execução
+## Fases futuras (nao incluidas neste plano)
 
-1. Solicitar as credenciais ao usuário (segredos)
-2. Criar a edge function `cobcloud-proxy` com endpoint de teste
-3. Criar o serviço frontend
-4. Criar a página de integração
-5. Adicionar botões nas telas existentes
-6. Testar conexão e fluxos
+Apos a Fase 1 concluida, as proximas fases serao:
+- **Fase 2**: Automacao e Comunicacao (regua de cobranca, WhatsApp, SMS, Email)
+- **Fase 3**: Negociacao e Pagamentos (acordos, PIX, boleto, gateways)
+- **Fase 4**: Analytics avancado e Portal do Devedor (white-label)
 
-### Limitação
+---
 
-Como você ainda **não possui as credenciais**, na implementação inicial criaremos toda a estrutura pronta para funcionar. Assim que você obtiver os tokens do CobCloud, basta configurá-los e o sistema estará operacional.
+## Riscos e Mitigacoes
+
+| Risco | Mitigacao |
+|-------|-----------|
+| Dados existentes nao migrados | Script de migracao cria tenant padrao e associa tudo |
+| Performance com RLS | Indices em tenant_id + funcoes SECURITY DEFINER |
+| Complexidade de roles | Tabela tenant_users separada, funcoes helper |
+| Limites do Lovable | Toda logica complexa via Edge Functions |
 
