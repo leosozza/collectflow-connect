@@ -1,210 +1,191 @@
 
 
-# Plano: Transformacao SaaS Multi-Tenant -- Fase 1 (Foundation)
+# Fase 2: Automacao e Comunicacao (Regua de Cobranca + WhatsApp + Email)
 
 ## Resumo
 
-Transformar o CollectFlow Connect de uma aplicacao single-tenant em uma plataforma SaaS multi-tenant, onde cada empresa de cobranca (tenant) opera de forma isolada com seus proprios dados, usuarios e configuracoes. Este plano cobre a **Fase 1 -- Foundation**, que e a base critica para todas as fases seguintes.
+Implementar um sistema completo de automacao de cobranca onde cada tenant configura suas proprias regras e credenciais. Inclui regua de cobranca configuravel, envio de WhatsApp via Gupshup (chave por tenant) e email via sistema integrado do Lovable Cloud.
+
+---
+
+## Arquitetura
+
+Cada tenant armazena suas credenciais Gupshup no campo `settings` (JSONB) da tabela `tenants`, que ja existe. A edge function `send-notifications` busca as credenciais do tenant ao processar notificacoes.
+
+```text
++-------------------+      +---------------------+      +------------------+
+| collection_rules  |      | send-notifications  |      | Gupshup API      |
+| (regras por       | ---> | (Edge Function)     | ---> | (WhatsApp)       |
+|  tenant)          |      |                     |      +------------------+
++-------------------+      |  Le credenciais do  |
+                           |  tenant.settings    | ---> +------------------+
++-------------------+      |                     |      | Lovable Cloud    |
+| clients           | ---> |  Filtra clientes    |      | Email (Auth)     |
+| (devedores)       |      |  por vencimento     |      +------------------+
++-------------------+      +---------------------+
+                                    |
+                           +--------v----------+
+                           | message_logs      |
+                           | (historico envios) |
+                           +-------------------+
+```
 
 ---
 
 ## O que muda para o usuario
 
-- Cada empresa tera seu proprio espaco isolado no sistema
-- Um fluxo de onboarding guiara novos tenants (criar empresa, escolher plano)
-- Admins de cada tenant gerenciam apenas seus proprios dados e usuarios
-- Um super-admin podera visualizar e gerenciar todos os tenants
-- Planos (Starter, Professional, Enterprise) definem limites de uso
-
----
-
-## Arquitetura Multi-Tenant
-
-A estrategia sera **tenant_id + RLS** (Row Level Security), onde todas as tabelas compartilham o mesmo schema mas os dados sao isolados por politicas de seguranca no banco.
-
-```text
-+------------------+     +-------------------+     +------------------+
-|   Tenant A       |     |   Tenant B        |     |   Tenant C       |
-|   (Empresa X)    |     |   (Empresa Y)     |     |   (Empresa Z)    |
-+--------+---------+     +---------+---------+     +--------+---------+
-         |                         |                        |
-         +------------+------------+------------------------+
-                      |
-              +-------v--------+
-              |  Banco unico   |
-              |  com RLS por   |
-              |  tenant_id     |
-              +----------------+
-```
+- Admin do tenant acessa "Configuracoes da Empresa" e insere suas chaves Gupshup (API Key, App Name, Source Number)
+- Admin configura regras de cobranca: quantos dias antes/depois do vencimento enviar mensagem, por qual canal (WhatsApp, Email, ambos)
+- Sistema envia automaticamente mensagens conforme as regras
+- Historico de todas as mensagens enviadas fica disponivel em "Automacao"
 
 ---
 
 ## Etapas de Implementacao
 
-### Etapa 1: Criar tabelas base (Migracoes SQL)
+### Etapa 1: Migracoes SQL -- Novas tabelas
 
-**Tabela `plans`** -- Define os planos SaaS disponiveis:
-- Campos: id, name, slug, price_monthly, limits (JSONB com max_users, max_clients, features)
-- Insercao dos planos iniciais: Starter (R$99,90), Professional (R$299,90), Enterprise (R$799,90)
+**Tabela `collection_rules`** -- Regras de cobranca por tenant:
+- id, tenant_id, name, channel (whatsapp/email/both), days_offset (negativo=antes, positivo=depois do vencimento), message_template (texto com variaveis como {{nome}}, {{valor}}, {{vencimento}}), is_active, created_at, updated_at
+- RLS: isolamento por tenant_id
 
-**Tabela `tenants`** -- Cada empresa de cobranca:
-- Campos: id, name, slug (unico), logo_url, primary_color, plan_id (FK para plans), status (active/suspended/cancelled), settings (JSONB), created_at, updated_at
+**Tabela `message_logs`** -- Historico de envios:
+- id, tenant_id, client_id, rule_id (nullable), channel, status (sent/failed/pending), phone, email_to, message_body, error_message, sent_at, created_at
+- RLS: isolamento por tenant_id
 
-**Tabela `tenant_users`** -- Relacionamento usuario-tenant com role:
-- Campos: id, tenant_id, user_id, role (super_admin/admin/operador), created_at
-- Substitui o campo `role` da tabela `profiles` para contexto multi-tenant
+### Etapa 2: Credenciais Gupshup por tenant
 
-### Etapa 2: Atualizar tabelas existentes
+Armazenar no campo `tenants.settings` (JSONB) as chaves:
+```json
+{
+  "gupshup_api_key": "...",
+  "gupshup_app_name": "...",
+  "gupshup_source_number": "5511999999999"
+}
+```
 
-- Adicionar coluna `tenant_id` (UUID, FK para tenants) nas tabelas:
-  - `profiles`
-  - `clients`
-  - `commission_grades`
-- Criar indices em `tenant_id` para performance
-- Migrar dados existentes: criar um tenant padrao e associar todos os registros atuais a ele
+Atualizar a pagina `TenantSettingsPage.tsx` com uma secao "Integracao WhatsApp (Gupshup)" onde o admin insere:
+- API Key (campo password, mascarado)
+- App Name
+- Numero de origem
 
-### Etapa 3: Atualizar politicas RLS
+Esses dados sao salvos via `updateTenant()` no campo settings.
 
-Substituir as politicas atuais por politicas baseadas em tenant_id:
+### Etapa 3: UI de Regras de Cobranca
 
-- Funcao helper `get_my_tenant_id()` (SECURITY DEFINER) que retorna o tenant_id do usuario logado
-- Funcao helper `has_tenant_role(tenant_id, role)` para verificar roles no contexto do tenant
-- Politicas em `clients`: usuario so ve/edita dados do seu tenant
-- Politicas em `profiles`: usuario so ve perfis do mesmo tenant
-- Politicas em `commission_grades`: isoladas por tenant
-- Politica especial para super_admin ver todos os tenants
+Nova pagina `/automacao` (acessivel a admins do tenant):
+- Lista de regras existentes com toggle ativo/inativo
+- Formulario para criar/editar regra:
+  - Nome da regra (ex: "Lembrete 3 dias antes")
+  - Canal: WhatsApp / Email / Ambos
+  - Dias: -3 (3 dias antes), 0 (no dia), +1 (1 dia apos), etc
+  - Template da mensagem com variaveis: {{nome}}, {{cpf}}, {{valor_parcela}}, {{data_vencimento}}, {{credor}}
+- Preview do template com dados fictícios
+- Botao para testar envio manual
 
-### Etapa 4: Criar TenantContext (Frontend)
+### Etapa 4: Edge Function `send-notifications`
 
-Novo hook `useTenant.tsx`:
-- Busca o tenant do usuario logado via `tenant_users`
-- Expoe: tenant atual, plano, funcoes `canAccess(feature)` e `checkLimit(resource, count)`
-- Envolve toda a aplicacao via `TenantProvider`
+Funcao serverless que:
+1. Busca todos os tenants ativos
+2. Para cada tenant, busca as `collection_rules` ativas
+3. Para cada regra, calcula a data alvo (hoje + days_offset) e busca clientes com `data_vencimento` = data alvo e status = "pendente"
+4. Le as credenciais Gupshup do `tenant.settings`
+5. Envia WhatsApp via Gupshup API (se canal inclui whatsapp e credenciais existem)
+6. Envia email via Lovable Cloud auth.admin (se canal inclui email)
+7. Registra cada envio em `message_logs`
 
-### Etapa 5: Fluxo de Onboarding
+Gupshup API call:
+```
+POST https://api.gupshup.io/wa/api/v1/msg
+Headers: apikey: {tenant.settings.gupshup_api_key}
+Body: channel=whatsapp&source={source}&destination={phone}&message={text}&src.name={app_name}
+```
 
-Nova pagina `/onboarding` com etapas:
-1. Criar empresa (nome, slug/subdominio)
-2. Selecionar plano
-3. Convidar primeiros usuarios (opcional)
-4. Redirecionamento ao dashboard
+### Etapa 5: UI de Historico de Mensagens
 
-### Etapa 6: Pagina de Configuracoes do Tenant
+Na pagina `/automacao`, aba "Historico":
+- Tabela com: data, cliente, canal, status (enviado/falha), mensagem
+- Filtros por periodo, canal, status
+- Contadores: total enviado, falhas, taxa de sucesso
 
-Nova pagina `/tenant/configuracoes` (somente admin do tenant):
-- Dados da empresa (nome, logo, cor primaria)
-- Plano atual e uso vs limites
-- Gerenciamento de usuarios do tenant
+### Etapa 6: Cron Job
 
-### Etapa 7: Super Admin
+Configurar um cron via `pg_cron` + `pg_net` para chamar `send-notifications` diariamente (ex: 8h da manha).
 
-Nova role `super_admin` com acesso global:
-- Pagina `/admin/tenants` para listar, suspender e gerenciar tenants
-- Visao consolidada de todos os tenants
+### Etapa 7: Rotas e Navegacao
 
-### Etapa 8: Atualizar servicos e componentes existentes
-
-- `clientService.ts`: incluir tenant_id automaticamente nas queries (via RLS, transparente)
-- `useAuth.tsx`: carregar tambem o tenant do usuario
-- `AppLayout.tsx`: mostrar nome/logo do tenant no sidebar
-- Todas as paginas existentes continuam funcionando, agora filtradas por tenant via RLS
+- Adicionar rota `/automacao` no `App.tsx`
+- Adicionar item "Automacao" no menu lateral (apenas admins)
+- Criar `AutomacaoPage.tsx` com tabs: Regras | Historico
 
 ---
 
 ## Detalhes Tecnicos
 
-### Migracoes SQL principais
+### Migracao SQL
 
 ```sql
--- plans
-CREATE TABLE plans (
+CREATE TABLE collection_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  price_monthly DECIMAL(10,2),
-  limits JSONB DEFAULT '{}',
+  channel TEXT NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp','email','both')),
+  days_offset INTEGER NOT NULL DEFAULT 0,
+  message_template TEXT NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- tenants
-CREATE TABLE tenants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  logo_url TEXT,
-  primary_color TEXT DEFAULT '#F97316',
-  plan_id UUID REFERENCES plans(id),
-  status TEXT DEFAULT 'active',
-  settings JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- tenant_users (roles por tenant)
-CREATE TABLE tenant_users (
+CREATE TABLE message_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'operador',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(tenant_id, user_id)
+  client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  rule_id UUID REFERENCES collection_rules(id) ON DELETE SET NULL,
+  channel TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  phone TEXT,
+  email_to TEXT,
+  message_body TEXT,
+  error_message TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Adicionar tenant_id nas tabelas existentes
-ALTER TABLE profiles ADD COLUMN tenant_id UUID REFERENCES tenants(id);
-ALTER TABLE clients ADD COLUMN tenant_id UUID REFERENCES tenants(id);
-ALTER TABLE commission_grades ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+-- RLS para ambas tabelas isoladas por tenant
+ALTER TABLE collection_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE message_logs ENABLE ROW LEVEL SECURITY;
+
+-- Policies: tenant users podem ver, admins podem gerenciar
 ```
 
-### Funcoes helper RLS
-
-```sql
-CREATE OR REPLACE FUNCTION get_my_tenant_id()
-RETURNS UUID
-LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT tenant_id FROM tenant_users
-  WHERE user_id = auth.uid() LIMIT 1
-$$;
-```
-
-### Estrutura de arquivos novos
+### Arquivos novos
 
 ```text
 src/
-  hooks/
-    useTenant.tsx            -- Context do tenant
   pages/
-    OnboardingPage.tsx       -- Fluxo de criacao de tenant
-    TenantSettingsPage.tsx   -- Config do tenant
-    SuperAdminPage.tsx       -- Gestao global de tenants
+    AutomacaoPage.tsx          -- Pagina principal com tabs
   components/
-    billing/
-      PlanCard.tsx           -- Card de exibicao do plano
-      UsageMeter.tsx         -- Medidor uso vs limites
-    tenant/
-      TenantSelector.tsx     -- Seletor de tenant (se usuario pertence a mais de um)
+    automacao/
+      RulesList.tsx            -- Lista de regras
+      RuleForm.tsx             -- Formulario criar/editar regra
+      MessageHistory.tsx       -- Tabela de historico
+      GupshupSettings.tsx      -- Config WhatsApp na pagina de tenant
   services/
-    tenantService.ts         -- CRUD e queries de tenant
+    automacaoService.ts        -- CRUD regras + logs
+
+supabase/
+  functions/
+    send-notifications/
+      index.ts                 -- Edge function principal
 ```
 
-### Compatibilidade retroativa
+### Seguranca
 
-- Um tenant padrao sera criado com os dados existentes
-- Todos os registros atuais (profiles, clients, commission_grades) recebem o tenant_id do tenant padrao
-- O usuario admin atual se torna super_admin
-- Nenhuma funcionalidade existente e perdida
-
----
-
-## Fases futuras (nao incluidas neste plano)
-
-Apos a Fase 1 concluida, as proximas fases serao:
-- **Fase 2**: Automacao e Comunicacao (regua de cobranca, WhatsApp, SMS, Email)
-- **Fase 3**: Negociacao e Pagamentos (acordos, PIX, boleto, gateways)
-- **Fase 4**: Analytics avancado e Portal do Devedor (white-label)
+- Credenciais Gupshup ficam no campo `settings` da tabela `tenants`, protegido por RLS (somente admin do tenant ve/edita)
+- A edge function usa service_role_key para acessar dados de todos os tenants (processamento batch)
+- Message logs isolados por tenant via RLS
+- Inputs de template validados (sem execucao de codigo, apenas substituicao de variaveis)
 
 ---
 
@@ -212,8 +193,9 @@ Apos a Fase 1 concluida, as proximas fases serao:
 
 | Risco | Mitigacao |
 |-------|-----------|
-| Dados existentes nao migrados | Script de migracao cria tenant padrao e associa tudo |
-| Performance com RLS | Indices em tenant_id + funcoes SECURITY DEFINER |
-| Complexidade de roles | Tabela tenant_users separada, funcoes helper |
-| Limites do Lovable | Toda logica complexa via Edge Functions |
+| Credenciais expostas no frontend | Campo settings protegido por RLS; campo de input mascarado |
+| Rate limit do Gupshup | Processar tenants sequencialmente com delay entre envios |
+| Template com variaveis invalidas | Validacao no frontend + fallback para texto literal |
+| Falha de envio | Registrar em message_logs com status "failed" e error_message |
+| Cron nao executando | Log de execucao + status visivel na UI |
 
