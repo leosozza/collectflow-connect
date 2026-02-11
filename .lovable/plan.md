@@ -1,197 +1,192 @@
 
 
-# Fase 4: Notificacoes, Auditoria e KPIs Avancados
+# Integracao com Gateway de Pagamento Negociarie
 
 ## Resumo
 
-Fase 4 transforma o sistema de uma ferramenta operacional em uma plataforma com visibilidade total: notificacoes em tempo real para acao imediata, trilha de auditoria para compliance, e KPIs avancados com metas para gestao de performance.
+Integrar o sistema com a API Negociarie (https://sistema.negociarie.com.br/api/v2) para permitir geracao de cobranças via Boleto, Pix e Cartao de Credito diretamente a partir das parcelas dos clientes, alem de sincronizar pagamentos recebidos e gerenciar inadimplencia.
 
 ---
 
-## Sub-Fase 4A: Notificacoes em Tempo Real
+## Autenticacao da API Negociarie
 
-### O que muda para o usuario
-- Icone de sino no header com badge de contagem de notificacoes nao lidas
-- Dropdown com lista de notificacoes recentes ao clicar no sino
-- Notificacoes automaticas para:
-  - Acordos pendentes de aprovacao (admin)
-  - Acordos aprovados/rejeitados (operador que criou)
-  - Parcelas vencendo hoje/amanha
-  - Novos clientes importados
-- Marcar como lida individualmente ou "marcar todas como lidas"
-- Pagina `/notificacoes` com historico completo
+A API usa autenticacao Bearer Token. Para obter o token:
+- **POST** `https://sistema.negociarie.com.br/api/login`
+- Body: `{ "client_id": "...", "client_secret": "..." }`
 
-### Detalhes tecnicos
+Sera necessario configurar dois segredos no backend:
+- `NEGOCIARIE_CLIENT_ID`
+- `NEGOCIARIE_CLIENT_SECRET`
 
-**Nova tabela `notifications`:**
-```sql
-CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  type TEXT NOT NULL DEFAULT 'info', -- info, warning, success, action
-  reference_type TEXT, -- 'agreement', 'client', 'expense'
-  reference_id UUID,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-- RLS: usuarios veem apenas suas proprias notificacoes
-- Realtime habilitado via `ALTER PUBLICATION supabase_realtime ADD TABLE notifications`
-- Componente `NotificationBell` no header do AppLayout
-- Hook `useNotifications` com Supabase Realtime para updates ao vivo
-- Funcao de banco `create_notification` (SECURITY DEFINER) para criar notificacoes de forma segura
-
-**Novos arquivos:**
-```text
-src/components/notifications/NotificationBell.tsx
-src/components/notifications/NotificationList.tsx
-src/hooks/useNotifications.ts
-src/services/notificationService.ts
-```
+O token sera gerado e cacheado na edge function (com renovacao automatica).
 
 ---
 
-## Sub-Fase 4B: Auditoria e Logs de Atividade
+## Endpoints da API que serao utilizados
 
-### O que muda para o usuario
-- Nova pagina `/auditoria` (admins) com timeline de acoes
-- Registro automatico de toda acao relevante:
-  - Cliente criado/editado/excluido
-  - Pagamento registrado / quebra registrada
-  - Acordo criado/aprovado/rejeitado
-  - Despesa adicionada
-  - Usuario editado
-  - Configuracoes alteradas
-- Filtros por usuario, tipo de acao, periodo
-- Detalhes da acao (quem, quando, o que mudou)
-- Exportacao do log em Excel
+### Cobranca Simples (Boletos)
+| Acao | Metodo | Endpoint |
+|------|--------|----------|
+| Adicionar cobranca (boleto) | POST | `/cobranca/nova` |
+| Consultar cobrancas | GET | `/cobranca/consulta` |
+| Baixar parcela manual | POST | `/cobranca/baixa-manual` |
+| Parcelas pagas por data | GET | `/cobranca/parcelas-pagas?data=YYYY-MM-DD` |
+| Alteradas hoje | GET | `/cobranca/alteradas-hoje` |
+| Atualizar URL callback | POST | `/cobranca/atualizar-url-callback` |
 
-### Detalhes tecnicos
+### Pix e Cartao
+| Acao | Metodo | Endpoint |
+|------|--------|----------|
+| Novo Pix | POST | `/cobranca/nova-pix` |
+| Novo Link de Cartao | POST | `/cobranca/nova-cartao` |
+| Pagamento via Credito | POST | `/cobranca/pagamento-credito` |
+| Cancelar pagamento | PATCH | `/cobranca/pagamento-credito/cancelar` |
+| Desativar recorrencia | PATCH | `/cobranca/pagamento-credito/recorrencia/desativar` |
 
-**Nova tabela `audit_logs`:**
-```sql
-CREATE TABLE audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL,
-  user_name TEXT NOT NULL,
-  action TEXT NOT NULL, -- 'create', 'update', 'delete', 'approve', 'reject', 'payment', 'break'
-  entity_type TEXT NOT NULL, -- 'client', 'agreement', 'expense', 'user', 'settings'
-  entity_id TEXT,
-  details JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-- RLS: admins do tenant veem todos os logs, operadores veem apenas os proprios
-- Servico `auditService.ts` com funcao `logAction()` chamada nos services existentes
-- Integracao nos services de client, agreement, finance e users
-
-**Novos arquivos:**
-```text
-src/pages/AuditoriaPage.tsx
-src/services/auditService.ts
-```
-
-**Arquivos modificados** (adicionar chamadas de auditoria):
-```text
-src/services/clientService.ts
-src/services/agreementService.ts
-src/services/financeService.ts
-```
+### Inadimplencia
+| Acao | Metodo | Endpoint |
+|------|--------|----------|
+| Adicionar titulos | POST | `/inadimplencia/nova` |
+| Consultar titulos | GET | `/inadimplencia/titulos` |
+| Listar acordos | GET | `/inadimplencia/acordos` |
+| Baixa de parcela do acordo | POST | `/inadimplencia/baixa-parcela` |
+| Devolucao de titulo | POST | `/inadimplencia/devolucao-titulo` |
+| Parcelas pagas (inadimplencia) | GET | `/inadimplencia/parcelas-pagas?data=YYYY-MM-DD` |
 
 ---
 
-## Sub-Fase 4C: Dashboard Avancado com KPIs e Metas
+## Arquitetura
 
-### O que muda para o usuario
-- Painel de metas por operador: admin define meta mensal de recebimento
-- Barra de progresso visual mostrando % da meta atingida
-- KPIs avancados no dashboard admin:
-  - Taxa de conversao (acordos propostos vs aprovados)
-  - Tempo medio de resolucao (dias entre criacao e pagamento)
-  - SLA de cobranca (% parcelas cobradas antes do vencimento)
-  - Ticket medio por operador
-- Ranking gamificado com medalhas (ouro, prata, bronze)
-- Comparativo mes atual vs mes anterior com setas de tendencia
+### Edge Function: `negociarie-proxy`
 
-### Detalhes tecnicos
+Uma nova edge function centralizada que:
+1. Autentica o usuario interno (admin)
+2. Gera/renova o token Bearer da Negociarie usando `client_id` e `client_secret` (armazenados como segredos)
+3. Roteia as acoes para os endpoints corretos da API
+4. Valida inputs com Zod
+5. Respeita rate limit da API (60 req/min)
 
-**Nova tabela `operator_goals`:**
+### Edge Function: `negociarie-callback`
+
+Uma edge function publica (sem JWT) que recebe callbacks da Negociarie quando:
+- Boleto e registrado na rede bancaria
+- Pagamento e confirmado (Pix, boleto, cartao)
+- Status de parcela muda
+
+Ao receber um callback de pagamento, atualiza automaticamente o status da parcela no sistema e gera notificacao.
+
+---
+
+## Detalhes Tecnicos
+
+### Nova tabela: `negociarie_cobrancas`
+
+Armazena a relacao entre parcelas internas (clients) e cobrancas na Negociarie:
+
 ```sql
-CREATE TABLE operator_goals (
+CREATE TABLE negociarie_cobrancas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  operator_id UUID NOT NULL,
-  year INTEGER NOT NULL,
-  month INTEGER NOT NULL,
-  target_amount NUMERIC NOT NULL DEFAULT 0,
-  created_by UUID NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  id_geral TEXT NOT NULL,          -- identificador no Negociarie
+  id_parcela TEXT,                  -- id_parcela no Negociarie
+  tipo TEXT NOT NULL DEFAULT 'boleto', -- boleto, pix, cartao
+  status TEXT NOT NULL DEFAULT 'pendente',
+  valor NUMERIC NOT NULL,
+  data_vencimento DATE NOT NULL,
+  link_boleto TEXT,
+  pix_copia_cola TEXT,
+  link_cartao TEXT,
+  linha_digitavel TEXT,
+  id_status INTEGER,               -- codigo status Negociarie (800, 801, etc)
+  callback_data JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(tenant_id, operator_id, year, month)
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-- RLS: admins gerenciam metas, operadores veem as proprias
-- Dashboard do operador ganha barra de progresso da meta
-- Dashboard admin ganha secao de KPIs avancados
-- Calculos feitos no frontend com dados existentes
+RLS: isolamento por tenant_id, admins gerenciam.
 
-**Novos arquivos:**
+### Novos arquivos
+
 ```text
-src/components/dashboard/GoalProgress.tsx
-src/components/dashboard/KPICards.tsx
-src/components/dashboard/TrendIndicator.tsx
-src/services/goalService.ts
+supabase/functions/negociarie-proxy/index.ts    -- Edge function principal
+supabase/functions/negociarie-callback/index.ts -- Webhook de callback
+src/services/negociarieService.ts               -- Service frontend
+src/components/integracao/NegociarieTab.tsx      -- Tab na pagina de integracao
+src/components/integracao/CobrancaForm.tsx       -- Formulario de nova cobranca
+src/components/integracao/CobrancasList.tsx      -- Lista de cobrancas geradas
+src/components/integracao/SyncPanel.tsx          -- Painel de sincronizacao
 ```
 
-**Arquivos modificados:**
-```text
-src/pages/AdminDashboardPage.tsx -- adicionar KPIs e metas
-src/pages/DashboardPage.tsx -- adicionar barra de progresso da meta
-```
-
----
-
-## Ordem de Implementacao
-
-| Ordem | Modulo | Justificativa |
-|-------|--------|---------------|
-| 1 | 4A - Notificacoes | Base para alertas das demais funcionalidades |
-| 2 | 4B - Auditoria | Registra acoes para compliance e rastreabilidade |
-| 3 | 4C - KPIs e Metas | Usa dados existentes + auditoria para metricas avancadas |
-
----
-
-## Novas Rotas e Menu
+### Arquivos modificados
 
 ```text
-Menu lateral (admins):
-  - Auditoria     /auditoria      FileText
-
-Header (todos):
-  - Sino de notificacoes (icone Bell)
+src/pages/IntegracaoPage.tsx    -- Adicionar tabs: CobCloud | Negociarie
+supabase/config.toml            -- Adicionar config das novas edge functions
 ```
 
 ---
 
-## Migracoes SQL Totais
+## Fluxo do Usuario
 
-Tres novas tabelas: `notifications`, `audit_logs` e `operator_goals`, todas com RLS por tenant_id.
-Habilitacao de Realtime para a tabela `notifications`.
+### 1. Configuracao (admin)
+- Na pagina `/integracao`, nova aba "Negociarie"
+- Botao "Testar Conexao" valida as credenciais
+- Campo para configurar URL de callback
+
+### 2. Gerar Cobranca
+- A partir de um cliente/parcela pendente, admin escolhe o metodo de pagamento:
+  - **Boleto**: Gera boleto com link PDF e linha digitavel
+  - **Pix**: Gera QR Code com pix copia e cola
+  - **Link de Cartao**: Gera link de pagamento via cartao de credito
+- Dados do devedor sao preenchidos automaticamente a partir do cadastro do cliente
+
+### 3. Acompanhamento
+- Lista de cobrancas geradas com status em tempo real
+- Consulta de status diretamente na API Negociarie
+- Sincronizacao manual: buscar "alteradas hoje" e atualizar status locais
+
+### 4. Recebimento automatico via Callback
+- Negociarie envia POST para o webhook quando pagamento e confirmado
+- Sistema atualiza status da parcela para "pago" automaticamente
+- Gera notificacao para o operador responsavel
+- Registra no log de auditoria
+
+### 5. Inadimplencia
+- Enviar titulos vencidos para gestao de inadimplencia na Negociarie
+- Consultar titulos e acordos registrados
+- Baixar parcelas de acordos
 
 ---
 
 ## Seguranca
 
-- Notificacoes isoladas por user_id + tenant_id, usuario so ve as proprias
-- Audit logs protegidos: admins veem tudo do tenant, operadores apenas suas acoes
-- Metas gerenciadas apenas por admins
-- Funcao SECURITY DEFINER para criacao de notificacoes (evita bypass de RLS)
-- Dados de auditoria nunca expostos publicamente
+- Credenciais `NEGOCIARIE_CLIENT_ID` e `NEGOCIARIE_CLIENT_SECRET` armazenadas como segredos do backend (nunca expostas no frontend)
+- Callback verifica token SHA1 (`sha1(client_id + client_secret)`) enviado pela Negociarie
+- Edge function de callback nao requer JWT mas valida identidade via token
+- Inputs validados com Zod em todas as acoes
+- Rate limiting respeitado (60 req/min conforme headers da API)
+
+---
+
+## Segredos Necessarios
+
+Antes de implementar, sera solicitado que voce configure:
+1. **NEGOCIARIE_CLIENT_ID** -- fornecido pela Negociarie ao contratar o servico
+2. **NEGOCIARIE_CLIENT_SECRET** -- fornecido pela Negociarie ao contratar o servico
+
+---
+
+## Ordem de Implementacao
+
+| Ordem | Etapa | Descricao |
+|-------|-------|-----------|
+| 1 | Segredos | Solicitar NEGOCIARIE_CLIENT_ID e CLIENT_SECRET |
+| 2 | Migracao | Criar tabela `negociarie_cobrancas` |
+| 3 | Edge Function proxy | Implementar `negociarie-proxy` com autenticacao e rotas |
+| 4 | Edge Function callback | Implementar `negociarie-callback` para webhooks |
+| 5 | Service frontend | Criar `negociarieService.ts` |
+| 6 | UI Integracao | Adicionar aba Negociarie com formulario de cobranca, lista e sync |
+| 7 | Fluxo de pagamento | Integrar geracao de cobranca no fluxo de parcelas (ClientsPage) |
 
