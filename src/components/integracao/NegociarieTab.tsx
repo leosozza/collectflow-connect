@@ -4,9 +4,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Wifi, WifiOff, Loader2, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Wifi, WifiOff, Loader2, CheckCircle2, XCircle, Link2 } from "lucide-react";
 import CobrancaForm from "./CobrancaForm";
 import CobrancasList from "./CobrancasList";
 import SyncPanel from "./SyncPanel";
@@ -26,6 +25,7 @@ const NegociarieTab = () => {
   const [testing, setTesting] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [callbackOk, setCallbackOk] = useState<boolean | null>(null);
 
   const addLog = (action: string, status: "success" | "error", message: string) => {
     setLogs((prev) => [
@@ -46,8 +46,10 @@ const NegociarieTab = () => {
       // Auto-register callback URL
       try {
         await negociarieService.atualizarCallback({ url: CALLBACK_URL });
+        setCallbackOk(true);
         addLog("Callback", "success", `URL de callback registrada: ${CALLBACK_URL}`);
       } catch (cbErr: any) {
+        setCallbackOk(false);
         addLog("Callback", "error", `Falha ao registrar callback: ${cbErr.message}`);
       }
 
@@ -90,11 +92,26 @@ const NegociarieTab = () => {
                   : "Sem conexão com a API"}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <Button onClick={handleTestConnection} disabled={testing} className="w-full">
               {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Testar Conexão
             </Button>
+            {callbackOk !== null && (
+              <div className="flex items-center gap-2 text-sm">
+                {callbackOk ? (
+                  <>
+                    <Link2 className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-700 dark:text-emerald-400">Callback configurado</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-4 h-4 text-destructive" />
+                    <span className="text-destructive">Callback não configurado</span>
+                  </>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
