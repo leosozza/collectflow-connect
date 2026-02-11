@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { TenantProvider } from "@/hooks/useTenant";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
@@ -13,6 +14,9 @@ import CadastroPage from "./pages/CadastroPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import SuperAdminPage from "./pages/SuperAdminPage";
+import TenantSettingsPage from "./pages/TenantSettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,12 +28,21 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <TenantProvider>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route
-              path="/"
+              path="/onboarding"
               element={
                 <ProtectedRoute>
+                  <OnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <Index />
                   </AppLayout>
@@ -39,7 +52,7 @@ const App = () => (
             <Route
               path="/carteira"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <CarteiraPage />
                   </AppLayout>
@@ -49,7 +62,7 @@ const App = () => (
             <Route
               path="/cadastro"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <CadastroPage />
                   </AppLayout>
@@ -59,7 +72,7 @@ const App = () => (
             <Route
               path="/usuarios"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <UsersPage />
                   </AppLayout>
@@ -69,7 +82,7 @@ const App = () => (
             <Route
               path="/configuracoes"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <ConfiguracoesPage />
                   </AppLayout>
@@ -79,15 +92,36 @@ const App = () => (
             <Route
               path="/integracao"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireTenant>
                   <AppLayout>
                     <IntegracaoPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/tenants"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <SuperAdminPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tenant/configuracoes"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <TenantSettingsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </TenantProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

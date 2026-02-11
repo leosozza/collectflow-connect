@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import { 
   LayoutDashboard, 
   Users, 
@@ -24,12 +25,13 @@ interface AppLayoutProps {
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const { profile, signOut } = useAuth();
+  const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isTenantAdmin;
 
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -38,7 +40,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     ...(isAdmin ? [
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },
+      { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
       { label: "Integração", icon: Cloud, path: "/integracao" },
+    ] : []),
+    ...(isSuperAdmin ? [
+      { label: "Tenants", icon: Users, path: "/admin/tenants" },
     ] : []),
   ];
 
@@ -66,7 +72,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           <div className="w-8 h-8 rounded-lg gradient-orange flex items-center justify-center flex-shrink-0">
             <Zap className="w-5 h-5 text-primary-foreground" />
           </div>
-          {!collapsed && <span className="text-lg font-bold text-sidebar-foreground">Connect Control</span>}
+          {!collapsed && <span className="text-lg font-bold text-sidebar-foreground">{tenant?.name || "Connect Control"}</span>}
         </div>
 
         <nav className="flex-1 px-2 py-4 space-y-1">
@@ -97,7 +103,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           {!collapsed && (
             <div className="px-4 py-2 mb-2">
               <p className="text-sm font-medium text-sidebar-foreground truncate">{profile?.full_name || "Usuário"}</p>
-              <p className="text-xs text-sidebar-foreground/60 capitalize">{profile?.role || "operador"}</p>
+              <p className="text-xs text-sidebar-foreground/60 capitalize">{tenantUser?.role || "operador"}</p>
             </div>
           )}
           <button
@@ -134,7 +140,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
-              {profile?.role === "admin" ? "Administrador" : "Operador"}
+              {isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Administrador" : "Operador"}
             </span>
           </div>
         </header>
