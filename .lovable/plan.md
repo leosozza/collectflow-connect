@@ -1,59 +1,50 @@
 
 
-# Melhorias no Formulario de Cobranca Negociarie (Boleto, Pix, Cartao)
+# Correcao das Barras de Rolagem
 
-## Problemas Atuais
+## Problema 1: Sidebar sem scroll
+A `<nav>` do sidebar usa `flex-1` para ocupar o espaco disponivel, mas nao tem `overflow-auto`. Quando ha muitos itens de menu (admin tem 13+ itens), os itens ficam cortados ou empurram o layout sem possibilidade de rolar. A barra de rolagem deve ser invisivel (thin/auto-hide) para manter o visual limpo.
 
-1. **Bug critico**: O formulario envia `client_id: null` ao salvar no banco, mas a coluna `client_id` na tabela `negociarie_cobrancas` e NOT NULL -- isso causa erro no INSERT
-2. **Sem mascara de CPF**: O campo CPF aceita qualquer texto sem formatacao
-3. **Sem validacao robusta**: Apenas verifica se campos estao preenchidos, sem validar formato de CPF, valor minimo, data no passado, etc.
-4. **Sem feedback visual do resultado**: Apos gerar a cobranca, nao mostra o link do boleto, codigo Pix ou link do cartao gerado -- o usuario precisa procurar na lista
-5. **Sem mascara de telefone**: Campo telefone sem formatacao
-6. **Sem confirmacao antes de enviar**: Nenhum dialog de confirmacao para evitar envios acidentais
+## Problema 2: Scrollbar da pagina principal incorreta
+O arquivo `src/App.css` define estilos no `#root` (`max-width: 1280px`, `margin: 0 auto`, `padding: 2rem`) que conflitam com o layout full-screen do `AppLayout`. Isso causa problemas de largura e posicionamento da barra de rolagem.
 
-## Plano de Implementacao
+## Solucao
 
-### 1. Corrigir bug do client_id (migracao de banco)
-- Alterar a coluna `client_id` na tabela `negociarie_cobrancas` para ser NULLABLE, ja que cobracas podem ser geradas sem vincular a um cliente do sistema
+### 1. Sidebar - Adicionar scroll invisivel na nav
+No `src/components/AppLayout.tsx`, alterar a `<nav>` (linha 89):
+- De: `className="flex-1 px-2 py-4 space-y-1"`
+- Para: `className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin"`
 
-### 2. Melhorar o CobrancaForm
-- Adicionar mascara de CPF (000.000.000-00) com formatacao automatica ao digitar
-- Adicionar mascara de telefone ((00) 00000-0000)
-- Validar CPF com 11 digitos apos remover formatacao
-- Validar valor minimo (maior que zero)
-- Validar data de vencimento nao pode ser no passado
-- Adicionar dialog de confirmacao antes de enviar com resumo dos dados
-- Apos sucesso, exibir um card/modal com os dados de pagamento gerados:
-  - Boleto: link do boleto + linha digitavel (com botao copiar)
-  - Pix: codigo copia-e-cola (com botao copiar) + QR code se disponivel
-  - Cartao: link de pagamento (com botao copiar/abrir)
-
-### 3. Melhorar o CobrancasList
-- Adicionar tooltip nos botoes de acao para clareza
-- Mostrar mais informacoes (nome/CPF se disponiveis)
-
-### 4. Melhorar tratamento de erros no edge function
-- Adicionar logging no `negociarie-proxy` para facilitar debug
-- Retornar mensagens de erro mais descritivas
-
-## Detalhes Tecnicos
-
-### Migracao SQL
-```sql
-ALTER TABLE negociarie_cobrancas ALTER COLUMN client_id DROP NOT NULL;
+Adicionar classe utilitaria CSS em `src/index.css` para esconder a scrollbar visualmente mas manter funcionalidade:
+```css
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .scrollbar-thin:hover {
+    scrollbar-color: hsl(var(--sidebar-border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 2px;
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background: hsl(var(--sidebar-border));
+  }
+}
 ```
 
+### 2. Limpar App.css
+Remover todo o conteudo de `src/App.css` (ou remover o arquivo se nao for importado em lugar critico). Os estilos la sao restos do template Vite e conflitam com o layout.
+
 ### Arquivos modificados
-- `src/components/integracao/CobrancaForm.tsx` -- Mascaras, validacao, dialog de confirmacao, exibicao do resultado
-- `src/services/negociarieService.ts` -- Remover cast `as any` e ajustar tipagem
-- `supabase/functions/negociarie-proxy/index.ts` -- Adicionar console.log para debug
-- Nova funcao utilitaria de mascaras em `src/lib/formatters.ts` (se nao existir mascaras la)
-
-### Fluxo melhorado do usuario
-1. Preenche formulario com mascaras automaticas
-2. Clica em "Gerar Boleto/Pix/Cartao"
-3. Dialog de confirmacao aparece com resumo
-4. Confirma e aguarda resposta
-5. Card de sucesso aparece com os dados de pagamento (link, linha digitavel, pix copia-cola)
-6. Lista de cobrancas atualiza automaticamente
-
+- `src/components/AppLayout.tsx` - adicionar `overflow-y-auto scrollbar-thin` na nav
+- `src/index.css` - adicionar classes utilitarias para scrollbar invisivel
+- `src/App.css` - limpar conteudo (estilos legados do template Vite)
