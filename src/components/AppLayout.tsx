@@ -17,7 +17,9 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
-  BarChart3
+  BarChart3,
+  Handshake,
+  DollarSign
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +43,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Cadastro", icon: ClipboardPlus, path: "/cadastro" },
     ...(isAdmin ? [
       { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
+      { label: "Acordos", icon: Handshake, path: "/acordos" },
+      { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
       { label: "Automação", icon: Bot, path: "/automacao" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },

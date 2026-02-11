@@ -19,6 +19,9 @@ import SuperAdminPage from "./pages/SuperAdminPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
+import AcordosPage from "./pages/AcordosPage";
+import FinanceiroPage from "./pages/FinanceiroPage";
+import PortalPage from "./pages/PortalPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -137,10 +140,31 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <RelatoriosPage />
+              </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/acordos"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AcordosPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/financeiro"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <FinanceiroPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/portal/:tenantSlug" element={<PortalPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </TenantProvider>
