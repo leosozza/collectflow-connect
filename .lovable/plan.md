@@ -1,104 +1,86 @@
 
 
-# Corrigir Estrutura do Payload para API Negociarie
+# Corrigir Recebimento Automatico de Callbacks da Negociarie
 
 ## Problema
-A API Negociarie espera um payload com estrutura **aninhada** (nested), mas o formulario envia um objeto plano (flat). Os campos obrigatorios sao:
+A cobranca COB-1770834042432 foi paga na gateway Negociarie, mas o sistema local continua mostrando "pendente" porque:
+1. A URL de callback nunca foi registrada na API Negociarie
+2. Os dados retornados pela API (pix_copia_cola, id_parcela) nao estao sendo salvos localmente
 
-- `id_geral` - identificador unico da cobranca (gerado pelo cliente)
-- `devedor` - objeto com dados do devedor: `documento`, `razao_social`, `cep`, `endereco`, `bairro`, `cidade`, `uf`, `email`, `celular`
-- `parcelas` - array de parcelas com valor e vencimento
-- `sandbox` - flag booleano (true para testes, false para producao)
+## Solucao em 3 partes
 
-## Solucao
+### Parte 1: Registrar URL de callback automaticamente
 
-### 1. Reestruturar o payload no `CobrancaForm.tsx`
+Adicionar um botao na aba Negociarie (ou disparar automaticamente ao testar conexao) para registrar a URL de callback na API.
 
-Transformar o payload flat atual:
-```json
-{ "documento": "123", "nome": "Fulano", "cep": "01001000", ... }
-```
+**Arquivo:** `src/components/integracao/NegociarieTab.tsx`
+- Adicionar botao "Configurar Callback" ou chamar automaticamente ao testar conexao
+- Chamar `negociarieService.atualizarCallback({ url: callbackUrl })`
+- A URL sera: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/negociarie-callback`
 
-Para o formato esperado pela API:
-```json
-{
-  "id_geral": "TENANT-1234567890",
-  "devedor": {
-    "documento": "12345678901",
-    "razao_social": "Nome Completo",
-    "cep": "01001000",
-    "endereco": "Rua Exemplo, 123",
-    "bairro": "Centro",
-    "cidade": "Sao Paulo",
-    "uf": "SP",
-    "email": "email@exemplo.com",
-    "celular": "11999999999"
-  },
-  "parcelas": [
-    {
-      "valor": 100.00,
-      "data_vencimento": "2026-03-01",
-      "descricao": "Cobranca boleto"
-    }
-  ],
-  "sandbox": false
-}
-```
+**Arquivo:** `src/components/integracao/SyncPanel.tsx`
+- Adicionar botao dedicado para configurar/atualizar a URL de callback
+- Mostrar status de configuracao
 
-### 2. Adicionar campo "Bairro" ao formulario
-A API exige `devedor.bairro` que nao existe no formulario atual. Adicionar campo de bairro obrigatorio.
+### Parte 2: Salvar dados retornados pela API ao criar cobranca
 
-### 3. Gerar `id_geral` automaticamente
-Gerar um identificador unico no formato `{prefixo}-{timestamp}` para cada cobranca.
+**Arquivo:** `src/components/integracao/CobrancaForm.tsx`
+- Apos criar a cobranca com sucesso, extrair `pix_copia_cola`, `id_parcela`, `link_boleto`, `linha_digitavel`, `link_cartao` da resposta da API
+- Salvar esses dados na tabela `negociarie_cobrancas` para que o callback consiga localizar a cobranca corretamente
 
-### 4. Adicionar flag `sandbox`
-Usar `sandbox: false` por padrao (producao). Opcionalmente ler das configuracoes do tenant.
-
-## Detalhes Tecnicos
-
-### Arquivos modificados
-- `src/components/integracao/CobrancaForm.tsx`
-  - Adicionar campo "Bairro" ao form state e UI
-  - Reestruturar payload para formato aninhado com `devedor`, `parcelas`, `id_geral`, `sandbox`
-  - Validar bairro como campo obrigatorio
-  - Gerar `id_geral` unico automaticamente
-
-### Novo estado do form
+Trecho atual que salva a cobranca:
 ```typescript
-const [form, setForm] = useState({
-  nome: "", cpf: "", email: "", telefone: "",
-  valor: "", vencimento: "", descricao: "",
-  cep: "", endereco: "", bairro: "", cidade: "", uf: "",
+await negociarieService.saveCobranca({
+  tenant_id: tenantId,
+  client_id: null,
+  id_geral: idGeral2,
+  id_parcela: null,        // <-- deveria salvar o retornado
+  tipo,
+  status: "pendente",
+  valor: parseCurrencyInput(form.valor),
+  data_vencimento: form.vencimento,
+  link_boleto: null,        // <-- deveria salvar o retornado
+  pix_copia_cola: null,     // <-- deveria salvar o retornado
+  link_cartao: null,        // <-- deveria salvar o retornado
+  linha_digitavel: null,    // <-- deveria salvar o retornado
 });
 ```
 
-### Payload reestruturado
+Sera alterado para extrair os dados da resposta:
 ```typescript
-const idGeral = `COB-${Date.now()}`;
-const payload = {
-  id_geral: idGeral,
-  devedor: {
-    documento: form.cpf.replace(/\D/g, ""),
-    razao_social: form.nome.trim(),
-    cep: form.cep.replace(/\D/g, ""),
-    endereco: form.endereco.trim(),
-    bairro: form.bairro.trim(),
-    cidade: form.cidade.trim(),
-    uf: form.uf,
-    email: form.email.trim() || "nao@informado.com",
-    celular: form.telefone.replace(/\D/g, "") || "00000000000",
-  },
-  parcelas: [
-    {
-      valor: Number(form.valor),
-      data_vencimento: form.vencimento,
-      descricao: form.descricao.trim() || `Cobranca ${tipo}`,
-    },
-  ],
-  sandbox: false,
-};
+const parcela = apiResult.parcelas?.[0] || {};
+await negociarieService.saveCobranca({
+  tenant_id: tenantId,
+  client_id: null,
+  id_geral: idGeral2,
+  id_parcela: parcela.id_parcela || null,
+  tipo,
+  status: "pendente",
+  valor: parseCurrencyInput(form.valor),
+  data_vencimento: form.vencimento,
+  link_boleto: parcela.link_boleto || parcela.url_boleto || null,
+  pix_copia_cola: parcela.pix_copia_cola || null,
+  link_cartao: parcela.link_cartao || parcela.url_cartao || null,
+  linha_digitavel: parcela.linha_digitavel || null,
+});
 ```
 
-### Validacao adicional
-- Bairro: obrigatorio, nao vazio
+### Parte 3: Adicionar botao de sincronizacao manual de status
+
+**Arquivo:** `src/components/integracao/CobrancasList.tsx`
+- Adicionar botao "Atualizar Status" em cada cobranca que consulta a API Negociarie via `consultaCobrancas({ id_geral })` e atualiza o status local
+- Isso serve como fallback caso o callback falhe
+
+### Parte 4: Atualizar a cobranca existente manualmente (acao imediata)
+
+Como a cobranca COB-1770834042432 ja existe e foi paga, o botao de sincronizacao manual permitira atualizar o status consultando a API.
+
+## Resumo dos arquivos modificados
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/components/integracao/NegociarieTab.tsx` | Registrar callback URL ao testar conexao |
+| `src/components/integracao/SyncPanel.tsx` | Botao dedicado para configurar URL de callback |
+| `src/components/integracao/CobrancaForm.tsx` | Salvar dados retornados (pix_copia_cola, id_parcela, etc.) |
+| `src/components/integracao/CobrancasList.tsx` | Botao "Atualizar Status" por cobranca via consulta API |
 
