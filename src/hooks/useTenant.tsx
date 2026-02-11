@@ -57,13 +57,15 @@ export const useTenant = () => {
 };
 
 export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantUser, setTenantUser] = useState<TenantUser | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchTenantData = async () => {
+    if (authLoading) return; // Wait for auth to finish
+    
     if (!user) {
       setTenant(null);
       setTenantUser(null);
@@ -73,13 +75,19 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
+      setLoading(true);
+      
       // Fetch tenant_user for current user
-      const { data: tuData } = await supabase
+      const { data: tuData, error: tuError } = await supabase
         .from("tenant_users")
         .select("*")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
+
+      if (tuError) {
+        console.error("Error fetching tenant_users:", tuError);
+      }
 
       if (!tuData) {
         setTenantUser(null);
@@ -92,11 +100,15 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
       setTenantUser(tuData as TenantUser);
 
       // Fetch tenant
-      const { data: tenantData } = await supabase
+      const { data: tenantData, error: tenantError } = await supabase
         .from("tenants")
         .select("*")
         .eq("id", tuData.tenant_id)
         .single();
+
+      if (tenantError) {
+        console.error("Error fetching tenant:", tenantError);
+      }
 
       if (tenantData) {
         setTenant(tenantData as Tenant);
@@ -120,7 +132,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchTenantData();
-  }, [user]);
+  }, [user, authLoading]);
 
   const isSuperAdmin = tenantUser?.role === "super_admin";
   const isTenantAdmin = tenantUser?.role === "admin" || isSuperAdmin;
