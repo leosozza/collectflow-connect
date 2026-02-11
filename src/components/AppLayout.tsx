@@ -16,7 +16,8 @@ import {
   ClipboardPlus,
   Bot,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,6 +40,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Carteira", icon: Wallet, path: "/carteira" },
     { label: "Cadastro", icon: ClipboardPlus, path: "/cadastro" },
     ...(isAdmin ? [
+      { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
       { label: "Automação", icon: Bot, path: "/automacao" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },

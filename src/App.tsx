@@ -18,6 +18,7 @@ import OnboardingPage from "./pages/OnboardingPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
+import RelatoriosPage from "./pages/RelatoriosPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -126,6 +127,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <AutomacaoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/relatorios"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <RelatoriosPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
