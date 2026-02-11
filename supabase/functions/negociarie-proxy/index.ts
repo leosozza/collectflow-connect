@@ -75,9 +75,8 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Token inválido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -88,8 +87,8 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "test-connection": {
-        // Simple ping - try to fetch cobrancas
-        result = await negociarieRequest("GET", "/cobranca/consulta?limit=1");
+        // Try to authenticate with Negociarie - if getToken succeeds, we're connected
+        await getToken();
         result = { connected: true, status: 200 };
         break;
       }
