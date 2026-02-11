@@ -8,6 +8,8 @@ export interface Client {
   credor: string;
   nome_completo: string;
   cpf: string;
+  phone: string | null;
+  email: string | null;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
@@ -25,6 +27,8 @@ export interface ClientFormData {
   credor: string;
   nome_completo: string;
   cpf: string;
+  phone?: string;
+  email?: string;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
@@ -78,6 +82,8 @@ export const createClient = async (
       credor: validated.credor,
       nome_completo: validated.nome_completo,
       cpf: validated.cpf,
+      phone: data.phone || null,
+      email: data.email || null,
       numero_parcela: validated.numero_parcela + i,
       total_parcelas: totalParcelas,
       valor_entrada: valorEntrada,

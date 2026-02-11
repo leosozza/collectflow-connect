@@ -45,6 +45,8 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [status, setStatus] = useState<"pendente" | "pago" | "quebrado">(
     defaultValues?.status || "pendente"
   );
+  const [phone, setPhone] = useState(defaultValues?.phone || "");
+  const [email, setEmail] = useState(defaultValues?.email || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +54,8 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       credor,
       nome_completo: nomeCompleto.trim(),
       cpf: cpf.trim(),
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
       numero_parcela: parseInt(numeroParcela) || 1,
       total_parcelas: parseInt(totalParcelas) || 1,
       valor_entrada: parseFloat(valorEntrada) || 0,
@@ -93,6 +97,27 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
             placeholder="000.000.000-00"
             maxLength={14}
             required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Telefone (WhatsApp)</Label>
+          <Input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="5511999999999"
+            maxLength={20}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Email</Label>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="cliente@email.com"
+            maxLength={255}
           />
         </div>
 
