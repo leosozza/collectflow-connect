@@ -1,178 +1,170 @@
 
 
-# Fase 3: Relatorios, Portal do Devedor, Acordos e Financeiro
+# Fase 4: Notificacoes, Auditoria e KPIs Avancados
 
 ## Resumo
 
-Fase 3 abrange quatro modulos complementares que transformam o sistema de um gestor operacional em uma plataforma completa de cobranca. Dado o volume, sera dividida em sub-fases incrementais para entrega progressiva.
+Fase 4 transforma o sistema de uma ferramenta operacional em uma plataforma com visibilidade total: notificacoes em tempo real para acao imediata, trilha de auditoria para compliance, e KPIs avancados com metas para gestao de performance.
 
 ---
 
-## Sub-Fase 3A: Relatorios e Analytics
+## Sub-Fase 4A: Notificacoes em Tempo Real
 
 ### O que muda para o usuario
-- Nova pagina `/relatorios` com graficos de evolucao mensal (recebimento vs quebra ao longo do tempo)
-- Relatorio de desempenho por operador com ranking
-- Relatorio de aging (envelhecimento da carteira) mostrando parcelas vencidas por faixas de dias
-- Exportacao de relatorios em Excel/PDF
-- Filtros por periodo, operador, credor e status
+- Icone de sino no header com badge de contagem de notificacoes nao lidas
+- Dropdown com lista de notificacoes recentes ao clicar no sino
+- Notificacoes automaticas para:
+  - Acordos pendentes de aprovacao (admin)
+  - Acordos aprovados/rejeitados (operador que criou)
+  - Parcelas vencendo hoje/amanha
+  - Novos clientes importados
+- Marcar como lida individualmente ou "marcar todas como lidas"
+- Pagina `/notificacoes` com historico completo
 
 ### Detalhes tecnicos
 
-**Nenhuma migracao necessaria** -- todos os dados ja existem na tabela `clients`. Os relatorios sao calculados no frontend com queries agregadas.
-
-**Novos arquivos:**
-```text
-src/pages/RelatoriosPage.tsx
-src/components/relatorios/EvolutionChart.tsx       -- Grafico de linha: recebido vs quebra por mes
-src/components/relatorios/AgingReport.tsx           -- Tabela de aging (0-30, 31-60, 61-90, 90+ dias)
-src/components/relatorios/OperatorRanking.tsx       -- Ranking de operadores por performance
-src/components/relatorios/ReportFilters.tsx         -- Filtros compartilhados
-```
-
-- Rota `/relatorios` no App.tsx (admins)
-- Item "Relatorios" no menu lateral com icone `BarChart3`
-- Usa Recharts (ja instalado) para graficos de evolucao
-- Exportacao Excel via `xlsx` (ja instalado), PDF via impressao do navegador (`window.print`)
-
----
-
-## Sub-Fase 3B: Gestao de Acordos e Negociacoes
-
-### O que muda para o usuario
-- Operadores podem criar propostas de acordo para um devedor (desconto, novo parcelamento)
-- Admin aprova ou rejeita propostas
-- Ao aprovar, o sistema gera automaticamente as novas parcelas e cancela as antigas
-- Historico de acordos por devedor
-- Dashboard mostra metricas de acordos (propostos, aprovados, valor renegociado)
-
-### Detalhes tecnicos
-
-**Nova tabela `agreements`:**
+**Nova tabela `notifications`:**
 ```sql
-CREATE TABLE agreements (
+CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  client_cpf TEXT NOT NULL,
-  client_name TEXT NOT NULL,
-  credor TEXT NOT NULL,
-  original_total NUMERIC NOT NULL,
-  proposed_total NUMERIC NOT NULL,
-  discount_percent NUMERIC DEFAULT 0,
-  new_installments INTEGER NOT NULL DEFAULT 1,
-  new_installment_value NUMERIC NOT NULL,
-  first_due_date DATE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','cancelled')),
-  created_by UUID REFERENCES auth.users(id),
-  approved_by UUID REFERENCES auth.users(id),
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE agreements ENABLE ROW LEVEL SECURITY;
--- RLS: tenant isolation
-```
-
-**Novos arquivos:**
-```text
-src/pages/AcordosPage.tsx                          -- Lista de acordos + formulario
-src/components/acordos/AgreementForm.tsx            -- Formulario de proposta
-src/components/acordos/AgreementsList.tsx           -- Lista com filtros e acoes
-src/services/agreementService.ts                    -- CRUD acordos + geracao de parcelas
-```
-
-- Rota `/acordos` no App.tsx
-- Ao aprovar acordo: cancela parcelas pendentes do CPF/credor, gera novas com valor e datas do acordo
-- Fluxo: Operador cria proposta -> Admin ve na lista -> Aprova/Rejeita -> Sistema executa
-
----
-
-## Sub-Fase 3C: Portal do Devedor
-
-### O que muda para o usuario
-- URL publica acessivel sem login: `/portal`
-- Devedor informa CPF e ve suas dividas pendentes
-- Ve detalhes: credor, parcelas, valores, vencimentos
-- Pode solicitar acordo diretamente (formulario simples)
-- Devedor recebe link do portal nas mensagens de WhatsApp/Email (template atualizado)
-
-### Detalhes tecnicos
-
-**Nenhuma autenticacao necessaria** -- portal e publico, consulta por CPF.
-
-**Edge function `portal-lookup`:**
-- Recebe CPF, retorna dividas pendentes do tenant (sem dados sensiveis como operator_id)
-- Tenant identificado via slug na URL ou parametro
-- Rate limiting basico (max 10 consultas por IP por minuto)
-
-**Novos arquivos:**
-```text
-src/pages/PortalPage.tsx                           -- Pagina publica do devedor
-src/components/portal/DebtList.tsx                 -- Lista de dividas
-src/components/portal/AgreementRequest.tsx         -- Formulario de solicitacao de acordo
-supabase/functions/portal-lookup/index.ts          -- Edge function para consulta
-```
-
-- Rota `/portal/:tenantSlug` no App.tsx (sem ProtectedRoute)
-- A edge function usa service_role_key para buscar dados, filtrando apenas campos seguros
-- Solicitacao de acordo cria um registro na tabela `agreements` com status "pending"
-
----
-
-## Sub-Fase 3D: Financeiro e Faturamento
-
-### O que muda para o usuario
-- Nova pagina `/financeiro` para acompanhar receitas e despesas do tenant
-- Resumo financeiro mensal: total recebido, comissoes pagas, margem liquida
-- Registro manual de despesas operacionais
-- Visao consolidada: receita bruta - comissoes - despesas = resultado liquido
-- Exportacao de demonstrativo financeiro em Excel
-
-### Detalhes tecnicos
-
-**Nova tabela `expenses`:**
-```sql
-CREATE TABLE expenses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  description TEXT NOT NULL,
-  amount NUMERIC NOT NULL,
-  category TEXT DEFAULT 'operacional',
-  expense_date DATE NOT NULL,
-  created_by UUID REFERENCES auth.users(id),
+  user_id UUID NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'info', -- info, warning, success, action
+  reference_type TEXT, -- 'agreement', 'client', 'expense'
+  reference_id UUID,
+  is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
--- RLS: tenant isolation, admins can manage
 ```
+
+- RLS: usuarios veem apenas suas proprias notificacoes
+- Realtime habilitado via `ALTER PUBLICATION supabase_realtime ADD TABLE notifications`
+- Componente `NotificationBell` no header do AppLayout
+- Hook `useNotifications` com Supabase Realtime para updates ao vivo
+- Funcao de banco `create_notification` (SECURITY DEFINER) para criar notificacoes de forma segura
 
 **Novos arquivos:**
 ```text
-src/pages/FinanceiroPage.tsx                       -- Dashboard financeiro
-src/components/financeiro/FinancialSummary.tsx      -- Cards de resumo
-src/components/financeiro/ExpenseForm.tsx           -- Formulario de despesa
-src/components/financeiro/ExpenseList.tsx           -- Lista de despesas
-src/components/financeiro/ProfitChart.tsx           -- Grafico receita vs despesa
-src/services/financeService.ts                     -- CRUD despesas + queries agregadas
+src/components/notifications/NotificationBell.tsx
+src/components/notifications/NotificationList.tsx
+src/hooks/useNotifications.ts
+src/services/notificationService.ts
 ```
-
-- Rota `/financeiro` no App.tsx (admins)
-- Receita calculada a partir de `clients` com status "pago"
-- Comissoes calculadas usando o sistema existente de grades
-- Resultado = receita - comissoes - despesas
 
 ---
 
-## Ordem de Implementacao Sugerida
+## Sub-Fase 4B: Auditoria e Logs de Atividade
+
+### O que muda para o usuario
+- Nova pagina `/auditoria` (admins) com timeline de acoes
+- Registro automatico de toda acao relevante:
+  - Cliente criado/editado/excluido
+  - Pagamento registrado / quebra registrada
+  - Acordo criado/aprovado/rejeitado
+  - Despesa adicionada
+  - Usuario editado
+  - Configuracoes alteradas
+- Filtros por usuario, tipo de acao, periodo
+- Detalhes da acao (quem, quando, o que mudou)
+- Exportacao do log em Excel
+
+### Detalhes tecnicos
+
+**Nova tabela `audit_logs`:**
+```sql
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL,
+  user_name TEXT NOT NULL,
+  action TEXT NOT NULL, -- 'create', 'update', 'delete', 'approve', 'reject', 'payment', 'break'
+  entity_type TEXT NOT NULL, -- 'client', 'agreement', 'expense', 'user', 'settings'
+  entity_id TEXT,
+  details JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+- RLS: admins do tenant veem todos os logs, operadores veem apenas os proprios
+- Servico `auditService.ts` com funcao `logAction()` chamada nos services existentes
+- Integracao nos services de client, agreement, finance e users
+
+**Novos arquivos:**
+```text
+src/pages/AuditoriaPage.tsx
+src/services/auditService.ts
+```
+
+**Arquivos modificados** (adicionar chamadas de auditoria):
+```text
+src/services/clientService.ts
+src/services/agreementService.ts
+src/services/financeService.ts
+```
+
+---
+
+## Sub-Fase 4C: Dashboard Avancado com KPIs e Metas
+
+### O que muda para o usuario
+- Painel de metas por operador: admin define meta mensal de recebimento
+- Barra de progresso visual mostrando % da meta atingida
+- KPIs avancados no dashboard admin:
+  - Taxa de conversao (acordos propostos vs aprovados)
+  - Tempo medio de resolucao (dias entre criacao e pagamento)
+  - SLA de cobranca (% parcelas cobradas antes do vencimento)
+  - Ticket medio por operador
+- Ranking gamificado com medalhas (ouro, prata, bronze)
+- Comparativo mes atual vs mes anterior com setas de tendencia
+
+### Detalhes tecnicos
+
+**Nova tabela `operator_goals`:**
+```sql
+CREATE TABLE operator_goals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  operator_id UUID NOT NULL,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  target_amount NUMERIC NOT NULL DEFAULT 0,
+  created_by UUID NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, operator_id, year, month)
+);
+```
+
+- RLS: admins gerenciam metas, operadores veem as proprias
+- Dashboard do operador ganha barra de progresso da meta
+- Dashboard admin ganha secao de KPIs avancados
+- Calculos feitos no frontend com dados existentes
+
+**Novos arquivos:**
+```text
+src/components/dashboard/GoalProgress.tsx
+src/components/dashboard/KPICards.tsx
+src/components/dashboard/TrendIndicator.tsx
+src/services/goalService.ts
+```
+
+**Arquivos modificados:**
+```text
+src/pages/AdminDashboardPage.tsx -- adicionar KPIs e metas
+src/pages/DashboardPage.tsx -- adicionar barra de progresso da meta
+```
+
+---
+
+## Ordem de Implementacao
 
 | Ordem | Modulo | Justificativa |
 |-------|--------|---------------|
-| 1 | 3A - Relatorios | Nao requer migracao, usa dados existentes |
-| 2 | 3B - Acordos | Adiciona valor operacional imediato |
-| 3 | 3D - Financeiro | Complementa acordos com visao financeira |
-| 4 | 3C - Portal do Devedor | Depende de acordos e templates prontos |
+| 1 | 4A - Notificacoes | Base para alertas das demais funcionalidades |
+| 2 | 4B - Auditoria | Registra acoes para compliance e rastreabilidade |
+| 3 | 4C - KPIs e Metas | Usa dados existentes + auditoria para metricas avancadas |
 
 ---
 
@@ -180,28 +172,26 @@ src/services/financeService.ts                     -- CRUD despesas + queries ag
 
 ```text
 Menu lateral (admins):
-  - Relatorios    /relatorios     BarChart3
-  - Acordos       /acordos        Handshake
-  - Financeiro    /financeiro     DollarSign
-  
-Rota publica (sem login):
-  - Portal        /portal/:slug   (nao aparece no menu)
+  - Auditoria     /auditoria      FileText
+
+Header (todos):
+  - Sino de notificacoes (icone Bell)
 ```
 
 ---
 
 ## Migracoes SQL Totais
 
-Duas novas tabelas: `agreements` e `expenses`, ambas com RLS por tenant_id.
-Uma nova edge function: `portal-lookup` para consultas publicas por CPF.
+Tres novas tabelas: `notifications`, `audit_logs` e `operator_goals`, todas com RLS por tenant_id.
+Habilitacao de Realtime para a tabela `notifications`.
 
 ---
 
 ## Seguranca
 
-- Portal do devedor expoe apenas: nome, credor, valor, vencimento, status. Nunca expoe operator_id, tenant internals
-- Edge function `portal-lookup` valida formato do CPF e aplica rate limiting
-- Tabela `agreements` tem campo `approved_by` para auditoria
-- Tabela `expenses` restrita a admins via RLS
-- Dados financeiros agregados no frontend, sem exposicao de dados individuais sensiveis
+- Notificacoes isoladas por user_id + tenant_id, usuario so ve as proprias
+- Audit logs protegidos: admins veem tudo do tenant, operadores apenas suas acoes
+- Metas gerenciadas apenas por admins
+- Funcao SECURITY DEFINER para criacao de notificacoes (evita bypass de RLS)
+- Dados de auditoria nunca expostos publicamente
 
