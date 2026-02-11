@@ -1,201 +1,207 @@
 
 
-# Fase 2: Automacao e Comunicacao (Regua de Cobranca + WhatsApp + Email)
+# Fase 3: Relatorios, Portal do Devedor, Acordos e Financeiro
 
 ## Resumo
 
-Implementar um sistema completo de automacao de cobranca onde cada tenant configura suas proprias regras e credenciais. Inclui regua de cobranca configuravel, envio de WhatsApp via Gupshup (chave por tenant) e email via sistema integrado do Lovable Cloud.
+Fase 3 abrange quatro modulos complementares que transformam o sistema de um gestor operacional em uma plataforma completa de cobranca. Dado o volume, sera dividida em sub-fases incrementais para entrega progressiva.
 
 ---
 
-## Arquitetura
+## Sub-Fase 3A: Relatorios e Analytics
 
-Cada tenant armazena suas credenciais Gupshup no campo `settings` (JSONB) da tabela `tenants`, que ja existe. A edge function `send-notifications` busca as credenciais do tenant ao processar notificacoes.
+### O que muda para o usuario
+- Nova pagina `/relatorios` com graficos de evolucao mensal (recebimento vs quebra ao longo do tempo)
+- Relatorio de desempenho por operador com ranking
+- Relatorio de aging (envelhecimento da carteira) mostrando parcelas vencidas por faixas de dias
+- Exportacao de relatorios em Excel/PDF
+- Filtros por periodo, operador, credor e status
 
+### Detalhes tecnicos
+
+**Nenhuma migracao necessaria** -- todos os dados ja existem na tabela `clients`. Os relatorios sao calculados no frontend com queries agregadas.
+
+**Novos arquivos:**
 ```text
-+-------------------+      +---------------------+      +------------------+
-| collection_rules  |      | send-notifications  |      | Gupshup API      |
-| (regras por       | ---> | (Edge Function)     | ---> | (WhatsApp)       |
-|  tenant)          |      |                     |      +------------------+
-+-------------------+      |  Le credenciais do  |
-                           |  tenant.settings    | ---> +------------------+
-+-------------------+      |                     |      | Lovable Cloud    |
-| clients           | ---> |  Filtra clientes    |      | Email (Auth)     |
-| (devedores)       |      |  por vencimento     |      +------------------+
-+-------------------+      +---------------------+
-                                    |
-                           +--------v----------+
-                           | message_logs      |
-                           | (historico envios) |
-                           +-------------------+
+src/pages/RelatoriosPage.tsx
+src/components/relatorios/EvolutionChart.tsx       -- Grafico de linha: recebido vs quebra por mes
+src/components/relatorios/AgingReport.tsx           -- Tabela de aging (0-30, 31-60, 61-90, 90+ dias)
+src/components/relatorios/OperatorRanking.tsx       -- Ranking de operadores por performance
+src/components/relatorios/ReportFilters.tsx         -- Filtros compartilhados
 ```
+
+- Rota `/relatorios` no App.tsx (admins)
+- Item "Relatorios" no menu lateral com icone `BarChart3`
+- Usa Recharts (ja instalado) para graficos de evolucao
+- Exportacao Excel via `xlsx` (ja instalado), PDF via impressao do navegador (`window.print`)
 
 ---
 
-## O que muda para o usuario
+## Sub-Fase 3B: Gestao de Acordos e Negociacoes
 
-- Admin do tenant acessa "Configuracoes da Empresa" e insere suas chaves Gupshup (API Key, App Name, Source Number)
-- Admin configura regras de cobranca: quantos dias antes/depois do vencimento enviar mensagem, por qual canal (WhatsApp, Email, ambos)
-- Sistema envia automaticamente mensagens conforme as regras
-- Historico de todas as mensagens enviadas fica disponivel em "Automacao"
+### O que muda para o usuario
+- Operadores podem criar propostas de acordo para um devedor (desconto, novo parcelamento)
+- Admin aprova ou rejeita propostas
+- Ao aprovar, o sistema gera automaticamente as novas parcelas e cancela as antigas
+- Historico de acordos por devedor
+- Dashboard mostra metricas de acordos (propostos, aprovados, valor renegociado)
 
----
+### Detalhes tecnicos
 
-## Etapas de Implementacao
-
-### Etapa 1: Migracoes SQL -- Novas tabelas
-
-**Tabela `collection_rules`** -- Regras de cobranca por tenant:
-- id, tenant_id, name, channel (whatsapp/email/both), days_offset (negativo=antes, positivo=depois do vencimento), message_template (texto com variaveis como {{nome}}, {{valor}}, {{vencimento}}), is_active, created_at, updated_at
-- RLS: isolamento por tenant_id
-
-**Tabela `message_logs`** -- Historico de envios:
-- id, tenant_id, client_id, rule_id (nullable), channel, status (sent/failed/pending), phone, email_to, message_body, error_message, sent_at, created_at
-- RLS: isolamento por tenant_id
-
-### Etapa 2: Credenciais Gupshup por tenant
-
-Armazenar no campo `tenants.settings` (JSONB) as chaves:
-```json
-{
-  "gupshup_api_key": "...",
-  "gupshup_app_name": "...",
-  "gupshup_source_number": "5511999999999"
-}
-```
-
-Atualizar a pagina `TenantSettingsPage.tsx` com uma secao "Integracao WhatsApp (Gupshup)" onde o admin insere:
-- API Key (campo password, mascarado)
-- App Name
-- Numero de origem
-
-Esses dados sao salvos via `updateTenant()` no campo settings.
-
-### Etapa 3: UI de Regras de Cobranca
-
-Nova pagina `/automacao` (acessivel a admins do tenant):
-- Lista de regras existentes com toggle ativo/inativo
-- Formulario para criar/editar regra:
-  - Nome da regra (ex: "Lembrete 3 dias antes")
-  - Canal: WhatsApp / Email / Ambos
-  - Dias: -3 (3 dias antes), 0 (no dia), +1 (1 dia apos), etc
-  - Template da mensagem com variaveis: {{nome}}, {{cpf}}, {{valor_parcela}}, {{data_vencimento}}, {{credor}}
-- Preview do template com dados fictícios
-- Botao para testar envio manual
-
-### Etapa 4: Edge Function `send-notifications`
-
-Funcao serverless que:
-1. Busca todos os tenants ativos
-2. Para cada tenant, busca as `collection_rules` ativas
-3. Para cada regra, calcula a data alvo (hoje + days_offset) e busca clientes com `data_vencimento` = data alvo e status = "pendente"
-4. Le as credenciais Gupshup do `tenant.settings`
-5. Envia WhatsApp via Gupshup API (se canal inclui whatsapp e credenciais existem)
-6. Envia email via Lovable Cloud auth.admin (se canal inclui email)
-7. Registra cada envio em `message_logs`
-
-Gupshup API call:
-```
-POST https://api.gupshup.io/wa/api/v1/msg
-Headers: apikey: {tenant.settings.gupshup_api_key}
-Body: channel=whatsapp&source={source}&destination={phone}&message={text}&src.name={app_name}
-```
-
-### Etapa 5: UI de Historico de Mensagens
-
-Na pagina `/automacao`, aba "Historico":
-- Tabela com: data, cliente, canal, status (enviado/falha), mensagem
-- Filtros por periodo, canal, status
-- Contadores: total enviado, falhas, taxa de sucesso
-
-### Etapa 6: Cron Job
-
-Configurar um cron via `pg_cron` + `pg_net` para chamar `send-notifications` diariamente (ex: 8h da manha).
-
-### Etapa 7: Rotas e Navegacao
-
-- Adicionar rota `/automacao` no `App.tsx`
-- Adicionar item "Automacao" no menu lateral (apenas admins)
-- Criar `AutomacaoPage.tsx` com tabs: Regras | Historico
-
----
-
-## Detalhes Tecnicos
-
-### Migracao SQL
-
+**Nova tabela `agreements`:**
 ```sql
-CREATE TABLE collection_rules (
+CREATE TABLE agreements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  channel TEXT NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp','email','both')),
-  days_offset INTEGER NOT NULL DEFAULT 0,
-  message_template TEXT NOT NULL,
-  is_active BOOLEAN DEFAULT TRUE,
+  client_cpf TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  credor TEXT NOT NULL,
+  original_total NUMERIC NOT NULL,
+  proposed_total NUMERIC NOT NULL,
+  discount_percent NUMERIC DEFAULT 0,
+  new_installments INTEGER NOT NULL DEFAULT 1,
+  new_installment_value NUMERIC NOT NULL,
+  first_due_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','cancelled')),
+  created_by UUID REFERENCES auth.users(id),
+  approved_by UUID REFERENCES auth.users(id),
+  notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE message_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
-  rule_id UUID REFERENCES collection_rules(id) ON DELETE SET NULL,
-  channel TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  phone TEXT,
-  email_to TEXT,
-  message_body TEXT,
-  error_message TEXT,
-  sent_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para ambas tabelas isoladas por tenant
-ALTER TABLE collection_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE message_logs ENABLE ROW LEVEL SECURITY;
-
--- Policies: tenant users podem ver, admins podem gerenciar
+ALTER TABLE agreements ENABLE ROW LEVEL SECURITY;
+-- RLS: tenant isolation
 ```
 
-### Arquivos novos
-
+**Novos arquivos:**
 ```text
-src/
-  pages/
-    AutomacaoPage.tsx          -- Pagina principal com tabs
-  components/
-    automacao/
-      RulesList.tsx            -- Lista de regras
-      RuleForm.tsx             -- Formulario criar/editar regra
-      MessageHistory.tsx       -- Tabela de historico
-      GupshupSettings.tsx      -- Config WhatsApp na pagina de tenant
-  services/
-    automacaoService.ts        -- CRUD regras + logs
-
-supabase/
-  functions/
-    send-notifications/
-      index.ts                 -- Edge function principal
+src/pages/AcordosPage.tsx                          -- Lista de acordos + formulario
+src/components/acordos/AgreementForm.tsx            -- Formulario de proposta
+src/components/acordos/AgreementsList.tsx           -- Lista com filtros e acoes
+src/services/agreementService.ts                    -- CRUD acordos + geracao de parcelas
 ```
 
-### Seguranca
-
-- Credenciais Gupshup ficam no campo `settings` da tabela `tenants`, protegido por RLS (somente admin do tenant ve/edita)
-- A edge function usa service_role_key para acessar dados de todos os tenants (processamento batch)
-- Message logs isolados por tenant via RLS
-- Inputs de template validados (sem execucao de codigo, apenas substituicao de variaveis)
+- Rota `/acordos` no App.tsx
+- Ao aprovar acordo: cancela parcelas pendentes do CPF/credor, gera novas com valor e datas do acordo
+- Fluxo: Operador cria proposta -> Admin ve na lista -> Aprova/Rejeita -> Sistema executa
 
 ---
 
-## Riscos e Mitigacoes
+## Sub-Fase 3C: Portal do Devedor
 
-| Risco | Mitigacao |
-|-------|-----------|
-| Credenciais expostas no frontend | Campo settings protegido por RLS; campo de input mascarado |
-| Rate limit do Gupshup | Processar tenants sequencialmente com delay entre envios |
-| Template com variaveis invalidas | Validacao no frontend + fallback para texto literal |
-| Falha de envio | Registrar em message_logs com status "failed" e error_message |
-| Cron nao executando | Log de execucao + status visivel na UI |
+### O que muda para o usuario
+- URL publica acessivel sem login: `/portal`
+- Devedor informa CPF e ve suas dividas pendentes
+- Ve detalhes: credor, parcelas, valores, vencimentos
+- Pode solicitar acordo diretamente (formulario simples)
+- Devedor recebe link do portal nas mensagens de WhatsApp/Email (template atualizado)
+
+### Detalhes tecnicos
+
+**Nenhuma autenticacao necessaria** -- portal e publico, consulta por CPF.
+
+**Edge function `portal-lookup`:**
+- Recebe CPF, retorna dividas pendentes do tenant (sem dados sensiveis como operator_id)
+- Tenant identificado via slug na URL ou parametro
+- Rate limiting basico (max 10 consultas por IP por minuto)
+
+**Novos arquivos:**
+```text
+src/pages/PortalPage.tsx                           -- Pagina publica do devedor
+src/components/portal/DebtList.tsx                 -- Lista de dividas
+src/components/portal/AgreementRequest.tsx         -- Formulario de solicitacao de acordo
+supabase/functions/portal-lookup/index.ts          -- Edge function para consulta
+```
+
+- Rota `/portal/:tenantSlug` no App.tsx (sem ProtectedRoute)
+- A edge function usa service_role_key para buscar dados, filtrando apenas campos seguros
+- Solicitacao de acordo cria um registro na tabela `agreements` com status "pending"
+
+---
+
+## Sub-Fase 3D: Financeiro e Faturamento
+
+### O que muda para o usuario
+- Nova pagina `/financeiro` para acompanhar receitas e despesas do tenant
+- Resumo financeiro mensal: total recebido, comissoes pagas, margem liquida
+- Registro manual de despesas operacionais
+- Visao consolidada: receita bruta - comissoes - despesas = resultado liquido
+- Exportacao de demonstrativo financeiro em Excel
+
+### Detalhes tecnicos
+
+**Nova tabela `expenses`:**
+```sql
+CREATE TABLE expenses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  amount NUMERIC NOT NULL,
+  category TEXT DEFAULT 'operacional',
+  expense_date DATE NOT NULL,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+-- RLS: tenant isolation, admins can manage
+```
+
+**Novos arquivos:**
+```text
+src/pages/FinanceiroPage.tsx                       -- Dashboard financeiro
+src/components/financeiro/FinancialSummary.tsx      -- Cards de resumo
+src/components/financeiro/ExpenseForm.tsx           -- Formulario de despesa
+src/components/financeiro/ExpenseList.tsx           -- Lista de despesas
+src/components/financeiro/ProfitChart.tsx           -- Grafico receita vs despesa
+src/services/financeService.ts                     -- CRUD despesas + queries agregadas
+```
+
+- Rota `/financeiro` no App.tsx (admins)
+- Receita calculada a partir de `clients` com status "pago"
+- Comissoes calculadas usando o sistema existente de grades
+- Resultado = receita - comissoes - despesas
+
+---
+
+## Ordem de Implementacao Sugerida
+
+| Ordem | Modulo | Justificativa |
+|-------|--------|---------------|
+| 1 | 3A - Relatorios | Nao requer migracao, usa dados existentes |
+| 2 | 3B - Acordos | Adiciona valor operacional imediato |
+| 3 | 3D - Financeiro | Complementa acordos com visao financeira |
+| 4 | 3C - Portal do Devedor | Depende de acordos e templates prontos |
+
+---
+
+## Novas Rotas e Menu
+
+```text
+Menu lateral (admins):
+  - Relatorios    /relatorios     BarChart3
+  - Acordos       /acordos        Handshake
+  - Financeiro    /financeiro     DollarSign
+  
+Rota publica (sem login):
+  - Portal        /portal/:slug   (nao aparece no menu)
+```
+
+---
+
+## Migracoes SQL Totais
+
+Duas novas tabelas: `agreements` e `expenses`, ambas com RLS por tenant_id.
+Uma nova edge function: `portal-lookup` para consultas publicas por CPF.
+
+---
+
+## Seguranca
+
+- Portal do devedor expoe apenas: nome, credor, valor, vencimento, status. Nunca expoe operator_id, tenant internals
+- Edge function `portal-lookup` valida formato do CPF e aplica rate limiting
+- Tabela `agreements` tem campo `approved_by` para auditoria
+- Tabela `expenses` restrita a admins via RLS
+- Dados financeiros agregados no frontend, sem exposicao de dados individuais sensiveis
 
