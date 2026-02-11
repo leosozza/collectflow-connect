@@ -14,6 +14,7 @@ import {
   Wallet,
   Cloud,
   ClipboardPlus,
+  Bot,
   PanelLeftClose,
   PanelLeftOpen
 } from "lucide-react";
@@ -39,6 +40,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Cadastro", icon: ClipboardPlus, path: "/cadastro" },
     ...(isAdmin ? [
       { label: "Usuários", icon: UserCog, path: "/usuarios" },
+      { label: "Automação", icon: Bot, path: "/automacao" },
       { label: "Configurações", icon: Settings, path: "/configuracoes" },
       { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
       { label: "Integração", icon: Cloud, path: "/integracao" },

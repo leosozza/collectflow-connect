@@ -86,6 +86,50 @@ export type Database = {
           },
         ]
       }
+      collection_rules: {
+        Row: {
+          channel: string
+          created_at: string | null
+          days_offset: number
+          id: string
+          is_active: boolean | null
+          message_template: string
+          name: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string | null
+          days_offset?: number
+          id?: string
+          is_active?: boolean | null
+          message_template: string
+          name: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string | null
+          days_offset?: number
+          id?: string
+          is_active?: boolean | null
+          message_template?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commission_grades: {
         Row: {
           created_at: string
@@ -114,6 +158,73 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "commission_grades_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_logs: {
+        Row: {
+          channel: string
+          client_id: string | null
+          created_at: string | null
+          email_to: string | null
+          error_message: string | null
+          id: string
+          message_body: string | null
+          phone: string | null
+          rule_id: string | null
+          sent_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          channel: string
+          client_id?: string | null
+          created_at?: string | null
+          email_to?: string | null
+          error_message?: string | null
+          id?: string
+          message_body?: string | null
+          phone?: string | null
+          rule_id?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string | null
+          created_at?: string | null
+          email_to?: string | null
+          error_message?: string | null
+          id?: string
+          message_body?: string | null
+          phone?: string | null
+          rule_id?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "collection_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
