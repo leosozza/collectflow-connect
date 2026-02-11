@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { addMonths } from "date-fns";
 import { validateClientData, validateImportRows } from "@/lib/validations";
+import { logAction } from "@/services/auditService";
 
 export interface Client {
   id: string;
@@ -101,6 +102,7 @@ export const createClient = async (
     .select();
 
   if (error) throw error;
+  logAction({ action: "create", entity_type: "client", entity_id: (result as Client[])[0]?.id, details: { nome: data.nome_completo, cpf: data.cpf, parcelas: totalParcelas } });
   return (result as Client[])[0];
 };
 
@@ -126,6 +128,7 @@ export const updateClient = async (
 };
 
 export const deleteClient = async (id: string): Promise<void> => {
+  logAction({ action: "delete", entity_type: "client", entity_id: id });
   const { error } = await supabase.from("clients").delete().eq("id", id);
   if (error) throw error;
 };
@@ -134,24 +137,17 @@ export const markAsPaid = async (client: Client, valorPago: number, dataPagament
   const isPaid = valorPago >= client.valor_parcela;
   const status = isPaid ? "pago" : "quebrado";
 
-  // Update current installment
-  await updateClient(client.id, {
-    valor_pago: valorPago,
-    status,
-  });
+  await updateClient(client.id, { valor_pago: valorPago, status });
+  logAction({ action: "payment", entity_type: "client", entity_id: client.id, details: { nome: client.nome_completo, valor: valorPago, status } });
 
-  // If broken, remove all future pending installments for this client
   if (!isPaid) {
     await removeFutureInstallments(client);
   }
 };
 
 export const markAsBroken = async (client: Client): Promise<void> => {
-  await updateClient(client.id, {
-    valor_pago: 0,
-    status: "quebrado",
-  });
-  // Remove all future pending installments
+  await updateClient(client.id, { valor_pago: 0, status: "quebrado" });
+  logAction({ action: "break", entity_type: "client", entity_id: client.id, details: { nome: client.nome_completo } });
   await removeFutureInstallments(client);
 };
 

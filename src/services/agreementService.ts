@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { addMonths } from "date-fns";
+import { logAction } from "@/services/auditService";
 
 export interface Agreement {
   id: string;
@@ -67,6 +68,7 @@ export const createAgreement = async (
     .single();
 
   if (error) throw error;
+  logAction({ action: "create", entity_type: "agreement", entity_id: (result as Agreement).id, details: { cpf: data.client_cpf, credor: data.credor } });
   return result as Agreement;
 };
 
@@ -82,6 +84,7 @@ export const approveAgreement = async (
     .eq("id", agreement.id);
 
   if (updateError) throw updateError;
+  logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
 
   // 2. Cancel existing pending installments for this CPF/credor
   const { error: cancelError } = await supabase
@@ -129,6 +132,7 @@ export const rejectAgreement = async (
     .eq("id", id);
 
   if (error) throw error;
+  logAction({ action: "reject", entity_type: "agreement", entity_id: id });
 };
 
 export const cancelAgreement = async (id: string): Promise<void> => {

@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
+import { KPICards, type KPI } from "@/components/dashboard/KPICards";
+import { Award, Target, Clock } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import { markAsPaid, markAsBroken, Client } from "@/services/clientService";
@@ -12,6 +14,7 @@ import {
   CalendarClock, ChevronLeft, ChevronRight, TrendingUp, Users, Wallet,
   BarChart3, PieChart as PieChartIcon,
 } from "lucide-react";
+import { fetchAgreements } from "@/services/agreementService";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -216,6 +219,35 @@ const AdminDashboardPage = () => {
     pendente: op.totalPendente,
   }));
 
+  // Agreements KPI
+  const { data: agreements = [] } = useQuery({
+    queryKey: ["agreements-kpi"],
+    queryFn: () => fetchAgreements(),
+    enabled: profile?.role === "admin",
+  });
+
+  const totalAgreements = agreements.length;
+  const approvedAgreements = agreements.filter((a) => a.status === "approved").length;
+  const conversionRate = totalAgreements > 0 ? ((approvedAgreements / totalAgreements) * 100).toFixed(1) : "0";
+
+  // SLA: % parcelas pagas antes ou no vencimento
+  const paidOnTime = pagos.filter((c) => {
+    const updated = new Date(c.updated_at || c.data_vencimento);
+    const due = new Date(c.data_vencimento);
+    return updated <= new Date(due.getTime() + 86400000); // +1 day tolerance
+  }).length;
+  const slaRate = pagos.length > 0 ? ((paidOnTime / pagos.length) * 100).toFixed(1) : "0";
+
+  // Ticket médio
+  const ticketMedio = pagos.length > 0 ? totalRecebido / pagos.length : 0;
+
+  const adminKPIs: KPI[] = [
+    { label: "Taxa Conversão Acordos", value: `${conversionRate}%`, icon: Target },
+    { label: "SLA de Cobrança", value: `${slaRate}%`, icon: Clock },
+    { label: "Ticket Médio", value: formatCurrency(ticketMedio), icon: Award },
+    { label: "Acordos Aprovados", value: `${approvedAgreements}/${totalAgreements}`, icon: BarChart3 },
+  ];
+
   if (profile?.role !== "admin") {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -328,6 +360,9 @@ const AdminDashboardPage = () => {
           <p className="text-xl font-bold text-foreground">{filteredClients.length}</p>
         </div>
       </div>
+
+      {/* Advanced KPIs */}
+      <KPICards kpis={adminKPIs} />
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

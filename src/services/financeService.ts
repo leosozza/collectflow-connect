@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { logAction } from "@/services/auditService";
 
 export interface Expense {
   id: string;
@@ -55,10 +56,12 @@ export const createExpense = async (
     .single();
 
   if (error) throw error;
+  logAction({ action: "create", entity_type: "expense", entity_id: (result as Expense).id, details: { descricao: data.description, valor: data.amount } });
   return result as Expense;
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {
+  logAction({ action: "delete", entity_type: "expense", entity_id: id });
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   if (error) throw error;
 };
