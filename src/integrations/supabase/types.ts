@@ -391,6 +391,81 @@ export type Database = {
           },
         ]
       }
+      negociarie_cobrancas: {
+        Row: {
+          callback_data: Json | null
+          client_id: string
+          created_at: string
+          data_vencimento: string
+          id: string
+          id_geral: string
+          id_parcela: string | null
+          id_status: number | null
+          linha_digitavel: string | null
+          link_boleto: string | null
+          link_cartao: string | null
+          pix_copia_cola: string | null
+          status: string
+          tenant_id: string
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          callback_data?: Json | null
+          client_id: string
+          created_at?: string
+          data_vencimento: string
+          id?: string
+          id_geral: string
+          id_parcela?: string | null
+          id_status?: number | null
+          linha_digitavel?: string | null
+          link_boleto?: string | null
+          link_cartao?: string | null
+          pix_copia_cola?: string | null
+          status?: string
+          tenant_id: string
+          tipo?: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          callback_data?: Json | null
+          client_id?: string
+          created_at?: string
+          data_vencimento?: string
+          id?: string
+          id_geral?: string
+          id_parcela?: string | null
+          id_status?: number | null
+          linha_digitavel?: string | null
+          link_boleto?: string | null
+          link_cartao?: string | null
+          pix_copia_cola?: string | null
+          status?: string
+          tenant_id?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "negociarie_cobrancas_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "negociarie_cobrancas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
