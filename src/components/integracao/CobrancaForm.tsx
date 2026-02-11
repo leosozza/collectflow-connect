@@ -45,6 +45,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     descricao: "",
     cep: "",
     endereco: "",
+    bairro: "",
     cidade: "",
     uf: "",
   });
@@ -73,6 +74,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     const cepDigits = form.cep.replace(/\D/g, "");
     if (cepDigits.length !== 8) return "CEP deve ter 8 dígitos";
     if (!form.endereco.trim()) return "Endereço é obrigatório";
+    if (!form.bairro.trim()) return "Bairro é obrigatório";
     if (!form.cidade.trim()) return "Cidade é obrigatória";
     if (!form.uf) return "UF é obrigatório";
     return null;
@@ -92,18 +94,28 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     setShowConfirm(false);
     setLoading(true);
     try {
+      const idGeral = `COB-${Date.now()}`;
       const payload = {
-        documento: form.cpf.replace(/\D/g, ""),
-        nome: form.nome.trim(),
-        email: form.email.trim() || undefined,
-        telefone: form.telefone.replace(/\D/g, "") || undefined,
-        valor: Number(form.valor),
-        vencimento: form.vencimento,
-        descricao: form.descricao.trim() || `Cobrança ${tipo}`,
-        cep: form.cep.replace(/\D/g, ""),
-        endereco: form.endereco.trim(),
-        cidade: form.cidade.trim(),
-        uf: form.uf,
+        id_geral: idGeral,
+        devedor: {
+          documento: form.cpf.replace(/\D/g, ""),
+          razao_social: form.nome.trim(),
+          cep: form.cep.replace(/\D/g, ""),
+          endereco: form.endereco.trim(),
+          bairro: form.bairro.trim(),
+          cidade: form.cidade.trim(),
+          uf: form.uf,
+          email: form.email.trim() || "nao@informado.com",
+          celular: form.telefone.replace(/\D/g, "") || "00000000000",
+        },
+        parcelas: [
+          {
+            valor: Number(form.valor),
+            data_vencimento: form.vencimento,
+            descricao: form.descricao.trim() || `Cobrança ${tipo}`,
+          },
+        ],
+        sandbox: false,
       };
 
       let apiResult;
@@ -115,7 +127,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
         apiResult = await negociarieService.novaCartao(payload);
       }
 
-      const idGeral = apiResult.id_geral || apiResult.idGeral || String(apiResult.id || "");
+      const idGeral2 = apiResult.id_geral || apiResult.idGeral || idGeral;
       const linkBoleto = apiResult.link_boleto || apiResult.linkBoleto || null;
       const pixCopiaCola = apiResult.pix_copia_cola || apiResult.pixCopiaCola || null;
       const linkCartao = apiResult.link_cartao || apiResult.linkCartao || null;
@@ -124,7 +136,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       await negociarieService.saveCobranca({
         tenant_id: tenantId,
         client_id: null,
-        id_geral: idGeral,
+        id_geral: idGeral2,
         id_parcela: apiResult.id_parcela || apiResult.idParcela || null,
         tipo,
         status: "pendente",
@@ -138,7 +150,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
       setResult({
         tipo,
-        id_geral: idGeral,
+        id_geral: idGeral2,
         link_boleto: linkBoleto || undefined,
         linha_digitavel: linhaDigitavel || undefined,
         pix_copia_cola: pixCopiaCola || undefined,
@@ -146,7 +158,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       });
 
       toast({ title: "Cobrança gerada!", description: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} criado com sucesso` });
-      setForm({ nome: "", cpf: "", email: "", telefone: "", valor: "", vencimento: "", descricao: "", cep: "", endereco: "", cidade: "", uf: "" });
+      setForm({ nome: "", cpf: "", email: "", telefone: "", valor: "", vencimento: "", descricao: "", cep: "", endereco: "", bairro: "", cidade: "", uf: "" });
       onCreated();
     } catch (e: any) {
       toast({ title: "Erro ao gerar cobrança", description: e.message, variant: "destructive" });
@@ -217,6 +229,10 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
               <div className="space-y-1.5">
                 <Label>Endereço *</Label>
                 <Input value={form.endereco} onChange={(e) => handleChange("endereco", e.target.value)} placeholder="Rua, número" maxLength={300} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bairro *</Label>
+                <Input value={form.bairro} onChange={(e) => handleChange("bairro", e.target.value)} placeholder="Bairro" maxLength={100} />
               </div>
               <div className="space-y-1.5">
                 <Label>Cidade *</Label>
