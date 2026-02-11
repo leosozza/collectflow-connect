@@ -1,11 +1,11 @@
-import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import DashboardPage from "@/pages/DashboardPage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
 
 const Index = () => {
-  const { profile } = useAuth();
+  const { isTenantAdmin } = useTenant();
 
-  if (profile?.role === "admin") {
+  if (isTenantAdmin) {
     return <AdminDashboardPage />;
   }
 

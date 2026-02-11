@@ -26,6 +26,7 @@ export type Database = {
           operator_id: string | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
+          tenant_id: string | null
           total_parcelas: number
           updated_at: string
           valor_entrada: number
@@ -43,6 +44,7 @@ export type Database = {
           operator_id?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          tenant_id?: string | null
           total_parcelas?: number
           updated_at?: string
           valor_entrada?: number
@@ -60,6 +62,7 @@ export type Database = {
           operator_id?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          tenant_id?: string | null
           total_parcelas?: number
           updated_at?: string
           valor_entrada?: number
@@ -74,6 +77,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "clients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       commission_grades: {
@@ -81,6 +91,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          tenant_id: string | null
           tiers: Json
           updated_at: string
         }
@@ -88,6 +99,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          tenant_id?: string | null
           tiers?: Json
           updated_at?: string
         }
@@ -95,8 +107,47 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          tenant_id?: string | null
           tiers?: Json
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_grades_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          limits: Json | null
+          name: string
+          price_monthly: number | null
+          slug: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          limits?: Json | null
+          name: string
+          price_monthly?: number | null
+          slug: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          limits?: Json | null
+          name?: string
+          price_monthly?: number | null
+          slug?: string
         }
         Relationships: []
       }
@@ -108,6 +159,7 @@ export type Database = {
           full_name: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string | null
           updated_at: string
           user_id: string
         }
@@ -118,6 +170,7 @@ export type Database = {
           full_name?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -128,6 +181,7 @@ export type Database = {
           full_name?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -139,6 +193,92 @@ export type Database = {
             referencedRelation: "commission_grades"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["tenant_role"]
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["tenant_role"]
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["tenant_role"]
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          created_at: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          plan_id: string | null
+          primary_color: string | null
+          settings: Json | null
+          slug: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          plan_id?: string | null
+          primary_color?: string | null
+          settings?: Json | null
+          slug: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          plan_id?: string | null
+          primary_color?: string | null
+          settings?: Json | null
+          slug?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenants_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -147,6 +287,7 @@ export type Database = {
     }
     Functions: {
       get_my_profile_id: { Args: never; Returns: string }
+      get_my_tenant_id: { Args: never; Returns: string }
       get_user_emails: {
         Args: never
         Returns: {
@@ -161,10 +302,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_tenant_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["tenant_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_tenant_admin: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "operador"
       client_status: "pendente" | "pago" | "quebrado"
+      tenant_role: "super_admin" | "admin" | "operador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -294,6 +448,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "operador"],
       client_status: ["pendente", "pago", "quebrado"],
+      tenant_role: ["super_admin", "admin", "operador"],
     },
   },
 } as const

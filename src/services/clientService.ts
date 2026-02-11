@@ -18,6 +18,7 @@ export interface Client {
   status: "pendente" | "pago" | "quebrado";
   created_at: string;
   updated_at: string;
+  tenant_id: string | null;
 }
 
 export interface ClientFormData {
