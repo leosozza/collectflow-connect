@@ -1,50 +1,68 @@
 
 
-# Correcao das Barras de Rolagem
+# Corrigir envio de Boleto, Pix e Cartao - Campos obrigatorios da API Negociarie
 
-## Problema 1: Sidebar sem scroll
-A `<nav>` do sidebar usa `flex-1` para ocupar o espaco disponivel, mas nao tem `overflow-auto`. Quando ha muitos itens de menu (admin tem 13+ itens), os itens ficam cortados ou empurram o layout sem possibilidade de rolar. A barra de rolagem deve ser invisivel (thin/auto-hide) para manter o visual limpo.
-
-## Problema 2: Scrollbar da pagina principal incorreta
-O arquivo `src/App.css` define estilos no `#root` (`max-width: 1280px`, `margin: 0 auto`, `padding: 2rem`) que conflitam com o layout full-screen do `AppLayout`. Isso causa problemas de largura e posicionamento da barra de rolagem.
+## Problema
+A API Negociarie retorna erro 400 porque:
+1. O campo `cpf` deveria ser enviado como `documento`
+2. Campos de endereco sao obrigatorios: `cep`, `endereco`, `cidade`, `uf`
+3. O proxy nao loga o body do erro, dificultando debug
 
 ## Solucao
 
-### 1. Sidebar - Adicionar scroll invisivel na nav
-No `src/components/AppLayout.tsx`, alterar a `<nav>` (linha 89):
-- De: `className="flex-1 px-2 py-4 space-y-1"`
-- Para: `className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin"`
+### 1. Adicionar campos de endereco ao formulario (`CobrancaForm.tsx`)
+- Novos campos: CEP (com mascara 00000-000), Endereco, Cidade, UF (select com estados)
+- Mapear `cpf` para `documento` no payload enviado a API
+- Manter layout em grid organizado
 
-Adicionar classe utilitaria CSS em `src/index.css` para esconder a scrollbar visualmente mas manter funcionalidade:
-```css
-@layer utilities {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-  }
-  .scrollbar-thin:hover {
-    scrollbar-color: hsl(var(--sidebar-border)) transparent;
-  }
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 4px;
-  }
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 2px;
-  }
-  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
-    background: hsl(var(--sidebar-border));
-  }
+### 2. Melhorar logging no edge function (`negociarie-proxy/index.ts`)
+- Logar o body completo do erro retornado pela Negociarie (nao apenas o status)
+- Isso facilita debug futuro
+
+## Detalhes tecnicos
+
+### Payload corrigido (enviado a API)
+```json
+{
+  "documento": "12345678901",
+  "nome": "Nome Completo",
+  "email": "email@exemplo.com",
+  "telefone": "11999999999",
+  "valor": 100.00,
+  "vencimento": "2026-03-01",
+  "descricao": "Cobranca boleto",
+  "cep": "01001000",
+  "endereco": "Rua Exemplo, 123",
+  "cidade": "Sao Paulo",
+  "uf": "SP"
 }
 ```
 
-### 2. Limpar App.css
-Remover todo o conteudo de `src/App.css` (ou remover o arquivo se nao for importado em lugar critico). Os estilos la sao restos do template Vite e conflitam com o layout.
-
 ### Arquivos modificados
-- `src/components/AppLayout.tsx` - adicionar `overflow-y-auto scrollbar-thin` na nav
-- `src/index.css` - adicionar classes utilitarias para scrollbar invisivel
-- `src/App.css` - limpar conteudo (estilos legados do template Vite)
+- `src/components/integracao/CobrancaForm.tsx` - Adicionar campos de endereco, mascara de CEP, mapear cpf->documento
+- `supabase/functions/negociarie-proxy/index.ts` - Logar body de erro completo na funcao `negociarieRequest`
+
+### Mascara de CEP
+Adicionar em `src/lib/formatters.ts`:
+```typescript
+export function formatCEP(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+```
+
+### Campos do form (estado inicial)
+```typescript
+const [form, setForm] = useState({
+  nome: "", cpf: "", email: "", telefone: "",
+  valor: "", vencimento: "", descricao: "",
+  cep: "", endereco: "", cidade: "", uf: "",
+});
+```
+
+### Validacao adicional
+- CEP: 8 digitos obrigatorio
+- Endereco: obrigatorio (nao vazio)
+- Cidade: obrigatorio
+- UF: obrigatorio (select com 27 estados)
