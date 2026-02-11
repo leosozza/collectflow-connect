@@ -3,18 +3,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchClients,
+  createClient,
   updateClient,
   deleteClient,
+  bulkCreateClients,
   Client,
   ClientFormData,
 } from "@/services/clientService";
+import type { ImportedRow } from "@/services/importService";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import ClientFilters from "@/components/clients/ClientFilters";
-import { Button } from "@/components/ui/button";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download } from "lucide-react";
-import { toast } from "sonner";
 import ClientForm from "@/components/clients/ClientForm";
+import ImportDialog from "@/components/clients/ImportDialog";
+import { Button } from "@/components/ui/button";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -54,13 +58,13 @@ const CarteiraPage = () => {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
     queryFn: () => fetchClients(filters),
   });
 
-  // Filter by search term (name or CPF) and sort by data_vencimento ascending
   const displayClients = useMemo(() => {
     let filtered = clients;
     if (filters.search.trim()) {
@@ -75,6 +79,17 @@ const CarteiraPage = () => {
       (a, b) => a.data_vencimento.localeCompare(b.data_vencimento)
     );
   }, [clients, filters.search]);
+
+  const createMutation = useMutation({
+    mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
+      toast.success("Cliente cadastrado!");
+      setFormOpen(false);
+    },
+    onError: () => toast.error("Erro ao cadastrar cliente"),
+  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ClientFormData> }) =>
@@ -98,6 +113,17 @@ const CarteiraPage = () => {
     onError: () => toast.error("Erro ao excluir cliente"),
   });
 
+  const importMutation = useMutation({
+    mutationFn: (rows: ImportedRow[]) => bulkCreateClients(rows, profile!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
+      toast.success("Clientes importados com sucesso!");
+      setImportOpen(false);
+    },
+    onError: () => toast.error("Erro ao importar clientes"),
+  });
+
   const handleEdit = (client: Client) => {
     setEditingClient(client);
     setFormOpen(true);
@@ -111,6 +137,8 @@ const CarteiraPage = () => {
   const handleSubmit = (data: ClientFormData) => {
     if (editingClient) {
       updateMutation.mutate({ id: editingClient.id, data });
+    } else {
+      createMutation.mutate(data);
     }
   };
 
@@ -126,6 +154,19 @@ const CarteiraPage = () => {
       return <XCircle className="w-5 h-5 text-destructive mx-auto" />;
     }
     return <Clock className="w-5 h-5 text-warning mx-auto" />;
+  };
+
+  const downloadTemplate = () => {
+    const templateData = [
+      ["Credor", "Nome Completo", "CPF", "Parcela", "Valor Entrada", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento"],
+      ["MAXFAMA", "João da Silva", "123.456.789-00", 1, 600.00, 500.00, 0, 12, "10/03/2026"],
+      ["MAXFAMA", "Maria Souza", "987.654.321-00", 1, 400.00, 350.00, 350.00, 6, "10/03/2026"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+    ws["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.writeFile(wb, "modelo_importacao.xlsx");
   };
 
   const handleExportExcel = () => {
@@ -152,11 +193,27 @@ const CarteiraPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Carteira</h1>
-        <p className="text-muted-foreground text-sm">
-          Gerencie as parcelas, pagamentos e clientes
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Carteira</h1>
+          <p className="text-muted-foreground text-sm">
+            Gerencie as parcelas, pagamentos e clientes
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={downloadTemplate} className="gap-2 text-muted-foreground" size="sm">
+            <Download className="w-4 h-4" />
+            Planilha Modelo
+          </Button>
+          <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
+            <FileSpreadsheet className="w-4 h-4" />
+            Importar
+          </Button>
+          <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Novo Cliente
+          </Button>
+        </div>
       </div>
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
@@ -224,16 +281,16 @@ const CarteiraPage = () => {
         )}
       </div>
 
-      {/* Edit dialog */}
+      {/* Create/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={handleCloseForm}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar Cliente</DialogTitle>
+            <DialogTitle>{editingClient ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
           </DialogHeader>
           <ClientForm
             defaultValues={editingClient || undefined}
             onSubmit={handleSubmit}
-            submitting={updateMutation.isPending}
+            submitting={createMutation.isPending || updateMutation.isPending}
           />
         </DialogContent>
       </Dialog>
@@ -259,6 +316,14 @@ const CarteiraPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onConfirm={(rows) => importMutation.mutate(rows)}
+        submitting={importMutation.isPending}
+      />
     </div>
   );
 };

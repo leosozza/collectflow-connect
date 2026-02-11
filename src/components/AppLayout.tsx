@@ -42,7 +42,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
-    { label: "Cadastro", icon: ClipboardPlus, path: "/cadastro" },
+    { label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" },
     ...(isAdmin ? [
       { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
       { label: "Acordos", icon: Handshake, path: "/acordos" },
