@@ -86,7 +86,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           {!collapsed && <span className="text-lg font-bold text-sidebar-foreground">{tenant?.name || "Connect Control"}</span>}
         </div>
 
-        <nav className="flex-1 px-2 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
