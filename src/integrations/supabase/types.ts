@@ -394,7 +394,7 @@ export type Database = {
       negociarie_cobrancas: {
         Row: {
           callback_data: Json | null
-          client_id: string
+          client_id: string | null
           created_at: string
           data_vencimento: string
           id: string
@@ -413,7 +413,7 @@ export type Database = {
         }
         Insert: {
           callback_data?: Json | null
-          client_id: string
+          client_id?: string | null
           created_at?: string
           data_vencimento: string
           id?: string
@@ -432,7 +432,7 @@ export type Database = {
         }
         Update: {
           callback_data?: Json | null
-          client_id?: string
+          client_id?: string | null
           created_at?: string
           data_vencimento?: string
           id?: string
