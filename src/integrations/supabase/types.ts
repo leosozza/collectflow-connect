@@ -82,6 +82,50 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          tenant_id: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          tenant_id: string
+          user_id: string
+          user_name?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           cpf: string
@@ -347,6 +391,97 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          reference_id: string | null
+          reference_type: string | null
+          tenant_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          reference_id?: string | null
+          reference_type?: string | null
+          tenant_id: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          tenant_id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_goals: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          month: number
+          operator_id: string
+          target_amount: number
+          tenant_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          month: number
+          operator_id: string
+          target_amount?: number
+          tenant_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          month?: number
+          operator_id?: string
+          target_amount?: number
+          tenant_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_goals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string | null
@@ -512,6 +647,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_notification: {
+        Args: {
+          _message: string
+          _reference_id?: string
+          _reference_type?: string
+          _tenant_id: string
+          _title: string
+          _type?: string
+          _user_id: string
+        }
+        Returns: string
+      }
       get_my_profile_id: { Args: never; Returns: string }
       get_my_tenant_id: { Args: never; Returns: string }
       get_user_emails: {

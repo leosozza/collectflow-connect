@@ -22,6 +22,7 @@ import RelatoriosPage from "./pages/RelatoriosPage";
 import AcordosPage from "./pages/AcordosPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import PortalPage from "./pages/PortalPage";
+import AuditoriaPage from "./pages/AuditoriaPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -165,6 +166,16 @@ const App = () => (
               }
             />
             <Route path="/portal/:tenantSlug" element={<PortalPage />} />
+            <Route
+              path="/auditoria"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AuditoriaPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </TenantProvider>

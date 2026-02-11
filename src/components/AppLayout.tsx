@@ -19,8 +19,10 @@ import {
   PanelLeftOpen,
   BarChart3,
   Handshake,
-  DollarSign
+  DollarSign,
+  FileText
 } from "lucide-react";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { Button } from "@/components/ui/button";
 
 interface AppLayoutProps {
@@ -50,6 +52,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       { label: "Configurações", icon: Settings, path: "/configuracoes" },
       { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
       { label: "Integração", icon: Cloud, path: "/integracao" },
+      { label: "Auditoria", icon: FileText, path: "/auditoria" },
     ] : []),
     ...(isSuperAdmin ? [
       { label: "Tenants", icon: Users, path: "/admin/tenants" },
@@ -147,6 +150,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </Button>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <span className="text-sm text-muted-foreground">
               {isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Administrador" : "Operador"}
             </span>

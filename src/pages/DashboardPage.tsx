@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
 import StatCard from "@/components/StatCard";
+import GoalProgress from "@/components/dashboard/GoalProgress";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
@@ -188,6 +189,9 @@ const DashboardPage = () => {
         <StatCard title="% de Quebras" value={`${pctQuebras}%`} icon="percent" />
         <StatCard title={`Comissão a Receber (${commissionRate}%)`} value={formatCurrency(comissao)} icon="commission" />
       </div>
+
+      {/* Goal progress */}
+      <GoalProgress year={parseInt(selectedYear)} month={parseInt(selectedMonth)} totalRecebido={totalRecebido} />
 
       {/* Date-navigable clients table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
