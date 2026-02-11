@@ -36,36 +36,25 @@ export const createTenant = async (
   name: string,
   slug: string,
   planId: string,
-  userId: string
+  _userId: string
 ): Promise<Tenant> => {
-  // Create the tenant
-  const { data: tenant, error: tenantError } = await supabase
+  // Use atomic SECURITY DEFINER function to create tenant + tenant_user + update profile
+  const { data: tenantId, error } = await supabase.rpc("onboard_tenant", {
+    _name: name,
+    _slug: slug,
+    _plan_id: planId,
+  });
+
+  if (error) throw error;
+
+  // Fetch the created tenant
+  const { data: tenant, error: fetchError } = await supabase
     .from("tenants")
-    .insert({ name, slug, plan_id: planId })
-    .select()
+    .select("*")
+    .eq("id", tenantId)
     .single();
 
-  if (tenantError) throw tenantError;
-
-  // Create tenant_user with admin role
-  const { error: tuError } = await supabase
-    .from("tenant_users")
-    .insert({
-      tenant_id: tenant.id,
-      user_id: userId,
-      role: "admin",
-    });
-
-  if (tuError) throw tuError;
-
-  // Update profile with tenant_id
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({ tenant_id: tenant.id })
-    .eq("user_id", userId);
-
-  if (profileError) throw profileError;
-
+  if (fetchError) throw fetchError;
   return tenant as Tenant;
 };
 
