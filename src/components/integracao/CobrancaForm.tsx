@@ -8,7 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, CreditCard, Check, Copy, ExternalLink } from "lucide-react";
-import { formatCPF, formatPhone, formatCurrency } from "@/lib/formatters";
+import { formatCPF, formatPhone, formatCurrency, formatCEP } from "@/lib/formatters";
+
+const UF_OPTIONS = [
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
+  "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+];
 
 interface CobrancaFormProps {
   tenantId: string;
@@ -38,6 +43,10 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     valor: "",
     vencimento: "",
     descricao: "",
+    cep: "",
+    endereco: "",
+    cidade: "",
+    uf: "",
   });
 
   const handleChange = (field: string, value: string) => {
@@ -45,6 +54,8 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       setForm((prev) => ({ ...prev, cpf: formatCPF(value) }));
     } else if (field === "telefone") {
       setForm((prev) => ({ ...prev, telefone: formatPhone(value) }));
+    } else if (field === "cep") {
+      setForm((prev) => ({ ...prev, cep: formatCEP(value) }));
     } else {
       setForm((prev) => ({ ...prev, [field]: value }));
     }
@@ -59,6 +70,11 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     if (!form.vencimento) return "Vencimento é obrigatório";
     const today = new Date().toISOString().split("T")[0];
     if (form.vencimento < today) return "Vencimento não pode ser no passado";
+    const cepDigits = form.cep.replace(/\D/g, "");
+    if (cepDigits.length !== 8) return "CEP deve ter 8 dígitos";
+    if (!form.endereco.trim()) return "Endereço é obrigatório";
+    if (!form.cidade.trim()) return "Cidade é obrigatória";
+    if (!form.uf) return "UF é obrigatório";
     return null;
   };
 
@@ -77,13 +93,17 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     setLoading(true);
     try {
       const payload = {
+        documento: form.cpf.replace(/\D/g, ""),
         nome: form.nome.trim(),
-        cpf: form.cpf.replace(/\D/g, ""),
         email: form.email.trim() || undefined,
         telefone: form.telefone.replace(/\D/g, "") || undefined,
         valor: Number(form.valor),
         vencimento: form.vencimento,
         descricao: form.descricao.trim() || `Cobrança ${tipo}`,
+        cep: form.cep.replace(/\D/g, ""),
+        endereco: form.endereco.trim(),
+        cidade: form.cidade.trim(),
+        uf: form.uf,
       };
 
       let apiResult;
@@ -126,7 +146,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       });
 
       toast({ title: "Cobrança gerada!", description: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} criado com sucesso` });
-      setForm({ nome: "", cpf: "", email: "", telefone: "", valor: "", vencimento: "", descricao: "" });
+      setForm({ nome: "", cpf: "", email: "", telefone: "", valor: "", vencimento: "", descricao: "", cep: "", endereco: "", cidade: "", uf: "" });
       onCreated();
     } catch (e: any) {
       toast({ title: "Erro ao gerar cobrança", description: e.message, variant: "destructive" });
@@ -190,7 +210,30 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
                 <Label>Vencimento *</Label>
                 <Input type="date" value={form.vencimento} onChange={(e) => handleChange("vencimento", e.target.value)} />
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
+              <div className="space-y-1.5">
+                <Label>CEP *</Label>
+                <Input value={form.cep} onChange={(e) => handleChange("cep", e.target.value)} placeholder="00000-000" maxLength={9} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Endereço *</Label>
+                <Input value={form.endereco} onChange={(e) => handleChange("endereco", e.target.value)} placeholder="Rua, número" maxLength={300} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cidade *</Label>
+                <Input value={form.cidade} onChange={(e) => handleChange("cidade", e.target.value)} placeholder="Cidade" maxLength={100} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>UF *</Label>
+                <Select value={form.uf} onValueChange={(v) => handleChange("uf", v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {UF_OPTIONS.map((uf) => (
+                      <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                 <Label>Descrição</Label>
                 <Input value={form.descricao} onChange={(e) => handleChange("descricao", e.target.value)} placeholder="Descrição da cobrança" maxLength={500} />
               </div>
@@ -217,6 +260,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
                   <p><strong>CPF:</strong> {form.cpf}</p>
                   <p><strong>Valor:</strong> {formatCurrency(Number(form.valor) || 0)}</p>
                   <p><strong>Vencimento:</strong> {form.vencimento ? new Date(form.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "-"}</p>
+                  <p><strong>Endereço:</strong> {form.endereco}, {form.cidade} - {form.uf}, CEP {form.cep}</p>
                   {form.email && <p><strong>Email:</strong> {form.email}</p>}
                   {form.telefone && <p><strong>Telefone:</strong> {form.telefone}</p>}
                   {form.descricao && <p><strong>Descrição:</strong> {form.descricao}</p>}

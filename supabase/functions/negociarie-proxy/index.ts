@@ -55,7 +55,10 @@ async function negociarieRequest(method: string, endpoint: string, body?: unknow
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  if (!res.ok) throw new Error(json.message || json.error || `Negociarie ${res.status}`);
+  if (!res.ok) {
+    console.error(`[negociarie-proxy] API error ${res.status}:`, JSON.stringify(json));
+    throw new Error(json.message || json.error || JSON.stringify(json.errors || json) || `Negociarie ${res.status}`);
+  }
   return json;
 }
 

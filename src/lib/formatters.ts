@@ -34,6 +34,12 @@ export const statusLabels: Record<string, string> = {
   quebrado: "Quebrado",
 };
 
+export const formatCEP = (value: string): string => {
+  const nums = value.replace(/\D/g, "").slice(0, 8);
+  if (nums.length <= 5) return nums;
+  return `${nums.slice(0, 5)}-${nums.slice(5)}`;
+};
+
 export const formatPhone = (value: string): string => {
   const nums = value.replace(/\D/g, "").slice(0, 11);
   if (nums.length <= 2) return nums;
