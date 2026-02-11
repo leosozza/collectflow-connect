@@ -44,16 +44,18 @@ const NegociarieTab = () => {
       addLog("Teste de Conexão", "success", "API Negociarie conectada com sucesso");
 
       // Auto-register callback URL
+      let cbSuccess = false;
       try {
         await negociarieService.atualizarCallback({ url: CALLBACK_URL });
         setCallbackOk(true);
+        cbSuccess = true;
         addLog("Callback", "success", `URL de callback registrada: ${CALLBACK_URL}`);
       } catch (cbErr: any) {
         setCallbackOk(false);
         addLog("Callback", "error", `Falha ao registrar callback: ${cbErr.message}`);
       }
 
-      toast({ title: "Conectado!", description: "API Negociarie acessível e callback configurado" });
+      toast({ title: "Conectado!", description: cbSuccess ? "API Negociarie acessível e callback configurado" : "API conectada, mas callback falhou" });
     } catch (e: any) {
       setConnected(false);
       addLog("Teste de Conexão", "error", e.message);
