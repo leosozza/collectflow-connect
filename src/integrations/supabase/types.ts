@@ -14,6 +14,74 @@ export type Database = {
   }
   public: {
     Tables: {
+      agreements: {
+        Row: {
+          approved_by: string | null
+          client_cpf: string
+          client_name: string
+          created_at: string
+          created_by: string
+          credor: string
+          discount_percent: number | null
+          first_due_date: string
+          id: string
+          new_installment_value: number
+          new_installments: number
+          notes: string | null
+          original_total: number
+          proposed_total: number
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          approved_by?: string | null
+          client_cpf: string
+          client_name: string
+          created_at?: string
+          created_by: string
+          credor: string
+          discount_percent?: number | null
+          first_due_date: string
+          id?: string
+          new_installment_value?: number
+          new_installments?: number
+          notes?: string | null
+          original_total?: number
+          proposed_total?: number
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          approved_by?: string | null
+          client_cpf?: string
+          client_name?: string
+          created_at?: string
+          created_by?: string
+          credor?: string
+          discount_percent?: number | null
+          first_due_date?: string
+          id?: string
+          new_installment_value?: number
+          new_installments?: number
+          notes?: string | null
+          original_total?: number
+          proposed_total?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           cpf: string
@@ -164,6 +232,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "commission_grades_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          created_by: string
+          description: string
+          expense_date: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by: string
+          description: string
+          expense_date: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by?: string
+          description?: string
+          expense_date?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
