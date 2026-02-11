@@ -120,36 +120,42 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     setLoading(true);
     try {
       const idGeral = `COB-${Date.now()}`;
-      const payload = {
-        id_geral: idGeral,
-        devedor: {
-          documento: form.cpf.replace(/\D/g, ""),
-          razao_social: form.nome.trim(),
-          cep: form.cep.replace(/\D/g, ""),
-          endereco: form.endereco.trim(),
-          bairro: form.bairro.trim(),
-          cidade: form.cidade.trim(),
-          uf: form.uf,
-          email: form.email.trim() || "nao@informado.com",
-          celular: form.telefone.replace(/\D/g, "") || "00000000000",
-        },
-        parcelas: [
-          {
-            valor: parseCurrencyInput(form.valor),
-            data_vencimento: form.vencimento,
-            descricao: form.descricao.trim() || `Cobrança ${tipo}`,
-          },
-        ],
-        sandbox: false,
-      };
+      const documento = form.cpf.replace(/\D/g, "");
+      const nome = form.nome.trim();
+      const cep = form.cep.replace(/\D/g, "");
+      const endereco = form.endereco.trim();
+      const bairro = form.bairro.trim();
+      const cidade = form.cidade.trim();
+      const uf = form.uf;
+      const email = form.email.trim() || "nao@informado.com";
+      const celular = form.telefone.replace(/\D/g, "") || "00000000000";
+      const valor = parseCurrencyInput(form.valor);
+      const descricao = form.descricao.trim() || `Cobrança ${tipo}`;
 
       let apiResult;
       if (tipo === "boleto") {
-        apiResult = await negociarieService.novaCobranca(payload);
-      } else if (tipo === "pix") {
-        apiResult = await negociarieService.novaPix(payload);
+        // Boleto uses flat payload
+        const flatPayload = {
+          documento, nome, cep, endereco, bairro, cidade, uf, email,
+          telefone: celular,
+          valor,
+          vencimento: form.vencimento,
+          descricao,
+        };
+        apiResult = await negociarieService.novaCobranca(flatPayload);
       } else {
-        apiResult = await negociarieService.novaCartao(payload);
+        // Pix and Cartão use nested payload
+        const nestedPayload = {
+          id_geral: idGeral,
+          devedor: { documento, razao_social: nome, cep, endereco, bairro, cidade, uf, email, celular },
+          parcelas: [{ valor, data_vencimento: form.vencimento, descricao }],
+          sandbox: false,
+        };
+        if (tipo === "pix") {
+          apiResult = await negociarieService.novaPix(nestedPayload);
+        } else {
+          apiResult = await negociarieService.novaCartao(nestedPayload);
+        }
       }
 
       const idGeral2 = apiResult.id_geral || apiResult.idGeral || idGeral;
