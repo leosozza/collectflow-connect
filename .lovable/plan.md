@@ -1,68 +1,104 @@
 
 
-# Corrigir envio de Boleto, Pix e Cartao - Campos obrigatorios da API Negociarie
+# Corrigir Estrutura do Payload para API Negociarie
 
 ## Problema
-A API Negociarie retorna erro 400 porque:
-1. O campo `cpf` deveria ser enviado como `documento`
-2. Campos de endereco sao obrigatorios: `cep`, `endereco`, `cidade`, `uf`
-3. O proxy nao loga o body do erro, dificultando debug
+A API Negociarie espera um payload com estrutura **aninhada** (nested), mas o formulario envia um objeto plano (flat). Os campos obrigatorios sao:
+
+- `id_geral` - identificador unico da cobranca (gerado pelo cliente)
+- `devedor` - objeto com dados do devedor: `documento`, `razao_social`, `cep`, `endereco`, `bairro`, `cidade`, `uf`, `email`, `celular`
+- `parcelas` - array de parcelas com valor e vencimento
+- `sandbox` - flag booleano (true para testes, false para producao)
 
 ## Solucao
 
-### 1. Adicionar campos de endereco ao formulario (`CobrancaForm.tsx`)
-- Novos campos: CEP (com mascara 00000-000), Endereco, Cidade, UF (select com estados)
-- Mapear `cpf` para `documento` no payload enviado a API
-- Manter layout em grid organizado
+### 1. Reestruturar o payload no `CobrancaForm.tsx`
 
-### 2. Melhorar logging no edge function (`negociarie-proxy/index.ts`)
-- Logar o body completo do erro retornado pela Negociarie (nao apenas o status)
-- Isso facilita debug futuro
+Transformar o payload flat atual:
+```json
+{ "documento": "123", "nome": "Fulano", "cep": "01001000", ... }
+```
 
-## Detalhes tecnicos
-
-### Payload corrigido (enviado a API)
+Para o formato esperado pela API:
 ```json
 {
-  "documento": "12345678901",
-  "nome": "Nome Completo",
-  "email": "email@exemplo.com",
-  "telefone": "11999999999",
-  "valor": 100.00,
-  "vencimento": "2026-03-01",
-  "descricao": "Cobranca boleto",
-  "cep": "01001000",
-  "endereco": "Rua Exemplo, 123",
-  "cidade": "Sao Paulo",
-  "uf": "SP"
+  "id_geral": "TENANT-1234567890",
+  "devedor": {
+    "documento": "12345678901",
+    "razao_social": "Nome Completo",
+    "cep": "01001000",
+    "endereco": "Rua Exemplo, 123",
+    "bairro": "Centro",
+    "cidade": "Sao Paulo",
+    "uf": "SP",
+    "email": "email@exemplo.com",
+    "celular": "11999999999"
+  },
+  "parcelas": [
+    {
+      "valor": 100.00,
+      "data_vencimento": "2026-03-01",
+      "descricao": "Cobranca boleto"
+    }
+  ],
+  "sandbox": false
 }
 ```
+
+### 2. Adicionar campo "Bairro" ao formulario
+A API exige `devedor.bairro` que nao existe no formulario atual. Adicionar campo de bairro obrigatorio.
+
+### 3. Gerar `id_geral` automaticamente
+Gerar um identificador unico no formato `{prefixo}-{timestamp}` para cada cobranca.
+
+### 4. Adicionar flag `sandbox`
+Usar `sandbox: false` por padrao (producao). Opcionalmente ler das configuracoes do tenant.
+
+## Detalhes Tecnicos
 
 ### Arquivos modificados
-- `src/components/integracao/CobrancaForm.tsx` - Adicionar campos de endereco, mascara de CEP, mapear cpf->documento
-- `supabase/functions/negociarie-proxy/index.ts` - Logar body de erro completo na funcao `negociarieRequest`
+- `src/components/integracao/CobrancaForm.tsx`
+  - Adicionar campo "Bairro" ao form state e UI
+  - Reestruturar payload para formato aninhado com `devedor`, `parcelas`, `id_geral`, `sandbox`
+  - Validar bairro como campo obrigatorio
+  - Gerar `id_geral` unico automaticamente
 
-### Mascara de CEP
-Adicionar em `src/lib/formatters.ts`:
-```typescript
-export function formatCEP(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 5) return digits;
-  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-}
-```
-
-### Campos do form (estado inicial)
+### Novo estado do form
 ```typescript
 const [form, setForm] = useState({
   nome: "", cpf: "", email: "", telefone: "",
   valor: "", vencimento: "", descricao: "",
-  cep: "", endereco: "", cidade: "", uf: "",
+  cep: "", endereco: "", bairro: "", cidade: "", uf: "",
 });
 ```
 
+### Payload reestruturado
+```typescript
+const idGeral = `COB-${Date.now()}`;
+const payload = {
+  id_geral: idGeral,
+  devedor: {
+    documento: form.cpf.replace(/\D/g, ""),
+    razao_social: form.nome.trim(),
+    cep: form.cep.replace(/\D/g, ""),
+    endereco: form.endereco.trim(),
+    bairro: form.bairro.trim(),
+    cidade: form.cidade.trim(),
+    uf: form.uf,
+    email: form.email.trim() || "nao@informado.com",
+    celular: form.telefone.replace(/\D/g, "") || "00000000000",
+  },
+  parcelas: [
+    {
+      valor: Number(form.valor),
+      data_vencimento: form.vencimento,
+      descricao: form.descricao.trim() || `Cobranca ${tipo}`,
+    },
+  ],
+  sandbox: false,
+};
+```
+
 ### Validacao adicional
-- CEP: 8 digitos obrigatorio
-- Endereco: obrigatorio (nao vazio)
-- Cidade: obrigatorio
-- UF: obrigatorio (select com 27 estados)
+- Bairro: obrigatorio, nao vazio
+
