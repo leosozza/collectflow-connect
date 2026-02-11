@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
         // 4. Find matching clients
         const { data: clients, error: cErr } = await supabase
           .from("clients")
-          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor")
+          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone, email")
           .eq("tenant_id", tenant.id)
           .eq("status", "pendente")
           .eq("data_vencimento", dateStr);
@@ -72,10 +72,8 @@ Deno.serve(async (req) => {
 
           // Send WhatsApp via Gupshup
           if ((rule.channel === "whatsapp" || rule.channel === "both") &&
-              settings.gupshup_api_key && settings.gupshup_source_number) {
-            // We need a phone number - using CPF as placeholder since clients table doesn't have phone
-            // In production, add a phone column to clients
-            const phone = settings.gupshup_source_number; // placeholder
+              settings.gupshup_api_key && settings.gupshup_source_number && client.phone) {
+            const phone = client.phone.replace(/\D/g, "");
             try {
               const body = new URLSearchParams({
                 channel: "whatsapp",
@@ -128,15 +126,19 @@ Deno.serve(async (req) => {
 
           // Email placeholder - would need email column on clients
           if (rule.channel === "email" || rule.channel === "both") {
-            await supabase.from("message_logs").insert({
-              tenant_id: tenant.id,
-              client_id: client.id,
-              rule_id: rule.id,
-              channel: "email",
-              status: "pending",
-              message_body: message,
-              error_message: "Email sending not yet configured",
-            });
+            if (client.email) {
+              // Email sending placeholder - integrate with email provider
+              await supabase.from("message_logs").insert({
+                tenant_id: tenant.id,
+                client_id: client.id,
+                rule_id: rule.id,
+                channel: "email",
+                status: "pending",
+                email_to: client.email,
+                message_body: message,
+                error_message: "Email provider not yet configured",
+              });
+            }
           }
         }
       }

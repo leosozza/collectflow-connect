@@ -20,10 +20,12 @@ export type Database = {
           created_at: string
           credor: string
           data_vencimento: string
+          email: string | null
           id: string
           nome_completo: string
           numero_parcela: number
           operator_id: string | null
+          phone: string | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
           tenant_id: string | null
@@ -38,10 +40,12 @@ export type Database = {
           created_at?: string
           credor?: string
           data_vencimento: string
+          email?: string | null
           id?: string
           nome_completo: string
           numero_parcela?: number
           operator_id?: string | null
+          phone?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
@@ -56,10 +60,12 @@ export type Database = {
           created_at?: string
           credor?: string
           data_vencimento?: string
+          email?: string | null
           id?: string
           nome_completo?: string
           numero_parcela?: number
           operator_id?: string | null
+          phone?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
