@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, CreditCard, Check, Copy, ExternalLink } from "lucide-react";
-import { formatCPF, formatPhone, formatCurrency, formatCEP } from "@/lib/formatters";
+import { formatCPF, formatPhone, formatCurrency, formatCEP, parseCurrencyInput } from "@/lib/formatters";
 
 const UF_OPTIONS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -78,6 +78,10 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       setForm((prev) => ({ ...prev, cep: formatted }));
       const digits = formatted.replace(/\D/g, "");
       if (digits.length === 8) fetchAddressByCep(digits);
+    } else if (field === "valor") {
+      // Allow only digits and comma/dot, format as currency
+      const raw = value.replace(/[^\d,.]/g, "");
+      setForm((prev) => ({ ...prev, valor: raw }));
     } else {
       setForm((prev) => ({ ...prev, [field]: value }));
     }
@@ -87,7 +91,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
     if (!form.nome.trim()) return "Nome é obrigatório";
     const cpfDigits = form.cpf.replace(/\D/g, "");
     if (cpfDigits.length !== 11) return "CPF deve ter 11 dígitos";
-    const valor = Number(form.valor);
+    const valor = parseCurrencyInput(form.valor);
     if (!valor || valor <= 0) return "Valor deve ser maior que zero";
     if (!form.vencimento) return "Vencimento é obrigatório";
     const today = new Date().toISOString().split("T")[0];
@@ -131,7 +135,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
         },
         parcelas: [
           {
-            valor: Number(form.valor),
+            valor: parseCurrencyInput(form.valor),
             data_vencimento: form.vencimento,
             descricao: form.descricao.trim() || `Cobrança ${tipo}`,
           },
@@ -161,7 +165,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
         id_parcela: apiResult.id_parcela || apiResult.idParcela || null,
         tipo,
         status: "pendente",
-        valor: Number(form.valor),
+        valor: parseCurrencyInput(form.valor),
         data_vencimento: form.vencimento,
         link_boleto: linkBoleto,
         pix_copia_cola: pixCopiaCola,
@@ -237,7 +241,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
               </div>
               <div className="space-y-1.5">
                 <Label>Valor (R$) *</Label>
-                <Input type="number" step="0.01" min="0.01" value={form.valor} onChange={(e) => handleChange("valor", e.target.value)} placeholder="0.00" />
+                <Input value={form.valor} onChange={(e) => handleChange("valor", e.target.value)} placeholder="100,00" inputMode="decimal" />
               </div>
               <div className="space-y-1.5">
                 <Label>Vencimento *</Label>
@@ -295,7 +299,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
                   <p><strong>Tipo:</strong> {tipoLabel}</p>
                   <p><strong>Nome:</strong> {form.nome}</p>
                   <p><strong>CPF:</strong> {form.cpf}</p>
-                  <p><strong>Valor:</strong> {formatCurrency(Number(form.valor) || 0)}</p>
+                  <p><strong>Valor:</strong> {formatCurrency(parseCurrencyInput(form.valor) || 0)}</p>
                   <p><strong>Vencimento:</strong> {form.vencimento ? new Date(form.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "-"}</p>
                   <p><strong>Endereço:</strong> {form.endereco}, {form.cidade} - {form.uf}, CEP {form.cep}</p>
                   {form.email && <p><strong>Email:</strong> {form.email}</p>}
