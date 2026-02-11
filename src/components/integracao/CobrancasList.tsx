@@ -53,19 +53,20 @@ const CobrancasList = ({ tenantId, refreshKey }: CobrancasListProps) => {
     setSyncingId(cobranca.id);
     try {
       const result = await negociarieService.consultaCobrancas({ id_geral: cobranca.id_geral });
-      const items = Array.isArray(result) ? result : result?.cobrancas || result?.data || [];
+      const items = Array.isArray(result) ? result : result?.parcelas || result?.cobrancas || result?.data || [];
       const match = items.length > 0 ? items[0] : null;
       if (match) {
-        const parcela = match.parcelas?.[0] || match;
-        const newStatus = parcela.status || match.status || cobranca.status;
+        const rawStatus = (match.status || cobranca.status).toLowerCase();
+        const normalizedStatus = (rawStatus === "liquidado" || rawStatus === "paga") ? "pago" : rawStatus;
         const updates: Record<string, unknown> = {
-          status: newStatus === "liquidado" ? "pago" : newStatus,
-          id_status: parcela.id_status || match.id_status || cobranca.id_status,
+          status: normalizedStatus,
+          id_status: match.id_status || cobranca.id_status,
         };
-        if (parcela.pix_copia_cola) updates.pix_copia_cola = parcela.pix_copia_cola;
-        if (parcela.link_boleto || parcela.url_boleto) updates.link_boleto = parcela.link_boleto || parcela.url_boleto;
-        if (parcela.linha_digitavel) updates.linha_digitavel = parcela.linha_digitavel;
-        if (parcela.link_cartao || parcela.url_cartao) updates.link_cartao = parcela.link_cartao || parcela.url_cartao;
+        if (match.pix_copia_cola) updates.pix_copia_cola = match.pix_copia_cola;
+        if (match.link_boleto || match.url_boleto) updates.link_boleto = match.link_boleto || match.url_boleto;
+        if (match.linha_digitavel) updates.linha_digitavel = match.linha_digitavel;
+        if (match.link_cartao || match.url_cartao) updates.link_cartao = match.link_cartao || match.url_cartao;
+        if (match.id_parcela) updates.id_parcela = String(match.id_parcela);
 
         await supabase
           .from("negociarie_cobrancas")
