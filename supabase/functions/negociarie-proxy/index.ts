@@ -49,7 +49,9 @@ async function negociarieRequest(method: string, endpoint: string, body?: unknow
     },
   };
   if (body && (method === "POST" || method === "PATCH" || method === "PUT")) {
-    opts.body = JSON.stringify(body);
+    const bodyStr = JSON.stringify(body);
+    console.log(`[negociarie-proxy] ${method} ${endpoint} payload:`, bodyStr);
+    opts.body = bodyStr;
   }
   const res = await fetch(url, opts);
   const text = await res.text();
