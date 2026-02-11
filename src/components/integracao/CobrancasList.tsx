@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { negociarieService } from "@/services/negociarieService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExternalLink, Copy, Loader2, List } from "lucide-react";
+import { ExternalLink, Copy, Loader2, List, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CobrancasListProps {
@@ -41,9 +42,46 @@ const CobrancasList = ({ tenantId, refreshKey }: CobrancasListProps) => {
     }
   };
 
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "Copiado!", description: `${label} copiado para a área de transferência` });
+  };
+
+  const handleSyncStatus = async (cobranca: any) => {
+    setSyncingId(cobranca.id);
+    try {
+      const result = await negociarieService.consultaCobrancas({ id_geral: cobranca.id_geral });
+      const items = Array.isArray(result) ? result : result?.cobrancas || result?.data || [];
+      const match = items.length > 0 ? items[0] : null;
+      if (match) {
+        const parcela = match.parcelas?.[0] || match;
+        const newStatus = parcela.status || match.status || cobranca.status;
+        const updates: Record<string, unknown> = {
+          status: newStatus === "liquidado" ? "pago" : newStatus,
+          id_status: parcela.id_status || match.id_status || cobranca.id_status,
+        };
+        if (parcela.pix_copia_cola) updates.pix_copia_cola = parcela.pix_copia_cola;
+        if (parcela.link_boleto || parcela.url_boleto) updates.link_boleto = parcela.link_boleto || parcela.url_boleto;
+        if (parcela.linha_digitavel) updates.linha_digitavel = parcela.linha_digitavel;
+        if (parcela.link_cartao || parcela.url_cartao) updates.link_cartao = parcela.link_cartao || parcela.url_cartao;
+
+        await supabase
+          .from("negociarie_cobrancas")
+          .update(updates as any)
+          .eq("id", cobranca.id);
+
+        toast({ title: "Atualizado!", description: `Status: ${updates.status}` });
+        loadCobrancas();
+      } else {
+        toast({ title: "Sem alterações", description: "Cobrança não encontrada na API" });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro ao sincronizar", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   if (loading) {
@@ -138,6 +176,23 @@ const CobrancasList = ({ tenantId, refreshKey }: CobrancasListProps) => {
                             <TooltipContent>Copiar linha digitável</TooltipContent>
                           </Tooltip>
                         )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleSyncStatus(c)}
+                              disabled={syncingId === c.id}
+                            >
+                              {syncingId === c.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Atualizar status</TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>

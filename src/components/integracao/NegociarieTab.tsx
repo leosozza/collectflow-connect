@@ -34,13 +34,24 @@ const NegociarieTab = () => {
     ]);
   };
 
+  const CALLBACK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
+
   const handleTestConnection = async () => {
     setTesting(true);
     try {
       await negociarieService.testConnection();
       setConnected(true);
       addLog("Teste de Conexão", "success", "API Negociarie conectada com sucesso");
-      toast({ title: "Conectado!", description: "API Negociarie acessível" });
+
+      // Auto-register callback URL
+      try {
+        await negociarieService.atualizarCallback({ url: CALLBACK_URL });
+        addLog("Callback", "success", `URL de callback registrada: ${CALLBACK_URL}`);
+      } catch (cbErr: any) {
+        addLog("Callback", "error", `Falha ao registrar callback: ${cbErr.message}`);
+      }
+
+      toast({ title: "Conectado!", description: "API Negociarie acessível e callback configurado" });
     } catch (e: any) {
       setConnected(false);
       addLog("Teste de Conexão", "error", e.message);

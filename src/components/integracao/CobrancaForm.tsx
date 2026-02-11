@@ -159,16 +159,18 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       }
 
       const idGeral2 = apiResult.id_geral || apiResult.idGeral || idGeral;
-      const linkBoleto = apiResult.link_boleto || apiResult.linkBoleto || null;
-      const pixCopiaCola = apiResult.pix_copia_cola || apiResult.pixCopiaCola || null;
-      const linkCartao = apiResult.link_cartao || apiResult.linkCartao || null;
-      const linhaDigitavel = apiResult.linha_digitavel || apiResult.linhaDigitavel || null;
+      const parcela = apiResult.parcelas?.[0] || apiResult;
+      const linkBoleto = parcela.link_boleto || parcela.linkBoleto || parcela.url_boleto || apiResult.link_boleto || null;
+      const pixCopiaCola = parcela.pix_copia_cola || parcela.pixCopiaCola || apiResult.pix_copia_cola || null;
+      const linkCartao = parcela.link_cartao || parcela.linkCartao || parcela.url_cartao || apiResult.link_cartao || null;
+      const linhaDigitavel = parcela.linha_digitavel || parcela.linhaDigitavel || apiResult.linha_digitavel || null;
+      const idParcela = parcela.id_parcela || parcela.idParcela || apiResult.id_parcela || null;
 
       await negociarieService.saveCobranca({
         tenant_id: tenantId,
         client_id: null,
         id_geral: idGeral2,
-        id_parcela: apiResult.id_parcela || apiResult.idParcela || null,
+        id_parcela: idParcela,
         tipo,
         status: "pendente",
         valor: parseCurrencyInput(form.valor),

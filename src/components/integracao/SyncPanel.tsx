@@ -5,15 +5,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, Link2 } from "lucide-react";
 
 interface SyncPanelProps {
   onSync: (message: string) => void;
 }
 
+const CALLBACK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
+
 const SyncPanel = ({ onSync }: SyncPanelProps) => {
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
+  const [settingCallback, setSettingCallback] = useState(false);
   const [syncDate, setSyncDate] = useState(new Date().toISOString().split("T")[0]);
 
   const handleSyncToday = async () => {
@@ -67,6 +70,26 @@ const SyncPanel = ({ onSync }: SyncPanelProps) => {
             Buscar
           </Button>
         </div>
+        <Button
+          onClick={async () => {
+            setSettingCallback(true);
+            try {
+              await negociarieService.atualizarCallback({ url: CALLBACK_URL });
+              onSync("URL de callback configurada com sucesso");
+              toast({ title: "Callback configurado!", description: CALLBACK_URL });
+            } catch (e: any) {
+              toast({ title: "Erro ao configurar callback", description: e.message, variant: "destructive" });
+            } finally {
+              setSettingCallback(false);
+            }
+          }}
+          disabled={settingCallback}
+          variant="outline"
+          className="w-full"
+        >
+          {settingCallback ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
+          Configurar Callback URL
+        </Button>
       </CardContent>
     </Card>
   );
