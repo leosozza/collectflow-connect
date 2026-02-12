@@ -105,90 +105,49 @@ const ClientDetailPage = () => {
         </div>
       </div>
 
-      {/* Client Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase">
-              <User className="w-3.5 h-3.5" /> CPF
-            </div>
-            <p className="text-lg font-semibold text-foreground">{formattedCpf}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase">
-              <Phone className="w-3.5 h-3.5" /> Telefone
-            </div>
-            <p className="text-lg font-semibold text-foreground">
-              {first.phone ? formatPhone(first.phone) : "—"}
+      {/* Client Info - Clean list style */}
+      <div className="bg-card rounded-xl border border-border p-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">CPF</p>
+            <p className="text-sm font-semibold text-foreground">{formattedCpf}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Telefone</p>
+            <p className="text-sm font-semibold text-foreground">{first.phone ? formatPhone(first.phone) : "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Email</p>
+            <p className="text-sm font-semibold text-foreground truncate">{first.email || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
+            <p className="text-sm font-semibold text-foreground">{first.credor}</p>
+          </div>
+        </div>
+        <div className="border-t border-border mt-4 pt-4 grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Total em Aberto</p>
+            <p className="text-lg font-bold text-destructive">{formatCurrency(totalAberto)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Total Pago</p>
+            <p className="text-lg font-bold text-success">{formatCurrency(totalPago)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Parcelas</p>
+            <p className="text-lg font-bold text-foreground">
+              {clients.filter((c) => c.status === "pago").length}/{clients.length}
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase">
-              <Mail className="w-3.5 h-3.5" /> Email
-            </div>
-            <p className="text-sm font-semibold text-foreground truncate">
-              {first.email || "—"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase">
-              <Building className="w-3.5 h-3.5" /> Credor
-            </div>
-            <p className="text-lg font-semibold text-foreground">{first.credor}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Totals */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-destructive/10">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total em Aberto</p>
-              <p className="text-xl font-bold text-destructive">{formatCurrency(totalAberto)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-success/10">
-              <DollarSign className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Pago</p>
-              <p className="text-xl font-bold text-success">{formatCurrency(totalPago)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <UserCheck className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Parcelas</p>
-              <p className="text-xl font-bold text-foreground">
-                {clients.filter((c) => c.status === "pago").length}/{clients.length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="titulos" className="space-y-4">
         <TabsList>
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
-          <TabsTrigger value="historico">Histórico e Ocorrências</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
         </TabsList>
 
@@ -230,67 +189,72 @@ const ClientDetailPage = () => {
           </Card>
         </TabsContent>
 
-        {/* Tab: Historico */}
-        <TabsContent value="historico" className="space-y-4">
-          {/* Agreements */}
+        <TabsContent value="historico">
           <Card>
             <CardContent className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">Acordos</h3>
-              {agreements.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum acordo registrado</p>
-              ) : (
-                <div className="space-y-3">
-                  {agreements.map((a) => (
-                    <div key={a.id} className="border border-border rounded-lg p-3 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">{a.credor}</span>
-                        <Badge variant={a.status === "approved" ? "default" : "secondary"}>
-                          {a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Original: {formatCurrency(Number(a.original_total))} → Proposta: {formatCurrency(Number(a.proposed_total))}
-                        {a.discount_percent ? ` (${a.discount_percent}% desc.)` : ""}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.new_installments}x de {formatCurrency(Number(a.new_installment_value))} — Início: {formatDate(a.first_due_date)}
-                      </p>
-                      {a.notes && <p className="text-xs text-muted-foreground italic">{a.notes}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <h3 className="font-semibold text-foreground mb-3">Histórico</h3>
+              {(() => {
+                // Merge agreements and audit logs into a single chronological list
+                const items: { id: string; date: string; type: "acordo" | "ocorrencia"; content: React.ReactNode }[] = [];
 
-          {/* Audit logs */}
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">Ocorrências</h3>
-              {auditLogs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma ocorrência registrada</p>
-              ) : (
-                <div className="space-y-2">
-                  {auditLogs.map((log: any) => (
-                    <div key={log.id} className="flex items-start gap-3 text-sm border-b border-border pb-2 last:border-0">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString("pt-BR")}
-                      </span>
+                agreements.forEach((a) => {
+                  items.push({
+                    id: `a-${a.id}`,
+                    date: a.created_at,
+                    type: "acordo",
+                    content: (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={a.status === "approved" ? "default" : "secondary"} className="text-xs">
+                            Acordo {a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{a.credor}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Original: {formatCurrency(Number(a.original_total))} → Proposta: {formatCurrency(Number(a.proposed_total))}
+                          {a.discount_percent ? ` (${a.discount_percent}% desc.)` : ""} — {a.new_installments}x de {formatCurrency(Number(a.new_installment_value))}
+                        </p>
+                        {a.notes && <p className="text-xs text-muted-foreground italic">{a.notes}</p>}
+                      </div>
+                    ),
+                  });
+                });
+
+                auditLogs.forEach((log: any) => {
+                  items.push({
+                    id: `l-${log.id}`,
+                    date: log.created_at,
+                    type: "ocorrencia",
+                    content: (
                       <div>
-                        <span className="font-medium">{log.user_name || "Sistema"}</span>
-                        <span className="text-muted-foreground"> — {log.action}</span>
+                        <span className="text-sm font-medium">{log.user_name || "Sistema"}</span>
+                        <span className="text-sm text-muted-foreground"> — {log.action}</span>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ),
+                  });
+                });
+
+                items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                if (items.length === 0) {
+                  return <p className="text-sm text-muted-foreground">Nenhum registro encontrado</p>;
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {items.map((item) => (
+                      <div key={item.id} className="flex items-start gap-3 border-b border-border pb-3 last:border-0">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap pt-0.5">
+                          {new Date(item.date).toLocaleString("pt-BR")}
+                        </span>
+                        <div className="flex-1">{item.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Tab: Anexos */}
-        <TabsContent value="anexos">
-          <ClientAttachments cpf={cpf || ""} />
         </TabsContent>
       </Tabs>
     </div>
