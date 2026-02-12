@@ -16,14 +16,16 @@ const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
 
-  // Fetch all client records for this CPF
+  // Fetch all client records for this CPF (handle both raw and formatted)
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["client-detail", cpf],
     queryFn: async () => {
+      const rawCpf = (cpf || "").replace(/\D/g, "");
+      // Try both raw digits and formatted CPF
       const { data, error } = await supabase
         .from("clients")
         .select("*")
-        .eq("cpf", cpf || "")
+        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
         .order("numero_parcela", { ascending: true });
       if (error) throw error;
       return data || [];
@@ -35,10 +37,11 @@ const ClientDetailPage = () => {
   const { data: agreements = [] } = useQuery({
     queryKey: ["client-agreements", cpf],
     queryFn: async () => {
+      const rawCpf = (cpf || "").replace(/\D/g, "");
       const { data, error } = await supabase
         .from("agreements")
         .select("*")
-        .eq("client_cpf", cpf || "")
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
