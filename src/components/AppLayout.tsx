@@ -23,6 +23,8 @@ import {
   FileText
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import AgreementCelebration from "@/components/notifications/AgreementCelebration";
+import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
 
 interface AppLayoutProps {
@@ -32,6 +34,7 @@ interface AppLayoutProps {
 const AppLayout = ({ children }: AppLayoutProps) => {
   const { profile, signOut } = useAuth();
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
+  const { celebrationNotification, dismissCelebration } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -161,6 +164,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           {children}
         </main>
       </div>
+
+      <AgreementCelebration
+        notification={celebrationNotification}
+        onDismiss={dismissCelebration}
+      />
     </div>
   );
 };
