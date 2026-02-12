@@ -126,6 +126,44 @@ export type Database = {
           },
         ]
       }
+      client_attachments: {
+        Row: {
+          client_cpf: string
+          created_at: string
+          file_name: string
+          file_path: string
+          id: string
+          tenant_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          client_cpf: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          id?: string
+          tenant_id: string
+          uploaded_by: string
+        }
+        Update: {
+          client_cpf?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          id?: string
+          tenant_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           cpf: string
