@@ -1,86 +1,117 @@
 
 
-# Corrigir Recebimento Automatico de Callbacks da Negociarie
+# Correções e Melhorias na Carteira
 
-## Problema
-A cobranca COB-1770834042432 foi paga na gateway Negociarie, mas o sistema local continua mostrando "pendente" porque:
-1. A URL de callback nunca foi registrada na API Negociarie
-2. Os dados retornados pela API (pix_copia_cola, id_parcela) nao estao sendo salvos localmente
+## 1. Corrigir Pesquisa por Nome
 
-## Solucao em 3 partes
+**Problema:** A busca por primeiro nome pode falhar devido a acentos e caracteres especiais (ex: "João" vs "joao"). A busca atual usa `includes()` sem normalização de acentos.
 
-### Parte 1: Registrar URL de callback automaticamente
+**Solução:** Adicionar normalização de acentos (remover diacríticos) na comparação, usando `normalize("NFD").replace(/[\u0300-\u036f]/g, "")` tanto no termo de busca quanto no nome do cliente.
 
-Adicionar um botao na aba Negociarie (ou disparar automaticamente ao testar conexao) para registrar a URL de callback na API.
+**Arquivo:** `src/pages/CarteiraPage.tsx` (linhas 70-76)
 
-**Arquivo:** `src/components/integracao/NegociarieTab.tsx`
-- Adicionar botao "Configurar Callback" ou chamar automaticamente ao testar conexao
-- Chamar `negociarieService.atualizarCallback({ url: callbackUrl })`
-- A URL sera: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/negociarie-callback`
-
-**Arquivo:** `src/components/integracao/SyncPanel.tsx`
-- Adicionar botao dedicado para configurar/atualizar a URL de callback
-- Mostrar status de configuracao
-
-### Parte 2: Salvar dados retornados pela API ao criar cobranca
-
-**Arquivo:** `src/components/integracao/CobrancaForm.tsx`
-- Apos criar a cobranca com sucesso, extrair `pix_copia_cola`, `id_parcela`, `link_boleto`, `linha_digitavel`, `link_cartao` da resposta da API
-- Salvar esses dados na tabela `negociarie_cobrancas` para que o callback consiga localizar a cobranca corretamente
-
-Trecho atual que salva a cobranca:
 ```typescript
-await negociarieService.saveCobranca({
-  tenant_id: tenantId,
-  client_id: null,
-  id_geral: idGeral2,
-  id_parcela: null,        // <-- deveria salvar o retornado
-  tipo,
-  status: "pendente",
-  valor: parseCurrencyInput(form.valor),
-  data_vencimento: form.vencimento,
-  link_boleto: null,        // <-- deveria salvar o retornado
-  pix_copia_cola: null,     // <-- deveria salvar o retornado
-  link_cartao: null,        // <-- deveria salvar o retornado
-  linha_digitavel: null,    // <-- deveria salvar o retornado
+// De:
+const term = filters.search.trim().toLowerCase();
+filtered = clients.filter(
+  (c) =>
+    c.nome_completo.toLowerCase().includes(term) || ...
+);
+
+// Para:
+const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const term = normalize(filters.search.trim());
+filtered = clients.filter(
+  (c) =>
+    normalize(c.nome_completo).includes(term) || ...
+);
+```
+
+---
+
+## 2. Corrigir Logica de Entrada + Parcelas
+
+**Problema:** No `createClient`, a primeira parcela recebe `valor_parcela = valorEntrada`, quando deveria manter a distinção clara: parcela 1 tem o valor de entrada, demais parcelas tem o valor da parcela regular.
+
+**Arquivo:** `src/services/clientService.ts` (linhas 75-97)
+
+**Correção:** Garantir que:
+- Parcela 1: `valor_parcela = valor_entrada` (valor de entrada)
+- Parcelas 2+: `valor_parcela = valor_parcela` (valor regular da parcela)
+- O campo `valor_entrada` armazena o valor de entrada apenas na primeira parcela, e 0 nas demais
+
+```typescript
+records.push({
+  ...commonFields,
+  numero_parcela: validated.numero_parcela + i,
+  total_parcelas: totalParcelas,
+  valor_entrada: isFirst ? valorEntrada : 0,       // entrada só na 1a
+  valor_parcela: isFirst ? valorEntrada : validated.valor_parcela,
+  valor_pago: isFirst ? validated.valor_pago : 0,
+  data_vencimento: dateStr,
+  status: isFirst ? validated.status : "pendente",
+  operator_id: operatorId,
 });
 ```
 
-Sera alterado para extrair os dados da resposta:
-```typescript
-const parcela = apiResult.parcelas?.[0] || {};
-await negociarieService.saveCobranca({
-  tenant_id: tenantId,
-  client_id: null,
-  id_geral: idGeral2,
-  id_parcela: parcela.id_parcela || null,
-  tipo,
-  status: "pendente",
-  valor: parseCurrencyInput(form.valor),
-  data_vencimento: form.vencimento,
-  link_boleto: parcela.link_boleto || parcela.url_boleto || null,
-  pix_copia_cola: parcela.pix_copia_cola || null,
-  link_cartao: parcela.link_cartao || parcela.url_cartao || null,
-  linha_digitavel: parcela.linha_digitavel || null,
-});
-```
+---
 
-### Parte 3: Adicionar botao de sincronizacao manual de status
+## 3. Pagina de Detalhes do Cliente (clicavel pelo nome)
 
-**Arquivo:** `src/components/integracao/CobrancasList.tsx`
-- Adicionar botao "Atualizar Status" em cada cobranca que consulta a API Negociarie via `consultaCobrancas({ id_geral })` e atualiza o status local
-- Isso serve como fallback caso o callback falhe
+### 3.1 Nova rota `/carteira/:cpf`
 
-### Parte 4: Atualizar a cobranca existente manualmente (acao imediata)
+**Arquivo:** `src/App.tsx`
+- Adicionar rota `/carteira/:cpf` apontando para novo componente `ClientDetailPage`
 
-Como a cobranca COB-1770834042432 ja existe e foi paga, o botao de sincronizacao manual permitira atualizar o status consultando a API.
+### 3.2 Nome clicavel na tabela
 
-## Resumo dos arquivos modificados
+**Arquivo:** `src/pages/CarteiraPage.tsx`
+- Tornar o nome do cliente um link clicavel (usando `react-router-dom` `Link` ou `useNavigate`) que navega para `/carteira/:cpf`
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/components/integracao/NegociarieTab.tsx` | Registrar callback URL ao testar conexao |
-| `src/components/integracao/SyncPanel.tsx` | Botao dedicado para configurar URL de callback |
-| `src/components/integracao/CobrancaForm.tsx` | Salvar dados retornados (pix_copia_cola, id_parcela, etc.) |
-| `src/components/integracao/CobrancasList.tsx` | Botao "Atualizar Status" por cobranca via consulta API |
+### 3.3 Nova pagina `ClientDetailPage`
+
+**Arquivo (novo):** `src/pages/ClientDetailPage.tsx`
+
+Layout inspirado no print de referência (dados do devedor), com as seguintes seções:
+
+**Cabeçalho - Dados do Cliente:**
+- Nome Completo, CPF, Telefone, Email
+- Credor, Operador
+- Informações consolidadas (total em aberto, total pago)
+
+**Abas (usando Tabs do Radix UI):**
+
+1. **Titulos em Aberto** - Lista de todas as parcelas pendentes do cliente (filtradas por CPF), com status, valor, vencimento e ações (pagar, editar)
+
+2. **Historico de Negociação e Ocorrencias** - Lista de acordos (da tabela `agreements`) filtrados pelo CPF do cliente + log de auditoria relacionado
+
+3. **Anexos** - Upload e visualização de comprovantes e documentos do cliente (requer storage bucket)
+
+### 3.4 Bucket de Storage para Anexos
+
+**Migração SQL:**
+- Criar bucket `client-attachments` no storage
+- Criar tabela `client_attachments` para metadados (id, tenant_id, client_cpf, file_name, file_path, uploaded_by, created_at)
+- RLS: tenant users podem ver/inserir, admins podem deletar
+- Policies no bucket de storage para controle de acesso
+
+### 3.5 Componente de Anexos
+
+**Arquivo (novo):** `src/components/clients/ClientAttachments.tsx`
+- Upload de arquivos (comprovantes, documentos)
+- Lista de arquivos com download
+- Exclusão de arquivos (admin)
+
+---
+
+## Resumo dos Arquivos
+
+| Arquivo | Ação |
+|---------|------|
+| `src/pages/CarteiraPage.tsx` | Corrigir busca + nome clicavel |
+| `src/services/clientService.ts` | Corrigir lógica entrada/parcelas |
+| `src/pages/ClientDetailPage.tsx` | **Novo** - Pagina de detalhes com abas |
+| `src/components/clients/ClientAttachments.tsx` | **Novo** - Componente de upload/lista de anexos |
+| `src/App.tsx` | Adicionar rota `/carteira/:cpf` |
+| **Migração SQL** | Criar bucket `client-attachments` + tabela `client_attachments` com RLS |
 
