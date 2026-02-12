@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchClients,
@@ -47,6 +48,7 @@ import {
 const CarteiraPage = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [filters, setFilters] = useState({
     status: "todos",
@@ -68,10 +70,11 @@ const CarteiraPage = () => {
   const displayClients = useMemo(() => {
     let filtered = clients;
     if (filters.search.trim()) {
-      const term = filters.search.trim().toLowerCase();
+      const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const term = normalize(filters.search.trim());
       filtered = clients.filter(
         (c) =>
-          c.nome_completo.toLowerCase().includes(term) ||
+          normalize(c.nome_completo).includes(term) ||
           c.cpf.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
       );
     }
@@ -242,7 +245,14 @@ const CarteiraPage = () => {
               <TableBody>
                 {displayClients.map((client) => (
                   <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium text-card-foreground">{client.nome_completo}</TableCell>
+                    <TableCell>
+                      <button
+                        className="font-medium text-primary hover:underline cursor-pointer text-left"
+                        onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                      >
+                        {client.nome_completo}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
                     <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                     <TableCell className="text-center">{client.numero_parcela}</TableCell>

@@ -73,7 +73,7 @@ export const createClient = async (
   const totalParcelas = validated.total_parcelas || data.total_parcelas || 1;
 
   // Create all installments at once
-  const valorEntrada = data.valor_entrada || validated.valor_parcela;
+  const valorEntrada = data.valor_entrada || 0;
   const records = [];
   for (let i = 0; i < totalParcelas; i++) {
     const date = addMonths(new Date(validated.data_vencimento + "T00:00:00"), i);
@@ -87,7 +87,7 @@ export const createClient = async (
       email: data.email || null,
       numero_parcela: validated.numero_parcela + i,
       total_parcelas: totalParcelas,
-      valor_entrada: valorEntrada,
+      valor_entrada: isFirst ? valorEntrada : 0,
       valor_parcela: isFirst ? valorEntrada : validated.valor_parcela,
       valor_pago: isFirst ? validated.valor_pago : 0,
       data_vencimento: dateStr,

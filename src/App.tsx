@@ -10,6 +10,7 @@ import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import CarteiraPage from "./pages/CarteiraPage";
+import ClientDetailPage from "./pages/ClientDetailPage";
 import CadastroPage from "./pages/CadastroPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
@@ -61,6 +62,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <CarteiraPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/carteira/:cpf"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <ClientDetailPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
