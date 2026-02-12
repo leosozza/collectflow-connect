@@ -1,117 +1,79 @@
+# Notificações em Tempo Real para Operadores
 
+## Resumo
 
-# Correções e Melhorias na Carteira
+Implementar dois tipos de notificações para operadores:
 
-## 1. Corrigir Pesquisa por Nome
+1. **Popup de parabenização** (modal central) quando um novo acordo for registrado para o operador
+2. **Notificação de pagamento** (toast discreto) quando um cliente efetua pagamento
 
-**Problema:** A busca por primeiro nome pode falhar devido a acentos e caracteres especiais (ex: "João" vs "joao"). A busca atual usa `includes()` sem normalização de acentos.
-
-**Solução:** Adicionar normalização de acentos (remover diacríticos) na comparação, usando `normalize("NFD").replace(/[\u0300-\u036f]/g, "")` tanto no termo de busca quanto no nome do cliente.
-
-**Arquivo:** `src/pages/CarteiraPage.tsx` (linhas 70-76)
-
-```typescript
-// De:
-const term = filters.search.trim().toLowerCase();
-filtered = clients.filter(
-  (c) =>
-    c.nome_completo.toLowerCase().includes(term) || ...
-);
-
-// Para:
-const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-const term = normalize(filters.search.trim());
-filtered = clients.filter(
-  (c) =>
-    normalize(c.nome_completo).includes(term) || ...
-);
-```
+A caixinha de notificações (sino) já existe no canto superior direito do header -- vamos mantê-la e aprimorá-la com esses novos comportamentos visuais.
 
 ---
 
-## 2. Corrigir Logica de Entrada + Parcelas
+## O que será feito
 
-**Problema:** No `createClient`, a primeira parcela recebe `valor_parcela = valorEntrada`, quando deveria manter a distinção clara: parcela 1 tem o valor de entrada, demais parcelas tem o valor da parcela regular.
+### 1. Popup de Parabenização por Novo Acordo
 
-**Arquivo:** `src/services/clientService.ts` (linhas 75-97)
+Quando o sistema Realtime detectar uma nova notificação do tipo `success` com `reference_type = "agreement"`, exibir um **Dialog modal centralizado** com:
 
-**Correção:** Garantir que:
-- Parcela 1: `valor_parcela = valor_entrada` (valor de entrada)
-- Parcelas 2+: `valor_parcela = valor_parcela` (valor regular da parcela)
-- O campo `valor_entrada` armazena o valor de entrada apenas na primeira parcela, e 0 nas demais
+- Icone de celebração (confetti/troféu)
+- Mensagem "Parabéns! Novo acordo realizado!"
+- Nome do cliente e detalhes do acordo
+- Botão para fechar
 
-```typescript
-records.push({
-  ...commonFields,
-  numero_parcela: validated.numero_parcela + i,
-  total_parcelas: totalParcelas,
-  valor_entrada: isFirst ? valorEntrada : 0,       // entrada só na 1a
-  valor_parcela: isFirst ? valorEntrada : validated.valor_parcela,
-  valor_pago: isFirst ? validated.valor_pago : 0,
-  data_vencimento: dateStr,
-  status: isFirst ? validated.status : "pendente",
-  operator_id: operatorId,
-});
-```
+### 2. Toast de Pagamento Recebido
+
+Quando chegar uma notificação do tipo `success` com `reference_type = "payment"`, exibir um **toast discreto** no canto superior direito usando o Sonner (já instalado), com o nome do cliente e valor pago.
+
+### 3. Lógica de Detecção
+
+Modificar o hook `useNotifications.ts` para:
+
+- Detectar notificações **novas** (INSERT) via Realtime (já configurado)
+- Comparar com as notificações anteriores para identificar as recém-chegadas
+- Disparar o popup ou toast conforme o tipo da notificação
 
 ---
 
-## 3. Pagina de Detalhes do Cliente (clicavel pelo nome)
+## Detalhes Técnicos
 
-### 3.1 Nova rota `/carteira/:cpf`
+### Arquivo: `src/hooks/useNotifications.ts`
 
-**Arquivo:** `src/App.tsx`
-- Adicionar rota `/carteira/:cpf` apontando para novo componente `ClientDetailPage`
+- Alterar o listener de Realtime para capturar o `payload` do evento INSERT
+- Quando `event === "INSERT"`, verificar o `payload.new`:
+  - Se `reference_type === "agreement"` e `type === "success"`: disparar callback de popup
+  - Se `reference_type === "payment"` e `type === "success"`: disparar toast via Sonner
+- Expor um estado `celebrationNotification` para o componente de popup consumir
 
-### 3.2 Nome clicavel na tabela
+### Arquivo (novo): `src/components/notifications/AgreementCelebration.tsx`
 
-**Arquivo:** `src/pages/CarteiraPage.tsx`
-- Tornar o nome do cliente um link clicavel (usando `react-router-dom` `Link` ou `useNavigate`) que navega para `/carteira/:cpf`
+- Dialog modal centralizado com animação (framer-motion, já instalado)
+- Icone de troféu/celebração
+- Exibe título e mensagem da notificação
+- Botão "Fechar" que marca como lida
 
-### 3.3 Nova pagina `ClientDetailPage`
+### Arquivo: `src/components/AppLayout.tsx`
 
-**Arquivo (novo):** `src/pages/ClientDetailPage.tsx`
+- Importar e renderizar `AgreementCelebration` no layout principal
+- Passar estado do hook `useNotifications` para controlar abertura do popup
 
-Layout inspirado no print de referência (dados do devedor), com as seguintes seções:
+### Arquivo: `src/hooks/useNotifications.ts`
 
-**Cabeçalho - Dados do Cliente:**
-- Nome Completo, CPF, Telefone, Email
-- Credor, Operador
-- Informações consolidadas (total em aberto, total pago)
+- Adicionar estado para controlar popup de celebração
+- Adicionar disparo de toast (Sonner) para notificações de pagamento
 
-**Abas (usando Tabs do Radix UI):**
+### Arquivos de notificação existentes
 
-1. **Titulos em Aberto** - Lista de todas as parcelas pendentes do cliente (filtradas por CPF), com status, valor, vencimento e ações (pagar, editar)
-
-2. **Historico de Negociação e Ocorrencias** - Lista de acordos (da tabela `agreements`) filtrados pelo CPF do cliente + log de auditoria relacionado
-
-3. **Anexos** - Upload e visualização de comprovantes e documentos do cliente (requer storage bucket)
-
-### 3.4 Bucket de Storage para Anexos
-
-**Migração SQL:**
-- Criar bucket `client-attachments` no storage
-- Criar tabela `client_attachments` para metadados (id, tenant_id, client_cpf, file_name, file_path, uploaded_by, created_at)
-- RLS: tenant users podem ver/inserir, admins podem deletar
-- Policies no bucket de storage para controle de acesso
-
-### 3.5 Componente de Anexos
-
-**Arquivo (novo):** `src/components/clients/ClientAttachments.tsx`
-- Upload de arquivos (comprovantes, documentos)
-- Lista de arquivos com download
-- Exclusão de arquivos (admin)
+- `NotificationBell.tsx` e `NotificationList.tsx` permanecem como estão (já discretos no canto superior direito)
 
 ---
 
 ## Resumo dos Arquivos
 
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/CarteiraPage.tsx` | Corrigir busca + nome clicavel |
-| `src/services/clientService.ts` | Corrigir lógica entrada/parcelas |
-| `src/pages/ClientDetailPage.tsx` | **Novo** - Pagina de detalhes com abas |
-| `src/components/clients/ClientAttachments.tsx` | **Novo** - Componente de upload/lista de anexos |
-| `src/App.tsx` | Adicionar rota `/carteira/:cpf` |
-| **Migração SQL** | Criar bucket `client-attachments` + tabela `client_attachments` com RLS |
 
+| Arquivo                                                 | Ação                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| `src/hooks/useNotifications.ts`                         | Modificar - detectar novos INSERTs e disparar popup/toast |
+| `src/components/notifications/AgreementCelebration.tsx` | **Novo** - Modal de parabenização                         |
+| `src/components/AppLayout.tsx`                          | Modificar - renderizar AgreementCelebration               |
