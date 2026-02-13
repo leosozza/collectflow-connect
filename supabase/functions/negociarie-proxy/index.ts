@@ -27,7 +27,11 @@ async function getToken(): Promise<string> {
 
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`Falha ao autenticar na Negociarie: ${res.status} - ${txt}`);
+    const isHtml = txt.trim().startsWith("<!") || txt.includes("<html");
+    const msg = isHtml
+      ? `Servidor Negociarie indisponível (status ${res.status}). Tente novamente em alguns minutos.`
+      : `Falha ao autenticar na Negociarie: ${res.status} - ${txt.substring(0, 200)}`;
+    throw new Error(msg);
   }
 
   const data = await res.json();
@@ -56,10 +60,17 @@ async function negociarieRequest(method: string, endpoint: string, body?: unknow
   const res = await fetch(url, opts);
   const text = await res.text();
   let json;
-  try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  if (!res.ok) {
-    console.error(`[negociarie-proxy] API error ${res.status}:`, JSON.stringify(json));
-    throw new Error(json.message || json.error || JSON.stringify(json.errors || json) || `Negociarie ${res.status}`);
+  const isHtml = text.trim().startsWith("<!") || text.includes("<html");
+  if (isHtml) {
+    console.error(`[negociarie-proxy] API returned HTML (${res.status})`);
+    if (!res.ok) throw new Error(`Servidor Negociarie indisponível (status ${res.status}). Tente novamente em alguns minutos.`);
+    json = { raw: "HTML response" };
+  } else {
+    try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    if (!res.ok) {
+      console.error(`[negociarie-proxy] API error ${res.status}:`, JSON.stringify(json));
+      throw new Error(json.message || json.error || JSON.stringify(json.errors || json) || `Negociarie ${res.status}`);
+    }
   }
   return json;
 }
