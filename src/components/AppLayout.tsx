@@ -331,7 +331,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               };
               const title = pageTitles[location.pathname];
               return title ? (
-                <h1 className="text-sm font-semibold text-foreground">{title}</h1>
+                <h1 className="text-lg font-semibold text-foreground">{title}</h1>
               ) : null;
             })()}
           </div>
