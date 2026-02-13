@@ -50,12 +50,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
-import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
+import { fetchWhatsAppInstances, type WhatsAppInstance } from "@/services/whatsappInstanceService";
 
 interface ThreeCAgent {
   id: number;
@@ -85,6 +87,7 @@ const UsersPage = () => {
   const [editAgentId, setEditAgentId] = useState<number | null>(null);
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+  const [editInstanceIds, setEditInstanceIds] = useState<string[]>([]);
 
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
@@ -140,16 +143,67 @@ const UsersPage = () => {
     },
   });
 
+  // Fetch WhatsApp instances
+  const { data: whatsappInstances = [] } = useQuery({
+    queryKey: ["whatsapp-instances", tenant?.id],
+    queryFn: () => fetchWhatsAppInstances(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  // Fetch operator_instances for the currently edited user
+  const { data: currentOperatorInstances = [] } = useQuery({
+    queryKey: ["operator-instances", editUser?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("operator_instances" as any)
+        .select("instance_id")
+        .eq("profile_id", editUser!.id);
+      if (error) throw error;
+      return (data || []).map((d: any) => d.instance_id as string);
+    },
+    enabled: !!editUser?.id,
+  });
+
+  // Sync editInstanceIds when operator instances load
+  useEffect(() => {
+    if (currentOperatorInstances.length > 0 && editUser) {
+      setEditInstanceIds(currentOperatorInstances);
+    } else if (!editUser) {
+      setEditInstanceIds([]);
+    }
+  }, [currentOperatorInstances, editUser]);
+
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null }) => {
+    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id, instanceIds }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null; instanceIds: string[] }) => {
       const { error } = await supabase
         .from("profiles")
         .update({ role, commission_grade_id, full_name, threecplus_agent_id } as any)
         .eq("id", id);
       if (error) throw error;
+
+      // Sync operator_instances
+      if (tenant?.id) {
+        await supabase
+          .from("operator_instances" as any)
+          .delete()
+          .eq("profile_id", id);
+
+        if (instanceIds.length > 0) {
+          const rows = instanceIds.map((instId) => ({
+            profile_id: id,
+            instance_id: instId,
+            tenant_id: tenant.id,
+          }));
+          const { error: insErr } = await supabase
+            .from("operator_instances" as any)
+            .insert(rows as any);
+          if (insErr) throw insErr;
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["operator-instances"] });
       toast.success("Usuário atualizado!");
       setEditUser(null);
     },
@@ -178,6 +232,7 @@ const UsersPage = () => {
     setEditGradeId(user.commission_grade_id || "none");
     setEditName(user.full_name);
     setEditAgentId(user.threecplus_agent_id);
+    setEditInstanceIds([]);
   };
 
   const getGradeName = (gradeId: string | null) => {
@@ -399,6 +454,39 @@ const UsersPage = () => {
                 </div>
               )}
             </div>
+
+            {/* WhatsApp Instances */}
+            {whatsappInstances.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <MessageSquare className="w-4 h-4" />
+                  Instâncias WhatsApp
+                </Label>
+                <div className="space-y-2 rounded-md border p-3">
+                  {whatsappInstances.map((inst) => (
+                    <label key={inst.id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={editInstanceIds.includes(inst.id)}
+                        onCheckedChange={(checked) => {
+                          setEditInstanceIds((prev) =>
+                            checked
+                              ? [...prev, inst.id]
+                              : prev.filter((id) => id !== inst.id)
+                          );
+                        }}
+                      />
+                      <span className="text-sm">{inst.name || inst.instance_name}</span>
+                      {inst.is_default && (
+                        <Badge variant="outline" className="text-[10px]">Padrão</Badge>
+                      )}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selecione quais instâncias este operador terá acesso às conversas.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
@@ -411,6 +499,7 @@ const UsersPage = () => {
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
                     threecplus_agent_id: editAgentId,
+                    instanceIds: editInstanceIds,
                   });
                 }
               }}

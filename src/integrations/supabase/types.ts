@@ -702,6 +702,45 @@ export type Database = {
           },
         ]
       }
+      operator_instances: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          profile_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          profile_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          profile_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_instances_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string | null
