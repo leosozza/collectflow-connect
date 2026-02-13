@@ -18,9 +18,10 @@ import ClientFilters from "@/components/clients/ClientFilters";
 import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import DialerExportDialog from "@/components/carteira/DialerExportDialog";
+import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -65,6 +66,7 @@ const CarteiraPage = () => {
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialerOpen, setDialerOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
@@ -226,10 +228,16 @@ const CarteiraPage = () => {
         </div>
         <div className="flex gap-2">
           {selectedIds.size > 0 && (
-            <Button variant="outline" onClick={() => setDialerOpen(true)} className="gap-2 border-primary text-primary">
-              <Phone className="w-4 h-4" />
-              Discador ({selectedIds.size})
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setWhatsappOpen(true)} className="gap-2 border-green-600 text-green-600">
+                <MessageSquare className="w-4 h-4" />
+                WhatsApp ({selectedIds.size})
+              </Button>
+              <Button variant="outline" onClick={() => setDialerOpen(true)} className="gap-2 border-primary text-primary">
+                <Phone className="w-4 h-4" />
+                Discador ({selectedIds.size})
+              </Button>
+            </>
           )}
           <Button variant="ghost" onClick={downloadTemplate} className="gap-2 text-muted-foreground" size="sm">
             <Download className="w-4 h-4" />
@@ -387,6 +395,13 @@ const CarteiraPage = () => {
       <DialerExportDialog
         open={dialerOpen}
         onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
+        selectedClients={selectedClients}
+      />
+
+      {/* WhatsApp bulk dialog */}
+      <WhatsAppBulkDialog
+        open={whatsappOpen}
+        onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
         selectedClients={selectedClients}
       />
     </div>
