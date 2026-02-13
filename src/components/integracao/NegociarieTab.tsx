@@ -4,8 +4,9 @@ import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, Loader2, CheckCircle2, XCircle, Link2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Wifi, WifiOff, Loader2, CheckCircle2, XCircle, Link2, Send } from "lucide-react";
 import CobrancaForm from "./CobrancaForm";
 import CobrancasList from "./CobrancasList";
 import SyncPanel from "./SyncPanel";
@@ -26,6 +27,10 @@ const NegociarieTab = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [callbackOk, setCallbackOk] = useState<boolean | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`
+  );
+  const [settingCallback, setSettingCallback] = useState(false);
 
   const addLog = (action: string, status: "success" | "error", message: string) => {
     setLogs((prev) => [
@@ -34,34 +39,39 @@ const NegociarieTab = () => {
     ]);
   };
 
-  const CALLBACK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
-
   const handleTestConnection = async () => {
     setTesting(true);
     try {
       await negociarieService.testConnection();
       setConnected(true);
       addLog("Teste de Conexão", "success", "API Negociarie conectada com sucesso");
-
-      // Auto-register callback URL
-      let cbSuccess = false;
-      try {
-        await negociarieService.atualizarCallback({ url: CALLBACK_URL });
-        setCallbackOk(true);
-        cbSuccess = true;
-        addLog("Callback", "success", `URL de callback registrada: ${CALLBACK_URL}`);
-      } catch (cbErr: any) {
-        setCallbackOk(false);
-        addLog("Callback", "error", `Falha ao registrar callback: ${cbErr.message}`);
-      }
-
-      toast({ title: "Conectado!", description: cbSuccess ? "API Negociarie acessível e callback configurado" : "API conectada, mas callback falhou" });
+      toast({ title: "Conectado!", description: "API Negociarie acessível" });
     } catch (e: any) {
       setConnected(false);
       addLog("Teste de Conexão", "error", e.message);
       toast({ title: "Falha na conexão", description: e.message, variant: "destructive" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleSetCallback = async () => {
+    if (!callbackUrl.trim()) {
+      toast({ title: "URL vazia", description: "Preencha a URL do callback", variant: "destructive" });
+      return;
+    }
+    setSettingCallback(true);
+    try {
+      await negociarieService.atualizarCallback({ url: callbackUrl.trim() });
+      setCallbackOk(true);
+      addLog("Callback", "success", `URL registrada: ${callbackUrl.trim()}`);
+      toast({ title: "Callback configurado!", description: "URL de callback registrada com sucesso" });
+    } catch (e: any) {
+      setCallbackOk(false);
+      addLog("Callback", "error", `Falha: ${e.message}`);
+      toast({ title: "Erro no callback", description: e.message, variant: "destructive" });
+    } finally {
+      setSettingCallback(false);
     }
   };
 
@@ -94,21 +104,53 @@ const NegociarieTab = () => {
                   : "Sem conexão com a API"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             <Button onClick={handleTestConnection} disabled={testing} className="w-full">
               {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Testar Conexão
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Callback configuration */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-muted-foreground" />
+              Configuração de Callback
+            </CardTitle>
+            <CardDescription>
+              URL que receberá notificações de pagamento da Negociarie
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="callback-url">URL do Callback</Label>
+              <Input
+                id="callback-url"
+                value={callbackUrl}
+                onChange={(e) => setCallbackUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            <Button onClick={handleSetCallback} disabled={settingCallback} className="w-full">
+              {settingCallback ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Configurar Callback
             </Button>
             {callbackOk !== null && (
               <div className="flex items-center gap-2 text-sm">
                 {callbackOk ? (
                   <>
-                    <Link2 className="w-4 h-4 text-emerald-600" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span className="text-emerald-700 dark:text-emerald-400">Callback configurado</span>
                   </>
                 ) : (
                   <>
-                    <Link2 className="w-4 h-4 text-destructive" />
+                    <XCircle className="w-4 h-4 text-destructive" />
                     <span className="text-destructive">Callback não configurado</span>
                   </>
                 )}
@@ -116,10 +158,10 @@ const NegociarieTab = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Sync Panel */}
-        <SyncPanel onSync={(msg) => addLog("Sincronização", "success", msg)} />
       </div>
+
+      {/* Sync Panel */}
+      <SyncPanel onSync={(msg) => addLog("Sincronização", "success", msg)} />
 
       {/* New charge form */}
       {tenant && (
@@ -131,13 +173,22 @@ const NegociarieTab = () => {
         <CobrancasList tenantId={tenant.id} refreshKey={refreshKey} />
       )}
 
-      {/* Logs */}
-      {logs.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Log de Operações</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Logs - always visible section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Log de Operações</CardTitle>
+          <CardDescription>
+            {logs.length === 0
+              ? "Teste a conexão ou configure o callback para ver os logs"
+              : `${logs.length} operação(ões) registrada(s)`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {logs.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nenhuma operação registrada ainda
+            </p>
+          ) : (
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {logs.map((log) => (
                 <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 text-sm">
@@ -148,7 +199,7 @@ const NegociarieTab = () => {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-card-foreground">{log.action}</p>
-                    <p className="text-muted-foreground">{log.message}</p>
+                    <p className="text-muted-foreground break-all">{log.message}</p>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {log.timestamp.toLocaleTimeString("pt-BR")}
@@ -156,9 +207,9 @@ const NegociarieTab = () => {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
