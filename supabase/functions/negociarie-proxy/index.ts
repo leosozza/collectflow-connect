@@ -141,7 +141,12 @@ Deno.serve(async (req) => {
       }
 
       case "atualizar-callback": {
-        result = await negociarieRequest("POST", "/cobranca/atualizar-url-callback", params.data);
+        // A API Negociarie espera o campo url_callback
+        const cbUrl = params.data?.url || params.data?.url_callback || "";
+        const callbackPayload = { url_callback: cbUrl };
+        console.log("[negociarie-proxy] Registrando callback:", JSON.stringify(callbackPayload));
+        result = await negociarieRequest("POST", "/cobranca/atualizar-url-callback", callbackPayload);
+        console.log("[negociarie-proxy] Resposta callback:", JSON.stringify(result));
         break;
       }
 
