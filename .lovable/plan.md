@@ -1,107 +1,118 @@
 
-# Integração WhatsApp na página /integracao
+
+# Suporte a Multiplas Instancias Baylers
 
 ## Resumo
 
-Adicionar uma aba "WhatsApp" na página de Integrações com duas opções de conexão:
-1. **Oficial (Gupshup)** - credenciais API + webhook de retorno
-2. **Baylers** (Evolution API, sem mencionar o nome real) - chave API + URL da instância
-
-As credenciais serão salvas no campo `settings` (jsonb) da tabela `tenants`, seguindo o padrão já usado para Gupshup e 3CPlus. O GupshupSettings existente será movido de Automação para Integrações e aprimorado com a URL do webhook.
+Atualmente o sistema suporta apenas **uma** instancia Baylers por tenant, armazenada no campo `settings` (jsonb) da tabela `tenants`. A mudanca consiste em criar uma tabela dedicada `whatsapp_instances` para armazenar N instancias por tenant, com uma UI que permite adicionar, editar, remover e definir qual e a instancia padrao.
 
 ## O que muda
 
-### 1. Nova aba "WhatsApp" na IntegracaoPage
+### 1. Nova tabela: `whatsapp_instances`
 
-Adicionar uma quarta aba na página `/integracao` com ícone MessageCircle e o texto "WhatsApp".
+Campos:
+- `id` (uuid, PK)
+- `tenant_id` (uuid, NOT NULL, FK tenants)
+- `name` (text) - nome amigavel (ex: "Vendas", "Cobranca")
+- `instance_name` (text) - nome tecnico da instancia na API
+- `instance_url` (text, NOT NULL) - URL base da API
+- `api_key` (text, NOT NULL) - chave de autenticacao
+- `is_default` (boolean, default false) - instancia padrao do tenant
+- `status` (text, default 'active') - active/inactive
+- `created_at`, `updated_at`
 
-### 2. Novo componente: `WhatsAppIntegrationTab`
+RLS: mesmas regras de admin manage + users select do tenant.
 
-Dentro da aba, exibir dois cards lado a lado (ou empilhados em mobile):
+### 2. UI refatorada no WhatsAppIntegrationTab
 
-**Card 1 - Oficial (Gupshup)**
-- Campo: API Key (com toggle mostrar/ocultar)
-- Campo: App Name
-- Campo: Número de Origem
-- Exibição (read-only): URL do Webhook de retorno
-  - Formato: `https://{SUPABASE_URL}/functions/v1/gupshup-webhook`
-  - Botão "Copiar" ao lado
-- Badge "Configurado" quando todos os campos estiverem preenchidos
-- Botão "Salvar credenciais"
+O card "Baylers" deixa de ter campos fixos e passa a ter:
 
-**Card 2 - Baylers**
-- Campo: URL da Instância (ex: `https://minha-instancia.com`)
-- Campo: API Key (com toggle mostrar/ocultar)
-- Campo: Nome da Instância
-- Badge "Configurado" quando URL + API Key estiverem preenchidos
-- Botão "Salvar credenciais"
+- Lista das instancias cadastradas (cards compactos com nome, URL, status, badge "Padrao")
+- Botao "+ Nova Instancia" que abre um formulario (Dialog)
+- Formulario com campos: Nome, URL da Instancia, API Key, Nome da Instancia
+- Acoes por instancia: Editar, Remover, Definir como padrao
+- O card do Gupshup permanece inalterado
 
-Ambos salvam em `tenant.settings` com prefixos distintos:
-- Gupshup: `gupshup_api_key`, `gupshup_app_name`, `gupshup_source_number`
-- Baylers: `baylers_api_key`, `baylers_instance_url`, `baylers_instance_name`
+### 3. Logica de envio atualizada
 
-### 3. Mover GupshupSettings de Automação para Integrações
+Na edge function `send-bulk-whatsapp` e no `WhatsAppChat`:
+- Quando o provider e "baylers", buscar a instancia marcada como `is_default = true`
+- Futuramente o operador podera escolher qual instancia usar (nao nesta fase)
 
-- Remover o `GupshupSettings` da aba "Configurações" do `AutomacaoPage`
-- A lógica já estará no novo `WhatsAppIntegrationTab`
-- Na aba "Configurações" de Automação, exibir apenas um aviso direcionando para Integrações
+### 4. Migracao de dados
 
-### 4. Edge function: `gupshup-webhook`
+Os campos `baylers_*` que ja existem no `tenant.settings` serao mantidos como fallback. A logica na edge function verificara primeiro a tabela `whatsapp_instances`, e se vazia usara o settings legado.
 
-Nova edge function para receber callbacks do Gupshup (status de entrega, respostas). Registra eventos na tabela `message_logs`. Isso permite que o admin cole a URL no painel do Gupshup.
+---
 
-### 5. Atualizar `send-bulk-whatsapp` para suportar Baylers
+## Detalhes tecnicos
 
-A edge function de disparo em lote verificará qual provedor está configurado (`gupshup_api_key` ou `baylers_api_key`) e usará a API correspondente.
-
-## Arquivos
-
-### Criar
-| Arquivo | Descrição |
-|---|---|
-| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Componente com os dois cards (Gupshup + Baylers) |
-| `supabase/functions/gupshup-webhook/index.ts` | Webhook para callbacks do Gupshup |
-
-### Modificar
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/IntegracaoPage.tsx` | Adicionar aba "WhatsApp" |
-| `src/pages/AutomacaoPage.tsx` | Remover GupshupSettings, adicionar aviso redirecionando |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Adicionar suporte ao provedor Baylers |
-
-## Detalhes Técnicos
-
-### Campos no `tenant.settings` (jsonb)
+### Migracao SQL
 
 ```text
-Gupshup (existentes):
-  gupshup_api_key
-  gupshup_app_name
-  gupshup_source_number
+CREATE TABLE whatsapp_instances (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  instance_name TEXT NOT NULL DEFAULT 'default',
+  instance_url TEXT NOT NULL,
+  api_key TEXT NOT NULL,
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-Baylers (novos):
-  baylers_api_key
-  baylers_instance_url
-  baylers_instance_name
-  whatsapp_provider: "gupshup" | "baylers"  (indica qual está ativo)
+-- RLS
+ALTER TABLE whatsapp_instances ENABLE ROW LEVEL SECURITY;
+
+-- Admins manage
+CREATE POLICY "Tenant admins can manage whatsapp instances"
+  ON whatsapp_instances FOR ALL
+  USING (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()))
+  WITH CHECK (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()));
+
+-- Users view
+CREATE POLICY "Tenant users can view whatsapp instances"
+  ON whatsapp_instances FOR SELECT
+  USING (tenant_id = get_my_tenant_id() OR is_super_admin(auth.uid()));
+
+-- Trigger updated_at
+CREATE TRIGGER update_whatsapp_instances_updated_at
+  BEFORE UPDATE ON whatsapp_instances
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 ```
 
-### Webhook Gupshup
+### Arquivos a criar
 
-- Rota: `POST /functions/v1/gupshup-webhook`
-- Sem JWT (verify_jwt = false)
-- Recebe payload do Gupshup com status de entrega
-- Atualiza `message_logs` com status atualizado
+| Arquivo | Descricao |
+|---|---|
+| `src/services/whatsappInstanceService.ts` | CRUD para instancias (fetch, create, update, delete, setDefault) |
+| `src/components/integracao/BaylersInstanceForm.tsx` | Dialog de criar/editar instancia |
+| `src/components/integracao/BaylersInstancesList.tsx` | Lista de instancias com acoes |
 
-### API Baylers (Evolution API)
+### Arquivos a modificar
 
-O envio de mensagem usa:
+| Arquivo | Mudanca |
+|---|---|
+| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Substituir card unico por lista de instancias |
+| `supabase/functions/send-bulk-whatsapp/index.ts` | Buscar instancia default da tabela, fallback para settings |
+| `src/components/carteira/WhatsAppBulkDialog.tsx` | Atualizar verificacao de credenciais para considerar instancias |
+
+### Fluxo do usuario
+
 ```text
-POST {baylers_instance_url}/message/sendText/{instance_name}
-Headers: apikey: {baylers_api_key}
-Body: { number: "5511999999999", text: "mensagem" }
+/integracao > WhatsApp > Card Baylers
+  -> Lista vazia: "Nenhuma instancia configurada"
+  -> Clica "+ Nova Instancia"
+  -> Dialog: Nome, URL, API Key, Nome da Instancia
+  -> Salva -> Aparece na lista com acoes
+  -> Pode adicionar mais instancias
+  -> Marca uma como "Padrao" (estrela)
+  -> Ao salvar, define whatsapp_provider = "baylers" no tenant
 ```
 
-### Nenhuma migração SQL necessária
+### Sobre limites por plano
 
-Todos os dados ficam no campo `settings` (jsonb) da tabela `tenants` que já existe.
+A tabela ja fica preparada para que futuramente voce adicione um campo `max_whatsapp_instances` na tabela `plans.limits` (jsonb). A validacao podera ser feita no frontend (ao clicar "+ Nova Instancia") ou via trigger no banco. Nesta fase nao sera implementado o limite -- apenas a estrutura que permite N instancias.
+
