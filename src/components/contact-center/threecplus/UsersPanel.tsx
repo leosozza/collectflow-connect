@@ -151,7 +151,11 @@ const UsersPanel = () => {
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell className="text-sm">{u.email || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{roleLabel(u.role || u.type || "")}</Badge>
+                      <Badge variant="outline">
+                        {typeof u.role === "object" && u.role !== null
+                          ? (u.role.readable_name || u.role.name || "—")
+                          : roleLabel(u.role || u.type || "")}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={u.active === false || u.status === "inactive" ? "destructive" : "default"}>
