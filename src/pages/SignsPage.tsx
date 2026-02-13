@@ -142,19 +142,45 @@ const SignsPage = () => {
         {/* ======= ABA PLAYGROUND ======= */}
         <TabsContent value="playground">
           <div className="flex flex-col items-center gap-6">
-            <div className="flex items-center gap-3 w-full max-w-md justify-between">
+            <div className="flex flex-col items-center gap-3 w-full max-w-md">
               <div className="flex items-center gap-2">
                 <Smartphone className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">Simulador Mobile</span>
+                <Button variant="ghost" size="sm" onClick={resetPlayground}>
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {activeType === "click" ? "Aceite Digital" : activeType === "facial" ? "Reconhecimento Facial" : "Assinatura na Tela"}
-                </Badge>
-                <Button variant="ghost" size="sm" onClick={resetPlayground}>
-                  <RotateCcw className="w-4 h-4 mr-1" />
-                  Reiniciar
-                </Button>
+                {(["click", "facial", "draw"] as const).map((type) => {
+                  const labels: Record<string, string> = { click: "Aceite Digital", facial: "Reconhecimento Facial", draw: "Assinatura na Tela" };
+                  const icons: Record<string, React.ReactNode> = {
+                    click: <MousePointerClick className="w-3 h-3" />,
+                    facial: <Camera className="w-3 h-3" />,
+                    draw: <PenTool className="w-3 h-3" />,
+                  };
+                  const isActive = activeType === type;
+                  return (
+                    <Badge
+                      key={type}
+                      variant={isActive ? "default" : "outline"}
+                      className={`cursor-pointer gap-1 ${isActive ? "" : "opacity-50"}`}
+                      onClick={async () => {
+                        if (!tenant || isActive) return;
+                        try {
+                          await updateTenant(tenant.id, {
+                            settings: { ...tenantSettings, signature_type: type },
+                          });
+                          await refetch();
+                          setSignatureType(type);
+                          resetPlayground();
+                        } catch {}
+                      }}
+                    >
+                      {icons[type]}
+                      {labels[type]}
+                    </Badge>
+                  );
+                })}
               </div>
             </div>
 
