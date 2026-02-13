@@ -17,6 +17,7 @@ export type Database = {
       agreements: {
         Row: {
           approved_by: string | null
+          checkout_token: string | null
           client_cpf: string
           client_name: string
           created_at: string
@@ -29,6 +30,7 @@ export type Database = {
           new_installments: number
           notes: string | null
           original_total: number
+          portal_origin: boolean
           proposed_total: number
           status: string
           tenant_id: string
@@ -36,6 +38,7 @@ export type Database = {
         }
         Insert: {
           approved_by?: string | null
+          checkout_token?: string | null
           client_cpf: string
           client_name: string
           created_at?: string
@@ -48,6 +51,7 @@ export type Database = {
           new_installments?: number
           notes?: string | null
           original_total?: number
+          portal_origin?: boolean
           proposed_total?: number
           status?: string
           tenant_id: string
@@ -55,6 +59,7 @@ export type Database = {
         }
         Update: {
           approved_by?: string | null
+          checkout_token?: string | null
           client_cpf?: string
           client_name?: string
           created_at?: string
@@ -67,6 +72,7 @@ export type Database = {
           new_installments?: number
           notes?: string | null
           original_total?: number
+          portal_origin?: boolean
           proposed_total?: number
           status?: string
           tenant_id?: string
@@ -975,6 +981,60 @@ export type Database = {
           slug?: string
         }
         Relationships: []
+      }
+      portal_payments: {
+        Row: {
+          agreement_id: string
+          amount: number
+          created_at: string
+          id: string
+          negociarie_id_geral: string | null
+          payment_data: Json | null
+          payment_method: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          agreement_id: string
+          amount?: number
+          created_at?: string
+          id?: string
+          negociarie_id_geral?: string | null
+          payment_data?: Json | null
+          payment_method?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          agreement_id?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          negociarie_id_geral?: string | null
+          payment_data?: Json | null
+          payment_method?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_payments_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

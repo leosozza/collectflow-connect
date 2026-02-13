@@ -199,6 +199,8 @@ const App = () => (
               }
             />
             <Route path="/portal/:tenantSlug" element={<PortalPage />} />
+            <Route path="/portal/:tenantSlug/checkout/:token" element={<PortalPage />} />
+            <Route path="/portal/:tenantSlug/termo/:token" element={<PortalPage />} />
             <Route
               path="/auditoria"
               element={

@@ -1,17 +1,13 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+import { useState, useEffect } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, FileText, Handshake } from "lucide-react";
-import { formatCurrency } from "@/lib/formatters";
-import { format } from "date-fns";
+import PortalLayout from "@/components/portal/PortalLayout";
+import PortalHero from "@/components/portal/PortalHero";
+import PortalDebtList from "@/components/portal/PortalDebtList";
+import PortalNegotiation from "@/components/portal/PortalNegotiation";
+import PortalCheckout from "@/components/portal/PortalCheckout";
+import PortalAgreementTerm from "@/components/portal/PortalAgreementTerm";
 
 interface DebtItem {
   nome_completo: string;
@@ -24,162 +20,165 @@ interface DebtItem {
   status: string;
 }
 
-const PortalPage = () => {
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const { toast } = useToast();
-  const [cpf, setCpf] = useState("");
-  const [debts, setDebts] = useState<DebtItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [showAgreementForm, setShowAgreementForm] = useState(false);
-  const [agreementNote, setAgreementNote] = useState("");
-  const [submittingAgreement, setSubmittingAgreement] = useState(false);
+type PortalView = "hero" | "debts" | "negotiate" | "checkout" | "term";
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCpf = cpf.replace(/\D/g, "");
-    if (cleanCpf.length !== 11) {
-      toast({ title: "CPF inválido", description: "Informe um CPF com 11 dígitos.", variant: "destructive" });
-      return;
+const PortalPage = () => {
+  const { tenantSlug, token } = useParams<{ tenantSlug: string; token?: string }>();
+  const [searchParams] = useSearchParams();
+  const { toast } = useToast();
+
+  const [view, setView] = useState<PortalView>("hero");
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [debts, setDebts] = useState<DebtItem[]>([]);
+  const [cpf, setCpf] = useState("");
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
+
+  // Negotiation state
+  const [negotiateCredor, setNegotiateCredor] = useState("");
+  const [negotiateDebts, setNegotiateDebts] = useState<DebtItem[]>([]);
+
+  // Determine initial view from route
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes("/checkout/") && token) {
+      setView("checkout");
+    } else if (path.includes("/termo/") && token) {
+      setView("term");
     }
+  }, [token]);
+
+  // Load tenant info
+  useEffect(() => {
+    const loadTenant = async () => {
+      if (!tenantSlug) return;
+      try {
+        const { data, error } = await supabase.functions.invoke("portal-lookup", {
+          body: { action: "tenant-info", tenant_slug: tenantSlug },
+        });
+        if (!error && data?.tenant) setTenantInfo(data.tenant);
+      } catch {
+        // ignore
+      }
+    };
+    loadTenant();
+  }, [tenantSlug]);
+
+  const handleSearch = async (searchCpf: string) => {
+    setCpf(searchCpf);
     setLoading(true);
-    setSearched(true);
     try {
       const { data, error } = await supabase.functions.invoke("portal-lookup", {
-        body: { cpf: cleanCpf, tenant_slug: tenantSlug },
+        body: { cpf: searchCpf, tenant_slug: tenantSlug },
       });
       if (error) throw error;
-      setDebts(data?.debts || []);
+      const results = data?.debts || [];
+      setDebts(results);
+      if (results.length > 0) {
+        setView("debts");
+      } else {
+        toast({ title: "Nenhuma pendência", description: "Nenhuma dívida encontrada para este CPF." });
+      }
     } catch (err: any) {
-      toast({ title: "Erro na consulta", description: err.message, variant: "destructive" });
-      setDebts([]);
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAgreementRequest = async () => {
-    const cleanCpf = cpf.replace(/\D/g, "");
-    setSubmittingAgreement(true);
+  const handleNegotiate = (credor: string, credorDebts: DebtItem[]) => {
+    setNegotiateCredor(credor);
+    setNegotiateDebts(credorDebts);
+    setView("negotiate");
+  };
+
+  const handleSubmitProposal = async (option: { type: string; total: number; installments: number; installmentValue: number; notes: string }) => {
+    setSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke("portal-lookup", {
-        body: { cpf: cleanCpf, tenant_slug: tenantSlug, action: "request_agreement", notes: agreementNote },
+      const { data, error } = await supabase.functions.invoke("portal-lookup", {
+        body: {
+          action: "create-portal-agreement",
+          cpf,
+          tenant_slug: tenantSlug,
+          credor: negotiateCredor,
+          original_total: negotiateDebts.reduce((s, d) => s + Number(d.valor_parcela), 0),
+          proposed_total: option.total,
+          new_installments: option.installments,
+          new_installment_value: option.installmentValue,
+          notes: `[Portal - ${option.type}] ${option.notes}`.trim(),
+        },
       });
       if (error) throw error;
-      toast({ title: "Solicitação enviada!", description: "A empresa analisará sua proposta." });
-      setShowAgreementForm(false);
-      setAgreementNote("");
+      toast({
+        title: "Proposta enviada!",
+        description: "Sua proposta será analisada. Você receberá o link de pagamento após aprovação.",
+      });
+      setView("hero");
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
-      setSubmittingAgreement(false);
+      setSubmitting(false);
     }
   };
 
-  const statusLabels: Record<string, string> = { pendente: "Pendente", pago: "Pago", quebrado: "Quebrado" };
+  const maxDiscount = (tenantInfo?.settings?.portal_max_discount as number) || 30;
+  const maxInstallments = (tenantInfo?.settings?.portal_max_installments as number) || 12;
+  const clientName = debts[0]?.nome_completo || "";
+
+  // Checkout / Term views
+  if (view === "checkout" && token) {
+    return (
+      <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+        <PortalCheckout checkoutToken={token} />
+      </PortalLayout>
+    );
+  }
+
+  if (view === "term" && token) {
+    return (
+      <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+        <PortalAgreementTerm checkoutToken={token} />
+      </PortalLayout>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-muted/30 flex flex-col items-center p-4 md:p-8">
-      <div className="w-full max-w-3xl space-y-6">
-        <div className="text-center space-y-2">
-          <FileText className="w-12 h-12 mx-auto text-primary" />
-          <h1 className="text-2xl font-bold">Portal do Devedor</h1>
-          <p className="text-muted-foreground">Consulte suas pendências financeiras</p>
-        </div>
-
-        <Card>
-          <CardContent className="pt-6">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="flex-1">
-                <Input
-                  placeholder="Digite seu CPF (somente números)"
-                  value={cpf}
-                  onChange={e => setCpf(e.target.value)}
-                  maxLength={14}
-                />
-              </div>
-              <Button type="submit" disabled={loading}>
-                <Search className="w-4 h-4 mr-2" /> {loading ? "Buscando..." : "Consultar"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {searched && debts.length === 0 && !loading && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              Nenhuma pendência encontrada para este CPF.
-            </CardContent>
-          </Card>
+    <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        {view === "hero" && (
+          <PortalHero
+            tenantName={tenantInfo?.name}
+            primaryColor={tenantInfo?.primary_color}
+            settings={tenantInfo?.settings}
+            onSearch={handleSearch}
+            loading={loading}
+          />
         )}
 
-        {debts.length > 0 && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Suas Pendências</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Credor</TableHead>
-                        <TableHead>Parcela</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {debts.map((d, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{d.credor}</TableCell>
-                          <TableCell>{d.numero_parcela}/{d.total_parcelas}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(d.valor_parcela)}</TableCell>
-                          <TableCell>{format(new Date(d.data_vencimento + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
-                          <TableCell>
-                            <Badge variant={d.status === "pendente" ? "outline" : d.status === "pago" ? "default" : "destructive"}>
-                              {statusLabels[d.status] || d.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+        {view === "debts" && (
+          <PortalDebtList
+            debts={debts}
+            clientName={clientName}
+            onBack={() => setView("hero")}
+            onNegotiate={handleNegotiate}
+          />
+        )}
 
-            <Card>
-              <CardContent className="pt-6">
-                {!showAgreementForm ? (
-                  <Button variant="outline" className="w-full" onClick={() => setShowAgreementForm(true)}>
-                    <Handshake className="w-4 h-4 mr-2" /> Solicitar Acordo
-                  </Button>
-                ) : (
-                  <div className="space-y-4">
-                    <Label>Descreva sua proposta de acordo</Label>
-                    <Textarea
-                      rows={3}
-                      value={agreementNote}
-                      onChange={e => setAgreementNote(e.target.value)}
-                      placeholder="Ex: Gostaria de parcelar em 6x com desconto..."
-                    />
-                    <div className="flex gap-2">
-                      <Button onClick={handleAgreementRequest} disabled={submittingAgreement || !agreementNote.trim()}>
-                        {submittingAgreement ? "Enviando..." : "Enviar Solicitação"}
-                      </Button>
-                      <Button variant="outline" onClick={() => setShowAgreementForm(false)}>Cancelar</Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
+        {view === "negotiate" && (
+          <PortalNegotiation
+            credor={negotiateCredor}
+            originalTotal={negotiateDebts.reduce((s, d) => s + Number(d.valor_parcela), 0)}
+            clientName={clientName}
+            clientCpf={cpf}
+            maxDiscount={maxDiscount}
+            maxInstallments={maxInstallments}
+            onBack={() => setView("debts")}
+            onSubmit={handleSubmitProposal}
+            submitting={submitting}
+          />
         )}
       </div>
-    </div>
+    </PortalLayout>
   );
 };
 
