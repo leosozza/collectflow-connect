@@ -42,13 +42,11 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  // Use getClaims for ES256 compatibility (Lovable Cloud)
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
   
   let userId: string | null = null;
   
   if (claimsError || !claimsData?.claims) {
-    // Fallback to getUser if getClaims is not available
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
       console.error("Auth error:", claimsError?.message || error?.message);
@@ -63,7 +61,6 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
 
   const admin = getSupabaseAdmin();
 
-  // Fetch profile with tenant_id and role
   const { data: profile } = await admin
     .from("profiles")
     .select("role, tenant_id")
@@ -78,7 +75,6 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
     throw new Error("Usuário sem empresa vinculada");
   }
 
-  // Fetch tenant settings for credentials
   const { data: tenant } = await admin
     .from("tenants")
     .select("settings")
@@ -161,8 +157,6 @@ function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
   return "pendente";
 }
 
-// --- Helpers for batch processing ---
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -184,20 +178,109 @@ async function fetchWithRetry(
   throw new Error("Rate limit excedido após múltiplas tentativas");
 }
 
+// --- Helper to extract array from CobCloud response ---
+
+function extractArray(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (data?.data && Array.isArray(data.data)) return data.data;
+  if (data?.titulos && Array.isArray(data.titulos)) return data.titulos;
+  if (data?.devedores && Array.isArray(data.devedores)) return data.devedores;
+  if (data?.results && Array.isArray(data.results)) return data.results;
+  return [];
+}
+
+function extractTotal(data: any, fallbackArray: any[]): number {
+  return Number(data?.total || data?.count || data?.totalCount || fallbackArray.length) || 0;
+}
+
+// --- Helper to detect which endpoint has data ---
+
+async function detectEndpoint(
+  headers: Record<string, string>
+): Promise<{ endpoint: string; source: string }> {
+  // Try titulos first
+  const titulosUrl = `${COBCLOUD_BASE}/cli/titulos/listar?page=1&limit=1`;
+  console.log("[detectEndpoint] Trying titulos:", titulosUrl);
+  try {
+    const res = await fetchWithRetry(titulosUrl, headers);
+    const raw = await res.text();
+    console.log("[detectEndpoint] titulos response status:", res.status, "body:", raw.slice(0, 500));
+    if (res.ok) {
+      const data = JSON.parse(raw);
+      const arr = extractArray(data);
+      const total = extractTotal(data, arr);
+      if (total > 0 || arr.length > 0) {
+        console.log("[detectEndpoint] Using titulos endpoint, total:", total);
+        return { endpoint: "/cli/titulos/listar", source: "titulos" };
+      }
+    }
+  } catch (e) {
+    console.error("[detectEndpoint] titulos error:", e.message);
+  }
+
+  // Fallback to devedores
+  const devedoresUrl = `${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`;
+  console.log("[detectEndpoint] Trying devedores:", devedoresUrl);
+  try {
+    const res = await fetchWithRetry(devedoresUrl, headers);
+    const raw = await res.text();
+    console.log("[detectEndpoint] devedores response status:", res.status, "body:", raw.slice(0, 500));
+    if (res.ok) {
+      const data = JSON.parse(raw);
+      const arr = extractArray(data);
+      const total = extractTotal(data, arr);
+      if (total > 0 || arr.length > 0) {
+        console.log("[detectEndpoint] Using devedores endpoint, total:", total);
+        return { endpoint: "/cli/devedores/listar", source: "devedores" };
+      }
+    }
+  } catch (e) {
+    console.error("[detectEndpoint] devedores error:", e.message);
+  }
+
+  console.log("[detectEndpoint] No data found in either endpoint");
+  return { endpoint: "/cli/titulos/listar", source: "titulos" };
+}
+
 // --- Route handlers ---
 
 async function handleStatus(creds: CobCloudCredentials) {
-  try {
-    const headers = buildCobCloudHeaders(creds);
-    const res = await fetch(`${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`, {
-      method: "GET",
-      headers,
-    });
-    const ok = res.status === 200;
-    return json({ connected: ok, status: res.status });
-  } catch (e) {
-    return json({ connected: false, error: e.message });
+  const headers = buildCobCloudHeaders(creds);
+  let devedoresCount = 0;
+  let titulosCount = 0;
+  let connected = false;
+
+  // Test both endpoints in parallel
+  const [devRes, titRes] = await Promise.all([
+    fetchWithRetry(`${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`, headers).catch(() => null),
+    fetchWithRetry(`${COBCLOUD_BASE}/cli/titulos/listar?page=1&limit=1`, headers).catch(() => null),
+  ]);
+
+  if (devRes) {
+    const raw = await devRes.text();
+    console.log("[status] devedores response:", devRes.status, raw.slice(0, 500));
+    if (devRes.ok) {
+      connected = true;
+      try {
+        const data = JSON.parse(raw);
+        devedoresCount = extractTotal(data, extractArray(data));
+      } catch {}
+    }
   }
+
+  if (titRes) {
+    const raw = await titRes.text();
+    console.log("[status] titulos response:", titRes.status, raw.slice(0, 500));
+    if (titRes.ok) {
+      connected = true;
+      try {
+        const data = JSON.parse(raw);
+        titulosCount = extractTotal(data, extractArray(data));
+      } catch {}
+    }
+  }
+
+  return json({ connected, status: connected ? 200 : 0, devedores_count: devedoresCount, titulos_count: titulosCount });
 }
 
 async function handleImportTitulos(body: any, creds: CobCloudCredentials) {
@@ -226,9 +309,9 @@ async function handleImportTitulos(body: any, creds: CobCloudCredentials) {
   }
 
   const data = await res.json();
-  const titulos = data.data || data.titulos || data || [];
+  const titulos = extractArray(data);
 
-  if (!Array.isArray(titulos) || titulos.length === 0) {
+  if (titulos.length === 0) {
     return json({ imported: 0, message: "Nenhum título encontrado" });
   }
 
@@ -361,42 +444,80 @@ async function handleBaixarTitulo(body: any, creds: CobCloudCredentials) {
 async function handlePreview(body: any, creds: CobCloudCredentials) {
   const headers = buildCobCloudHeaders(creds);
 
-  const statuses = ["aberto", "pago", "quebrado"];
   const dateType = body.date_type ? String(body.date_type).slice(0, 30) : undefined;
   const dateValue = body.date_value ? String(body.date_value).slice(0, 50) : undefined;
 
+  // First detect which endpoint has data
+  const { endpoint, source } = await detectEndpoint(headers);
+
+  // Now get counts - try without status filter first for total
+  const baseParams = new URLSearchParams();
+  baseParams.set("page", "1");
+  baseParams.set("limit", "1");
+  if (dateType) baseParams.set("date_type", dateType);
+  if (dateValue) baseParams.set("date_value", dateValue);
+
+  console.log("[preview] Using endpoint:", endpoint, "source:", source);
+
+  // Get total without status filter
+  let grandTotal = 0;
+  try {
+    const totalUrl = `${COBCLOUD_BASE}${endpoint}?${baseParams}`;
+    console.log("[preview] Fetching total from:", totalUrl);
+    const res = await fetchWithRetry(totalUrl, headers);
+    const raw = await res.text();
+    console.log("[preview] Total response:", res.status, raw.slice(0, 500));
+    if (res.ok) {
+      const data = JSON.parse(raw);
+      grandTotal = extractTotal(data, extractArray(data));
+    }
+  } catch (e) {
+    console.error("[preview] Total fetch error:", e.message);
+  }
+
+  // Try getting counts per status
+  const statuses = ["aberto", "pago", "quebrado"];
   const results = await Promise.all(
     statuses.map(async (status) => {
-      const params = new URLSearchParams();
-      params.set("page", "1");
-      params.set("limit", "1");
+      const params = new URLSearchParams(baseParams);
       params.set("status", status);
-      if (dateType) params.set("date_type", dateType);
-      if (dateValue) params.set("date_value", dateValue);
 
       try {
-        const res = await fetchWithRetry(
-          `${COBCLOUD_BASE}/cli/titulos/listar?${params}`,
-          headers
-        );
-        if (!res.ok) return { status, count: 0 };
-        const data = await res.json();
-        const count = data.total || data.count || (data.data || data.titulos || []).length || 0;
+        const url = `${COBCLOUD_BASE}${endpoint}?${params}`;
+        console.log(`[preview] Fetching status=${status} from:`, url);
+        const res = await fetchWithRetry(url, headers);
+        if (!res.ok) {
+          const errText = await res.text();
+          console.log(`[preview] status=${status} error:`, res.status, errText.slice(0, 300));
+          return { status, count: 0 };
+        }
+        const raw = await res.text();
+        console.log(`[preview] status=${status} response:`, raw.slice(0, 500));
+        const data = JSON.parse(raw);
+        const arr = extractArray(data);
+        const count = extractTotal(data, arr);
         return { status, count: Number(count) };
-      } catch {
+      } catch (e) {
+        console.error(`[preview] status=${status} error:`, e.message);
         return { status, count: 0 };
       }
     })
   );
 
   const byStatus: Record<string, number> = {};
-  let total = 0;
+  let statusTotal = 0;
   for (const r of results) {
     byStatus[r.status] = r.count;
-    total += r.count;
+    statusTotal += r.count;
   }
 
-  return json({ total, byStatus });
+  // If per-status counts are all 0 but grandTotal > 0, put all in "aberto"
+  const finalTotal = statusTotal > 0 ? statusTotal : grandTotal;
+  if (statusTotal === 0 && grandTotal > 0) {
+    byStatus["aberto"] = grandTotal;
+  }
+
+  return json({ total: finalTotal, byStatus, source });
 }
 
 async function handleImportAll(body: any, creds: CobCloudCredentials) {
@@ -412,6 +533,10 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
   const dateType = body.date_type ? String(body.date_type).slice(0, 30) : undefined;
   const dateValue = body.date_value ? String(body.date_value).slice(0, 50) : undefined;
 
+  // Detect which endpoint has data
+  const { endpoint, source } = await detectEndpoint(headers);
+  console.log("[import-all] Using endpoint:", endpoint, "source:", source);
+
   let page = 1;
   let totalImported = 0;
   let totalSkipped = 0;
@@ -426,23 +551,41 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
     if (dateType) params.set("date_type", dateType);
     if (dateValue) params.set("date_value", dateValue);
 
+    const url = `${COBCLOUD_BASE}${endpoint}?${params}`;
+    console.log(`[import-all] Page ${page}: fetching ${url}`);
+
     let res: Response;
     try {
-      res = await fetchWithRetry(`${COBCLOUD_BASE}/cli/titulos/listar?${params}`, headers);
+      res = await fetchWithRetry(url, headers);
     } catch (e) {
-      console.error(`Page ${page} fetch failed:`, e.message);
+      console.error(`[import-all] Page ${page} fetch failed:`, e.message);
       break;
     }
 
     if (!res.ok) {
-      console.error(`CobCloud returned ${res.status} on page ${page}`);
+      const errText = await res.text();
+      console.error(`[import-all] CobCloud returned ${res.status} on page ${page}:`, errText.slice(0, 300));
       break;
     }
 
-    const data = await res.json();
-    const titulos = data.data || data.titulos || data || [];
+    const raw = await res.text();
+    console.log(`[import-all] Page ${page} response (first 500 chars):`, raw.slice(0, 500));
+    
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      console.error(`[import-all] Page ${page} invalid JSON`);
+      break;
+    }
 
-    if (!Array.isArray(titulos) || titulos.length === 0) break;
+    const titulos = extractArray(data);
+    console.log(`[import-all] Page ${page}: ${titulos.length} records extracted`);
+
+    if (titulos.length === 0) {
+      console.log(`[import-all] Page ${page}: empty, stopping`);
+      break;
+    }
 
     for (const t of titulos) {
       const rawCpf = cleanCpf(t.cpf || t.documento || t.cpf_cnpj || "");
@@ -480,18 +623,17 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
     }
 
     totalRecords += titulos.length;
-    console.log(`Page ${page}: ${titulos.length} records, total imported so far: ${totalImported}`);
+    console.log(`[import-all] Page ${page}: total imported so far: ${totalImported}`);
 
     if (titulos.length < PAGE_SIZE) break;
     page++;
     await delay(DELAY_MS);
   }
 
-  return json({ imported: totalImported, skipped: totalSkipped, pages: page, total: totalRecords });
+  return json({ imported: totalImported, skipped: totalSkipped, pages: page, total: totalRecords, source });
 }
 
 // --- Main handler ---
-
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -499,7 +641,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // All routes require admin auth + tenant credentials
     const creds = await verifyAdminAndGetCredentials(req);
 
     const body = req.method !== "GET" ? await req.json() : {};

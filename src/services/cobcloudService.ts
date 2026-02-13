@@ -33,15 +33,16 @@ export interface ImportFilters {
 }
 
 export const cobcloudService = {
-  testConnection: () => callProxy("status"),
+  testConnection: (): Promise<{ connected: boolean; status: number; devedores_count?: number; titulos_count?: number }> =>
+    callProxy("status"),
 
-  preview: (filters?: { date_type?: string; date_value?: string }): Promise<PreviewResult> =>
+  preview: (filters?: { date_type?: string; date_value?: string }): Promise<PreviewResult & { source?: string }> =>
     callProxy("preview", filters || {}),
 
   importTitulos: (filters?: { page?: number; limit?: number; cpf?: string; status?: string }) =>
     callProxy("import-titulos", filters || {}),
 
-  importAll: (filters?: ImportFilters) =>
+  importAll: (filters?: ImportFilters): Promise<{ imported: number; skipped: number; pages: number; total: number; source?: string }> =>
     callProxy("import-all", (filters || {}) as Record<string, unknown>),
 
   exportDevedores: (clientIds: string[]) =>
