@@ -167,7 +167,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
 
   if (step === "error") {
     return (
-      <div className={`text-center space-y-4 p-6 ${fullscreen ? "absolute inset-0 flex flex-col items-center justify-center bg-foreground/95" : ""}`}>
+      <div className={`text-center space-y-4 p-6 ${fullscreen ? "fixed inset-0 z-50 flex flex-col items-center justify-center bg-foreground/95" : ""}`}>
         <AlertCircle className={`w-12 h-12 mx-auto ${fullscreen ? "text-red-400" : "text-destructive"}`} />
         <p className={`text-sm ${fullscreen ? "text-background/70" : "text-muted-foreground"}`}>{errorMsg}</p>
         <Button variant="outline" onClick={() => { setStep("idle"); setErrorMsg(""); }}>
@@ -179,7 +179,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
 
   if (step === "idle") {
     return (
-      <div className={`text-center space-y-4 ${fullscreen ? "absolute inset-0 flex flex-col items-center justify-center bg-foreground/95 p-6" : "p-6"}`}>
+      <div className={`text-center space-y-4 ${fullscreen ? "fixed inset-0 z-50 flex flex-col items-center justify-center bg-foreground/95 p-6" : "p-6"}`}>
         <div className="relative w-24 h-24 mx-auto">
           <div className="absolute inset-0 rounded-full border-2 border-dashed animate-spin" style={{ borderColor: `${primaryColor}40`, animationDuration: "8s" }} />
           <div className="absolute inset-2 rounded-full flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
@@ -209,7 +209,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
 
   if (step === "done") {
     return (
-      <div className={`space-y-4 ${fullscreen ? "absolute inset-0 bg-foreground/95 p-4 flex flex-col justify-center" : ""}`}>
+      <div className={`space-y-4 ${fullscreen ? "fixed inset-0 z-50 bg-foreground/95 p-4 flex flex-col justify-center" : ""}`}>
         <div className="text-center">
           <CheckCircle2 className="w-12 h-12 mx-auto text-primary mb-2" />
           <p className={`font-medium ${fullscreen ? "text-background" : "text-foreground"}`}>Fotos capturadas com sucesso!</p>
@@ -243,7 +243,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
   // Capturing state
   if (fullscreen) {
     return (
-      <div className="absolute inset-0 bg-foreground/90">
+      <div className="fixed inset-0 z-50 bg-foreground/90">
         <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
 
         {flashActive && <div className="absolute inset-0 bg-background/90 z-20 transition-opacity" />}

@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Eraser, CheckCircle2, PenTool } from "lucide-react";
+import { Eraser, CheckCircle2, PenTool, ArrowLeft } from "lucide-react";
 
 interface SignatureDrawProps {
   onConfirm: (imageData: string) => void;
@@ -14,6 +14,62 @@ const SignatureDraw = ({ onConfirm, loading, primaryColor = "#F97316", fullscree
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width: 600, height: 200 });
+  const [orientationLocked, setOrientationLocked] = useState(false);
+
+  // Try to lock orientation to landscape when fullscreen
+  useEffect(() => {
+    if (!fullscreen) return;
+
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation && typeof screen.orientation.lock === "function") {
+          await screen.orientation.lock("landscape");
+          setOrientationLocked(true);
+        }
+      } catch {
+        // iOS Safari and some browsers don't support orientation lock
+        setOrientationLocked(false);
+      }
+    };
+
+    lockOrientation();
+
+    return () => {
+      try {
+        if (screen.orientation && typeof screen.orientation.unlock === "function") {
+          screen.orientation.unlock();
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }, [fullscreen]);
+
+  // Update canvas size based on container
+  useEffect(() => {
+    if (!fullscreen || !containerRef.current) return;
+
+    const updateSize = () => {
+      // When orientation is NOT locked, we need CSS rotation fallback
+      // In that case, the container is rotated, so width/height are swapped
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      if (orientationLocked) {
+        // Orientation is locked to landscape, use normal dimensions
+        setCanvasSize({ width: vw, height: vh - 100 });
+      } else {
+        // CSS rotation fallback: container rotated 90deg
+        // visual width = vh, visual height = vw
+        setCanvasSize({ width: Math.max(vw, vh), height: Math.min(vw, vh) - 100 });
+      }
+    };
+
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, [fullscreen, orientationLocked]);
 
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -50,7 +106,7 @@ const SignatureDraw = ({ onConfirm, loading, primaryColor = "#F97316", fullscree
 
   useEffect(() => {
     initCanvas();
-  }, [initCanvas]);
+  }, [initCanvas, canvasSize]);
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -90,8 +146,22 @@ const SignatureDraw = ({ onConfirm, loading, primaryColor = "#F97316", fullscree
   };
 
   if (fullscreen) {
+    const needsRotation = !orientationLocked;
+
     return (
-      <div ref={containerRef} className="absolute inset-0 flex flex-col bg-background">
+      <div
+        ref={containerRef}
+        className="fixed inset-0 z-50 flex flex-col bg-background"
+        style={needsRotation ? {
+          transform: "rotate(90deg)",
+          transformOrigin: "top left",
+          width: "100vh",
+          height: "100vw",
+          top: 0,
+          left: "100vw",
+          position: "fixed",
+        } : undefined}
+      >
         {/* Header bar */}
         <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
           <div className="flex items-center gap-2 text-sm">
@@ -104,12 +174,12 @@ const SignatureDraw = ({ onConfirm, loading, primaryColor = "#F97316", fullscree
         </div>
 
         {/* Canvas area - fills remaining space */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 relative overflow-hidden touch-none">
           <div className="absolute inset-2 rounded-xl border-2 border-dashed overflow-hidden bg-white" style={{ borderColor: `${primaryColor}40` }}>
             <canvas
               ref={canvasRef}
-              width={800}
-              height={400}
+              width={canvasSize.width}
+              height={canvasSize.height}
               className="w-full h-full cursor-crosshair touch-none"
               onMouseDown={startDrawing}
               onMouseMove={draw}
