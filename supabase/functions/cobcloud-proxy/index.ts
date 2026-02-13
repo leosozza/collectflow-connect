@@ -151,7 +151,7 @@ function safeNumber(val: unknown, fallback = 0): number {
 function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
   if (!s) return "pendente";
   const lower = s.toLowerCase();
-  if (lower.includes("pago") || lower.includes("quitado") || lower.includes("liquidado"))
+  if (lower.includes("baixado") || lower.includes("pago") || lower.includes("quitado") || lower.includes("liquidado"))
     return "pago";
   if (lower.includes("quebr") || lower.includes("parcial")) return "quebrado";
   return "pendente";
@@ -182,6 +182,8 @@ async function fetchWithRetry(
 
 function extractArray(data: any): any[] {
   if (Array.isArray(data)) return data;
+  // CobCloud format: {"value":{"query":[...]}}
+  if (data?.value && Array.isArray(data.value.query)) return data.value.query;
   if (data?.data && Array.isArray(data.data)) return data.data;
   if (data?.titulos && Array.isArray(data.titulos)) return data.titulos;
   if (data?.devedores && Array.isArray(data.devedores)) return data.devedores;
@@ -190,7 +192,13 @@ function extractArray(data: any): any[] {
 }
 
 function extractTotal(data: any, fallbackArray: any[]): number {
-  return Number(data?.total || data?.count || data?.totalCount || fallbackArray.length) || 0;
+  // CobCloud format: {"value":{"total":N}} or no total field
+  if (data?.value && typeof data.value.total === "number") return data.value.total;
+  if (data?.value && typeof data.value.count === "number") return data.value.count;
+  if (typeof data?.total === "number") return data.total;
+  if (typeof data?.count === "number") return data.count;
+  if (typeof data?.totalCount === "number") return data.totalCount;
+  return fallbackArray.length;
 }
 
 // --- Helper to detect which endpoint has data ---
@@ -476,7 +484,7 @@ async function handlePreview(body: any, creds: CobCloudCredentials) {
   }
 
   // Try getting counts per status
-  const statuses = ["aberto", "pago", "quebrado"];
+  const statuses = ["aberto", "baixado"];
   const results = await Promise.all(
     statuses.map(async (status) => {
       const params = new URLSearchParams(baseParams);
