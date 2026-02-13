@@ -114,6 +114,14 @@ const importedRecordSchema = z.object({
   valor_pago: z.number().min(0).max(99999999.99),
   data_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   status: z.enum(["pendente", "pago", "quebrado"]),
+  external_id: z.string().max(100).optional(),
+  phone: z.string().max(200).optional(),
+  email: z.string().max(200).optional(),
+  endereco: z.string().max(500).optional(),
+  cidade: z.string().max(100).optional(),
+  uf: z.string().max(5).optional(),
+  cep: z.string().max(20).optional(),
+  total_parcelas: z.number().int().min(1).max(9999).optional(),
 });
 
 const importRequestSchema = z.object({
@@ -159,6 +167,57 @@ function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function concatParts(...parts: (string | undefined | null)[]): string | undefined {
+  const filtered = parts.map(p => String(p || "").trim()).filter(Boolean);
+  return filtered.length > 0 ? filtered.join(", ") : undefined;
+}
+
+function concatPhones(...phones: (string | undefined | null)[]): string | undefined {
+  const filtered = phones.map(p => String(p || "").replace(/\D/g, "").trim()).filter(p => p.length >= 8);
+  return filtered.length > 0 ? filtered.join(" / ") : undefined;
+}
+
+function buildRawRecord(t: any, rawCpf: string) {
+  const nome = t.nome || t.devedor_nome || t.nome_completo || t.NOME_DEVEDOR || t.nome_devedor || "Sem nome";
+  const credor = t.credor || t.empresa || t.CREDOR || t.credor_nome || "COBCLOUD";
+  const parcela = t.parcela || t.numero_parcela || t.PARCELA || t.NM_PARCELA;
+  const valor = t.valor || t.valor_titulo || t.valor_parcela || t.VL_TITULO || t.vl_titulo || t.VL_PARCELA;
+  const valorPago = t.valor_pago || t.VL_PAGO || t.vl_pago || t.VL_SALDO || t.vl_saldo;
+  const dataVenc = t.vencimento || t.data_vencimento || t.DT_VENCIMENTO || t.dt_vencimento;
+  const status = t.status || t.situacao || t.STATUS;
+
+  const externalId = t.cod_devedor || t.COD_DEVEDOR || t.external_id || t.ID_DEVEDOR || t.id_devedor;
+  const phone = concatPhones(t.fone_1 || t.FONE_1, t.fone_2 || t.FONE_2, t.fone_3 || t.FONE_3, t.phone || t.TELEFONE);
+  const email = t.email || t.EMAIL || undefined;
+  const endereco = concatParts(t.endereco || t.ENDERECO, t.numero || t.NUMERO, t.complemento || t.COMPLEMENTO, t.bairro || t.BAIRRO);
+  const cidade = t.cidade || t.CIDADE || undefined;
+  const uf = t.estado || t.ESTADO || t.uf || t.UF || undefined;
+  const cep = t.cep || t.CEP || undefined;
+  const totalParcelas = safeNumber(t.total_parcelas || t.TOTAL_PARCELAS || t.nm || t.NM, 0);
+
+  const rec: Record<string, any> = {
+    nome_completo: sanitizeString(String(nome), 200),
+    cpf: rawCpf,
+    credor: sanitizeString(String(credor), 100),
+    numero_parcela: Math.max(1, Math.min(9999, Math.round(safeNumber(parcela, 1)))),
+    valor_parcela: Math.max(0, Math.min(99999999.99, safeNumber(valor))),
+    valor_pago: Math.max(0, Math.min(99999999.99, safeNumber(valorPago))),
+    data_vencimento: String(dataVenc || new Date().toISOString().split("T")[0]).slice(0, 10),
+    status: mapStatus(status),
+  };
+
+  if (externalId) rec.external_id = sanitizeString(String(externalId), 100);
+  if (phone) rec.phone = sanitizeString(phone, 200);
+  if (email) rec.email = sanitizeString(String(email), 200);
+  if (endereco) rec.endereco = sanitizeString(endereco, 500);
+  if (cidade) rec.cidade = sanitizeString(String(cidade), 100);
+  if (uf) rec.uf = sanitizeString(String(uf), 5);
+  if (cep) rec.cep = sanitizeString(String(cep).replace(/\D/g, ""), 20);
+  if (totalParcelas > 0) rec.total_parcelas = Math.min(9999, Math.round(totalParcelas));
+
+  return rec;
 }
 
 async function fetchWithRetry(
@@ -334,42 +393,33 @@ async function handleImportTitulos(body: any, creds: CobCloudCredentials) {
     const rawCpf = cleanCpf(t.cpf || t.documento || t.cpf_cnpj || "");
     if (!rawCpf) { skipped++; continue; }
 
-    const rawRecord = {
-      nome_completo: sanitizeString(String(t.nome || t.devedor_nome || t.nome_completo || "Sem nome"), 200),
-      cpf: rawCpf,
-      credor: sanitizeString(String(t.credor || t.empresa || "COBCLOUD"), 100),
-      numero_parcela: Math.max(1, Math.min(9999, Math.round(safeNumber(t.parcela || t.numero_parcela, 1)))),
-      valor_parcela: Math.max(0, Math.min(99999999.99, safeNumber(t.valor || t.valor_titulo || t.valor_parcela))),
-      valor_pago: Math.max(0, Math.min(99999999.99, safeNumber(t.valor_pago))),
-      data_vencimento: String(t.vencimento || t.data_vencimento || new Date().toISOString().split("T")[0]).slice(0, 10),
-      status: mapStatus(t.status || t.situacao),
-    };
+    const rawRecord = buildRawRecord(t, rawCpf);
 
-    const validation = importedRecordSchema.safeParse(rawRecord);
-    if (!validation.success) {
-      console.warn(`Skipping invalid record (CPF: ${rawCpf}): ${validation.error.message}`);
-      skipped++;
-      continue;
+      const validation = importedRecordSchema.safeParse(rawRecord);
+      if (!validation.success) {
+        console.warn(`Skipping invalid record (CPF: ${rawCpf}): ${validation.error.message}`);
+        skipped++;
+        continue;
+      }
+
+      const rec = validation.data;
+      const { data: existing } = await admin
+        .from("clients")
+        .select("id")
+        .eq("cpf", rec.cpf)
+        .eq("numero_parcela", rec.numero_parcela)
+        .eq("tenant_id", creds.tenantId)
+        .maybeSingle();
+
+      if (existing) {
+        await admin.from("clients").update(rec).eq("id", existing.id);
+      } else {
+        await admin.from("clients").insert({ ...rec, tenant_id: creds.tenantId });
+      }
+      imported++;
     }
 
-    const rec = validation.data;
-    const { data: existing } = await admin
-      .from("clients")
-      .select("id")
-      .eq("cpf", rec.cpf)
-      .eq("numero_parcela", rec.numero_parcela)
-      .eq("tenant_id", creds.tenantId)
-      .maybeSingle();
-
-    if (existing) {
-      await admin.from("clients").update(rec).eq("id", existing.id);
-    } else {
-      await admin.from("clients").insert({ ...rec, tenant_id: creds.tenantId });
-    }
-    imported++;
-  }
-
-  return json({ imported, skipped, total: titulos.length });
+    return json({ imported, skipped, total: titulos.length });
 }
 
 async function handleExportDevedores(body: any, creds: CobCloudCredentials) {
@@ -599,16 +649,7 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
       const rawCpf = cleanCpf(t.cpf || t.documento || t.cpf_cnpj || "");
       if (!rawCpf) { totalSkipped++; continue; }
 
-      const rawRecord = {
-        nome_completo: sanitizeString(String(t.nome || t.devedor_nome || t.nome_completo || "Sem nome"), 200),
-        cpf: rawCpf,
-        credor: sanitizeString(String(t.credor || t.empresa || "COBCLOUD"), 100),
-        numero_parcela: Math.max(1, Math.min(9999, Math.round(safeNumber(t.parcela || t.numero_parcela, 1)))),
-        valor_parcela: Math.max(0, Math.min(99999999.99, safeNumber(t.valor || t.valor_titulo || t.valor_parcela))),
-        valor_pago: Math.max(0, Math.min(99999999.99, safeNumber(t.valor_pago))),
-        data_vencimento: String(t.vencimento || t.data_vencimento || new Date().toISOString().split("T")[0]).slice(0, 10),
-        status: mapStatus(t.status || t.situacao),
-      };
+      const rawRecord = buildRawRecord(t, rawCpf);
 
       const validation = importedRecordSchema.safeParse(rawRecord);
       if (!validation.success) { totalSkipped++; continue; }
