@@ -81,6 +81,11 @@ const CampaignsPanel = () => {
     }
     setCreating(true);
     try {
+      // Get qualification_list_id from an existing campaign if available
+      const existingQualList = campaigns.find(
+        (c: any) => c.dialer_settings?.qualification_list_id
+      )?.dialer_settings?.qualification_list_id;
+
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
         body: {
           action: "create_campaign",
@@ -89,6 +94,7 @@ const CampaignsPanel = () => {
           campaign_name: newCampaignName.trim(),
           start_time: newStartTime,
           end_time: newEndTime,
+          qualification_list_id: existingQualList || undefined,
         },
       });
       if (error) throw error;
