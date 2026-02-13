@@ -54,7 +54,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState, useMemo, useEffect } from "react";
-import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare } from "lucide-react";
+import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare, Link2, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
 import { fetchWhatsAppInstances, type WhatsAppInstance } from "@/services/whatsappInstanceService";
@@ -88,7 +88,11 @@ const UsersPage = () => {
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
   const [editInstanceIds, setEditInstanceIds] = useState<string[]>([]);
-
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState<string>("operador");
+  const [inviteExpiry, setInviteExpiry] = useState<string>("7");
+  const [generatedLink, setGeneratedLink] = useState<string>("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
@@ -166,12 +170,10 @@ const UsersPage = () => {
 
   // Sync editInstanceIds when operator instances load
   useEffect(() => {
-    if (currentOperatorInstances.length > 0 && editUser) {
+    if (editUser && currentOperatorInstances.length > 0) {
       setEditInstanceIds(currentOperatorInstances);
-    } else if (!editUser) {
-      setEditInstanceIds([]);
     }
-  }, [currentOperatorInstances, editUser]);
+  }, [editUser?.id, currentOperatorInstances.join(",")]);
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id, instanceIds }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null; instanceIds: string[] }) => {
@@ -269,9 +271,14 @@ const UsersPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
-        <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
+          <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
+        </div>
+        <Button onClick={() => { setInviteOpen(true); setGeneratedLink(""); }} className="gap-2">
+          <Link2 className="w-4 h-4" /> Convidar por Link
+        </Button>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -531,6 +538,92 @@ const UsersPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Invite Link Dialog */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Convidar por Link</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Cargo</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operador">Operador</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Validade</Label>
+              <Select value={inviteExpiry} onValueChange={setInviteExpiry}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">24 horas</SelectItem>
+                  <SelectItem value="7">7 dias</SelectItem>
+                  <SelectItem value="30">30 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {generatedLink ? (
+              <div className="space-y-2">
+                <Label>Link gerado</Label>
+                <div className="flex gap-2">
+                  <Input value={generatedLink} readOnly className="text-xs" />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedLink);
+                      toast.success("Link copiado!");
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                className="w-full"
+                disabled={generatingInvite}
+                onClick={async () => {
+                  if (!tenant?.id || !profile?.user_id) return;
+                  setGeneratingInvite(true);
+                  try {
+                    const expiresAt = new Date();
+                    expiresAt.setDate(expiresAt.getDate() + parseInt(inviteExpiry));
+
+                    const { data, error } = await supabase
+                      .from("invite_links")
+                      .insert({
+                        tenant_id: tenant.id,
+                        role: inviteRole as any,
+                        created_by: profile.user_id,
+                        expires_at: expiresAt.toISOString(),
+                      } as any)
+                      .select("token")
+                      .single();
+
+                    if (error) throw error;
+                    const link = `${window.location.origin}/auth?invite=${(data as any).token}`;
+                    setGeneratedLink(link);
+                    toast.success("Link de convite gerado!");
+                  } catch {
+                    toast.error("Erro ao gerar link");
+                  } finally {
+                    setGeneratingInvite(false);
+                  }
+                }}
+              >
+                {generatingInvite ? "Gerando..." : "Gerar Link"}
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

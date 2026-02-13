@@ -34,6 +34,7 @@ import AgreementCelebration from "@/components/notifications/AgreementCelebratio
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -339,9 +340,21 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
-            <span className="text-sm text-muted-foreground">
-              {isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Administrador" : "Operador"}
-            </span>
+            <button
+              onClick={() => navigate("/perfil")}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={(profile as any)?.avatar_url} />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                  {(profile?.full_name || "U").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden sm:block text-left">
+                <p className="text-sm font-medium text-foreground leading-tight truncate max-w-[120px]">{profile?.full_name || "Usuário"}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Admin" : "Operador"}</p>
+              </div>
+            </button>
           </div>
         </header>
 

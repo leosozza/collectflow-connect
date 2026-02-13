@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,13 +19,36 @@ const signupSchema = loginSchema.extend({
 });
 
 const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite");
+  const [isLogin, setIsLogin] = useState(!inviteToken);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [inviteInfo, setInviteInfo] = useState<{ tenant_name: string; role: string } | null>(null);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (inviteToken) {
+      supabase
+        .from("invite_links")
+        .select("role, tenant_id, tenants(name)")
+        .eq("token", inviteToken)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setInviteInfo({
+              tenant_name: (data as any).tenants?.name || "Empresa",
+              role: data.role,
+            });
+          } else {
+            toast.error("Convite inválido ou expirado");
+          }
+        });
+    }
+  }, [inviteToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +72,7 @@ const AuthPage = () => {
         }
       } else {
         const parsed = signupSchema.parse({ email, password, fullName });
-        const { error } = await signUp(parsed.email, parsed.password, parsed.fullName);
+        const { error, data: signUpData } = await signUp(parsed.email, parsed.password, parsed.fullName) as any;
         if (error) {
           if (error.message?.includes("already registered")) {
             toast.error("Este e-mail já está cadastrado");
@@ -56,6 +80,16 @@ const AuthPage = () => {
             toast.error(error.message || "Erro ao criar conta");
           }
         } else {
+          // If invite token, accept invite
+          if (inviteToken && signUpData?.user?.id) {
+            try {
+              await supabase.functions.invoke("accept-invite", {
+                body: { token: inviteToken, user_id: signUpData.user.id },
+              });
+            } catch {
+              // non-blocking
+            }
+          }
           toast.success("Conta criada! Verifique seu e-mail para confirmar.");
           setIsLogin(true);
         }
@@ -85,6 +119,14 @@ const AuthPage = () => {
           <h2 className="text-xl font-semibold text-card-foreground mb-1">
             {isLogin ? "Entrar" : "Criar Conta"}
           </h2>
+          {inviteInfo && !isLogin && (
+            <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
+              <p className="text-sm text-foreground font-medium">
+                Convite para <strong>{inviteInfo.tenant_name}</strong>
+              </p>
+              <p className="text-xs text-muted-foreground capitalize">Cargo: {inviteInfo.role}</p>
+            </div>
+          )}
           <p className="text-muted-foreground text-sm mb-6">
             {isLogin ? "Acesse sua conta para continuar" : "Preencha os dados para criar sua conta"}
           </p>
