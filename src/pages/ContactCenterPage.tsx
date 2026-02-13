@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Headphones, Phone, MessageCircle } from "lucide-react";
-import TelefoniaTab from "@/components/contact-center/TelefoniaTab";
+import { Headphones } from "lucide-react";
+import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppTab from "@/components/contact-center/WhatsAppTab";
 
 interface ContactCenterPageProps {
@@ -34,7 +34,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
         </div>
       </div>
 
-      {channel === "telefonia" ? <TelefoniaTab /> : <WhatsAppTab />}
+      {channel === "telefonia" ? <ThreeCPlusPanel /> : <WhatsAppTab />}
     </div>
   );
 };
