@@ -1,79 +1,60 @@
-# Notificações em Tempo Real para Operadores
 
-## Resumo
 
-Implementar dois tipos de notificações para operadores:
-
-1. **Popup de parabenização** (modal central) quando um novo acordo for registrado para o operador
-2. **Notificação de pagamento** (toast discreto) quando um cliente efetua pagamento
-
-A caixinha de notificações (sino) já existe no canto superior direito do header -- vamos mantê-la e aprimorá-la com esses novos comportamentos visuais.
-
----
+# Sidebar com Aba "Avançado" Colapsável
 
 ## O que será feito
 
-### 1. Popup de Parabenização por Novo Acordo
+Reorganizar os itens do sidebar em grupos, criando uma seção **"Avançado"** colapsável (accordion/collapsible) que agrupa itens administrativos, e uma seção **"Super Admin"** separada para o item Tenants.
 
-Quando o sistema Realtime detectar uma nova notificação do tipo `success` com `reference_type = "agreement"`, exibir um **Dialog modal centralizado** com:
+### Estrutura do Sidebar
 
-- Icone de celebração (confetti/troféu)
-- Mensagem "Parabéns! Novo acordo realizado!"
-- Nome do cliente e detalhes do acordo
-- Botão para fechar
+```text
+--- Itens principais (sempre visíveis) ---
+  Dashboard
+  Carteira
+  Relatórios        (admin)
+  Acordos           (admin)
+  Financeiro        (admin)
+  Integração        (admin)
 
-### 2. Toast de Pagamento Recebido
+--- Avançado (colapsável, admin) ---
+  Configurações
+  Automação
+  Usuários
+  Log de Importações
+  Empresa
+  Auditoria
 
-Quando chegar uma notificação do tipo `success` com `reference_type = "payment"`, exibir um **toast discreto** no canto superior direito usando o Sonner (já instalado), com o nome do cliente e valor pago.
+--- Super Admin (colapsável, super_admin) ---
+  Tenants
+```
 
-### 3. Lógica de Detecção
-
-Modificar o hook `useNotifications.ts` para:
-
-- Detectar notificações **novas** (INSERT) via Realtime (já configurado)
-- Comparar com as notificações anteriores para identificar as recém-chegadas
-- Disparar o popup ou toast conforme o tipo da notificação
+### Comportamento
+- A seção "Avançado" começa fechada e pode ser expandida clicando no título
+- Quando o sidebar está colapsado (modo ícone), a seção mostra apenas os ícones dos itens (sem o título do grupo)
+- A seção "Super Admin" segue o mesmo padrão colapsável
+- Se a rota ativa estiver dentro de um grupo colapsável, o grupo abre automaticamente
 
 ---
 
 ## Detalhes Técnicos
 
-### Arquivo: `src/hooks/useNotifications.ts`
-
-- Alterar o listener de Realtime para capturar o `payload` do evento INSERT
-- Quando `event === "INSERT"`, verificar o `payload.new`:
-  - Se `reference_type === "agreement"` e `type === "success"`: disparar callback de popup
-  - Se `reference_type === "payment"` e `type === "success"`: disparar toast via Sonner
-- Expor um estado `celebrationNotification` para o componente de popup consumir
-
-### Arquivo (novo): `src/components/notifications/AgreementCelebration.tsx`
-
-- Dialog modal centralizado com animação (framer-motion, já instalado)
-- Icone de troféu/celebração
-- Exibe título e mensagem da notificação
-- Botão "Fechar" que marca como lida
-
 ### Arquivo: `src/components/AppLayout.tsx`
 
-- Importar e renderizar `AgreementCelebration` no layout principal
-- Passar estado do hook `useNotifications` para controlar abertura do popup
+1. **Reorganizar `navItems`** em dois arrays:
+   - `mainNavItems`: Dashboard, Carteira, Relatórios, Acordos, Financeiro, Integração
+   - `advancedNavItems` (admin): Configurações, Automação, Usuários, Log de Importações, Empresa, Auditoria
+   - `superAdminNavItems` (super_admin): Tenants
 
-### Arquivo: `src/hooks/useNotifications.ts`
+2. **Adicionar estado** `advancedOpen` e `superAdminOpen` para controlar a expansão dos grupos colapsáveis
 
-- Adicionar estado para controlar popup de celebração
-- Adicionar disparo de toast (Sonner) para notificações de pagamento
+3. **Renderizar a seção "Avançado"** usando um botão toggle com ícone de chevron que expande/colapsa a lista de itens. Quando a rota ativa pertence ao grupo, o grupo abre automaticamente via `useEffect`.
 
-### Arquivos de notificação existentes
+4. **Mover "Log de Importações"** de item principal para dentro do grupo "Avançado" (apenas para admins; operadores não verão este item, pois todo o grupo é admin-only). Caso operadores precisem acessar Log de Importações, ele permanecerá nos itens principais também.
 
-- `NotificationBell.tsx` e `NotificationList.tsx` permanecem como estão (já discretos no canto superior direito)
+**Nota:** Como operadores atualmente veem "Log de Importações", ele será mantido nos itens principais para operadores e movido para "Avançado" apenas para admins (evitando perda de acesso).
 
----
+| Arquivo | Ação |
+|---------|------|
+| `src/components/AppLayout.tsx` | Modificar - reorganizar nav em grupos com seção colapsável |
 
-## Resumo dos Arquivos
-
-
-| Arquivo                                                 | Ação                                                      |
-| ------------------------------------------------------- | --------------------------------------------------------- |
-| `src/hooks/useNotifications.ts`                         | Modificar - detectar novos INSERTs e disparar popup/toast |
-| `src/components/notifications/AgreementCelebration.tsx` | **Novo** - Modal de parabenização                         |
-| `src/components/AppLayout.tsx`                          | Modificar - renderizar AgreementCelebration               |
