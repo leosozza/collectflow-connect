@@ -2,6 +2,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CobCloudTab from "@/components/integracao/CobCloudTab";
 import NegociarieTab from "@/components/integracao/NegociarieTab";
+import ThreeCPlusTab from "@/components/integracao/ThreeCPlusTab";
+import { Phone } from "lucide-react";
 
 const IntegracaoPage = () => {
   const { profile } = useAuth();
@@ -25,12 +27,19 @@ const IntegracaoPage = () => {
         <TabsList>
           <TabsTrigger value="cobcloud">CobCloud</TabsTrigger>
           <TabsTrigger value="negociarie">Negociarie</TabsTrigger>
+          <TabsTrigger value="telefonia" className="gap-2">
+            <Phone className="w-4 h-4" />
+            Telefonia
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="cobcloud">
           <CobCloudTab />
         </TabsContent>
         <TabsContent value="negociarie">
           <NegociarieTab />
+        </TabsContent>
+        <TabsContent value="telefonia">
+          <ThreeCPlusTab />
         </TabsContent>
       </Tabs>
     </div>
