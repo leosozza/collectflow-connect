@@ -130,7 +130,10 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
-        url = `${baseUrl}/campaigns/${campaign_id}/statistics?${authParam}`;
+        const today = new Date().toISOString().split('T')[0];
+        const startDate = body.startDate || today;
+        const endDate = body.endDate || today;
+        url = `${baseUrl}/campaigns/${campaign_id}/statistics?${authParam}&startDate=${startDate}&endDate=${endDate}`;
         break;
 
       // ── Dashboard: campaign controls ──
