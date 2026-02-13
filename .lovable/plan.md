@@ -1,67 +1,61 @@
 
+# Fase 2 - Integração com Discador 3CPlus
 
-# Adicionar Abas de Historico e Conversa WhatsApp
-
-## O que sera feito
-
-Transformar a area do historico (coluna direita do atendimento) em um componente com abas (Tabs). A primeira aba mostra o historico atual (timeline de tabulacoes, acordos e mensagens). A segunda aba mostra uma interface de conversa WhatsApp estilo chat, preparada para integracao futura.
-
-### Layout proposto
-
-```text
-+--------------------------------------------------+
-|  [ Historico ]  [ Conversa WhatsApp ]             |
-+--------------------------------------------------+
-|                                                    |
-|  (conteudo da aba selecionada)                     |
-|                                                    |
-|  Aba Historico: timeline atual (sem mudancas)      |
-|                                                    |
-|  Aba Conversa: interface estilo chat               |
-|  +----------------------------------------------+ |
-|  |  Mensagens do cliente (esquerda, cinza)       | |
-|  |  Mensagens enviadas (direita, verde)          | |
-|  |  ...                                          | |
-|  +----------------------------------------------+ |
-|  |  [ Digite sua mensagem...     ] [ Enviar ]    | |
-|  +----------------------------------------------+ |
-|                                                    |
-+--------------------------------------------------+
-```
-
-## Comportamento
-
-- Aba "Historico" exibe a timeline existente sem alteracoes
-- Aba "Conversa" exibe as mensagens do `message_logs` formatadas como bolhas de chat (estilo WhatsApp)
-- Campo de digitacao no final da aba Conversa fica desabilitado com placeholder "Integracao em breve" (sera habilitado na fase de integracao)
-- As mensagens existentes no `message_logs` ja aparecem na conversa, organizadas cronologicamente
+## Status da Fase 1 ✅
+- [x] Tela de atendimento /atendimento/:id
+- [x] Header com dados do cliente (nome, CPF, telefone, email, credor, external_id, endereço, observações)
+- [x] Painel de tabulação (Caixa Postal, Ligação Interrompida, Contato Incorreto, Retornar, Negociar)
+- [x] Painel de negociação (simulador, geração de acordo)
+- [x] Chat WhatsApp (aba com bolhas, input desabilitado para integração futura)
+- [x] Histórico/timeline (tabulações, acordos, mensagens)
+- [x] Tabela call_dispositions
+- [x] Campo external_id nos clients
+- [x] Campos endereço e observações
 
 ---
 
-## Detalhes Tecnicos
+## O que será feito na Fase 2
 
-### Arquivo novo: `src/components/atendimento/WhatsAppChat.tsx`
+Integrar o sistema com o discador 3CPlus para envio de lotes de clientes e abertura automática da tela de atendimento quando uma ligação conecta.
 
-- Componente que recebe as mensagens (`message_logs`) como prop
-- Renderiza cada mensagem como bolha de chat:
-  - Mensagens enviadas: alinhadas a direita, fundo verde
-  - Mensagens recebidas (futuro): alinhadas a esquerda, fundo cinza
-- Campo de input + botao "Enviar" no rodape, desabilitado por enquanto
-- ScrollArea para rolagem das mensagens
-- Mensagem vazia: "Nenhuma conversa registrada"
+### Fluxo
 
-### Arquivo modificado: `src/components/atendimento/ClientTimeline.tsx`
+```text
+Carteira (filtros) 
+  → Botão "Enviar para Discador"
+  → Edge function envia lote para API 3CPlus
+  → 3CPlus disca automaticamente
+  → Quando conecta, abre /atendimento/:id no navegador do operador
+  → Operador tabula na tela de atendimento
+```
 
-- Envolver o conteudo atual com o componente `Tabs` do Radix
-- Duas abas: "Historico" (conteudo atual) e "Conversa" (WhatsAppChat)
-- Receber `messages` como prop e passar para o WhatsAppChat
-- Renomear o componente ou manter o nome e adicionar as tabs internamente
+### O que construir
 
-### Arquivo: `src/pages/AtendimentoPage.tsx`
+| Item | Arquivo | Ação |
+|------|---------|------|
+| 1. Configuração 3CPlus | `src/components/integracao/ThreeCPlusTab.tsx` | Criar - formulário de credenciais (API Key, Campaign ID) |
+| 2. Settings no tenant | `src/pages/ConfiguracoesPage.tsx` ou `IntegracaoPage.tsx` | Modificar - adicionar aba 3CPlus |
+| 3. Edge function export | `supabase/functions/3cplus-export/index.ts` | Criar - envia lote de clientes filtrados à API 3CPlus |
+| 4. Botão enviar para discador | `src/components/carteira/CarteiraTable.tsx` | Modificar - adicionar seleção múltipla + botão "Enviar para Discador" |
+| 5. Dialog de envio | `src/components/carteira/DialerExportDialog.tsx` | Criar - confirma envio com preview da quantidade |
 
-- Sem alteracoes significativas, pois `ClientTimeline` ja recebe `messages` como prop
+### Credenciais necessárias (por tenant)
 
-| Arquivo | Acao |
-|---------|------|
-| `src/components/atendimento/WhatsAppChat.tsx` | Criar - interface de chat com bolhas |
-| `src/components/atendimento/ClientTimeline.tsx` | Modificar - adicionar Tabs com aba Historico e Conversa |
+Armazenadas em `tenants.settings` (JSONB):
+- `threecplus_api_key` - Chave de API do 3CPlus
+- `threecplus_campaign_id` - ID da campanha no 3CPlus (opcional, pode ser selecionado no envio)
+
+### Edge Function: 3cplus-export
+
+**Input:** Lista de client IDs ou filtros aplicados
+**Output:** Resultado do envio à API 3CPlus
+
+Formato esperado pela 3CPlus:
+- Nome, telefone(s), CPF, valor em aberto
+- URL de callback: `/atendimento/{client_id}`
+
+### Considerações
+
+- O operador precisa estar logado no sistema para que a URL `/atendimento/:id` funcione
+- A 3CPlus abre essa URL em um iframe ou nova aba quando a ligação conecta
+- Não há mudanças no banco de dados (usa estrutura existente)
