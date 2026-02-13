@@ -39,6 +39,10 @@ const QualificationsPanel = () => {
     setLoading(true);
     try {
       const data = await invoke("list_qualifications");
+      if (data?.status === 404) {
+        setQualifications([]);
+        return;
+      }
       setQualifications(Array.isArray(data) ? data : data?.data || []);
     } catch {
       toast.error("Erro ao carregar qualificações");
