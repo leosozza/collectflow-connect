@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { RefreshCw, Loader2, DatabaseBackup, FileText, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
+import { RefreshCw, Loader2, DatabaseBackup, FileText, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 
 interface Props {
   hasCredentials: boolean;
@@ -15,8 +15,7 @@ interface Props {
 
 const STATUS_CONFIG = {
   aberto: { label: "Em Aberto", icon: Clock, colorClass: "text-yellow-500" },
-  pago: { label: "Pago / Quitado", icon: CheckCircle2, colorClass: "text-green-500" },
-  quebrado: { label: "Quebrado", icon: XCircle, colorClass: "text-red-500" },
+  baixado: { label: "Pago / Quitado", icon: CheckCircle2, colorClass: "text-green-500" },
 };
 
 const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
@@ -25,7 +24,7 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
   const [preview, setPreview] = useState<(PreviewResult & { source?: string }) | null>(null);
 
   // Filters
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["aberto", "pago", "quebrado"]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["aberto", "baixado"]);
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [cpfFilter, setCpfFilter] = useState("");
@@ -69,7 +68,7 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
     try {
       const filters: ImportFilters = {};
       if (!importAll) {
-        if (selectedStatuses.length < 3) {
+        if (selectedStatuses.length < 2) {
           filters.status = selectedStatuses.join(",");
         }
         if (dateStart && dateEnd) {
@@ -156,7 +155,7 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
               </p>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {(Object.entries(STATUS_CONFIG) as [string, typeof STATUS_CONFIG.aberto][]).map(([key, cfg]) => {
                 const count = preview.byStatus[key] || 0;
                 const selected = selectedStatuses.includes(key);
@@ -187,7 +186,7 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
               <FileText className="w-4 h-4" />
               <span>
                 Total disponível: <strong className="text-card-foreground">{preview.total.toLocaleString("pt-BR")}</strong>
-                {selectedStatuses.length < 3 && (
+                {selectedStatuses.length < 2 && (
                   <> · Selecionados: <strong className="text-primary">{selectedTotal.toLocaleString("pt-BR")}</strong></>
                 )}
               </span>
