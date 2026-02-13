@@ -177,7 +177,7 @@ const BaylersInstancesList = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-lg">
               <MessageSquare className="w-5 h-5" />
-              Baylers (Evolution API)
+              WhatsApp QR Code
             </CardTitle>
             <div className="flex items-center gap-2">
               {instances.length > 0 && (
@@ -190,7 +190,7 @@ const BaylersInstancesList = () => {
               )}
             </div>
           </div>
-          <CardDescription>Conexão via Evolution API — apenas informe o nome da instância</CardDescription>
+          <CardDescription>Conexão via QR Code — apenas informe o nome da instância</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? (
