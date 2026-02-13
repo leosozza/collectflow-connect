@@ -108,3 +108,9 @@ export async function getEvolutionInstanceStatus(instanceName: string) {
 export async function deleteEvolutionInstance(instanceName: string) {
   return callEvolutionProxy("delete", { instanceName });
 }
+
+export async function setEvolutionWebhook(instanceName: string) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+  return callEvolutionProxy("setWebhook", { instanceName, webhookUrl });
+}

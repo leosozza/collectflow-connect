@@ -13,13 +13,14 @@ import {
   connectEvolutionInstance,
   getEvolutionInstanceStatus,
   deleteEvolutionInstance,
+  setEvolutionWebhook,
   WhatsAppInstance,
 } from "@/services/whatsappInstanceService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2, Pencil, Check, X } from "lucide-react";
+import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2, Pencil, Check, X, Webhook } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import BaylersInstanceForm from "./BaylersInstanceForm";
 import {
@@ -113,6 +114,14 @@ const BaylersInstancesList = () => {
       setFormOpen(false);
       toast({ title: "Instância criada!" });
 
+      // Auto-configure webhook
+      try {
+        await setEvolutionWebhook(instanceName);
+        toast({ title: "Webhook configurado automaticamente!" });
+      } catch {
+        toast({ title: "Aviso", description: "Instância criada, mas webhook não pôde ser configurado. Use o botão de webhook manualmente.", variant: "destructive" });
+      }
+
       // Show QR code if available
       const qr = result?.qrcode?.base64 || result?.base64;
       if (qr) {
@@ -136,8 +145,24 @@ const BaylersInstancesList = () => {
       } else {
         toast({ title: "Instância já conectada ou QR indisponível" });
       }
+      // Auto-configure webhook after connect
+      try {
+        await setEvolutionWebhook(inst.instance_name);
+        toast({ title: "Webhook configurado!" });
+      } catch {
+        // silent — user can configure manually
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleSetWebhook = async (inst: WhatsAppInstance) => {
+    try {
+      await setEvolutionWebhook(inst.instance_name);
+      toast({ title: "Webhook configurado com sucesso!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao configurar webhook", description: err.message, variant: "destructive" });
     }
   };
 
@@ -332,6 +357,15 @@ const BaylersInstancesList = () => {
                       disabled={loadingStatus[inst.id]}
                     >
                       {loadingStatus[inst.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleSetWebhook(inst)}
+                      title="Configurar Webhook"
+                    >
+                      <Webhook className="w-4 h-4" />
                     </Button>
                     {!inst.is_default && (
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetDefault(inst)} title="Definir como padrão">
