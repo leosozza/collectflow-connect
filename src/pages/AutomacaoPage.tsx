@@ -14,7 +14,7 @@ import { Plus } from "lucide-react";
 import RulesList from "@/components/automacao/RulesList";
 import RuleForm from "@/components/automacao/RuleForm";
 import MessageHistory from "@/components/automacao/MessageHistory";
-import GupshupSettings from "@/components/automacao/GupshupSettings";
+import { Link } from "react-router-dom";
 import DispositionAutomationsTab from "@/components/automacao/DispositionAutomationsTab";
 
 const AutomacaoPage = () => {
@@ -145,7 +145,12 @@ const AutomacaoPage = () => {
         </TabsContent>
 
         <TabsContent value="config">
-          <GupshupSettings />
+          <div className="rounded-lg border bg-card p-6 text-center space-y-3">
+            <p className="text-muted-foreground">As configurações de WhatsApp foram movidas para a página de Integrações.</p>
+            <Link to="/integracao" className="text-primary hover:underline font-medium">
+              Ir para Integrações →
+            </Link>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

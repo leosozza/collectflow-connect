@@ -80,8 +80,22 @@ Deno.serve(async (req) => {
       .single();
 
     const settings = (tenant?.settings || {}) as Record<string, any>;
-    if (!settings.gupshup_api_key || !settings.gupshup_source_number) {
+    const provider = settings.whatsapp_provider || (settings.gupshup_api_key ? "gupshup" : settings.baylers_api_key ? "baylers" : "");
+
+    if (provider === "gupshup" && (!settings.gupshup_api_key || !settings.gupshup_source_number)) {
       return new Response(JSON.stringify({ error: "Gupshup credentials not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (provider === "baylers" && (!settings.baylers_api_key || !settings.baylers_instance_url)) {
+      return new Response(JSON.stringify({ error: "Baylers credentials not configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!provider) {
+      return new Response(JSON.stringify({ error: "No WhatsApp provider configured" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -130,24 +144,39 @@ Deno.serve(async (req) => {
       const phone = client.phone.replace(/\D/g, "");
 
       try {
-        const body = new URLSearchParams({
-          channel: "whatsapp",
-          source: settings.gupshup_source_number,
-          destination: phone,
-          "src.name": settings.gupshup_app_name || "",
-          message: JSON.stringify({ type: "text", text: message }),
-        });
+        let resp: Response;
+        let result: any;
 
-        const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-          method: "POST",
-          headers: {
-            apikey: settings.gupshup_api_key,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: body.toString(),
-        });
+        if (provider === "baylers") {
+          const instanceName = settings.baylers_instance_name || "default";
+          resp = await fetch(`${settings.baylers_instance_url}/message/sendText/${instanceName}`, {
+            method: "POST",
+            headers: {
+              apikey: settings.baylers_api_key,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ number: phone, text: message }),
+          });
+          result = await resp.json();
+        } else {
+          const body = new URLSearchParams({
+            channel: "whatsapp",
+            source: settings.gupshup_source_number,
+            destination: phone,
+            "src.name": settings.gupshup_app_name || "",
+            message: JSON.stringify({ type: "text", text: message }),
+          });
 
-        const result = await resp.json();
+          resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+            method: "POST",
+            headers: {
+              apikey: settings.gupshup_api_key,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+          });
+          result = await resp.json();
+        }
         const status = resp.ok ? "sent" : "failed";
 
         await supabase.from("message_logs").insert({
