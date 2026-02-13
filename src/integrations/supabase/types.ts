@@ -126,6 +126,54 @@ export type Database = {
           },
         ]
       }
+      call_dispositions: {
+        Row: {
+          client_id: string
+          created_at: string
+          disposition_type: string
+          id: string
+          notes: string | null
+          operator_id: string
+          scheduled_callback: string | null
+          tenant_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          disposition_type: string
+          id?: string
+          notes?: string | null
+          operator_id: string
+          scheduled_callback?: string | null
+          tenant_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          disposition_type?: string
+          id?: string
+          notes?: string | null
+          operator_id?: string
+          scheduled_callback?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_dispositions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_dispositions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_attachments: {
         Row: {
           client_cpf: string
@@ -171,6 +219,7 @@ export type Database = {
           credor: string
           data_vencimento: string
           email: string | null
+          external_id: string | null
           id: string
           nome_completo: string
           numero_parcela: number
@@ -191,6 +240,7 @@ export type Database = {
           credor?: string
           data_vencimento: string
           email?: string | null
+          external_id?: string | null
           id?: string
           nome_completo: string
           numero_parcela?: number
@@ -211,6 +261,7 @@ export type Database = {
           credor?: string
           data_vencimento?: string
           email?: string | null
+          external_id?: string | null
           id?: string
           nome_completo?: string
           numero_parcela?: number

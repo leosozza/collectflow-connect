@@ -1,6 +1,8 @@
+import { useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
 import { formatCurrency, formatDate } from "@/lib/formatters";
-import { AlertTriangle, CalendarClock } from "lucide-react";
+import { AlertTriangle, CalendarClock, Headset } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -20,6 +22,7 @@ interface CarteiraTableProps {
 
 const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraTableProps) => {
   const today = startOfDay(new Date());
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -56,6 +59,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                 <TableHead className="text-center">Parcela</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead>Vencimento</TableHead>
+                <TableHead className="text-center">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -89,6 +93,16 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                         {formatDate(client.data_vencimento)}
                         {isToday && " (Hoje)"}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/atendimento/${client.id}`)}
+                        title="Atender"
+                      >
+                        <Headset className="w-4 h-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
