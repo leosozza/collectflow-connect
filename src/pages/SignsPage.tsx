@@ -203,11 +203,20 @@ const SignsPage = () => {
             {/* Mobile or Desktop rendering */}
             {isMobile ? (
               /* On real mobile: no phone frame, render content directly */
-              <div className="w-full min-h-[500px] bg-background rounded-xl overflow-hidden border relative flex flex-col">
-                <div className={`${isFullscreenMode ? "absolute inset-0" : ""} flex-1 flex flex-col`}>
-                  {renderPlaygroundContent()}
-                </div>
-              </div>
+              <>
+                {isFullscreenMode && (
+                  <div className="fixed inset-0 z-50 bg-background flex flex-col">
+                    {renderPlaygroundContent()}
+                  </div>
+                )}
+                {!isFullscreenMode && (
+                  <div className="w-full min-h-[500px] bg-background rounded-xl overflow-hidden border relative flex flex-col">
+                    <div className="flex-1 flex flex-col">
+                      {renderPlaygroundContent()}
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               /* Desktop: iPhone frame */
               <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl">
