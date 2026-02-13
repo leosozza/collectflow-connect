@@ -17,7 +17,7 @@ interface CobCloudCredentials {
 
 function buildCobCloudHeaders(creds: CobCloudCredentials) {
   return {
-    token_assessoria: creds.tokenAssessoria,
+    token_company: creds.tokenAssessoria,
     token_client: creds.tokenClient,
     "Content-Type": "application/json",
   };
@@ -166,12 +166,20 @@ function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
 async function handleStatus(creds: CobCloudCredentials) {
   try {
     const headers = buildCobCloudHeaders(creds);
-    const res = await fetch(`${COBCLOUD_BASE}/cli/titulos/listar?page=1&limit=1`, {
+    const url = `${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`;
+    console.log("CobCloud status check URL:", url);
+    console.log("CobCloud headers (masked):", {
+      token_company: creds.tokenAssessoria ? `${creds.tokenAssessoria.slice(0, 8)}...` : "MISSING",
+      token_client: creds.tokenClient ? `${creds.tokenClient.slice(0, 8)}...` : "MISSING",
+    });
+    const res = await fetch(url, {
       method: "GET",
       headers,
     });
+    const body = await res.text();
+    console.log("CobCloud response status:", res.status, "body:", body);
     const ok = res.status === 200;
-    return json({ connected: ok, status: res.status });
+    return json({ connected: ok, status: res.status, detail: body });
   } catch (e) {
     return json({ connected: false, error: e.message });
   }
