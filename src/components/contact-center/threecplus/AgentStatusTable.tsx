@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LogOut, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import SpyButton from "./SpyButton";
 
 interface Agent {
   id: number;
@@ -19,6 +20,8 @@ interface AgentStatusTableProps {
   loading: boolean;
   onLogout: (agentId: number) => void;
   loggingOut: number | null;
+  domain?: string;
+  apiToken?: string;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -43,7 +46,13 @@ function getStatusInfo(status: string | number) {
   return statusConfig[normalized] || { label: String(status) || "—", className: "bg-muted text-muted-foreground border-border" };
 }
 
-const AgentStatusTable = ({ agents, loading, onLogout, loggingOut }: AgentStatusTableProps) => {
+function isOnCall(status: string | number): boolean {
+  if (typeof status === 'number') return status === 2;
+  const s = status?.toLowerCase().replace(/[\s-]/g, '_') || '';
+  return s === 'on_call' || s === 'ringing';
+}
+
+const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken }: AgentStatusTableProps) => {
   if (loading && agents.length === 0) {
     return (
       <div className="space-y-2">
@@ -74,6 +83,7 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut }: AgentStatus
       <TableBody>
         {agents.map((agent) => {
           const info = getStatusInfo(agent.status);
+          const canSpy = isOnCall(agent.status) && domain && apiToken;
           return (
             <TableRow key={agent.id}>
               <TableCell className="font-medium">{agent.name || `Agente ${agent.id}`}</TableCell>
@@ -91,7 +101,15 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut }: AgentStatus
               <TableCell className="text-muted-foreground text-sm">
                 {agent.status_time || "—"}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right space-x-1">
+                {canSpy && (
+                  <SpyButton
+                    agentId={agent.id}
+                    agentName={agent.name || `Agente ${agent.id}`}
+                    domain={domain!}
+                    apiToken={apiToken!}
+                  />
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

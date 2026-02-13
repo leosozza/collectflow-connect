@@ -197,6 +197,8 @@ const TelefoniaDashboard = () => {
             loading={loading}
             onLogout={handleLogout}
             loggingOut={loggingOut}
+            domain={domain}
+            apiToken={apiToken}
           />
         </CardContent>
       </Card>
