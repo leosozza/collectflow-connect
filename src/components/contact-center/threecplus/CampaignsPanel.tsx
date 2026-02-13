@@ -26,6 +26,8 @@ const CampaignsPanel = () => {
   // Create campaign dialog
   const [createOpen, setCreateOpen] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState("");
+  const [newStartTime, setNewStartTime] = useState("08:00");
+  const [newEndTime, setNewEndTime] = useState("18:30");
   const [creating, setCreating] = useState(false);
 
   const loadCampaigns = async () => {
@@ -85,6 +87,8 @@ const CampaignsPanel = () => {
           domain,
           api_token: apiToken,
           campaign_name: newCampaignName.trim(),
+          start_time: newStartTime,
+          end_time: newEndTime,
         },
       });
       if (error) throw error;
@@ -207,6 +211,24 @@ const CampaignsPanel = () => {
                 value={newCampaignName}
                 onChange={(e) => setNewCampaignName(e.target.value)}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Horário de início</Label>
+                <Input
+                  type="time"
+                  value={newStartTime}
+                  onChange={(e) => setNewStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Horário de término</Label>
+                <Input
+                  type="time"
+                  value={newEndTime}
+                  onChange={(e) => setNewEndTime(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
