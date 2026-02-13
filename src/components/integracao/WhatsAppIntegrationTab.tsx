@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Eye, EyeOff, Copy, Check, Radio } from "lucide-react";
+import BaylersInstancesList from "./BaylersInstancesList";
 
 const WhatsAppIntegrationTab = () => {
   const { tenant, refetch } = useTenant();
@@ -22,20 +23,12 @@ const WhatsAppIntegrationTab = () => {
   const [savingGupshup, setSavingGupshup] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Baylers state
-  const [baylersUrl, setBaylersUrl] = useState(settings.baylers_instance_url || "");
-  const [baylersKey, setBaylersKey] = useState(settings.baylers_api_key || "");
-  const [baylersName, setBaylersName] = useState(settings.baylers_instance_name || "");
-  const [showBaylersKey, setShowBaylersKey] = useState(false);
-  const [savingBaylers, setSavingBaylers] = useState(false);
-
   const activeProvider = settings.whatsapp_provider || (settings.gupshup_api_key ? "gupshup" : "");
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
   const webhookUrl = `${supabaseUrl}/functions/v1/gupshup-webhook`;
 
   const isGupshupConfigured = !!(settings.gupshup_api_key && settings.gupshup_app_name && settings.gupshup_source_number);
-  const isBaylersConfigured = !!(settings.baylers_api_key && settings.baylers_instance_url);
 
   const handleCopyWebhook = async () => {
     await navigator.clipboard.writeText(webhookUrl);
@@ -62,28 +55,6 @@ const WhatsAppIntegrationTab = () => {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setSavingGupshup(false);
-    }
-  };
-
-  const handleSaveBaylers = async () => {
-    if (!tenant) return;
-    setSavingBaylers(true);
-    try {
-      await updateTenant(tenant.id, {
-        settings: {
-          ...settings,
-          baylers_api_key: baylersKey.trim(),
-          baylers_instance_url: baylersUrl.trim().replace(/\/+$/, ""),
-          baylers_instance_name: baylersName.trim(),
-          whatsapp_provider: "baylers",
-        },
-      });
-      await refetch();
-      toast({ title: "Credenciais Baylers salvas!" });
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setSavingBaylers(false);
     }
   };
 
@@ -148,53 +119,8 @@ const WhatsAppIntegrationTab = () => {
         </CardContent>
       </Card>
 
-      {/* Baylers Card */}
-      <Card className={activeProvider === "baylers" ? "ring-2 ring-primary" : ""}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <MessageSquare className="w-5 h-5" />
-              Baylers
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              {isBaylersConfigured && <Badge variant="secondary" className="text-green-700 bg-green-100">Configurado</Badge>}
-              {activeProvider === "baylers" && <Badge><Radio className="w-3 h-3 mr-1" />Ativo</Badge>}
-            </div>
-          </div>
-          <CardDescription>Conexão não-oficial via instância própria</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>URL da Instância</Label>
-            <Input value={baylersUrl} onChange={(e) => setBaylersUrl(e.target.value)} placeholder="https://minha-instancia.com" />
-          </div>
-          <div className="space-y-2">
-            <Label>API Key</Label>
-            <div className="relative">
-              <Input
-                type={showBaylersKey ? "text" : "password"}
-                value={baylersKey}
-                onChange={(e) => setBaylersKey(e.target.value)}
-                placeholder="Chave de API da instância"
-              />
-              <button
-                type="button"
-                onClick={() => setShowBaylersKey(!showBaylersKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showBaylersKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Nome da Instância</Label>
-            <Input value={baylersName} onChange={(e) => setBaylersName(e.target.value)} placeholder="Nome da instância" />
-          </div>
-          <Button onClick={handleSaveBaylers} disabled={savingBaylers} className="w-full">
-            {savingBaylers ? "Salvando..." : "Salvar e ativar Baylers"}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Baylers Card - Multiple Instances */}
+      <BaylersInstancesList />
     </div>
   );
 };
