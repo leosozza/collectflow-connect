@@ -17,8 +17,10 @@ import * as XLSX from "xlsx";
 import ClientFilters from "@/components/clients/ClientFilters";
 import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
+import DialerExportDialog from "@/components/carteira/DialerExportDialog";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -61,6 +63,8 @@ const CarteiraPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [dialerOpen, setDialerOpen] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
@@ -194,6 +198,23 @@ const CarteiraPage = () => {
     toast.success("Exportado com sucesso!");
   };
 
+  const toggleSelectAll = () => {
+    if (selectedIds.size === displayClients.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayClients.map((c) => c.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -204,6 +225,12 @@ const CarteiraPage = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button variant="outline" onClick={() => setDialerOpen(true)} className="gap-2 border-primary text-primary">
+              <Phone className="w-4 h-4" />
+              Discador ({selectedIds.size})
+            </Button>
+          )}
           <Button variant="ghost" onClick={downloadTemplate} className="gap-2 text-muted-foreground" size="sm">
             <Download className="w-4 h-4" />
             Planilha Modelo
@@ -231,7 +258,13 @@ const CarteiraPage = () => {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50">
+              <TableRow className="bg-muted/50">
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={selectedIds.size === displayClients.length && displayClients.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>CPF</TableHead>
                   <TableHead>Credor</TableHead>
@@ -244,7 +277,13 @@ const CarteiraPage = () => {
               </TableHeader>
               <TableBody>
                 {displayClients.map((client) => (
-                  <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
+                  <TableRow key={client.id} className={`transition-colors ${selectedIds.has(client.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(client.id)}
+                        onCheckedChange={() => toggleSelect(client.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <button
                         className="font-medium text-primary hover:underline cursor-pointer text-left"
@@ -342,6 +381,13 @@ const CarteiraPage = () => {
         onClose={() => setImportOpen(false)}
         onConfirm={(rows) => importMutation.mutate(rows)}
         submitting={importMutation.isPending}
+      />
+
+      {/* Dialer export dialog */}
+      <DialerExportDialog
+        open={dialerOpen}
+        onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
+        selectedClients={selectedClients}
       />
     </div>
   );

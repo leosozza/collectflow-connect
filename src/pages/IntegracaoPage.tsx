@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CobCloudTab from "@/components/integracao/CobCloudTab";
 import NegociarieTab from "@/components/integracao/NegociarieTab";
+import ThreeCPlusTab from "@/components/integracao/ThreeCPlusTab";
 
 const IntegracaoPage = () => {
   const { profile } = useAuth();
@@ -25,12 +26,16 @@ const IntegracaoPage = () => {
         <TabsList>
           <TabsTrigger value="cobcloud">CobCloud</TabsTrigger>
           <TabsTrigger value="negociarie">Negociarie</TabsTrigger>
+          <TabsTrigger value="threecplus">3CPlus</TabsTrigger>
         </TabsList>
         <TabsContent value="cobcloud">
           <CobCloudTab />
         </TabsContent>
         <TabsContent value="negociarie">
           <NegociarieTab />
+        </TabsContent>
+        <TabsContent value="threecplus">
+          <ThreeCPlusTab />
         </TabsContent>
       </Tabs>
     </div>
