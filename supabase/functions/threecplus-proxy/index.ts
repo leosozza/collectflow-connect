@@ -316,6 +316,101 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── NEW: Schedules ──
+      case 'list_schedules': {
+        const params: Record<string, string> = {};
+        if (body.page) params.page = body.page;
+        url = buildUrl(baseUrl, 'agent/schedules', authParam, params);
+        break;
+      }
+
+      // ── NEW: SMS ──
+      case 'list_sms_mailings':
+        url = buildUrl(baseUrl, 'mailing_list_sms', authParam);
+        break;
+
+      case 'create_sms_mailing': {
+        const err = requireField(body, 'sms_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'mailing_list_sms', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.sms_data);
+        break;
+      }
+
+      case 'start_sms_mailing': {
+        const err = requireField(body, 'sms_list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `mailing_list_sms/${body.sms_list_id}/start_list`, authParam);
+        method = 'PUT';
+        break;
+      }
+
+      case 'upload_sms_mailing': {
+        const err = requireField(body, 'sms_list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `mailing_list_sms/${body.sms_list_id}/upload`, authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.upload_data || {});
+        break;
+      }
+
+      // ── NEW: Users ──
+      case 'list_users':
+        url = buildUrl(baseUrl, 'users', authParam);
+        break;
+
+      case 'create_user': {
+        const err = requireField(body, 'user_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'users', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.user_data);
+        break;
+      }
+
+      case 'update_user': {
+        const err = requireField(body, 'user_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `users/${body.user_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify(body.user_data || {});
+        break;
+      }
+
+      case 'deactivate_user': {
+        const err = requireField(body, 'user_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `users/${body.user_id}/deactivate`, authParam);
+        break;
+      }
+
+      case 'list_active_agents':
+        url = buildUrl(baseUrl, 'agents', authParam, { all: 'true', status: 'active' });
+        break;
+
+      // ── NEW: Receptive Queues ──
+      case 'list_receptive_queues':
+        url = buildUrl(baseUrl, 'receptive_queues', authParam);
+        break;
+
+      case 'create_receptive_queue': {
+        const err = requireField(body, 'queue_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'receptive_queues', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.queue_data);
+        break;
+      }
+
+      case 'list_receptive_ivr':
+        url = buildUrl(baseUrl, 'receptive_ivr', authParam);
+        break;
+
+      case 'list_receptive_numbers':
+        url = buildUrl(baseUrl, 'receptive_number_setting', authParam);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ status: 400, detail: `Unknown action: ${action}` }),

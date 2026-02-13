@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutDashboard, List, Send, History, AlertTriangle, BarChart3, Users, Tag, ShieldBan, UsersRound } from "lucide-react";
+import { LayoutDashboard, List, Send, History, AlertTriangle, BarChart3, Users, Tag, ShieldBan, UsersRound, CalendarClock, MessageSquare, Users2, PhoneIncoming } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { Card, CardContent } from "@/components/ui/card";
 import CampaignsPanel from "./CampaignsPanel";
@@ -11,6 +11,10 @@ import AgentsReportPanel from "./AgentsReportPanel";
 import QualificationsPanel from "./QualificationsPanel";
 import BlockListPanel from "./BlockListPanel";
 import TeamsPanel from "./TeamsPanel";
+import SchedulesPanel from "./SchedulesPanel";
+import SMSPanel from "./SMSPanel";
+import UsersPanel from "./UsersPanel";
+import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
 
 const ThreeCPlusPanel = () => {
   const { tenant } = useTenant();
@@ -73,6 +77,22 @@ const ThreeCPlusPanel = () => {
             <UsersRound className="w-4 h-4" />
             Equipes
           </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-2">
+            <CalendarClock className="w-4 h-4" />
+            Agendamentos
+          </TabsTrigger>
+          <TabsTrigger value="sms" className="gap-2">
+            <MessageSquare className="w-4 h-4" />
+            SMS
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-2">
+            <Users2 className="w-4 h-4" />
+            Usuários
+          </TabsTrigger>
+          <TabsTrigger value="receptive" className="gap-2">
+            <PhoneIncoming className="w-4 h-4" />
+            Receptivo
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
           <TelefoniaDashboard />
@@ -100,6 +120,18 @@ const ThreeCPlusPanel = () => {
         </TabsContent>
         <TabsContent value="teams">
           <TeamsPanel />
+        </TabsContent>
+        <TabsContent value="schedules">
+          <SchedulesPanel />
+        </TabsContent>
+        <TabsContent value="sms">
+          <SMSPanel />
+        </TabsContent>
+        <TabsContent value="users">
+          <UsersPanel />
+        </TabsContent>
+        <TabsContent value="receptive">
+          <ReceptiveQueuesPanel />
         </TabsContent>
       </Tabs>
     </div>
