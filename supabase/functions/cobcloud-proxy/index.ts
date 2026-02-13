@@ -461,7 +461,7 @@ async function handlePreview(body: any, creds: CobCloudCredentials) {
   // Now get counts - try without status filter first for total
   const baseParams = new URLSearchParams();
   baseParams.set("page", "1");
-  baseParams.set("limit", "1");
+  baseParams.set("limit", "99999");
   if (dateType) baseParams.set("date_type", dateType);
   if (dateValue) baseParams.set("date_value", dateValue);
 
