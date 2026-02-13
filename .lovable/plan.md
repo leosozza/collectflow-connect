@@ -1,72 +1,69 @@
 
 
-# Importacao Completa da Carteira CobCloud com Paginacao Automatica
+# Preview da Carteira CobCloud Antes de Importar
 
-## Problema Atual
+## Objetivo
 
-A importacao atual busca apenas **uma unica pagina** da API CobCloud (maximo 500 registros). Para importar a carteira inteira, o usuario precisaria clicar repetidamente mudando a pagina manualmente. Alem disso, nao ha protecao contra o rate limit (HTTP 429) da API.
+Adicionar uma etapa de **sincronizacao/preview** na aba CobCloud que, ao clicar em "Sincronizar", consulta a API e mostra um resumo da carteira disponivel com contadores por status e filtros. O usuario pode entao decidir importar tudo ou apenas um subconjunto filtrado.
 
-## Solucao
+## Como vai funcionar
 
-Criar uma acao **"Importar Carteira Completa"** que percorre automaticamente todas as paginas da API CobCloud ate nao haver mais registros, com:
+1. O usuario clica em **"Sincronizar com CobCloud"**
+2. O sistema consulta a API CobCloud buscando apenas a primeira pagina (limit=1) para cada status, obtendo os totais
+3. Um painel de resumo aparece mostrando:
+   - Total de titulos disponiveis
+   - Quantidade por status (em aberto, pago/quitado, quebrado)
+4. O usuario pode selecionar filtros:
+   - **Status**: Em aberto, Pago, Quebrado (ou todos)
+   - **Periodo de data**: Data inicio e data fim (usando os parametros `date_type` e `date_value` da API)
+   - **CPF** especifico (opcional)
+5. Apos escolher os filtros, clica em **"Importar Selecionados"** que dispara a importacao completa com paginacao automatica usando os filtros escolhidos
 
-- Paginacao automatica (loop pagina a pagina)
-- Pausa entre requisicoes para evitar 429 (rate limit)
-- Retry automatico com backoff quando receber 429
-- Progresso em tempo real na interface (pagina atual, registros importados)
-- Opcao de cancelar a importacao
+## Alteracoes Tecnicas
 
-## Alteracoes
+### 1. Edge Function `cobcloud-proxy/index.ts` - Nova acao `preview`
 
-### 1. Edge Function `cobcloud-proxy/index.ts` - Nova acao `import-all`
+Adicionar handler `handlePreview` que:
+- Faz chamadas paralelas a API CobCloud `/cli/titulos/listar` com diferentes filtros de status para obter contadores
+- Usa `limit=1` em cada chamada para ser rapido e nao consumir rate limit
+- Retorna o resumo: `{ total, byStatus: { aberto: N, pago: N, quebrado: N } }`
+- Aceita filtros opcionais de data (`date_type`, `date_value`) para contar apenas titulos de um periodo
 
-Adicionar handler `handleImportAll` que:
-- Percorre todas as paginas da API (`/cli/titulos/listar`) em lotes de 200 registros por pagina
-- Ao receber uma pagina vazia ou com menos registros que o limite, para o loop
-- Se receber HTTP 429, aguarda 2 segundos e tenta novamente (ate 3 retries)
-- Usa upsert em batch (agrupando registros) em vez de insert/update individual para performance
-- Retorna totais: `{ imported, skipped, pages, total }`
-- Limite de seguranca: maximo 50 paginas por execucao (10.000 registros)
+### 2. Service `cobcloudService.ts` - Novo metodo `preview`
 
-### 2. Service `cobcloudService.ts` - Novo metodo
+Adicionar metodo que chama a acao `preview` e retorna os totais.
 
-Adicionar `importAll` que chama a acao `import-all` com filtros opcionais (cpf, status).
+### 3. Edge Function `cobcloud-proxy/index.ts` - Atualizar `import-all`
 
-### 3. UI `CobCloudTab.tsx` - Botao "Importar Tudo"
+Adicionar suporte aos parametros de filtro de data (`date_type`, `date_value`) vindos da API CobCloud para que a importacao possa ser filtrada por periodo.
 
-- Adicionar botao "Importar Carteira Completa" ao lado do botao de importacao atual
-- Mostrar barra de progresso durante a importacao com:
-  - Numero de paginas processadas
-  - Total de registros importados ate o momento
-- Manter o botao de importacao por pagina para importacoes parciais/filtradas
+### 4. UI `CobCloudTab.tsx` - Redesign do fluxo de importacao
 
-## Detalhes Tecnicos
+Substituir os cards de importacao atuais por um fluxo em 2 etapas:
 
-### Fluxo da paginacao na Edge Function
+**Etapa 1 - Sincronizar/Preview:**
+- Botao "Sincronizar com CobCloud" que busca o resumo
+- Card de resumo mostrando contadores por status com icones coloridos
+- Cada status e clicavel para selecionar/deselecionar o filtro
 
-```text
-pagina = 1
-total_importados = 0
+**Etapa 2 - Filtros e Importacao:**
+- Filtros visiveis apos a sincronizacao:
+  - Checkboxes por status (em aberto, pago, quebrado)
+  - Seletor de periodo (data inicio / data fim)
+  - Campo CPF opcional
+- Botao "Importar Tudo" (sem filtro) e "Importar Filtrado" (com filtros selecionados)
+- Barra de progresso durante importacao (ja existente)
 
-LOOP:
-  GET /cli/titulos/listar?page={pagina}&limit=200
-  
-  SE 429 -> aguarda 2s, retry (max 3x)
-  SE vazio ou < 200 resultados -> processa e ENCERRA
-  SE pagina > 50 -> ENCERRA (limite de seguranca)
-  
-  processa registros (upsert no banco)
-  total_importados += importados
-  pagina++
-  aguarda 500ms (rate limit preventivo)
+### 5. Service `cobcloudService.ts` - Atualizar `importAll`
 
-RETORNA { imported, skipped, pages, total }
-```
+Passar os novos parametros de filtro (status, date_type, date_value) para a edge function.
 
-### Upsert em batch
+## Parametros da API CobCloud utilizados
 
-Em vez de verificar e inserir/atualizar um registro por vez (N queries por registro), usar upsert do Supabase com `onConflict` para processar multiplos registros de uma vez, reduzindo drasticamente o numero de queries ao banco.
+Conforme documentacao oficial:
+- `status` - filtro por status do titulo
+- `date_type` - tipo de data para filtro (ex: vencimento, cadastro)
+- `date_value` - valor da data para filtro
+- `documento` - CPF/CNPJ do devedor
+- `page` e `limit` - paginacao
 
-### Endpoint existente de importacao por pagina
-
-O endpoint `import-titulos` existente continua funcionando normalmente para importacoes parciais com filtros especificos (por CPF, por status, etc).
