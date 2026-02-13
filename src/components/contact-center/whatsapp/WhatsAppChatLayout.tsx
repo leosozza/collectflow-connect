@@ -16,6 +16,7 @@ import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappIns
 import ConversationList from "./ConversationList";
 import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
+import GlobalSearch from "./GlobalSearch";
 
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
@@ -94,7 +95,6 @@ const WhatsAppChatLayout = () => {
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
-          // Mark read if inbound
           if (newMsg.direction === "inbound") {
             markConversationRead(selectedConv.id).catch(console.error);
           }
@@ -119,9 +119,14 @@ const WhatsAppChatLayout = () => {
     setSelectedConv(conv);
   };
 
+  const getInstanceForConv = () => {
+    if (!selectedConv) return null;
+    return instances.find((i) => i.id === selectedConv.instance_id) || null;
+  };
+
   const handleSend = async (text: string) => {
     if (!selectedConv || !tenantId) return;
-    const instance = instances.find((i) => i.id === selectedConv.instance_id);
+    const instance = getInstanceForConv();
     if (!instance) {
       toast.error("Instância não encontrada");
       return;
@@ -136,6 +141,81 @@ const WhatsAppChatLayout = () => {
     }
   };
 
+  const handleSendMedia = async (file: File) => {
+    if (!selectedConv || !tenantId) return;
+    const instance = getInstanceForConv();
+    if (!instance) {
+      toast.error("Instância não encontrada");
+      return;
+    }
+    setSending(true);
+    try {
+      // Upload to storage
+      const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("chat-media")
+        .upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("chat-media").getPublicUrl(filePath);
+      const mediaUrl = urlData.publicUrl;
+
+      // Determine media type
+      let mediaType = "document";
+      if (file.type.startsWith("image/")) mediaType = "image";
+      else if (file.type.startsWith("video/")) mediaType = "video";
+      else if (file.type.startsWith("audio/")) mediaType = "audio";
+
+      // Send via evolution proxy
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("Não autenticado");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const conv = selectedConv;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/evolution-proxy?action=sendMessage`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instanceName: instance.instance_name,
+          phone: conv.remote_phone,
+          mediaUrl,
+          mediaType,
+          message: file.name,
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mídia");
+
+      // Insert local message
+      await supabase.from("chat_messages" as any).insert({
+        conversation_id: conv.id,
+        tenant_id: tenantId,
+        direction: "outbound",
+        message_type: mediaType,
+        content: file.name,
+        media_url: mediaUrl,
+        media_mime_type: file.type,
+        status: "sent",
+        external_id: result?.key?.id || null,
+      } as any);
+
+      await supabase
+        .from("conversations" as any)
+        .update({ last_message_at: new Date().toISOString() } as any)
+        .eq("id", conv.id);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao enviar mídia");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendAudio = async (blob: Blob) => {
+    const file = new File([blob], `audio_${Date.now()}.webm`, { type: "audio/webm;codecs=opus" });
+    await handleSendMedia(file);
+  };
+
   const handleStatusChange = async (status: string) => {
     if (!selectedConv) return;
     try {
@@ -147,34 +227,48 @@ const WhatsAppChatLayout = () => {
     }
   };
 
+  const handleGlobalSearchNavigate = (conversationId: string) => {
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (conv) setSelectedConv(conv);
+  };
+
   const selectedInstanceName = instances.find((i) => i.id === selectedConv?.instance_id)?.name;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] rounded-lg overflow-hidden border border-border bg-card">
-      <div className="w-[300px] shrink-0">
-        <ConversationList
-          conversations={conversations}
-          selectedId={selectedConv?.id || null}
-          onSelect={handleSelectConv}
-          instances={instances.map((i) => ({ id: i.id, name: i.name }))}
-        />
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Top bar with global search */}
+      <div className="flex items-center justify-end px-3 py-1.5 border-b border-border bg-card rounded-t-lg">
+        <GlobalSearch onNavigate={handleGlobalSearchNavigate} />
       </div>
-      <ChatPanel
-        conversation={selectedConv}
-        messages={messages}
-        onSend={handleSend}
-        sending={sending}
-        onStatusChange={handleStatusChange}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        instanceName={selectedInstanceName}
-      />
-      {sidebarOpen && (
-        <ContactSidebar
+
+      <div className="flex flex-1 overflow-hidden rounded-b-lg border border-border bg-card">
+        <div className="w-[300px] shrink-0">
+          <ConversationList
+            conversations={conversations}
+            selectedId={selectedConv?.id || null}
+            onSelect={handleSelectConv}
+            instances={instances.map((i) => ({ id: i.id, name: i.name }))}
+          />
+        </div>
+        <ChatPanel
           conversation={selectedConv}
-          onClientLinked={loadConversations}
+          messages={messages}
+          onSend={handleSend}
+          onSendMedia={handleSendMedia}
+          onSendAudio={handleSendAudio}
+          sending={sending}
+          onStatusChange={handleStatusChange}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          instanceName={selectedInstanceName}
         />
-      )}
+        {sidebarOpen && (
+          <ContactSidebar
+            conversation={selectedConv}
+            onClientLinked={loadConversations}
+          />
+        )}
+      </div>
     </div>
   );
 };

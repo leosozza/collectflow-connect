@@ -12,6 +12,8 @@ interface ChatPanelProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
   onSend: (text: string) => void;
+  onSendMedia: (file: File) => void;
+  onSendAudio: (blob: Blob) => void;
   sending: boolean;
   onStatusChange: (status: string) => void;
   sidebarOpen: boolean;
@@ -23,6 +25,8 @@ const ChatPanel = ({
   conversation,
   messages,
   onSend,
+  onSendMedia,
+  onSendAudio,
   sending,
   onStatusChange,
   sidebarOpen,
@@ -102,7 +106,7 @@ const ChatPanel = ({
       </ScrollArea>
 
       {/* Input */}
-      <ChatInput onSend={onSend} disabled={sending} />
+      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} disabled={sending} />
     </div>
   );
 };
