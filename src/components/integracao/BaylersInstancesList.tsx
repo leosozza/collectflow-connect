@@ -18,7 +18,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2, Pencil, Check, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import BaylersInstanceForm from "./BaylersInstanceForm";
 import {
   AlertDialog,
@@ -51,6 +52,8 @@ const BaylersInstancesList = () => {
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [loadingStatus, setLoadingStatus] = useState<Record<string, boolean>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ["whatsapp-instances", tenant?.id],
@@ -171,6 +174,27 @@ const BaylersInstancesList = () => {
     }
   };
 
+  const handleStartEdit = (inst: WhatsAppInstance) => {
+    setEditingId(inst.id);
+    setEditName(inst.name || inst.instance_name);
+  };
+
+  const handleSaveEdit = async (inst: WhatsAppInstance) => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === inst.name) {
+      setEditingId(null);
+      return;
+    }
+    try {
+      await updateWhatsAppInstance(inst.id, { name: trimmed } as any);
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant?.id] });
+      toast({ title: "Nome atualizado!" });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+    setEditingId(null);
+  };
+
   const getStatusBadge = (instId: string) => {
     const state = statusMap[instId];
     if (!state) return null;
@@ -214,9 +238,34 @@ const BaylersInstancesList = () => {
                 <div key={inst.id} className="flex items-center justify-between rounded-lg border p-3 gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm truncate">
-                        {inst.name || inst.instance_name}
-                      </span>
+                      {editingId === inst.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEdit(inst);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            className="h-7 text-sm w-40"
+                            autoFocus
+                          />
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleSaveEdit(inst)}>
+                            <Check className="w-3.5 h-3.5 text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingId(null)}>
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span
+                          className="font-medium text-sm truncate cursor-pointer hover:underline"
+                          onDoubleClick={() => handleStartEdit(inst)}
+                          title="Clique duplo para editar"
+                        >
+                          {inst.name || inst.instance_name}
+                        </span>
+                      )}
                       {inst.is_default && (
                         <Badge variant="outline" className="text-xs gap-1">
                           <Star className="w-3 h-3 fill-current" />Padrão
@@ -231,6 +280,15 @@ const BaylersInstancesList = () => {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleStartEdit(inst)}
+                      title="Editar nome"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
