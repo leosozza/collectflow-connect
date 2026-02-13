@@ -241,27 +241,60 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
   }
 
   // Capturing state
-  return (
-    <div className={fullscreen ? "absolute inset-0" : "space-y-3"}>
-      <div className={`relative overflow-hidden bg-foreground/90 ${fullscreen ? "absolute inset-0" : "rounded-xl"}`} style={fullscreen ? undefined : { aspectRatio: "3/4" }}>
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+  if (fullscreen) {
+    return (
+      <div className="absolute inset-0 bg-foreground/90">
+        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
 
-        {/* Flash effect */}
         {flashActive && <div className="absolute inset-0 bg-background/90 z-20 transition-opacity" />}
 
-        {/* Face overlay with guide */}
+        <FaceOverlay
+          primaryColor={primaryColor}
+          instruction={INSTRUCTIONS[currentInstruction]}
+          countdown={countdown}
+        />
+
+        {/* Progress overlaid at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-3 pb-4 bg-gradient-to-t from-black/70 via-black/40 to-transparent">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-white/70">Progresso de verificação</span>
+            <span className="font-medium text-white/70">{currentInstruction + 1}/{INSTRUCTIONS.length}</span>
+          </div>
+          <Progress value={((currentInstruction) / INSTRUCTIONS.length) * 100} className="h-1.5" />
+          <div className="flex justify-between mt-1.5">
+            {INSTRUCTIONS.map((inst, i) => (
+              <div key={i} className="flex items-center gap-1 text-xs">
+                {i < currentInstruction ? (
+                  <CheckCircle2 className="w-3 h-3 text-primary" />
+                ) : i === currentInstruction ? (
+                  <Loader2 className="w-3 h-3 animate-spin" style={{ color: primaryColor }} />
+                ) : (
+                  <div className="w-3 h-3 rounded-full border border-white/30" />
+                )}
+                <span className={i <= currentInstruction ? "text-white/80" : "text-white/30"}>{inst.icon}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative overflow-hidden bg-foreground/90 rounded-xl" style={{ aspectRatio: "3/4" }}>
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        {flashActive && <div className="absolute inset-0 bg-background/90 z-20 transition-opacity" />}
         <FaceOverlay
           primaryColor={primaryColor}
           instruction={INSTRUCTIONS[currentInstruction]}
           countdown={countdown}
         />
       </div>
-
-      {/* Progress - overlaid at bottom when fullscreen */}
-      <div className={fullscreen ? "absolute bottom-0 left-0 right-0 z-10 p-3 bg-gradient-to-t from-black/60 to-transparent" : "space-y-1.5"}>
+      <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className={fullscreen ? "text-white/70" : ""}>Progresso de verificação</span>
-          <span className={`font-medium ${fullscreen ? "text-white/70" : ""}`}>{currentInstruction + 1}/{INSTRUCTIONS.length}</span>
+          <span>Progresso de verificação</span>
+          <span className="font-medium">{currentInstruction + 1}/{INSTRUCTIONS.length}</span>
         </div>
         <Progress value={((currentInstruction) / INSTRUCTIONS.length) * 100} className="h-1.5" />
         <div className="flex justify-between">
@@ -274,7 +307,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
               ) : (
                 <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
               )}
-              <span className={i <= currentInstruction ? (fullscreen ? "text-white/80" : "text-foreground") : (fullscreen ? "text-white/30" : "text-muted-foreground/50")}>{inst.icon}</span>
+              <span className={i <= currentInstruction ? "text-foreground" : "text-muted-foreground/50"}>{inst.icon}</span>
             </div>
           ))}
         </div>
