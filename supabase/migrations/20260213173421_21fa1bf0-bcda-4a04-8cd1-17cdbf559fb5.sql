@@ -1,0 +1,1 @@
+ALTER TABLE public.whatsapp_instances ADD COLUMN phone_number text;

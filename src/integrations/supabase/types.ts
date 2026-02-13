@@ -1197,6 +1197,7 @@ export type Database = {
           instance_url: string
           is_default: boolean
           name: string
+          phone_number: string | null
           status: string
           tenant_id: string
           updated_at: string
@@ -1209,6 +1210,7 @@ export type Database = {
           instance_url: string
           is_default?: boolean
           name?: string
+          phone_number?: string | null
           status?: string
           tenant_id: string
           updated_at?: string
@@ -1221,6 +1223,7 @@ export type Database = {
           instance_url?: string
           is_default?: boolean
           name?: string
+          phone_number?: string | null
           status?: string
           tenant_id?: string
           updated_at?: string
