@@ -24,6 +24,7 @@ import AcordosPage from "./pages/AcordosPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import PortalPage from "./pages/PortalPage";
 import AuditoriaPage from "./pages/AuditoriaPage";
+import AtendimentoPage from "./pages/AtendimentoPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -183,6 +184,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <AuditoriaPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/atendimento/:id"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AtendimentoPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
