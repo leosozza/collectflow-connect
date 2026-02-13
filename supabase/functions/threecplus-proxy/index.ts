@@ -59,9 +59,13 @@ Deno.serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        url = `${baseUrl}/campaigns/${campaign_id}/lists/${list_id}/mailing.json?${authParam}`;
+        // Use "create mailing by array" endpoint (accepts JSON with header + mailing)
+        url = `${baseUrl}/campaigns/${campaign_id}/lists/${list_id}/mailing?${authParam}`;
         method = 'POST';
-        body = JSON.stringify({ mailing: mailings });
+        body = JSON.stringify({
+          header: ['identifier', 'areacodephone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
+          mailing: mailings,
+        });
         break;
 
       default:

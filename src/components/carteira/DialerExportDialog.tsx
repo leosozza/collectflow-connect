@@ -83,15 +83,12 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
       });
 
       const mailings = Array.from(uniqueClients.values()).map((c) => ({
-        name: c.nome_completo,
-        phone: c.phone?.replace(/\D/g, "") || "",
-        ...(c.external_id ? { external_id: c.external_id } : {}),
-        data: {
-          cpf: c.cpf,
-          credor: c.credor,
-          valor: String(c.valor_parcela),
-          client_id: c.id,
-        },
+        identifier: c.cpf.replace(/\D/g, ""),
+        areacodephone: c.phone?.replace(/\D/g, "") || "",
+        Nome: c.nome_completo,
+        Extra1: c.credor,
+        Extra2: String(c.valor_parcela),
+        Extra3: c.id,
       }));
 
       // 3. Send mailing to 3CPlus
