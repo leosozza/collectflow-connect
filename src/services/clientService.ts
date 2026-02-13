@@ -56,6 +56,7 @@ export const fetchClients = async (filters?: {
   credor?: string;
   dateFrom?: string;
   dateTo?: string;
+  operatorId?: string;
 }): Promise<Client[]> => {
   let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
 
@@ -70,6 +71,9 @@ export const fetchClients = async (filters?: {
   }
   if (filters?.dateTo) {
     query = query.lte("data_vencimento", filters.dateTo);
+  }
+  if (filters?.operatorId) {
+    query = query.eq("operator_id", filters.operatorId);
   }
 
   const { data, error } = await query;
