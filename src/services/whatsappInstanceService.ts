@@ -9,6 +9,7 @@ export interface WhatsAppInstance {
   api_key: string;
   is_default: boolean;
   status: string;
+  phone_number: string | null;
   created_at: string;
   updated_at: string;
 }

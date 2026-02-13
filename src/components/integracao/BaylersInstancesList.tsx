@@ -5,6 +5,7 @@ import { updateTenant } from "@/services/tenantService";
 import {
   fetchWhatsAppInstances,
   createWhatsAppInstance,
+  updateWhatsAppInstance,
   deleteWhatsAppInstance,
   setDefaultInstance,
   createEvolutionInstance,
@@ -75,6 +76,7 @@ const BaylersInstancesList = () => {
         tenant_id: tenant.id,
         is_default: isFirst,
         status: "active",
+        phone_number: null,
       });
 
       if (isFirst) {
@@ -122,6 +124,13 @@ const BaylersInstancesList = () => {
       const result = await getEvolutionInstanceStatus(inst.instance_name);
       const state = result?.instance?.state || result?.state || "unknown";
       setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
+
+      // Save phone number if returned by the API
+      const phone = result?.instance?.owner || result?.owner || null;
+      if (phone && phone !== inst.phone_number) {
+        await updateWhatsAppInstance(inst.id, { phone_number: phone } as any);
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant?.id] });
+      }
     } catch {
       setStatusMap((prev) => ({ ...prev, [inst.id]: "error" }));
     } finally {
@@ -215,7 +224,11 @@ const BaylersInstancesList = () => {
                       )}
                       {getStatusBadge(inst.id)}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{inst.instance_name}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {inst.phone_number
+                        ? `📱 ${inst.phone_number.replace(/^(\d{2})(\d{2})(\d{4,5})(\d{4})$/, '+$1 ($2) $3-$4')}`
+                        : inst.instance_name}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
