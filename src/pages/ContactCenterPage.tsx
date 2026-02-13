@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
-import WhatsAppTab from "@/components/contact-center/WhatsAppTab";
+import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
 
 interface ContactCenterPageProps {
   channel: "telefonia" | "whatsapp";
@@ -9,7 +9,8 @@ interface ContactCenterPageProps {
 const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const { profile } = useAuth();
 
-  if (profile?.role !== "admin") {
+  // Telefonia remains admin-only; WhatsApp is open to all authenticated users
+  if (channel === "telefonia" && profile?.role !== "admin") {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Acesso restrito a administradores</p>
@@ -19,7 +20,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
 
   return (
     <div className="space-y-4">
-      {channel === "telefonia" ? <ThreeCPlusPanel /> : <WhatsAppTab />}
+      {channel === "telefonia" ? <ThreeCPlusPanel /> : <WhatsAppChatLayout />}
     </div>
   );
 };
