@@ -158,33 +158,47 @@ const SignsPage = () => {
               </div>
             </div>
 
-            {/* Mobile Frame */}
-            <div className="relative w-[375px] min-h-[667px] bg-background border-[3px] border-foreground/20 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
-              {/* Phone Notch */}
-              <div className="h-7 bg-foreground/10 flex items-center justify-center">
-                <div className="w-20 h-4 bg-foreground/20 rounded-full" />
-              </div>
+            {/* Mobile Frame - iPhone style */}
+            <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl">
+              {/* Phone bezel inner */}
+              <div className="relative bg-background rounded-[2.2rem] overflow-hidden flex flex-col" style={{ height: 640 }}>
+                {/* Status Bar */}
+                <div className="h-12 bg-foreground/5 flex items-center justify-between px-8 pt-2 shrink-0">
+                  <span className="text-[11px] font-semibold text-foreground/70">18:28</span>
+                  <div className="absolute left-1/2 -translate-x-1/2 top-2 w-[90px] h-[25px] bg-foreground/90 rounded-full" />
+                  <div className="flex items-center gap-1">
+                    <div className="flex gap-[2px]">
+                      <div className="w-[3px] h-[6px] bg-foreground/50 rounded-sm" />
+                      <div className="w-[3px] h-[8px] bg-foreground/50 rounded-sm" />
+                      <div className="w-[3px] h-[10px] bg-foreground/50 rounded-sm" />
+                      <div className="w-[3px] h-[12px] bg-foreground/70 rounded-sm" />
+                    </div>
+                    <svg className="w-4 h-4 text-foreground/60" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C7.46 3 3.34 4.78.29 7.67l1.41 1.41C4.28 6.55 7.93 5 12 5s7.72 1.55 10.29 4.08l1.41-1.41C20.66 4.78 16.54 3 12 3zm0 4c-3.33 0-6.35 1.37-8.54 3.57l1.41 1.41C6.73 10.12 9.24 9 12 9s5.27 1.12 7.13 2.98l1.41-1.41C18.35 8.37 15.33 7 12 7zm0 4a7.46 7.46 0 0 0-5.25 2.15l1.42 1.42A5.49 5.49 0 0 1 12 13c1.52 0 2.9.62 3.83 1.57l1.42-1.42A7.46 7.46 0 0 0 12 11zm0 4c-1.1 0-2.1.45-2.83 1.17L12 19l2.83-2.83A3.98 3.98 0 0 0 12 15z"/></svg>
+                    <svg className="w-5 h-5 text-foreground/60" viewBox="0 0 24 24" fill="currentColor"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+                  </div>
+                </div>
 
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-4">
-                {playgroundStep === "termo" && (
-                  <PlaygroundTermo onNext={() => setPlaygroundStep("assinatura")} />
-                )}
-                {playgroundStep === "assinatura" && (
-                  <PlaygroundAssinatura
-                    type={activeType}
-                    primaryColor={tenant?.primary_color || "#F97316"}
-                    onConfirm={() => setPlaygroundStep("confirmacao")}
-                  />
-                )}
-                {playgroundStep === "confirmacao" && (
-                  <PlaygroundConfirmacao onReset={resetPlayground} />
-                )}
-              </div>
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-3">
+                  {playgroundStep === "termo" && (
+                    <PlaygroundTermo onNext={() => setPlaygroundStep("assinatura")} />
+                  )}
+                  {playgroundStep === "assinatura" && (
+                    <PlaygroundAssinatura
+                      type={activeType}
+                      primaryColor={tenant?.primary_color || "#F97316"}
+                      onConfirm={() => setPlaygroundStep("confirmacao")}
+                    />
+                  )}
+                  {playgroundStep === "confirmacao" && (
+                    <PlaygroundConfirmacao onReset={resetPlayground} />
+                  )}
+                </div>
 
-              {/* Phone Bottom Bar */}
-              <div className="h-5 flex items-center justify-center">
-                <div className="w-28 h-1 bg-foreground/20 rounded-full" />
+                {/* Home Indicator */}
+                <div className="h-6 flex items-center justify-center shrink-0">
+                  <div className="w-32 h-1 bg-foreground/30 rounded-full" />
+                </div>
               </div>
             </div>
           </div>
