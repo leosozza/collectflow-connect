@@ -334,6 +334,7 @@ const TelefoniaDashboard = () => {
         apiToken={apiToken}
         onLogout={handleLogout}
         loggingOut={loggingOut}
+        allAgents={agents}
       />
 
       {/* Campaigns */}

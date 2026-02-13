@@ -35,6 +35,7 @@ interface AgentDetailSheetProps {
   apiToken: string;
   onLogout: (agentId: number) => void;
   loggingOut: number | null;
+  allAgents?: any[];
 }
 
 const numericStatusMap: Record<number, string> = {
@@ -60,7 +61,7 @@ function getInitials(name: string): string {
 }
 
 const AgentDetailSheet = ({
-  agent, open, onOpenChange, domain, apiToken, onLogout, loggingOut,
+  agent, open, onOpenChange, domain, apiToken, onLogout, loggingOut, allAgents,
 }: AgentDetailSheetProps) => {
   const [tab, setTab] = useState("escuta");
   const [extension, setExtension] = useState("");
@@ -72,6 +73,34 @@ const AgentDetailSheet = ({
   const [actLoading, setActLoading] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [autoDetectedExt, setAutoDetectedExt] = useState<string | null>(null);
+
+  // Auto-detect supervisor extension when sheet opens
+  useEffect(() => {
+    if (!open || !allAgents?.length) return;
+    const detect = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: myProfile } = await supabase
+          .from("profiles")
+          .select("threecplus_agent_id" as any)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const myAgentId = (myProfile as any)?.threecplus_agent_id;
+        if (myAgentId == null) return;
+        const myAgent = allAgents.find((a: any) => a.id === myAgentId);
+        const ext = myAgent?.extension || myAgent?.ramal;
+        if (ext) {
+          setExtension(String(ext));
+          setAutoDetectedExt(String(ext));
+        }
+      } catch {
+        // silent
+      }
+    };
+    detect();
+  }, [open, allAgents]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -256,6 +285,12 @@ const AgentDetailSheet = ({
                     <CircleDot className={`w-4 h-4 ${isOnCall ? "text-destructive animate-pulse" : "text-muted-foreground"}`} />
                     <span className="text-sm font-medium">{isOnCall ? "Em ligação — pode espionar" : "Sem ligação ativa — escuta de ambiente"}</span>
                   </div>
+                  {autoDetectedExt && (
+                    <Badge variant="secondary" className="gap-1.5 text-xs">
+                      <Headphones className="w-3 h-3" />
+                      Seu ramal detectado: {autoDetectedExt}
+                    </Badge>
+                  )}
                   <div className="space-y-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Ramal</Label>
