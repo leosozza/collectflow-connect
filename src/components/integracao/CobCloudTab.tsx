@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, WifiOff, Download, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Wifi, WifiOff, Download, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown } from "lucide-react";
 
 interface LogEntry {
   id: string;
@@ -125,6 +126,48 @@ const CobCloudTab = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 mb-3">
+                <HelpCircle className="w-4 h-4" />
+                Como obter os tokens?
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="rounded-lg border bg-muted/30 p-4 mb-4 text-sm space-y-3">
+                <h4 className="font-semibold text-card-foreground">Passo a passo para obter seus tokens CobCloud:</h4>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                  <li>
+                    Acesse o painel administrativo do CobCloud em{" "}
+                    <a href="https://app.cob.cloud" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                      app.cob.cloud
+                    </a>
+                  </li>
+                  <li>Faça login com suas credenciais de administrador</li>
+                  <li>
+                    No menu lateral, vá em <strong>Configurações</strong> → <strong>Integrações</strong> ou <strong>API</strong>
+                  </li>
+                  <li>
+                    Localize a seção <strong>"Tokens de API"</strong> ou <strong>"Chaves de Acesso"</strong>
+                  </li>
+                  <li>
+                    Copie o <strong>Token Assessoria</strong> — este é o token que identifica sua assessoria/empresa junto à API
+                  </li>
+                  <li>
+                    Copie o <strong>Token Client</strong> — este é o token de autenticação do cliente da API
+                  </li>
+                  <li>Cole ambos os tokens nos campos abaixo e clique em "Salvar Credenciais"</li>
+                </ol>
+                <div className="rounded bg-accent/50 p-3 mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>💡 Dica:</strong> Se você não encontrar os tokens, entre em contato com o suporte do CobCloud ou com o responsável técnico da sua conta. 
+                    Os tokens também podem estar disponíveis na seção "Minha Conta" ou "Perfil da Assessoria".
+                  </p>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="token-assessoria">Token Assessoria</Label>
