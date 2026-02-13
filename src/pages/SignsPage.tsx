@@ -66,8 +66,7 @@ const SignsPage = () => {
 
   const resetPlayground = () => setPlaygroundStep("termo");
 
-  const isFacialFullscreen = playgroundStep === "assinatura" && playgroundType === "facial";
-  const isLandscape = playgroundStep === "assinatura" && playgroundType === "draw";
+  const isFullscreenMode = playgroundStep === "assinatura" && (playgroundType === "facial" || playgroundType === "draw");
 
   const renderPlaygroundContent = () => (
     <>
@@ -79,7 +78,7 @@ const SignsPage = () => {
           type={playgroundType}
           primaryColor={tenant?.primary_color || "#F97316"}
           onConfirm={() => setPlaygroundStep("confirmacao")}
-          fullscreen={playgroundType === "facial"}
+          fullscreen={playgroundType === "facial" || playgroundType === "draw"}
         />
       )}
       {playgroundStep === "confirmacao" && (
@@ -205,13 +204,13 @@ const SignsPage = () => {
             {isMobile ? (
               /* On real mobile: no phone frame, render content directly */
               <div className="w-full min-h-[500px] bg-background rounded-xl overflow-hidden border relative">
-                <div className={`${isFacialFullscreen ? "absolute inset-0" : "p-3"} h-full`}>
+                <div className={`${isFullscreenMode ? "absolute inset-0" : "p-3"} h-full`}>
                   {renderPlaygroundContent()}
                 </div>
               </div>
             ) : (
               /* Desktop: iPhone frame */
-              <div className={`relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl transition-all duration-500 ease-in-out ${isLandscape ? "rotate-90 scale-90" : "rotate-0"}`}>
+              <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl">
                 <div className="relative bg-background rounded-[2.2rem] overflow-hidden flex flex-col" style={{ height: 640 }}>
                   {/* Status Bar */}
                   <div className="h-12 bg-foreground/5 flex items-center justify-between px-8 pt-2 shrink-0">
@@ -230,12 +229,12 @@ const SignsPage = () => {
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 overflow-y-auto relative ${isFacialFullscreen ? "" : "p-3"}`}>
+                  <div className={`flex-1 overflow-y-auto relative ${isFullscreenMode ? "" : "p-3"}`}>
                     {renderPlaygroundContent()}
                   </div>
 
                   {/* Home Indicator */}
-                  {!isFacialFullscreen && (
+                  {!isFullscreenMode && (
                     <div className="h-6 flex items-center justify-center shrink-0">
                       <div className="w-32 h-1 bg-foreground/30 rounded-full" />
                     </div>
@@ -313,10 +312,11 @@ const PlaygroundAssinatura = ({
   onConfirm: () => void;
   fullscreen?: boolean;
 }) => {
-  if (type === "facial" && fullscreen) {
-    return (
-      <SignatureFacial primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />
-    );
+  if (fullscreen && (type === "facial" || type === "draw")) {
+    if (type === "facial") {
+      return <SignatureFacial primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
+    }
+    return <SignatureDraw primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
   }
 
   return (
