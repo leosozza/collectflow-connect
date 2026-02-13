@@ -25,7 +25,11 @@ interface KpiItem {
   iconClass: string;
 }
 
-const TelefoniaDashboard = () => {
+interface TelefoniaDashboardProps {
+  menuButton?: React.ReactNode;
+}
+
+const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
   const { tenant } = useTenant();
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
@@ -243,7 +247,10 @@ const TelefoniaDashboard = () => {
     <div className="space-y-5">
       {/* Toolbar */}
       <Card className="shadow-none border-border/60">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 px-4">
+        <CardContent className="flex items-center justify-between gap-3 py-3 px-4">
+          <div className="flex items-center gap-2 min-w-0">
+            {menuButton}
+          </div>
           <div className="flex items-center gap-2">
             <Badge
               variant="outline"
