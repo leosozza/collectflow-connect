@@ -27,6 +27,7 @@ import PortalPage from "./pages/PortalPage";
 import AuditoriaPage from "./pages/AuditoriaPage";
 import AtendimentoPage from "./pages/AtendimentoPage";
 import ContactCenterPage from "./pages/ContactCenterPage";
+import PerfilPage from "./pages/PerfilPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -228,6 +229,26 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <AtendimentoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perfil"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <PerfilPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perfil/:userId"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <PerfilPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
