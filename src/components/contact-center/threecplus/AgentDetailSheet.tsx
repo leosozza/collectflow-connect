@@ -117,12 +117,14 @@ const AgentDetailSheet = ({
     const fetchActivity = async () => {
       setActLoading(true);
       try {
-        // Load profiles for name matching
-        const { data: profs } = await supabase.from("profiles").select("id, user_id, full_name");
+        // Load profiles with threecplus_agent_id mapping
+        const { data: profs } = await supabase.from("profiles").select("id, user_id, full_name, threecplus_agent_id" as any);
         setProfiles(profs || []);
 
-        // Match agent name to profile
+        // Match agent by threecplus_agent_id first, then fallback to name
         const matched = (profs || []).find(
+          (p: any) => p.threecplus_agent_id === agent.id
+        ) || (profs || []).find(
           (p: any) => p.full_name?.toLowerCase().trim() === agent.name?.toLowerCase().trim()
         );
 
@@ -132,7 +134,7 @@ const AgentDetailSheet = ({
           const { data: logs } = await supabase
             .from("user_activity_logs" as any)
             .select("*")
-            .eq("user_id", matched.user_id)
+            .eq("user_id", (matched as any).user_id)
             .gte("created_at", today.toISOString())
             .order("created_at", { ascending: false })
             .limit(50) as any;
@@ -175,6 +177,8 @@ const AgentDetailSheet = ({
   const status = normalizeStatus(agent.status);
   const isOnCall = status === "on_call" || status === "ringing";
   const matchedProfile = profiles.find(
+    (p: any) => p.threecplus_agent_id === agent.id
+  ) || profiles.find(
     (p: any) => p.full_name?.toLowerCase().trim() === agent.name?.toLowerCase().trim()
   );
 
