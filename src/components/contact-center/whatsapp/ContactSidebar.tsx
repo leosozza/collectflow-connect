@@ -4,10 +4,11 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Link2, Unlink, Search } from "lucide-react";
+import { User, Link2, Unlink, Search, Tag } from "lucide-react";
 import { Conversation, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import TagManager from "./TagManager";
 
 interface ContactSidebarProps {
   conversation: Conversation | null;
@@ -26,12 +27,20 @@ interface SimpleClient {
   total_parcelas: number;
 }
 
+interface ConversationTag {
+  id: string;
+  name: string;
+  color: string;
+  tenant_id: string;
+}
+
 const ContactSidebar = ({ conversation, onClientLinked }: ContactSidebarProps) => {
   const [linkedClient, setLinkedClient] = useState<SimpleClient | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SimpleClient[]>([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [assignedTags, setAssignedTags] = useState<ConversationTag[]>([]);
 
   // Fetch linked client
   useEffect(() => {
@@ -48,6 +57,35 @@ const ContactSidebar = ({ conversation, onClientLinked }: ContactSidebarProps) =
         setLinkedClient(data as SimpleClient | null);
       });
   }, [conversation?.client_id]);
+
+  // Fetch assigned tags
+  const loadTags = async () => {
+    if (!conversation) {
+      setAssignedTags([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("conversation_tag_assignments" as any)
+      .select("tag_id")
+      .eq("conversation_id", conversation.id);
+
+    if (!data || data.length === 0) {
+      setAssignedTags([]);
+      return;
+    }
+
+    const tagIds = (data as any[]).map((d: any) => d.tag_id);
+    const { data: tags } = await supabase
+      .from("conversation_tags" as any)
+      .select("*")
+      .in("id", tagIds);
+
+    setAssignedTags((tags || []) as unknown as ConversationTag[]);
+  };
+
+  useEffect(() => {
+    loadTags();
+  }, [conversation?.id]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -113,6 +151,23 @@ const ContactSidebar = ({ conversation, onClientLinked }: ContactSidebarProps) =
                 <div className="text-xs text-muted-foreground">{conversation.remote_phone}</div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Tags */}
+        <Card className="mb-3">
+          <CardHeader className="p-3 pb-1">
+            <CardTitle className="text-xs flex items-center gap-1">
+              <Tag className="w-3 h-3" />
+              Etiquetas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-1">
+            <TagManager
+              conversationId={conversation.id}
+              assignedTags={assignedTags}
+              onTagsChanged={loadTags}
+            />
           </CardContent>
         </Card>
 
