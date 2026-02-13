@@ -26,6 +26,9 @@ export const cobcloudService = {
   importTitulos: (filters?: { page?: number; limit?: number; cpf?: string; status?: string }) =>
     callProxy("import-titulos", filters || {}),
 
+  importAll: (filters?: { cpf?: string; status?: string }) =>
+    callProxy("import-all", filters || {}),
+
   exportDevedores: (clientIds: string[]) =>
     callProxy("export-devedores", { clientIds }),
 
