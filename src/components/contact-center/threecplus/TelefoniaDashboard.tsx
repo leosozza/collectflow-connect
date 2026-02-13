@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff,
 } from "lucide-react";
@@ -251,44 +252,53 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
           <div className="flex items-center gap-2 min-w-0">
             {menuButton}
           </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                lastUpdate
-                  ? "border-emerald-500/40 text-emerald-700 gap-1.5"
-                  : "border-destructive/40 text-destructive gap-1.5"
-              }
-            >
-              {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {lastUpdate ? "Conectado" : "Desconectado"}
-            </Badge>
-            {lastUpdate && (
-              <span className="text-xs text-muted-foreground">
-                {lastUpdate.toLocaleTimeString("pt-BR")}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id="auto-refresh" />
-              <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground">Auto</Label>
-            </div>
-            <Select value={String(interval)} onValueChange={(v) => setRefreshInterval(Number(v))}>
-              <SelectTrigger className="w-[72px] h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15">15s</SelectItem>
-                <SelectItem value="30">30s</SelectItem>
-                <SelectItem value="60">60s</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} className="gap-1.5 h-8 text-xs">
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="inline-flex items-center gap-1.5 cursor-pointer">
+                <Badge
+                  variant="outline"
+                  className={`cursor-pointer transition-colors hover:bg-accent ${
+                    lastUpdate
+                      ? "border-emerald-500/40 text-emerald-700 gap-1.5"
+                      : "border-destructive/40 text-destructive gap-1.5"
+                  }`}
+                >
+                  {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                  {lastUpdate ? "Conectado" : "Desconectado"}
+                  {lastUpdate && (
+                    <span className="text-muted-foreground font-normal ml-1">
+                      {lastUpdate.toLocaleTimeString("pt-BR")}
+                    </span>
+                  )}
+                </Badge>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3 space-y-3" align="center">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="auto-refresh-pop" className="text-xs">Atualização automática</Label>
+                <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id="auto-refresh-pop" />
+              </div>
+              {autoRefresh && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Intervalo</Label>
+                  <Select value={String(interval)} onValueChange={(v) => setRefreshInterval(Number(v))}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 segundos</SelectItem>
+                      <SelectItem value="30">30 segundos</SelectItem>
+                      <SelectItem value="60">60 segundos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} className="w-full gap-1.5 h-8 text-xs">
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                Atualizar agora
+              </Button>
+            </PopoverContent>
+          </Popover>
         </CardContent>
       </Card>
 
