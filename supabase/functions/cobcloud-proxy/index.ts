@@ -32,7 +32,9 @@ function getSupabaseAdmin() {
 
 async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCredentials> {
   const authHeader = req.headers.get("authorization");
-  if (!authHeader) throw new Error("Não autenticado");
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Não autenticado");
+
+  const token = authHeader.replace("Bearer ", "");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -40,8 +42,24 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) throw new Error("Token inválido");
+  // Use getClaims for ES256 compatibility (Lovable Cloud)
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+  
+  let userId: string | null = null;
+  
+  if (claimsError || !claimsData?.claims) {
+    // Fallback to getUser if getClaims is not available
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      console.error("Auth error:", claimsError?.message || error?.message);
+      throw new Error("Token inválido");
+    }
+    userId = user.id;
+  } else {
+    userId = claimsData.claims.sub as string;
+  }
+
+  if (!userId) throw new Error("Token inválido");
 
   const admin = getSupabaseAdmin();
 
@@ -49,7 +67,7 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
   const { data: profile } = await admin
     .from("profiles")
     .select("role, tenant_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!profile || profile.role !== "admin") {
