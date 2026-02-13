@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -36,10 +37,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useState } from "react";
-import { Edit, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
+
+interface ThreeCAgent {
+  id: number;
+  name: string;
+  extension?: number;
+  status?: string | number;
+}
 
 interface Profile {
   id: string;
@@ -53,13 +76,43 @@ interface Profile {
 
 const UsersPage = () => {
   const { profile } = useAuth();
+  const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [editRole, setEditRole] = useState<string>("operador");
   const [editGradeId, setEditGradeId] = useState<string>("none");
   const [editName, setEditName] = useState<string>("");
-  const [editAgentId, setEditAgentId] = useState<string>("");
+  const [editAgentId, setEditAgentId] = useState<number | null>(null);
+  const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+
+  const settings = (tenant?.settings as Record<string, any>) || {};
+  const domain = settings.threecplus_domain || "";
+  const apiToken = settings.threecplus_api_token || "";
+
+  // Fetch 3CPlus agents list
+  const { data: threecAgents = [], isLoading: agentsLoading } = useQuery({
+    queryKey: ["threecplus-all-agents", domain],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+        body: { action: "list_active_agents", domain, api_token: apiToken },
+      });
+      if (error) throw error;
+      const list = Array.isArray(data) ? data : data?.data || [];
+      return list as ThreeCAgent[];
+    },
+    enabled: !!domain && !!apiToken,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Map agentId -> name for display
+  const agentNameMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const a of threecAgents) {
+      m.set(a.id, a.name);
+    }
+    return m;
+  }, [threecAgents]);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
@@ -124,13 +177,30 @@ const UsersPage = () => {
     setEditRole(user.role);
     setEditGradeId(user.commission_grade_id || "none");
     setEditName(user.full_name);
-    setEditAgentId(user.threecplus_agent_id?.toString() || "");
+    setEditAgentId(user.threecplus_agent_id);
   };
 
   const getGradeName = (gradeId: string | null) => {
     if (!gradeId) return "Nenhuma";
     return grades.find((g) => g.id === gradeId)?.name || "—";
   };
+
+  const getAgentDisplay = (agentId: number | null) => {
+    if (!agentId) return "—";
+    const name = agentNameMap.get(agentId);
+    return name ? `${name} (#${agentId})` : `#${agentId}`;
+  };
+
+  // IDs already assigned to other users
+  const assignedAgentIds = useMemo(() => {
+    const set = new Set<number>();
+    for (const u of users) {
+      if (u.threecplus_agent_id && u.id !== editUser?.id) {
+        set.add(u.threecplus_agent_id);
+      }
+    }
+    return set;
+  }, [users, editUser?.id]);
 
   if (profile?.role !== "admin") {
     return (
@@ -139,6 +209,8 @@ const UsersPage = () => {
       </div>
     );
   }
+
+  const selectedAgentName = editAgentId ? agentNameMap.get(editAgentId) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -170,7 +242,16 @@ const UsersPage = () => {
                 <TableCell className="text-muted-foreground text-sm">{u.email}</TableCell>
                 <TableCell className="capitalize text-muted-foreground">{u.role}</TableCell>
                 <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
-                <TableCell className="text-muted-foreground font-mono text-sm">{u.threecplus_agent_id || "—"}</TableCell>
+                <TableCell>
+                  {u.threecplus_agent_id ? (
+                    <Badge variant="outline" className="gap-1.5 font-normal">
+                      <Phone className="w-3 h-3" />
+                      {getAgentDisplay(u.threecplus_agent_id)}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
@@ -226,15 +307,97 @@ const UsersPage = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 3CPlus Agent Picker */}
             <div className="space-y-2">
-              <Label>ID Agente 3CPlus</Label>
-              <Input
-                type="number"
-                value={editAgentId}
-                onChange={(e) => setEditAgentId(e.target.value)}
-                placeholder="Ex: 12345"
-              />
-              <p className="text-[11px] text-muted-foreground">Vincule o ID do agente na plataforma de telefonia</p>
+              <Label>Agente 3CPlus</Label>
+              {!domain || !apiToken ? (
+                <p className="text-xs text-muted-foreground">Configure o domínio e token 3CPlus nas configurações da empresa para vincular agentes.</p>
+              ) : (
+                <div className="space-y-2">
+                  <Popover open={agentPopoverOpen} onOpenChange={setAgentPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={agentPopoverOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        {editAgentId ? (
+                          <span className="truncate">
+                            {selectedAgentName || `Agente #${editAgentId}`}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Selecionar agente...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar agente por nome..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {agentsLoading ? (
+                              <div className="flex items-center justify-center gap-2 py-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span className="text-sm">Carregando agentes...</span>
+                              </div>
+                            ) : (
+                              "Nenhum agente encontrado"
+                            )}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {threecAgents.map((agent) => {
+                              const isAssigned = assignedAgentIds.has(agent.id);
+                              const isSelected = editAgentId === agent.id;
+                              return (
+                                <CommandItem
+                                  key={agent.id}
+                                  value={`${agent.name} ${agent.id}`}
+                                  onSelect={() => {
+                                    if (!isAssigned || isSelected) {
+                                      setEditAgentId(isSelected ? null : agent.id);
+                                      setAgentPopoverOpen(false);
+                                    }
+                                  }}
+                                  disabled={isAssigned && !isSelected}
+                                  className="flex items-center justify-between"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Check className={cn("h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")} />
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium truncate">{agent.name}</p>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        ID: {agent.id}
+                                        {agent.extension ? ` · Ramal: ${agent.extension}` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {isAssigned && !isSelected && (
+                                    <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">Vinculado</Badge>
+                                  )}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {editAgentId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1 text-muted-foreground"
+                      onClick={() => setEditAgentId(null)}
+                    >
+                      <X className="w-3 h-3" /> Remover vínculo
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -247,7 +410,7 @@ const UsersPage = () => {
                     role: editRole as "admin" | "operador",
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
-                    threecplus_agent_id: editAgentId ? parseInt(editAgentId) : null,
+                    threecplus_agent_id: editAgentId,
                   });
                 }
               }}
