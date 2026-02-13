@@ -1,69 +1,75 @@
 
 
-# Preview da Carteira CobCloud Antes de Importar
+# Corrigir Importacao CobCloud - API Retornando Zero Resultados
 
-## Objetivo
+## Problema
 
-Adicionar uma etapa de **sincronizacao/preview** na aba CobCloud que, ao clicar em "Sincronizar", consulta a API e mostra um resumo da carteira disponivel com contadores por status e filtros. O usuario pode entao decidir importar tudo ou apenas um subconjunto filtrado.
+A conexao com CobCloud funciona (status 200), mas a sincronizacao e importacao retornam 0 registros. Isso acontece porque:
 
-## Como vai funcionar
+1. O teste de conexao usa o endpoint `/cli/devedores/listar` (que funciona e encontra dados)
+2. O preview e importacao usam `/cli/titulos/listar` (que retorna vazio)
+3. Nao temos logs do que a API CobCloud realmente retorna, dificultando o diagnostico
+4. Os valores de status usados no filtro (`aberto`, `pago`, `quebrado`) podem nao corresponder aos valores reais da API
 
-1. O usuario clica em **"Sincronizar com CobCloud"**
-2. O sistema consulta a API CobCloud buscando apenas a primeira pagina (limit=1) para cada status, obtendo os totais
-3. Um painel de resumo aparece mostrando:
-   - Total de titulos disponiveis
-   - Quantidade por status (em aberto, pago/quitado, quebrado)
-4. O usuario pode selecionar filtros:
-   - **Status**: Em aberto, Pago, Quebrado (ou todos)
-   - **Periodo de data**: Data inicio e data fim (usando os parametros `date_type` e `date_value` da API)
-   - **CPF** especifico (opcional)
-5. Apos escolher os filtros, clica em **"Importar Selecionados"** que dispara a importacao completa com paginacao automatica usando os filtros escolhidos
+## Solucao
+
+### 1. Adicionar logging de debug na Edge Function
+
+Incluir `console.log` para registrar as respostas brutas da API CobCloud em todas as chamadas (preview, import, status). Isso permite diagnosticar exatamente o que a API retorna.
+
+### 2. Usar tambem `/cli/devedores/listar` como fonte de dados
+
+Ja que sabemos que `/cli/devedores/listar` retorna dados, vamos:
+- Adicionar uma chamada ao endpoint de devedores no preview para contagem
+- Tentar ambos os endpoints (`titulos` e `devedores`) e usar o que retornar dados
+- Logar a resposta de ambos para entender a estrutura
+
+### 3. Preview mais robusto com fallback
+
+O handler `handlePreview` vai:
+1. Primeiro tentar `/cli/titulos/listar` sem filtro de status (apenas limit=1) para ver se existe algum dado
+2. Se retornar 0, tentar `/cli/devedores/listar` como alternativa
+3. Logar a resposta bruta de cada chamada para debug
+4. Retornar o total encontrado e a fonte dos dados
+
+### 4. Importacao com endpoint correto
+
+O handler `handleImportAll` vai:
+- Testar automaticamente qual endpoint tem dados antes de iniciar o loop
+- Usar o endpoint que retorna resultados
+- Logar cada pagina para acompanhamento
 
 ## Alteracoes Tecnicas
 
-### 1. Edge Function `cobcloud-proxy/index.ts` - Nova acao `preview`
+### Edge Function `cobcloud-proxy/index.ts`
 
-Adicionar handler `handlePreview` que:
-- Faz chamadas paralelas a API CobCloud `/cli/titulos/listar` com diferentes filtros de status para obter contadores
-- Usa `limit=1` em cada chamada para ser rapido e nao consumir rate limit
-- Retorna o resumo: `{ total, byStatus: { aberto: N, pago: N, quebrado: N } }`
-- Aceita filtros opcionais de data (`date_type`, `date_value`) para contar apenas titulos de um periodo
+**handlePreview** - Adicionar:
+```text
+- console.log com a URL chamada e resposta bruta
+- Chamada sem filtro de status primeiro (para ver total geral)
+- Fallback para /cli/devedores/listar se titulos retornar vazio
+- Retorno inclui campo "source" indicando qual endpoint foi usado
+```
 
-### 2. Service `cobcloudService.ts` - Novo metodo `preview`
+**handleImportAll** - Adicionar:
+```text
+- console.log com a URL e resposta de cada pagina
+- Deteccao automatica do endpoint correto (titulos vs devedores)
+- Log de erro mais detalhado quando pagina retorna vazio
+```
 
-Adicionar metodo que chama a acao `preview` e retorna os totais.
+**handleStatus** - Adicionar:
+```text
+- Testar ambos endpoints e retornar contagem de cada
+- Retorno: { connected, status, devedores_count, titulos_count }
+```
 
-### 3. Edge Function `cobcloud-proxy/index.ts` - Atualizar `import-all`
+### UI `CobCloudTab.tsx`
 
-Adicionar suporte aos parametros de filtro de data (`date_type`, `date_value`) vindos da API CobCloud para que a importacao possa ser filtrada por periodo.
+- Exibir informacao de debug quando a sincronizacao retorna 0 (ex: "Nenhum titulo encontrado. Verifique as credenciais e se existem dados cadastrados no CobCloud.")
+- Mostrar o resultado do teste de conexao com mais detalhes (contagem de devedores vs titulos)
 
-### 4. UI `CobCloudTab.tsx` - Redesign do fluxo de importacao
+### Service `cobcloudService.ts`
 
-Substituir os cards de importacao atuais por um fluxo em 2 etapas:
-
-**Etapa 1 - Sincronizar/Preview:**
-- Botao "Sincronizar com CobCloud" que busca o resumo
-- Card de resumo mostrando contadores por status com icones coloridos
-- Cada status e clicavel para selecionar/deselecionar o filtro
-
-**Etapa 2 - Filtros e Importacao:**
-- Filtros visiveis apos a sincronizacao:
-  - Checkboxes por status (em aberto, pago, quebrado)
-  - Seletor de periodo (data inicio / data fim)
-  - Campo CPF opcional
-- Botao "Importar Tudo" (sem filtro) e "Importar Filtrado" (com filtros selecionados)
-- Barra de progresso durante importacao (ja existente)
-
-### 5. Service `cobcloudService.ts` - Atualizar `importAll`
-
-Passar os novos parametros de filtro (status, date_type, date_value) para a edge function.
-
-## Parametros da API CobCloud utilizados
-
-Conforme documentacao oficial:
-- `status` - filtro por status do titulo
-- `date_type` - tipo de data para filtro (ex: vencimento, cadastro)
-- `date_value` - valor da data para filtro
-- `documento` - CPF/CNPJ do devedor
-- `page` e `limit` - paginacao
+- Atualizar tipagem do `testConnection` para incluir os novos campos de contagem
 
