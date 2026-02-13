@@ -48,17 +48,18 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
   const isAdmin = isTenantAdmin;
 
-  const mainNavItems = [
+  const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
     ...(!isAdmin ? [{ label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" }] : []),
-    ...(isAdmin ? [
-      { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
-      { label: "Acordos", icon: Handshake, path: "/acordos" },
-      { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
-      { label: "Integração", icon: Cloud, path: "/integracao" },
-    ] : []),
   ];
+
+  const postContactItems = isAdmin ? [
+    { label: "Acordos", icon: Handshake, path: "/acordos" },
+    { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
+    { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
+    { label: "Integração", icon: Cloud, path: "/integracao" },
+  ] : [];
 
   const contactCenterItems = isAdmin ? [
     { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
@@ -120,7 +121,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
-          {mainNavItems.map((item) => {
+          {preContactItems.map((item) => {
             const active = location.pathname === item.path;
             return (
               <Link
@@ -144,7 +145,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
           {contactCenterItems.length > 0 && (
             <Collapsible open={contactCenterOpen} onOpenChange={setContactCenterOpen}>
-              <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 mt-1 rounded-lg text-sm font-medium transition-colors ${isContactCenterRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
+              <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors ${isContactCenterRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
                 <div className="flex items-center gap-3">
                   <Headphones className="w-5 h-5 flex-shrink-0" />
                   {!collapsed && "Contact Center"}
@@ -176,6 +177,28 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               </CollapsibleContent>
             </Collapsible>
           )}
+
+          {postContactItems.map((item) => {
+            const active = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                title={collapsed ? item.label : undefined}
+                className={`
+                  flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                  ${active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  }
+                `}
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && item.label}
+              </Link>
+            );
+          })}
 
           {advancedNavItems.length > 0 && (
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
