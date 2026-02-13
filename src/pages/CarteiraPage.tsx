@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import {
   fetchClients,
   createClient,
@@ -50,6 +51,8 @@ import {
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
+  const { isTenantAdmin, isSuperAdmin } = useTenant();
+  const isAdmin = isTenantAdmin || isSuperAdmin;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -68,9 +71,14 @@ const CarteiraPage = () => {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
 
+  const filtersWithOperator = {
+    ...filters,
+    ...(!isAdmin && profile?.id ? { operatorId: profile.id } : {}),
+  };
+
   const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["clients", filters],
-    queryFn: () => fetchClients(filters),
+    queryKey: ["clients", filtersWithOperator],
+    queryFn: () => fetchClients(filtersWithOperator),
   });
 
   const displayClients = useMemo(() => {

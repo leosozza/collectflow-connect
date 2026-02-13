@@ -53,7 +53,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
-    ...(!isAdmin ? [{ label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" }] : []),
   ];
 
   const postContactItems = isAdmin ? [
@@ -63,10 +62,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Integração", icon: Cloud, path: "/integracao" },
   ] : [];
 
-  const contactCenterItems = isAdmin ? [
-    { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
+  const contactCenterItems = [
+    ...(isAdmin ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
     { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
-  ] : [];
+  ];
 
   const advancedNavItems = isAdmin ? [
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
