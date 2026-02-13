@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { updateTenant } from "@/services/tenantService";
@@ -62,6 +62,17 @@ const BaylersInstancesList = () => {
     queryFn: () => fetchWhatsAppInstances(tenant!.id),
     enabled: !!tenant?.id,
   });
+
+  // Auto-fetch status and phone number for all instances on load
+  useEffect(() => {
+    if (instances.length === 0) return;
+    instances.forEach((inst) => {
+      if (!statusMap[inst.id] && !loadingStatus[inst.id]) {
+        handleCheckStatus(inst);
+      }
+    });
+  }, [instances]);
+
 
   // Count active conversations per instance
   const { data: conversationCounts = {} } = useQuery({
