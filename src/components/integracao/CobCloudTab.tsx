@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Wifi, WifiOff, Download, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown } from "lucide-react";
+import { Wifi, WifiOff, Download, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown, DatabaseBackup } from "lucide-react";
 
 interface LogEntry {
   id: string;
@@ -24,6 +25,8 @@ const CobCloudTab = () => {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingAll, setImportingAll] = useState(false);
+  const [importAllResult, setImportAllResult] = useState<{ imported: number; pages: number; total: number } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [importCpf, setImportCpf] = useState("");
   const [importLimit, setImportLimit] = useState("100");
@@ -113,6 +116,24 @@ const CobCloudTab = () => {
       toast({ title: "Erro na importação", description: e.message, variant: "destructive" });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImportAll = async () => {
+    setImportingAll(true);
+    setImportAllResult(null);
+    try {
+      const result = await cobcloudService.importAll({
+        cpf: importCpf || undefined,
+      });
+      setImportAllResult({ imported: result.imported, pages: result.pages, total: result.total });
+      addLog("Importar Carteira Completa", "success", `${result.imported} títulos importados de ${result.total} encontrados em ${result.pages} páginas`);
+      toast({ title: "Importação completa!", description: `${result.imported} títulos importados de ${result.pages} páginas` });
+    } catch (e: any) {
+      addLog("Importar Carteira Completa", "error", e.message);
+      toast({ title: "Erro na importação completa", description: e.message, variant: "destructive" });
+    } finally {
+      setImportingAll(false);
     }
   };
 
@@ -306,6 +327,46 @@ const CobCloudTab = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Import All Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DatabaseBackup className="w-5 h-5" />
+            Importar Carteira Completa
+          </CardTitle>
+          <CardDescription>
+            Importa automaticamente todos os títulos do CobCloud, percorrendo todas as páginas da API (até 10.000 registros por execução).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {importingAll && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Importando... isso pode levar alguns minutos
+              </div>
+              <Progress value={undefined} className="h-2" />
+            </div>
+          )}
+          {importAllResult && !importingAll && (
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
+              <p className="flex items-center gap-2 font-medium text-card-foreground">
+                <CheckCircle2 className="w-4 h-4 text-success" />
+                Importação finalizada
+              </p>
+              <p className="text-muted-foreground">{importAllResult.imported} títulos importados de {importAllResult.total} encontrados em {importAllResult.pages} página(s)</p>
+            </div>
+          )}
+          <Button onClick={handleImportAll} disabled={importingAll || !hasCredentials} className="w-full" variant="default">
+            {importingAll ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <DatabaseBackup className="w-4 h-4 mr-2" />}
+            {importingAll ? "Importando..." : "Importar Carteira Completa"}
+          </Button>
+          {!hasCredentials && (
+            <p className="text-xs text-muted-foreground">Salve as credenciais acima para importar</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -161,6 +161,29 @@ function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
   return "pendente";
 }
 
+// --- Helpers for batch processing ---
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  maxRetries = 3
+): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const res = await fetch(url, { method: "GET", headers });
+    if (res.status === 429) {
+      console.warn(`Rate limited (429), retry ${attempt + 1}/${maxRetries}`);
+      await delay(2000 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Rate limit excedido após múltiplas tentativas");
+}
+
 // --- Route handlers ---
 
 async function handleStatus(creds: CobCloudCredentials) {
@@ -335,7 +358,95 @@ async function handleBaixarTitulo(body: any, creds: CobCloudCredentials) {
   return json({ status: res.status, data });
 }
 
+async function handleImportAll(body: any, creds: CobCloudCredentials) {
+  const headers = buildCobCloudHeaders(creds);
+  const admin = getSupabaseAdmin();
+
+  const MAX_PAGES = 50;
+  const PAGE_SIZE = 200;
+  const DELAY_MS = 500;
+
+  const cpfFilter = body.cpf ? String(body.cpf).slice(0, 20) : undefined;
+  const statusFilter = body.status ? String(body.status).slice(0, 30) : undefined;
+
+  let page = 1;
+  let totalImported = 0;
+  let totalSkipped = 0;
+  let totalRecords = 0;
+
+  while (page <= MAX_PAGES) {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    if (cpfFilter) params.set("cpf", cpfFilter);
+    if (statusFilter) params.set("status", statusFilter);
+
+    let res: Response;
+    try {
+      res = await fetchWithRetry(`${COBCLOUD_BASE}/cli/titulos/listar?${params}`, headers);
+    } catch (e) {
+      console.error(`Page ${page} fetch failed:`, e.message);
+      break;
+    }
+
+    if (!res.ok) {
+      console.error(`CobCloud returned ${res.status} on page ${page}`);
+      break;
+    }
+
+    const data = await res.json();
+    const titulos = data.data || data.titulos || data || [];
+
+    if (!Array.isArray(titulos) || titulos.length === 0) break;
+
+    for (const t of titulos) {
+      const rawCpf = cleanCpf(t.cpf || t.documento || t.cpf_cnpj || "");
+      if (!rawCpf) { totalSkipped++; continue; }
+
+      const rawRecord = {
+        nome_completo: sanitizeString(String(t.nome || t.devedor_nome || t.nome_completo || "Sem nome"), 200),
+        cpf: rawCpf,
+        credor: sanitizeString(String(t.credor || t.empresa || "COBCLOUD"), 100),
+        numero_parcela: Math.max(1, Math.min(9999, Math.round(safeNumber(t.parcela || t.numero_parcela, 1)))),
+        valor_parcela: Math.max(0, Math.min(99999999.99, safeNumber(t.valor || t.valor_titulo || t.valor_parcela))),
+        valor_pago: Math.max(0, Math.min(99999999.99, safeNumber(t.valor_pago))),
+        data_vencimento: String(t.vencimento || t.data_vencimento || new Date().toISOString().split("T")[0]).slice(0, 10),
+        status: mapStatus(t.status || t.situacao),
+      };
+
+      const validation = importedRecordSchema.safeParse(rawRecord);
+      if (!validation.success) { totalSkipped++; continue; }
+
+      const rec = validation.data;
+      const { data: existing } = await admin
+        .from("clients")
+        .select("id")
+        .eq("cpf", rec.cpf)
+        .eq("numero_parcela", rec.numero_parcela)
+        .eq("tenant_id", creds.tenantId)
+        .maybeSingle();
+
+      if (existing) {
+        await admin.from("clients").update(rec).eq("id", existing.id);
+      } else {
+        await admin.from("clients").insert({ ...rec, tenant_id: creds.tenantId });
+      }
+      totalImported++;
+    }
+
+    totalRecords += titulos.length;
+    console.log(`Page ${page}: ${titulos.length} records, total imported so far: ${totalImported}`);
+
+    if (titulos.length < PAGE_SIZE) break;
+    page++;
+    await delay(DELAY_MS);
+  }
+
+  return json({ imported: totalImported, skipped: totalSkipped, pages: page, total: totalRecords });
+}
+
 // --- Main handler ---
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -357,6 +468,8 @@ Deno.serve(async (req) => {
         return await handleStatus(creds);
       case "import-titulos":
         return await handleImportTitulos(body, creds);
+      case "import-all":
+        return await handleImportAll(body, creds);
       case "export-devedores":
         return await handleExportDevedores(body, creds);
       case "baixar-titulo":
