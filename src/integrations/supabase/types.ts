@@ -1473,6 +1473,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_user_tenant_data: {
+        Args: never
+        Returns: {
+          tu_created_at: string
+          tu_id: string
+          tu_role: Database["public"]["Enums"]["tenant_role"]
+          tu_tenant_id: string
+          tu_user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

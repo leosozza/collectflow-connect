@@ -77,17 +77,23 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       
-      // Fetch tenant_user for current user
-      const { data: tuData, error: tuError } = await supabase
-        .from("tenant_users")
-        .select("*")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+      // Use SECURITY DEFINER RPC to bypass restrictive RLS policies
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc("get_user_tenant_data");
 
-      if (tuError) {
-        console.error("Error fetching tenant_users:", tuError);
+      if (rpcError) {
+        console.error("Error fetching tenant data via RPC:", rpcError);
       }
+
+      const tuData = rpcData && rpcData.length > 0
+        ? {
+            id: rpcData[0].tu_id,
+            tenant_id: rpcData[0].tu_tenant_id,
+            user_id: rpcData[0].tu_user_id,
+            role: rpcData[0].tu_role,
+            created_at: rpcData[0].tu_created_at,
+          }
+        : null;
 
       if (!tuData) {
         setTenantUser(null);
