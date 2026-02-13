@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { updateTenant } from "@/services/tenantService";
+import { supabase } from "@/integrations/supabase/client";
 import {
   fetchWhatsAppInstances,
   createWhatsAppInstance,
@@ -58,6 +59,25 @@ const BaylersInstancesList = () => {
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ["whatsapp-instances", tenant?.id],
     queryFn: () => fetchWhatsAppInstances(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  // Count active conversations per instance
+  const { data: conversationCounts = {} } = useQuery({
+    queryKey: ["conversation-counts-by-instance", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("instance_id")
+        .eq("tenant_id", tenant!.id)
+        .eq("status", "open");
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      (data || []).forEach((c) => {
+        counts[c.instance_id] = (counts[c.instance_id] || 0) + 1;
+      });
+      return counts;
+    },
     enabled: !!tenant?.id,
   });
 
@@ -272,6 +292,11 @@ const BaylersInstancesList = () => {
                         </Badge>
                       )}
                       {getStatusBadge(inst.id)}
+                      {(conversationCounts[inst.id] || 0) > 0 && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          💬 {conversationCounts[inst.id]} ativa{conversationCounts[inst.id] > 1 ? "s" : ""}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
                       {inst.phone_number
