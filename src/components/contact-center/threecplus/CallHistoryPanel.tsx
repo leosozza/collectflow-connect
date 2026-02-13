@@ -126,12 +126,12 @@ const CallHistoryPanel = () => {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Campanha</Label>
-              <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+              <Select value={campaignFilter || "all"} onValueChange={(v) => setCampaignFilter(v === "all" ? "" : v)}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="all">Todas</SelectItem>
                   {campaigns.map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                   ))}
