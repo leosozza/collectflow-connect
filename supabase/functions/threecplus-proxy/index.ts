@@ -517,6 +517,17 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Check if response is JSON before parsing
+    const respContentType = response.headers.get('content-type') || '';
+    if (!respContentType.includes('application/json')) {
+      const textBody = await response.text();
+      console.error(`3CPlus returned non-JSON (${respContentType}): ${textBody.substring(0, 200)}`);
+      return new Response(
+        JSON.stringify({ status: response.status, detail: `API returned non-JSON response (status ${response.status}). The endpoint may be unavailable.` }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
 
