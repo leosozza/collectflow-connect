@@ -162,8 +162,85 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "sendMessage": {
+        const { instanceName, phone, message, mediaUrl, mediaType } = body;
+        if (!instanceName || !phone) {
+          return new Response(JSON.stringify({ error: "instanceName e phone são obrigatórios" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const payload: any = {
+          number: phone.includes("@") ? phone : `${phone}@s.whatsapp.net`,
+        };
+
+        let endpoint = "sendText";
+        if (mediaUrl && mediaType) {
+          endpoint = "sendMedia";
+          payload.mediatype = mediaType;
+          payload.media = mediaUrl;
+          payload.caption = message || "";
+        } else {
+          payload.text = message || "";
+        }
+
+        const resp = await fetch(`${baseUrl}/message/${endpoint}/${encodeURIComponent(instanceName)}`, {
+          method: "POST",
+          headers: {
+            apikey: evolutionKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        result = await resp.json();
+
+        if (!resp.ok) {
+          return new Response(JSON.stringify({ error: result?.message || "Erro ao enviar mensagem", details: result }), {
+            status: resp.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        break;
+      }
+
+      case "setWebhook": {
+        const { instanceName, webhookUrl } = body;
+        if (!instanceName || !webhookUrl) {
+          return new Response(JSON.stringify({ error: "instanceName e webhookUrl são obrigatórios" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const resp = await fetch(`${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`, {
+          method: "POST",
+          headers: {
+            apikey: evolutionKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: webhookUrl,
+            webhook_by_events: false,
+            webhook_base64: false,
+            events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE"],
+          }),
+        });
+
+        result = await resp.json().catch(() => ({ success: true }));
+
+        if (!resp.ok) {
+          return new Response(JSON.stringify({ error: result?.message || "Erro ao configurar webhook", details: result }), {
+            status: resp.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        break;
+      }
+
       default:
-        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, status, delete" }), {
+        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, status, delete, sendMessage, setWebhook" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
