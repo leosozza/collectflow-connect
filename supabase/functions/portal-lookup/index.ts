@@ -11,21 +11,40 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { cpf, tenant_slug, action, notes } = await req.json();
-
-    if (!cpf || typeof cpf !== "string" || cpf.replace(/\D/g, "").length !== 11) {
-      return new Response(JSON.stringify({ error: "CPF inválido" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const cleanCpf = cpf.replace(/\D/g, "");
+    const body = await req.json();
+    const { cpf, tenant_slug, action, notes, credor, original_total, proposed_total, new_installments, new_installment_value } = body;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Action: tenant-info - return tenant public data
+    if (action === "tenant-info") {
+      if (!tenant_slug) {
+        return new Response(JSON.stringify({ error: "Slug obrigatório" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("name, slug, logo_url, primary_color, settings")
+        .eq("slug", tenant_slug)
+        .single();
+
+      return new Response(JSON.stringify({ tenant: tenant || null }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // All other actions need CPF
+    if (!cpf || typeof cpf !== "string" || cpf.replace(/\D/g, "").length !== 11) {
+      return new Response(JSON.stringify({ error: "CPF inválido" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const cleanCpf = cpf.replace(/\D/g, "");
 
     // Find tenant by slug
     let tenantId: string | null = null;
@@ -38,16 +57,62 @@ Deno.serve(async (req) => {
       tenantId = tenantData?.id || null;
     }
 
-    if (action === "request_agreement") {
-      // Create agreement request from portal
+    // Action: create-portal-agreement
+    if (action === "create-portal-agreement") {
       if (!tenantId) {
         return new Response(JSON.stringify({ error: "Empresa não encontrada" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Get pending debts to calculate totals
+      // Get client name from debts
+      const { data: clientDebts } = await supabase
+        .from("clients")
+        .select("nome_completo")
+        .eq("cpf", cleanCpf)
+        .eq("tenant_id", tenantId)
+        .limit(1);
+
+      const clientName = clientDebts?.[0]?.nome_completo || "Cliente";
+      const checkoutToken = crypto.randomUUID();
+
+      const discountPercent = original_total > 0
+        ? Math.round((1 - proposed_total / original_total) * 100)
+        : 0;
+
+      const { data: agreement, error: insertError } = await supabase.from("agreements").insert({
+        tenant_id: tenantId,
+        client_cpf: cleanCpf,
+        client_name: clientName,
+        credor: credor || "N/A",
+        original_total: original_total || 0,
+        proposed_total: proposed_total || 0,
+        new_installments: new_installments || 1,
+        new_installment_value: new_installment_value || proposed_total || 0,
+        first_due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+        discount_percent: discountPercent > 0 ? discountPercent : null,
+        status: "pending",
+        portal_origin: true,
+        checkout_token: checkoutToken,
+        created_by: "00000000-0000-0000-0000-000000000000",
+        notes: notes || "[Solicitação via Portal]",
+      }).select().single();
+
+      if (insertError) throw insertError;
+
+      return new Response(JSON.stringify({ success: true, checkout_token: checkoutToken }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Action: request_agreement (legacy)
+    if (action === "request_agreement") {
+      if (!tenantId) {
+        return new Response(JSON.stringify({ error: "Empresa não encontrada" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { data: debts } = await supabase
         .from("clients")
         .select("nome_completo, credor, valor_parcela")
@@ -57,26 +122,27 @@ Deno.serve(async (req) => {
 
       if (!debts || debts.length === 0) {
         return new Response(JSON.stringify({ error: "Nenhuma pendência encontrada" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const totalOriginal = debts.reduce((s, d) => s + Number(d.valor_parcela), 0);
       const clientName = debts[0].nome_completo;
-      const credor = debts[0].credor;
+      const credorName = debts[0].credor;
 
       const { error: insertError } = await supabase.from("agreements").insert({
         tenant_id: tenantId,
         client_cpf: cleanCpf,
         client_name: clientName,
-        credor: credor,
+        credor: credorName,
         original_total: totalOriginal,
         proposed_total: totalOriginal,
         new_installments: 1,
         new_installment_value: totalOriginal,
         first_due_date: new Date().toISOString().split("T")[0],
         status: "pending",
+        portal_origin: true,
+        checkout_token: crypto.randomUUID(),
         created_by: "00000000-0000-0000-0000-000000000000",
         notes: `[Solicitação via Portal] ${notes || ""}`.trim(),
       });
@@ -107,8 +173,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

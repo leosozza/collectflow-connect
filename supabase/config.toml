@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.chat-ai-suggest]
 verify_jwt = false
+
+[functions.portal-checkout]
+verify_jwt = false
