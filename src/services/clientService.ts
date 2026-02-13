@@ -11,6 +11,7 @@ export interface Client {
   cpf: string;
   phone: string | null;
   email: string | null;
+  external_id: string | null;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
@@ -30,6 +31,7 @@ export interface ClientFormData {
   cpf: string;
   phone?: string;
   email?: string;
+  external_id?: string;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
@@ -85,6 +87,7 @@ export const createClient = async (
       cpf: validated.cpf,
       phone: data.phone || null,
       email: data.email || null,
+      external_id: data.external_id || null,
       numero_parcela: validated.numero_parcela + i,
       total_parcelas: totalParcelas,
       valor_entrada: isFirst ? valorEntrada : 0,
@@ -168,6 +171,7 @@ export const bulkCreateClients = async (
     credor: string;
     nome_completo: string;
     cpf: string;
+    external_id?: string;
     numero_parcela: number;
     valor_entrada: number;
     valor_parcela: number;
