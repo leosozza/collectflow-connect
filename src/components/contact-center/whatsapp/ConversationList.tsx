@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, MessageCircle, User } from "lucide-react";
+import { Search, MessageCircle, User, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Conversation } from "@/services/conversationService";
 import { formatDistanceToNow } from "date-fns";
@@ -121,6 +121,9 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
                       {conv.remote_phone}
                     </span>
                     <div className="flex items-center gap-1">
+                      {(conv as any).sla_deadline_at && new Date((conv as any).sla_deadline_at) < new Date() && (
+                        <AlertTriangle className="w-3 h-3 text-destructive" />
+                      )}
                       <span className={`w-2 h-2 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
                       {conv.unread_count > 0 && (
                         <Badge variant="default" className="h-5 min-w-5 text-[10px] px-1.5 rounded-full">

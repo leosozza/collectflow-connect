@@ -6,9 +6,12 @@ import { toast } from "sonner";
 import {
   Conversation,
   ChatMessage,
+  QuickReply,
   fetchConversations,
   fetchMessages,
+  fetchQuickReplies,
   sendTextMessage,
+  sendInternalNote,
   updateConversationStatus,
   markConversationRead,
 } from "@/services/conversationService";
@@ -27,13 +30,15 @@ const WhatsAppChatLayout = () => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load instances
+  // Load instances + quick replies
   useEffect(() => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
+    fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
   }, [tenantId]);
 
   // Load conversations
@@ -141,6 +146,18 @@ const WhatsAppChatLayout = () => {
     }
   };
 
+  const handleSendInternalNote = async (text: string) => {
+    if (!selectedConv || !tenantId) return;
+    setSending(true);
+    try {
+      await sendInternalNote(selectedConv.id, tenantId, text);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar nota");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleSendMedia = async (file: File) => {
     if (!selectedConv || !tenantId) return;
     const instance = getInstanceForConv();
@@ -150,7 +167,6 @@ const WhatsAppChatLayout = () => {
     }
     setSending(true);
     try {
-      // Upload to storage
       const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-media")
@@ -160,13 +176,11 @@ const WhatsAppChatLayout = () => {
       const { data: urlData } = supabase.storage.from("chat-media").getPublicUrl(filePath);
       const mediaUrl = urlData.publicUrl;
 
-      // Determine media type
       let mediaType = "document";
       if (file.type.startsWith("image/")) mediaType = "image";
       else if (file.type.startsWith("video/")) mediaType = "video";
       else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-      // Send via evolution proxy
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("Não autenticado");
@@ -187,7 +201,6 @@ const WhatsAppChatLayout = () => {
       const result = await resp.json();
       if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mídia");
 
-      // Insert local message
       await supabase.from("chat_messages" as any).insert({
         conversation_id: conv.id,
         tenant_id: tenantId,
@@ -256,12 +269,15 @@ const WhatsAppChatLayout = () => {
           onSend={handleSend}
           onSendMedia={handleSendMedia}
           onSendAudio={handleSendAudio}
+          onSendInternalNote={handleSendInternalNote}
           sending={sending}
           onStatusChange={handleStatusChange}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           instanceName={selectedInstanceName}
           clientInfo={null}
+          quickReplies={quickReplies}
+          slaDeadline={(selectedConv as any)?.sla_deadline_at}
         />
         {sidebarOpen && (
           <ContactSidebar

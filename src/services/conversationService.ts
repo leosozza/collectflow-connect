@@ -26,7 +26,50 @@ export interface ChatMessage {
   media_mime_type: string | null;
   status: "pending" | "sent" | "delivered" | "read" | "failed";
   external_id: string | null;
+  is_internal: boolean;
   created_at: string;
+}
+
+export interface QuickReply {
+  id: string;
+  tenant_id: string;
+  shortcut: string;
+  content: string;
+  category: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchQuickReplies(tenantId: string): Promise<QuickReply[]> {
+  const { data, error } = await supabase
+    .from("quick_replies" as any)
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("shortcut");
+  if (error) throw error;
+  return (data || []) as unknown as QuickReply[];
+}
+
+export async function sendInternalNote(
+  conversationId: string,
+  tenantId: string,
+  content: string
+): Promise<ChatMessage> {
+  const { data, error } = await supabase
+    .from("chat_messages" as any)
+    .insert({
+      conversation_id: conversationId,
+      tenant_id: tenantId,
+      direction: "outbound",
+      message_type: "text",
+      content,
+      status: "delivered",
+      is_internal: true,
+    } as any)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as unknown as ChatMessage;
 }
 
 export async function fetchConversations(tenantId: string): Promise<Conversation[]> {
