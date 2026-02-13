@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, domain, api_token, campaign_id, list_id, mailings, campaign_name } = await req.json();
+    const { action, domain, api_token, campaign_id, list_id, mailings, campaign_name, start_time, end_time, qualification_list_id } = await req.json();
 
     if (!domain || !api_token) {
       return new Response(
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
         });
         break;
 
-      case 'create_campaign':
+      case 'create_campaign': {
         if (!campaign_name) {
           return new Response(
             JSON.stringify({ status: 400, detail: 'campaign_name is required' }),
@@ -79,8 +79,15 @@ Deno.serve(async (req) => {
         }
         url = `${baseUrl}/campaigns?${authParam}`;
         method = 'POST';
-        body = JSON.stringify({ name: campaign_name });
+        const campaignBody: Record<string, any> = {
+          name: campaign_name,
+          start_time: start_time || '08:00',
+          end_time: end_time || '18:30',
+        };
+        if (qualification_list_id) campaignBody.qualification_list_id = qualification_list_id;
+        body = JSON.stringify(campaignBody);
         break;
+      }
 
       default:
         return new Response(
