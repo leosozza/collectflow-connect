@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { updateTenant } from "@/services/tenantService";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, MousePointerClick, Camera, PenTool, RotateCcw, CheckCircle2, Smartphone } from "lucide-react";
+import { Shield, MousePointerClick, Camera, PenTool, RotateCcw, CheckCircle2, Smartphone, RotateCw } from "lucide-react";
 import SignatureClick from "@/components/portal/signatures/SignatureClick";
 import SignatureFacial from "@/components/portal/signatures/SignatureFacial";
 import SignatureDraw from "@/components/portal/signatures/SignatureDraw";
@@ -312,11 +312,53 @@ const PlaygroundAssinatura = ({
   onConfirm: () => void;
   fullscreen?: boolean;
 }) => {
-  if (fullscreen && (type === "facial" || type === "draw")) {
-    if (type === "facial") {
-      return <SignatureFacial primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
+  const [showRotateAnim, setShowRotateAnim] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (fullscreen && type === "draw") {
+      setShowRotateAnim(true);
+      setReady(false);
+      const timer = setTimeout(() => {
+        setShowRotateAnim(false);
+        setReady(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowRotateAnim(false);
+      setReady(true);
     }
-    return <SignatureDraw primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
+  }, [fullscreen, type]);
+
+  if (fullscreen && type === "draw") {
+    if (showRotateAnim) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-foreground/95 gap-4">
+          <div className="relative">
+            <Smartphone
+              className="w-12 h-12 text-background/80 transition-transform duration-700 ease-in-out"
+              style={{ transform: "rotate(0deg)", animation: "rotate-phone 1.2s ease-in-out forwards" }}
+            />
+          </div>
+          <p className="text-background/70 text-sm font-medium animate-pulse">Girando para paisagem...</p>
+          <style>{`
+            @keyframes rotate-phone {
+              0% { transform: rotate(0deg); opacity: 0.5; }
+              50% { transform: rotate(-45deg); opacity: 1; }
+              100% { transform: rotate(-90deg); opacity: 0.7; }
+            }
+          `}</style>
+        </div>
+      );
+    }
+    if (ready) {
+      return <SignatureDraw primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
+    }
+    return null;
+  }
+
+  if (fullscreen && type === "facial") {
+    return <SignatureFacial primaryColor={primaryColor} onConfirm={onConfirm} fullscreen />;
   }
 
   return (
