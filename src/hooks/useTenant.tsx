@@ -77,31 +77,40 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       
-      // Use SECURITY DEFINER RPC to bypass restrictive RLS policies
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc("get_user_tenant_data");
+      // Use SECURITY DEFINER RPC to get tenant_id (bypasses restrictive RLS)
+      const { data: tenantId, error: rpcError } = await supabase
+        .rpc("get_my_tenant_id");
+
+      console.log("[useTenant] get_my_tenant_id result:", tenantId, "error:", rpcError);
 
       if (rpcError) {
-        console.error("Error fetching tenant data via RPC:", rpcError);
+        console.error("Error fetching tenant_id via RPC:", rpcError);
       }
 
-      const tuData = rpcData && rpcData.length > 0
-        ? {
-            id: rpcData[0].tu_id,
-            tenant_id: rpcData[0].tu_tenant_id,
-            user_id: rpcData[0].tu_user_id,
-            role: rpcData[0].tu_role,
-            created_at: rpcData[0].tu_created_at,
-          }
-        : null;
-
-      if (!tuData) {
+      if (!tenantId) {
+        console.log("[useTenant] No tenant found, redirecting to onboarding");
         setTenantUser(null);
         setTenant(null);
         setPlan(null);
         setLoading(false);
         return;
       }
+
+      // We have a tenant_id, determine role via SECURITY DEFINER functions
+      const [{ data: isSA }, { data: isTA }] = await Promise.all([
+        supabase.rpc("is_super_admin", { _user_id: user.id }),
+        supabase.rpc("is_tenant_admin", { _user_id: user.id, _tenant_id: tenantId }),
+      ]);
+
+      const userRole = isSA ? "super_admin" as const : isTA ? "admin" as const : "operador" as const;
+
+      const tuData = {
+        id: tenantId,
+        tenant_id: tenantId,
+        user_id: user.id,
+        role: userRole,
+        created_at: new Date().toISOString(),
+      };
 
       setTenantUser(tuData as TenantUser);
 
