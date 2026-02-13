@@ -200,27 +200,23 @@ const TelefoniaDashboard = () => {
       </div>
 
       {/* Agent Status */}
-      <Card className="shadow-none border-border/60">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Status dos Agentes</CardTitle>
-              <CardDescription className="text-xs">Monitoramento em tempo real das atividades dos agentes</CardDescription>
-            </div>
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-base font-semibold">Agentes de Relacionamento ({agents.length})</h3>
+            <p className="text-xs text-muted-foreground">Clique em um agente para detalhes</p>
           </div>
-        </CardHeader>
-        <CardContent>
-          <AgentStatusTable
-            agents={agents}
-            loading={loading}
-            onLogout={handleLogout}
-            loggingOut={loggingOut}
-            domain={domain}
-            apiToken={apiToken}
-            onAgentClick={(agent) => setSelectedAgent(agent)}
-          />
-        </CardContent>
-      </Card>
+        </div>
+        <AgentStatusTable
+          agents={agents}
+          loading={loading}
+          onLogout={handleLogout}
+          loggingOut={loggingOut}
+          domain={domain}
+          apiToken={apiToken}
+          onAgentClick={(agent) => setSelectedAgent(agent)}
+        />
+      </div>
 
       <AgentDetailSheet
         agent={selectedAgent}
