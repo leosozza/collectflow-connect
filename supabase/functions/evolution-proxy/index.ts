@@ -223,6 +223,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             webhook: {
               url: webhookUrl,
+              enabled: true,
               webhook_by_events: false,
               webhook_base64: false,
               events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE"],
