@@ -1,39 +1,114 @@
 
-# Reestruturar Contact Center e Integracao
+# Dashboard Completo de Telefonia 3CPlus
 
-## Conceito
+## Objetivo
+Transformar a pagina de Telefonia (`/contact-center/telefonia`) para que a primeira visualizacao seja um **Dashboard em tempo real** com todos os dados operacionais do discador 3CPlus, eliminando a necessidade de acessar a plataforma do discador separadamente.
 
-Separar **configuracao** de **operacao**:
+## Estrutura das Abas
 
-- `/integracao` -- aba "Telefonia" com sub-aba "3CPlus" para salvar credenciais (dominio + token) e testar conexao
-- `/contact-center` -- tela operacional com opcao de canal (Telefonia ou WhatsApp), onde Telefonia mostra Campanhas, Enviar Mailing e Historico do discador integrado
+A pagina de Telefonia tera as seguintes abas (a aba Dashboard sera a default):
 
-## Alteracoes
+1. **Dashboard** (nova - pagina inicial)
+2. **Campanhas** (existente)
+3. **Enviar Mailing** (existente)
+4. **Historico** (existente)
 
-### 1. Pagina `/integracao` -- restaurar aba 3CPlus
+---
 
-- Adicionar de volta a aba "Telefonia" no TabsList (ao lado de CobCloud e Negociarie)
-- Dentro da aba Telefonia, mostrar o componente `ThreeCPlusTab` existente (que ja tem o formulario de credenciais com dominio, token, salvar e testar conexao)
-- O componente `src/components/integracao/ThreeCPlusTab.tsx` ja existe e esta pronto, basta importar e adicionar na pagina
+## Dashboard - Secoes e Dados
 
-### 2. Pagina `/contact-center` -- remover aba de configuracao
+### 1. Cards de KPI (topo)
+Metricas principais em cards visuais:
+- **Agentes Online** - quantidade de agentes logados
+- **Agentes em Ligacao** - agentes com chamada ativa
+- **Agentes em Pausa** - agentes em work break
+- **Agentes Ociosos** - agentes idle/disponiveis
+- **Chamadas Ativas** - total de chamadas em andamento
+- **Chamadas Completadas (hoje)** - total de chamadas conectadas
 
-- Remover a sub-aba "Configuracao" do `ThreeCPlusPanel.tsx` (ficam apenas: Campanhas, Enviar Mailing, Historico)
-- Quando as credenciais nao estiverem configuradas, exibir mensagem orientando o admin a ir em Integracoes para configurar
-- Os paineis de Campanhas e Mailing ja leem as credenciais de `tenant.settings`, entao continuam funcionando normalmente
+### 2. Tabela de Status dos Agentes
+Lista em tempo real de todos os agentes com:
+- Nome do agente
+- Status atual (online, em ligacao, pausa, ACW, manual)
+- Campanha logada
+- Tempo no status atual
+- Acoes: deslogar agente, alterar pausa
 
-### 3. Remover `ConfigPanel.tsx` do contact-center
+### 3. Campanhas Ativas - Resumo
+Para cada campanha ativa:
+- Nome e status
+- Agentes logados naquela campanha
+- Chamadas ativas
+- Estatisticas (chamadas completadas, abandonadas, nao atendidas)
 
-- O arquivo `src/components/contact-center/threecplus/ConfigPanel.tsx` deixa de ser usado no Contact Center (pode ser removido, pois o `ThreeCPlusTab` em integracao ja cumpre essa funcao)
+### 4. Configuracoes do Discador (por campanha)
+- **Agressividade** - visualizacao e controle via PATCH da campanha
+- Horario de funcionamento (start_time / end_time)
+- Status da campanha (pausar/retomar)
+
+### 5. Botao de Auto-Refresh
+- Atualizacao automatica a cada 30 segundos (configuravel)
+- Botao manual de refresh
+
+---
 
 ## Detalhes Tecnicos
 
-### Arquivos modificados
-- `src/pages/IntegracaoPage.tsx` -- adicionar aba "Telefonia" importando `ThreeCPlusTab`
-- `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` -- remover tab "config" e import do ConfigPanel; adicionar aviso quando credenciais nao existirem
+### Edge Function (`threecplus-proxy`)
+Adicionar novos actions ao proxy existente:
 
-### Arquivos removidos
-- `src/components/contact-center/threecplus/ConfigPanel.tsx` -- nao mais necessario
+```text
+Novos endpoints a proxiar:
+- GET /agents/online          -> action: "agents_online"
+- GET /agents/status          -> action: "agents_status"  
+- GET /company/calls          -> action: "company_calls"
+- GET /campaigns/{id}/calls   -> action: "campaign_calls"
+- GET /campaigns/{id}/agents/status -> action: "campaign_agents_status"
+- GET /campaigns/{id}/statistics    -> action: "campaign_statistics"
+- PATCH /campaigns/{id}       -> action: "update_campaign" (agressividade etc)
+- PUT /campaigns/{id}/pause   -> action: "pause_campaign"
+- PUT /campaigns/{id}/resume  -> action: "resume_campaign"
+- POST /agents/{id}/logout    -> action: "logout_agent"
+```
 
-### Nenhum arquivo novo necessario
-Todos os componentes ja existem, so precisam ser reorganizados.
+### Novos Componentes Frontend
+
+1. **`TelefoniaDashboard.tsx`** - componente principal do dashboard
+   - Gerencia o polling/refresh dos dados
+   - Organiza os sub-componentes
+
+2. **`AgentStatusTable.tsx`** - tabela de agentes com status em tempo real
+   - Badges coloridos por status (verde=idle, amarelo=pausa, vermelho=ligacao, azul=ACW)
+   - Acoes inline (deslogar, mudar pausa)
+
+3. **`CampaignOverview.tsx`** - cards resumo por campanha
+   - Estatisticas da campanha
+   - Controles de pausar/retomar
+   - Slider ou input para agressividade
+
+4. **`DialerControls.tsx`** - painel de controles do discador
+   - Agressividade (configuravel por campanha)
+   - Horarios de operacao
+   - Pause/Resume da campanha
+
+### Modificacoes em Arquivos Existentes
+
+- **`ThreeCPlusPanel.tsx`** - adicionar aba "Dashboard" como default
+- **`supabase/functions/threecplus-proxy/index.ts`** - adicionar os novos cases no switch
+
+### Fluxo de Dados
+
+```text
+Frontend (polling 30s)
+  -> supabase.functions.invoke("threecplus-proxy", { action: "agents_status" })
+  -> Edge Function faz GET /agents/status na API 3CPlus
+  -> Retorna JSON com status de todos agentes
+  -> Frontend renderiza tabela + KPIs
+```
+
+### UX
+- Indicador visual de "ultima atualizacao" com timestamp
+- Toggle para ativar/desativar auto-refresh
+- Intervalo configuravel (15s, 30s, 60s)
+- Loading skeleton enquanto carrega dados iniciais
+- Badge de conexao (online/offline) no topo
