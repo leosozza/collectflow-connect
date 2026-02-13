@@ -40,6 +40,7 @@ const TeamsPanel = () => {
     setLoading(true);
     try {
       const data = await invoke("list_teams");
+      if (data?.status === 404) { setTeams([]); return; }
       setTeams(Array.isArray(data) ? data : data?.data || []);
     } catch {
       toast.error("Erro ao carregar equipes");

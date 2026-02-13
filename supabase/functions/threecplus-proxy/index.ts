@@ -355,9 +355,14 @@ Deno.serve(async (req) => {
     const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
 
+    // Always return 200 from proxy, include upstream status in body
+    const body = typeof data === 'object' && data !== null
+      ? { ...data, status: response.status }
+      : { data, status: response.status };
+
     return new Response(
-      JSON.stringify(data),
-      { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(body),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('3CPlus proxy error:', error);
