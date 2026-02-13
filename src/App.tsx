@@ -18,6 +18,7 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
+import SignsPage from "./pages/SignsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
 import AcordosPage from "./pages/AcordosPage";
@@ -164,6 +165,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <AutomacaoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/signs"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <SignsPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

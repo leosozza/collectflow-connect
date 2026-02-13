@@ -14,8 +14,9 @@ import {
   UserCog,
   Wallet,
   Cloud,
-  ClipboardPlus,
-  Bot,
+    ClipboardPlus,
+    Bot,
+    PenTool,
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
@@ -70,6 +71,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const advancedNavItems = isAdmin ? [
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
     { label: "Automação", icon: Bot, path: "/automacao" },
+    { label: "Signs", icon: PenTool, path: "/signs" },
     { label: "Usuários", icon: UserCog, path: "/usuarios" },
     { label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" },
     { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
@@ -326,6 +328,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/cadastro": "Log de Importações",
                 "/tenant/configuracoes": "Empresa",
                 "/auditoria": "Auditoria",
+                "/signs": "Assinatura Digital",
                 "/admin/tenants": "Tenants",
               };
               const title = pageTitles[location.pathname];
