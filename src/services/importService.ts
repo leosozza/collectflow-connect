@@ -5,6 +5,7 @@ export interface ImportedRow {
   credor: string;
   nome_completo: string;
   cpf: string;
+  external_id?: string;
   numero_parcela: number;
   valor_entrada: number;
   valor_parcela: number;
@@ -118,6 +119,7 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       credor: String(getCell(0) || "MAXFAMA").trim(),
       nome_completo: nome,
       cpf: formatCPFDisplay(cleanCPF(getCell(2))),
+      external_id: String(getCell(9) || "").trim() || undefined,
       numero_parcela: parseInt(String(getCell(3) || "1"), 10) || 1,
       valor_entrada: valorEntrada || valorParcela,
       valor_parcela: valorParcela,

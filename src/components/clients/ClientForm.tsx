@@ -47,6 +47,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   );
   const [phone, setPhone] = useState(defaultValues?.phone || "");
   const [email, setEmail] = useState(defaultValues?.email || "");
+  const [externalId, setExternalId] = useState(defaultValues?.external_id || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +57,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       cpf: cpf.trim(),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
+      external_id: externalId.trim() || undefined,
       numero_parcela: parseInt(numeroParcela) || 1,
       total_parcelas: parseInt(totalParcelas) || 1,
       valor_entrada: parseFloat(valorEntrada) || 0,
@@ -118,6 +120,16 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
             onChange={(e) => setEmail(e.target.value)}
             placeholder="cliente@email.com"
             maxLength={255}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>ID Externo</Label>
+          <Input
+            value={externalId}
+            onChange={(e) => setExternalId(e.target.value)}
+            placeholder="Contrato, ID CRM, etc."
+            maxLength={100}
           />
         </div>
 
