@@ -1,10 +1,11 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { List, Send, History, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, List, Send, History, AlertTriangle } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { Card, CardContent } from "@/components/ui/card";
 import CampaignsPanel from "./CampaignsPanel";
 import MailingPanel from "./MailingPanel";
 import HistoryPanel from "./HistoryPanel";
+import TelefoniaDashboard from "./TelefoniaDashboard";
 
 const ThreeCPlusPanel = () => {
   const { tenant } = useTenant();
@@ -29,8 +30,12 @@ const ThreeCPlusPanel = () => {
 
   return (
     <div className="mt-4">
-      <Tabs defaultValue="campaigns">
+      <Tabs defaultValue="dashboard">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="dashboard" className="gap-2">
+            <LayoutDashboard className="w-4 h-4" />
+            Dashboard
+          </TabsTrigger>
           <TabsTrigger value="campaigns" className="gap-2">
             <List className="w-4 h-4" />
             Campanhas
@@ -44,6 +49,9 @@ const ThreeCPlusPanel = () => {
             Histórico
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="dashboard">
+          <TelefoniaDashboard />
+        </TabsContent>
         <TabsContent value="campaigns">
           <CampaignsPanel />
         </TabsContent>

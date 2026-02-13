@@ -9,7 +9,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, domain, api_token, campaign_id, list_id, mailings, campaign_name, start_time, end_time, qualification_list_id } = await req.json();
+    const body = await req.json();
+    const {
+      action, domain, api_token,
+      campaign_id, list_id, mailings,
+      campaign_name, start_time, end_time, qualification_list_id,
+      agent_id, campaign_data,
+    } = body;
 
     if (!domain || !api_token) {
       return new Response(
@@ -18,53 +24,46 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Strip protocol if user included it in domain
     const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '');
     const baseUrl = `https://${cleanDomain}/api/v1`;
     const authParam = `api_token=${api_token}`;
 
     let url = '';
     let method = 'GET';
-    let body: string | undefined;
+    let reqBody: string | undefined;
 
     switch (action) {
+      // ── Existing actions ──
       case 'list_campaigns':
         url = `${baseUrl}/campaigns?${authParam}`;
         break;
 
       case 'get_campaign_lists':
         if (!campaign_id) {
-          return new Response(
-            JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         url = `${baseUrl}/campaigns/${campaign_id}/lists?${authParam}`;
         break;
 
       case 'create_list':
         if (!campaign_id) {
-          return new Response(
-            JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         url = `${baseUrl}/campaigns/${campaign_id}/lists?${authParam}`;
         method = 'POST';
-        body = JSON.stringify({ name: `CollectFlow ${new Date().toLocaleDateString('pt-BR')}` });
+        reqBody = JSON.stringify({ name: `CollectFlow ${new Date().toLocaleDateString('pt-BR')}` });
         break;
 
       case 'send_mailing':
         if (!campaign_id || !list_id || !mailings) {
-          return new Response(
-            JSON.stringify({ status: 400, detail: 'campaign_id, list_id and mailings are required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id, list_id and mailings are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
-        // Use "create mailing by array" endpoint (accepts JSON with header + mailing)
         url = `${baseUrl}/campaigns/${campaign_id}/lists/${list_id}/mailing?${authParam}`;
         method = 'POST';
-        body = JSON.stringify({
+        reqBody = JSON.stringify({
           header: ['identifier', 'areacodephone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
           mailing: mailings,
         });
@@ -72,22 +71,96 @@ Deno.serve(async (req) => {
 
       case 'create_campaign': {
         if (!campaign_name) {
-          return new Response(
-            JSON.stringify({ status: 400, detail: 'campaign_name is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_name is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         url = `${baseUrl}/campaigns?${authParam}`;
         method = 'POST';
-        const campaignBody: Record<string, any> = {
+        reqBody = JSON.stringify({
           name: campaign_name,
           start_time: start_time || '08:00',
           end_time: end_time || '18:30',
           qualification_list: qualification_list_id || null,
-        };
-        body = JSON.stringify(campaignBody);
+        });
         break;
       }
+
+      // ── Dashboard: agents ──
+      case 'agents_online':
+        url = `${baseUrl}/agents/online?${authParam}`;
+        break;
+
+      case 'agents_status':
+        url = `${baseUrl}/agents/status?${authParam}`;
+        break;
+
+      case 'logout_agent':
+        if (!agent_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'agent_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/agents/${agent_id}/logout?${authParam}`;
+        method = 'POST';
+        break;
+
+      // ── Dashboard: calls ──
+      case 'company_calls':
+        url = `${baseUrl}/company/calls?${authParam}`;
+        break;
+
+      case 'campaign_calls':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}/calls?${authParam}`;
+        break;
+
+      // ── Dashboard: campaign details ──
+      case 'campaign_agents_status':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}/agents/status?${authParam}`;
+        break;
+
+      case 'campaign_statistics':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}/statistics?${authParam}`;
+        break;
+
+      // ── Dashboard: campaign controls ──
+      case 'update_campaign':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}?${authParam}`;
+        method = 'PATCH';
+        reqBody = JSON.stringify(campaign_data || {});
+        break;
+
+      case 'pause_campaign':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}/pause?${authParam}`;
+        method = 'PUT';
+        break;
+
+      case 'resume_campaign':
+        if (!campaign_id) {
+          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = `${baseUrl}/campaigns/${campaign_id}/resume?${authParam}`;
+        method = 'PUT';
+        break;
 
       default:
         return new Response(
@@ -102,8 +175,8 @@ Deno.serve(async (req) => {
       method,
       headers: { 'Content-Type': 'application/json' },
     };
-    if (body) {
-      fetchOptions.body = body;
+    if (reqBody) {
+      fetchOptions.body = reqBody;
     }
 
     const response = await fetch(url, fetchOptions);
