@@ -19,7 +19,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("Webhook received:", JSON.stringify(body).slice(0, 500));
 
-    // Evolution API sends different event types
     const event = body.event;
     const instanceName = body.instance;
 
@@ -29,7 +28,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Find the whatsapp_instance by instance_name
     const { data: instance } = await supabase
       .from("whatsapp_instances")
       .select("id, tenant_id")
@@ -45,6 +43,63 @@ Deno.serve(async (req) => {
 
     const tenantId = instance.tenant_id;
     const instanceId = instance.id;
+
+    // Helper: get SLA minutes from tenant settings
+    const getSlaMinutes = async (): Promise<number> => {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("settings")
+        .eq("id", tenantId)
+        .single();
+      const settings = tenant?.settings as any;
+      return settings?.sla_minutes || 30;
+    };
+
+    // Helper: round-robin assignment
+    const assignRoundRobin = async (): Promise<string | null> => {
+      // Get operators linked to this instance
+      const { data: operators } = await supabase
+        .from("operator_instances")
+        .select("profile_id")
+        .eq("instance_id", instanceId)
+        .eq("tenant_id", tenantId);
+
+      if (!operators || operators.length === 0) return null;
+
+      const profileIds = operators.map((o: any) => o.profile_id);
+
+      // Count open conversations per operator
+      const { data: convCounts } = await supabase
+        .from("conversations")
+        .select("assigned_to")
+        .eq("tenant_id", tenantId)
+        .eq("status", "open")
+        .in("assigned_to", profileIds);
+
+      const countMap: Record<string, number> = {};
+      for (const pid of profileIds) {
+        countMap[pid] = 0;
+      }
+      if (convCounts) {
+        for (const c of convCounts) {
+          if (c.assigned_to && countMap[c.assigned_to] !== undefined) {
+            countMap[c.assigned_to]++;
+          }
+        }
+      }
+
+      // Find operator with fewest open conversations
+      let minCount = Infinity;
+      let assignee: string | null = null;
+      for (const pid of profileIds) {
+        if (countMap[pid] < minCount) {
+          minCount = countMap[pid];
+          assignee = pid;
+        }
+      }
+
+      return assignee;
+    };
 
     // Handle message events
     if (event === "messages.upsert") {
@@ -62,7 +117,6 @@ Deno.serve(async (req) => {
       const externalId = msgData.key?.id || "";
       const pushName = msgData.pushName || "";
 
-      // Determine message type and content
       let messageType = "text";
       let content = "";
       let mediaUrl = "";
@@ -100,7 +154,7 @@ Deno.serve(async (req) => {
       // Find or create conversation
       const { data: existingConv } = await supabase
         .from("conversations")
-        .select("id, unread_count")
+        .select("id, unread_count, assigned_to")
         .eq("tenant_id", tenantId)
         .eq("instance_id", instanceId)
         .eq("remote_phone", remotePhone)
@@ -111,16 +165,32 @@ Deno.serve(async (req) => {
       if (existingConv) {
         conversationId = existingConv.id;
         const newUnread = direction === "inbound" ? (existingConv.unread_count || 0) + 1 : existingConv.unread_count;
+
+        // Set SLA deadline on inbound messages
+        const updateData: any = {
+          last_message_at: new Date().toISOString(),
+          unread_count: newUnread,
+          remote_name: pushName || undefined,
+        };
+
+        if (direction === "inbound") {
+          updateData.status = "open";
+          const slaMinutes = await getSlaMinutes();
+          updateData.sla_deadline_at = new Date(Date.now() + slaMinutes * 60 * 1000).toISOString();
+        } else {
+          // Outbound resets SLA
+          updateData.sla_deadline_at = null;
+        }
+
         await supabase
           .from("conversations")
-          .update({
-            last_message_at: new Date().toISOString(),
-            unread_count: newUnread,
-            remote_name: pushName || undefined,
-            status: direction === "inbound" ? "open" : undefined,
-          })
+          .update(updateData)
           .eq("id", conversationId);
       } else {
+        // Round-robin assignment for new conversations
+        const assignedTo = direction === "inbound" ? await assignRoundRobin() : null;
+        const slaMinutes = await getSlaMinutes();
+
         const { data: newConv, error: convErr } = await supabase
           .from("conversations")
           .insert({
@@ -131,6 +201,10 @@ Deno.serve(async (req) => {
             status: "open",
             unread_count: direction === "inbound" ? 1 : 0,
             last_message_at: new Date().toISOString(),
+            assigned_to: assignedTo,
+            sla_deadline_at: direction === "inbound"
+              ? new Date(Date.now() + slaMinutes * 60 * 1000).toISOString()
+              : null,
           })
           .select("id")
           .single();
@@ -142,7 +216,7 @@ Deno.serve(async (req) => {
         conversationId = newConv.id;
       }
 
-      // Check if message already exists (dedup by external_id)
+      // Dedup
       if (externalId) {
         const { data: existing } = await supabase
           .from("chat_messages")
@@ -157,7 +231,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Insert message
       const { error: msgErr } = await supabase.from("chat_messages").insert({
         conversation_id: conversationId,
         tenant_id: tenantId,
@@ -205,7 +278,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // For other events, just acknowledge
     return new Response(JSON.stringify({ ok: true, event }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

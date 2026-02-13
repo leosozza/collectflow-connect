@@ -182,6 +182,7 @@ export type Database = {
           direction: string
           external_id: string | null
           id: string
+          is_internal: boolean
           media_mime_type: string | null
           media_url: string | null
           message_type: string
@@ -195,6 +196,7 @@ export type Database = {
           direction: string
           external_id?: string | null
           id?: string
+          is_internal?: boolean
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
@@ -208,6 +210,7 @@ export type Database = {
           direction?: string
           external_id?: string | null
           id?: string
+          is_internal?: boolean
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
@@ -522,6 +525,7 @@ export type Database = {
           last_message_at: string | null
           remote_name: string
           remote_phone: string
+          sla_deadline_at: string | null
           status: string
           tenant_id: string
           unread_count: number
@@ -536,6 +540,7 @@ export type Database = {
           last_message_at?: string | null
           remote_name?: string
           remote_phone: string
+          sla_deadline_at?: string | null
           status?: string
           tenant_id: string
           unread_count?: number
@@ -550,6 +555,7 @@ export type Database = {
           last_message_at?: string | null
           remote_name?: string
           remote_phone?: string
+          sla_deadline_at?: string | null
           status?: string
           tenant_id?: string
           unread_count?: number
@@ -1017,6 +1023,44 @@ export type Database = {
           },
           {
             foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quick_replies: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          shortcut: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          content: string
+          created_at?: string
+          id?: string
+          shortcut: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          shortcut?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quick_replies_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

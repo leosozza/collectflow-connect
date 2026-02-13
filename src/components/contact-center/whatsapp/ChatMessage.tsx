@@ -1,5 +1,5 @@
 import { ChatMessage as ChatMessageType } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote } from "lucide-react";
 import { format } from "date-fns";
 
 interface ChatMessageProps {
@@ -16,6 +16,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 
 const ChatMessageBubble = ({ message }: ChatMessageProps) => {
   const isOutbound = message.direction === "outbound";
+  const isInternal = message.is_internal;
 
   const renderContent = () => {
     switch (message.message_type) {
@@ -71,6 +72,25 @@ const ChatMessageBubble = ({ message }: ChatMessageProps) => {
         return <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>;
     }
   };
+
+  if (isInternal) {
+    return (
+      <div className="flex justify-center mb-1">
+        <div className="max-w-[80%] px-3 py-1.5 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700">
+          <div className="flex items-center gap-1 mb-0.5">
+            <StickyNote className="w-3 h-3 text-yellow-600 dark:text-yellow-400" />
+            <span className="text-[10px] font-medium text-yellow-700 dark:text-yellow-400">Nota interna</span>
+          </div>
+          <p className="text-sm whitespace-pre-wrap break-words text-yellow-900 dark:text-yellow-100">{message.content}</p>
+          <div className="flex justify-end mt-0.5">
+            <span className="text-[10px] text-yellow-600 dark:text-yellow-400">
+              {format(new Date(message.created_at), "HH:mm")}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} mb-1`}>

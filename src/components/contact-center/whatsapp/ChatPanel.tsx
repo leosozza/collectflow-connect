@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
@@ -15,12 +15,15 @@ interface ChatPanelProps {
   onSend: (text: string) => void;
   onSendMedia: (file: File) => void;
   onSendAudio: (blob: Blob) => void;
+  onSendInternalNote?: (text: string) => void;
   sending: boolean;
   onStatusChange: (status: string) => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   instanceName?: string;
   clientInfo?: any;
+  quickReplies?: any[];
+  slaDeadline?: string | null;
 }
 
 const ChatPanel = ({
@@ -29,12 +32,15 @@ const ChatPanel = ({
   onSend,
   onSendMedia,
   onSendAudio,
+  onSendInternalNote,
   sending,
   onStatusChange,
   sidebarOpen,
   onToggleSidebar,
   instanceName,
   clientInfo,
+  quickReplies,
+  slaDeadline,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -68,8 +74,14 @@ const ChatPanel = ({
             <User className="w-5 h-5 text-muted-foreground" />
           </div>
           <div>
-            <div className="font-medium text-sm">
+            <div className="font-medium text-sm flex items-center gap-2">
               {conversation.remote_name || conversation.remote_phone}
+              {slaDeadline && new Date(slaDeadline) < new Date() && (
+                <Badge variant="destructive" className="text-[10px] h-4 gap-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                  SLA
+                </Badge>
+              )}
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2">
               {conversation.remote_phone}
@@ -116,7 +128,7 @@ const ChatPanel = ({
       )}
 
       {/* Input */}
-      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} disabled={sending} />
+      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} onSendInternalNote={onSendInternalNote} quickReplies={quickReplies} disabled={sending} />
     </div>
   );
 };
