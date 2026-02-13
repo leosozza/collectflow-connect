@@ -1,73 +1,39 @@
 
+# Reestruturar Contact Center e Integracao
 
-# Contact Center - Nova Estrutura de Navegacao e Tela Completa
+## Conceito
 
-## Resumo
+Separar **configuracao** de **operacao**:
 
-Criar uma nova secao "Contact Center" no sidebar, abaixo de "Carteira", contendo duas abas principais: **Telefonia** e **WhatsApp**. Dentro de Telefonia, o primeiro discador disponivel sera o **3CPlus**, com tela completa para gerenciar campanhas, enviar mailings, visualizar listas e configurar credenciais. A arquitetura e preparada para multi-tenant e futuros discadores.
+- `/integracao` -- aba "Telefonia" com sub-aba "3CPlus" para salvar credenciais (dominio + token) e testar conexao
+- `/contact-center` -- tela operacional com opcao de canal (Telefonia ou WhatsApp), onde Telefonia mostra Campanhas, Enviar Mailing e Historico do discador integrado
 
-## Estrutura de Navegacao
+## Alteracoes
 
-```text
-Sidebar (mainNavItems)
-├── Dashboard
-├── Carteira
-├── Contact Center        <-- NOVO (admin only)
-│   (pagina com tabs)
-│   ├── Telefonia
-│   │   └── 3CPlus (sub-tab ou secao padrao)
-│   │       ├── Configuracao (credenciais)
-│   │       ├── Campanhas (listar, criar)
-│   │       ├── Enviar Mailing
-│   │       └── Historico de Envios
-│   └── WhatsApp (placeholder para Fase 3)
-├── Relatorios
-├── Acordos
-├── ...
-```
+### 1. Pagina `/integracao` -- restaurar aba 3CPlus
 
-## O que sera construido
+- Adicionar de volta a aba "Telefonia" no TabsList (ao lado de CobCloud e Negociarie)
+- Dentro da aba Telefonia, mostrar o componente `ThreeCPlusTab` existente (que ja tem o formulario de credenciais com dominio, token, salvar e testar conexao)
+- O componente `src/components/integracao/ThreeCPlusTab.tsx` ja existe e esta pronto, basta importar e adicionar na pagina
 
-### 1. Nova rota `/contact-center`
-- Adicionar rota protegida em `App.tsx`
-- Pagina `ContactCenterPage.tsx` com Tabs de nivel 1: **Telefonia** e **WhatsApp**
+### 2. Pagina `/contact-center` -- remover aba de configuracao
 
-### 2. Aba Telefonia > 3CPlus (componente completo)
-Refatorar o `ThreeCPlusTab` atual e expandir para uma tela completa com sub-abas:
+- Remover a sub-aba "Configuracao" do `ThreeCPlusPanel.tsx` (ficam apenas: Campanhas, Enviar Mailing, Historico)
+- Quando as credenciais nao estiverem configuradas, exibir mensagem orientando o admin a ir em Integracoes para configurar
+- Os paineis de Campanhas e Mailing ja leem as credenciais de `tenant.settings`, entao continuam funcionando normalmente
 
-- **Configuracao**: formulario de credenciais (dominio + token) - ja existe, sera movido
-- **Campanhas**: listar campanhas da conta, exibir detalhes (status, listas vinculadas), botao para criar nova campanha via API
-- **Enviar Mailing**: selecionar campanha, selecionar lista (ou criar nova), fazer upload de contatos manualmente ou selecionar da carteira
-- **Historico**: registro local dos envios feitos pelo sistema (data, qtd contatos, campanha, status)
+### 3. Remover `ConfigPanel.tsx` do contact-center
 
-### 3. Sidebar atualizado
-- Adicionar item "Contact Center" com icone `Headphones` abaixo de "Carteira" nos `mainNavItems` (visivel apenas para admins)
-- Remover a aba 3CPlus da pagina `/integracao` (mover para Contact Center)
-
-### 4. Mover logica do DialerExportDialog
-- O botao "Discador" na Carteira continuara funcionando, mas abrira o dialog que redireciona ou envia direto
-- Alternativamente, o envio de mailing tambem pode ser feito pela tela do Contact Center
+- O arquivo `src/components/contact-center/threecplus/ConfigPanel.tsx` deixa de ser usado no Contact Center (pode ser removido, pois o `ThreeCPlusTab` em integracao ja cumpre essa funcao)
 
 ## Detalhes Tecnicos
 
-### Novos arquivos
-- `src/pages/ContactCenterPage.tsx` - pagina principal com Tabs (Telefonia / WhatsApp)
-- `src/components/contact-center/TelefoniaTab.tsx` - container da aba Telefonia com sub-tabs por discador
-- `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` - painel completo 3CPlus com sub-abas (Config, Campanhas, Mailing, Historico)
-- `src/components/contact-center/threecplus/CampaignsPanel.tsx` - listagem e criacao de campanhas
-- `src/components/contact-center/threecplus/MailingPanel.tsx` - envio de mailing (selecionar campanha, lista, contatos)
-- `src/components/contact-center/threecplus/ConfigPanel.tsx` - credenciais (extraido do ThreeCPlusTab atual)
-- `src/components/contact-center/WhatsAppTab.tsx` - placeholder para Fase 3
+### Arquivos modificados
+- `src/pages/IntegracaoPage.tsx` -- adicionar aba "Telefonia" importando `ThreeCPlusTab`
+- `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` -- remover tab "config" e import do ConfigPanel; adicionar aviso quando credenciais nao existirem
 
-### Alteracoes em arquivos existentes
-- `src/App.tsx` - adicionar rota `/contact-center`
-- `src/components/AppLayout.tsx` - adicionar "Contact Center" ao `mainNavItems` (admin only)
-- `src/pages/IntegracaoPage.tsx` - remover aba 3CPlus (manter CobCloud e Negociarie)
+### Arquivos removidos
+- `src/components/contact-center/threecplus/ConfigPanel.tsx` -- nao mais necessario
 
-### Edge function `threecplus-proxy`
-- Adicionar novas actions: `create_campaign`, `get_campaign_details`, `get_list_mailings` para suportar as novas funcionalidades da tela
-
-### Preparacao multi-discador
-- A aba Telefonia tera sub-tabs por provedor (inicialmente so "3CPlus")
-- Futuro: adicionar outros discadores como novas sub-tabs sem alterar a estrutura
-
+### Nenhum arquivo novo necessario
+Todos os componentes ja existem, so precisam ser reorganizados.
