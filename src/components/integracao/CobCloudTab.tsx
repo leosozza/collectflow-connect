@@ -29,16 +29,19 @@ const CobCloudTab = () => {
   const [importLimit, setImportLimit] = useState("100");
 
   // Credentials state
+  const [tokenCompany, setTokenCompany] = useState("");
   const [tokenAssessoria, setTokenAssessoria] = useState("");
   const [tokenClient, setTokenClient] = useState("");
   const [savingCredentials, setSavingCredentials] = useState(false);
+  const [showCompany, setShowCompany] = useState(false);
   const [showAssessoria, setShowAssessoria] = useState(false);
   const [showClient, setShowClient] = useState(false);
 
-  const hasCredentials = !!(tenant?.settings?.cobcloud_token_assessoria && tenant?.settings?.cobcloud_token_client);
+  const hasCredentials = !!(tenant?.settings?.cobcloud_token_company && tenant?.settings?.cobcloud_token_client);
 
   useEffect(() => {
     if (tenant?.settings) {
+      setTokenCompany(tenant.settings.cobcloud_token_company || "");
       setTokenAssessoria(tenant.settings.cobcloud_token_assessoria || "");
       setTokenClient(tenant.settings.cobcloud_token_client || "");
     }
@@ -46,14 +49,15 @@ const CobCloudTab = () => {
 
   const handleSaveCredentials = async () => {
     if (!tenant) return;
-    if (!tokenAssessoria.trim() || !tokenClient.trim()) {
-      toast({ title: "Preencha ambos os tokens", variant: "destructive" });
+    if (!tokenCompany.trim() || !tokenClient.trim()) {
+      toast({ title: "Preencha Token Company e Token Client", variant: "destructive" });
       return;
     }
     setSavingCredentials(true);
     try {
       const newSettings = {
         ...(tenant.settings || {}),
+        cobcloud_token_company: tokenCompany.trim(),
         cobcloud_token_assessoria: tokenAssessoria.trim(),
         cobcloud_token_client: tokenClient.trim(),
       };
@@ -168,14 +172,35 @@ const CobCloudTab = () => {
               </div>
             </CollapsibleContent>
           </Collapsible>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="token-assessoria">Token Assessoria</Label>
+              <Label htmlFor="token-company">Token Company</Label>
+              <div className="relative">
+                <Input
+                  id="token-company"
+                  type={showCompany ? "text" : "password"}
+                  placeholder="Token da empresa"
+                  value={tokenCompany}
+                  onChange={(e) => setTokenCompany(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowCompany(!showCompany)}
+                >
+                  {showCompany ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="token-assessoria">Token Assessoria (opcional)</Label>
               <div className="relative">
                 <Input
                   id="token-assessoria"
                   type={showAssessoria ? "text" : "password"}
-                  placeholder="Insira o token da assessoria"
+                  placeholder="Token da assessoria"
                   value={tokenAssessoria}
                   onChange={(e) => setTokenAssessoria(e.target.value)}
                 />
@@ -196,7 +221,7 @@ const CobCloudTab = () => {
                 <Input
                   id="token-client"
                   type={showClient ? "text" : "password"}
-                  placeholder="Insira o token do client"
+                  placeholder="Token do client/credor"
                   value={tokenClient}
                   onChange={(e) => setTokenClient(e.target.value)}
                 />

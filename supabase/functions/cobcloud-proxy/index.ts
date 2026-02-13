@@ -86,7 +86,7 @@ async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCrede
     .single();
 
   const settings = tenant?.settings as Record<string, any> | null;
-  const tokenAssessoria = settings?.cobcloud_token_assessoria || Deno.env.get("COBCLOUD_TOKEN_ASSESSORIA");
+  const tokenAssessoria = settings?.cobcloud_token_company || settings?.cobcloud_token_assessoria || Deno.env.get("COBCLOUD_TOKEN_ASSESSORIA");
   const tokenClient = settings?.cobcloud_token_client || Deno.env.get("COBCLOUD_TOKEN_CLIENT");
 
   if (!tokenAssessoria || !tokenClient) {
@@ -166,20 +166,12 @@ function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
 async function handleStatus(creds: CobCloudCredentials) {
   try {
     const headers = buildCobCloudHeaders(creds);
-    const url = `${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`;
-    console.log("CobCloud status check URL:", url);
-    console.log("CobCloud headers (masked):", {
-      token_company: creds.tokenAssessoria ? `${creds.tokenAssessoria.slice(0, 8)}...` : "MISSING",
-      token_client: creds.tokenClient ? `${creds.tokenClient.slice(0, 8)}...` : "MISSING",
-    });
-    const res = await fetch(url, {
+    const res = await fetch(`${COBCLOUD_BASE}/cli/devedores/listar?page=1&limit=1`, {
       method: "GET",
       headers,
     });
-    const body = await res.text();
-    console.log("CobCloud response status:", res.status, "body:", body);
     const ok = res.status === 200;
-    return json({ connected: ok, status: res.status, detail: body });
+    return json({ connected: ok, status: res.status });
   } catch (e) {
     return json({ connected: false, error: e.message });
   }
