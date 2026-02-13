@@ -34,6 +34,10 @@ const BlockListPanel = () => {
     setLoading(true);
     try {
       const data = await invoke("list_block_list");
+      if (data?.status === 404) {
+        setBlocks([]);
+        return;
+      }
       setBlocks(Array.isArray(data) ? data : data?.data || []);
     } catch {
       toast.error("Erro ao carregar lista de bloqueio");
