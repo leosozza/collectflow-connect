@@ -244,7 +244,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
   if (fullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-foreground/90">
-        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" style={{ transform: "scaleX(-1)" }} />
 
         {flashActive && <div className="absolute inset-0 bg-background/90 z-20 transition-opacity" />}
 
@@ -283,7 +283,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden bg-foreground/90 rounded-xl" style={{ aspectRatio: "3/4" }}>
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: "scaleX(-1)" }} />
         {flashActive && <div className="absolute inset-0 bg-background/90 z-20 transition-opacity" />}
         <FaceOverlay
           primaryColor={primaryColor}
