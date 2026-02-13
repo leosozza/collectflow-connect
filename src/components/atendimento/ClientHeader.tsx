@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText } from "lucide-react";
+import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 
@@ -14,9 +14,13 @@ interface ClientHeaderProps {
     external_id?: string | null;
     data_vencimento?: string;
     valor_parcela?: number;
+    valor_entrada?: number;
+    valor_pago?: number;
     numero_parcela?: number;
     total_parcelas?: number;
+    quebra?: number | null;
     status?: string;
+    operator_id?: string | null;
   };
   totalAberto: number;
   totalPago: number;
@@ -24,13 +28,20 @@ interface ClientHeaderProps {
   parcelasPagas: number;
 }
 
+const InfoItem = ({ icon: Icon, label, value, className }: { icon?: any; label: string; value: string | number; className?: string }) => (
+  <div className="flex items-center gap-2 text-sm">
+    {Icon && <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />}
+    <span className="text-muted-foreground">{label}:</span>
+    <span className={`font-medium ${className || "text-foreground"}`}>{value}</span>
+  </div>
+);
+
 const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas }: ClientHeaderProps) => {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="bg-card rounded-xl border border-border p-5">
       <Collapsible open={open} onOpenChange={setOpen}>
-        {/* Always visible: name, CPF, credor + totals */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -66,44 +77,37 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
           </div>
         </div>
 
-        {/* Collapsible: full details */}
         <CollapsibleContent className="mt-4 pt-4 border-t border-border">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
             {client.phone && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Phone className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium text-foreground">{formatPhone(client.phone)}</span>
-              </div>
+              <InfoItem icon={Phone} label="Telefone" value={formatPhone(client.phone)} />
             )}
             {client.email && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Mail className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium text-foreground">{client.email}</span>
-              </div>
+              <InfoItem icon={Mail} label="Email" value={client.email} />
             )}
             {client.external_id && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Hash className="w-4 h-4 flex-shrink-0" />
-                <span className="text-muted-foreground">ID Externo:</span>
-                <span className="font-medium text-foreground">{client.external_id}</span>
-              </div>
+              <InfoItem icon={Hash} label="ID Externo" value={client.external_id} />
             )}
             {client.data_vencimento && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="w-4 h-4 flex-shrink-0" />
-                <span className="text-muted-foreground">Vencimento:</span>
-                <span className="font-medium text-foreground">{new Date(client.data_vencimento).toLocaleDateString("pt-BR")}</span>
-              </div>
+              <InfoItem icon={Calendar} label="Vencimento" value={new Date(client.data_vencimento).toLocaleDateString("pt-BR")} />
             )}
             {client.valor_parcela != null && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <FileText className="w-4 h-4 flex-shrink-0" />
-                <span className="text-muted-foreground">Valor Parcela:</span>
-                <span className="font-medium text-foreground">{formatCurrency(client.valor_parcela)}</span>
-              </div>
+              <InfoItem icon={FileText} label="Valor Parcela" value={formatCurrency(client.valor_parcela)} />
+            )}
+            {client.valor_entrada != null && client.valor_entrada > 0 && (
+              <InfoItem icon={DollarSign} label="Valor Entrada" value={formatCurrency(client.valor_entrada)} />
+            )}
+            {client.valor_pago != null && (
+              <InfoItem icon={DollarSign} label="Valor Pago" value={formatCurrency(client.valor_pago)} className="text-success" />
+            )}
+            {client.numero_parcela != null && client.total_parcelas != null && (
+              <InfoItem icon={Layers} label="Parcela Atual" value={`${client.numero_parcela} de ${client.total_parcelas}`} />
+            )}
+            {client.quebra != null && client.quebra > 0 && (
+              <InfoItem icon={AlertTriangle} label="Quebra" value={formatCurrency(client.quebra)} className="text-destructive" />
             )}
             {client.status && (
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Status:</span>
                 <span className={`font-medium capitalize ${client.status === "pendente" ? "text-destructive" : client.status === "pago" ? "text-success" : "text-foreground"}`}>
                   {client.status}
