@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PartyPopper, QrCode, CreditCard, Layers, Plus, Trash2, Loader2, ExternalLink, Copy } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
+import SignatureStep from "./signatures/SignatureStep";
 
 interface Agreement {
   id: string;
@@ -50,6 +51,9 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<PaymentMode | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [signatureType, setSignatureType] = useState<"click" | "facial" | "draw">("click");
+  const [tenantColor, setTenantColor] = useState("#F97316");
   const [splits, setSplits] = useState<SplitItem[]>([
     { method: "pix", amount: "" },
     { method: "cartao", amount: "" },
@@ -68,12 +72,21 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
       if (!res.ok) throw new Error(data.error);
       setAgreement(data.agreement);
       setPayments(data.payments || []);
+      // Set signature type from tenant settings
+      if (data.tenant?.settings?.signature_type) {
+        setSignatureType(data.tenant.settings.signature_type);
+      }
+      if (data.tenant?.primary_color) {
+        setTenantColor(data.tenant.primary_color);
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSigned = useCallback(() => setSigned(true), []);
 
   useEffect(() => { fetchData(); }, [checkoutToken]);
 
@@ -173,31 +186,54 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
         <div className="text-center space-y-3">
           <PartyPopper className="w-16 h-16 mx-auto text-primary" />
           <h1 className="text-3xl font-bold text-foreground">Parabéns! 🎉</h1>
-          <p className="text-muted-foreground">Seu acordo foi aprovado. Escolha como deseja pagar.</p>
+          <p className="text-muted-foreground">
+            {signed ? "Seu acordo foi assinado. Escolha como deseja pagar." : "Seu acordo foi aprovado. Assine digitalmente para prosseguir."}
+          </p>
         </div>
       )}
 
-      {/* Agreement summary */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Resumo do Acordo</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Credor</span><span className="font-medium text-foreground">{agreement.credor}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Valor original</span><span className="line-through text-muted-foreground">{formatCurrency(agreement.original_total)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Valor negociado</span><span className="font-bold text-foreground text-lg">{formatCurrency(agreement.proposed_total)}</span></div>
-          {agreement.discount_percent && agreement.discount_percent > 0 && (
-            <div className="flex justify-between"><span className="text-muted-foreground">Desconto</span><Badge className="bg-success text-success-foreground">{agreement.discount_percent}%</Badge></div>
-          )}
-          <div className="flex justify-between"><span className="text-muted-foreground">Parcelas</span><span className="text-foreground">{agreement.new_installments}x de {formatCurrency(agreement.new_installment_value)}</span></div>
-          {remaining > 0 && remaining < agreement.proposed_total && (
-            <div className="flex justify-between border-t pt-2"><span className="text-muted-foreground">Saldo restante</span><span className="font-bold text-primary">{formatCurrency(remaining)}</span></div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Signature step - before payment */}
+      {!signed && agreement && (
+        <SignatureStep
+          checkoutToken={checkoutToken}
+          signatureType={signatureType}
+          primaryColor={tenantColor}
+          onSigned={handleSigned}
+          agreement={{
+            id: agreement.id,
+            client_name: agreement.client_name,
+            credor: agreement.credor,
+            proposed_total: agreement.proposed_total,
+            new_installments: agreement.new_installments,
+            new_installment_value: agreement.new_installment_value,
+            first_due_date: agreement.first_due_date,
+          }}
+        />
+      )}
+
+      {/* Agreement summary - show after signing */}
+      {signed && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Resumo do Acordo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Credor</span><span className="font-medium text-foreground">{agreement.credor}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Valor original</span><span className="line-through text-muted-foreground">{formatCurrency(agreement.original_total)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Valor negociado</span><span className="font-bold text-foreground text-lg">{formatCurrency(agreement.proposed_total)}</span></div>
+            {agreement.discount_percent && agreement.discount_percent > 0 && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Desconto</span><Badge className="bg-success text-success-foreground">{agreement.discount_percent}%</Badge></div>
+            )}
+            <div className="flex justify-between"><span className="text-muted-foreground">Parcelas</span><span className="text-foreground">{agreement.new_installments}x de {formatCurrency(agreement.new_installment_value)}</span></div>
+            {remaining > 0 && remaining < agreement.proposed_total && (
+              <div className="flex justify-between border-t pt-2"><span className="text-muted-foreground">Saldo restante</span><span className="font-bold text-primary">{formatCurrency(remaining)}</span></div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Existing payments */}
-      {payments.length > 0 && (
+      {signed && payments.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Pagamentos</CardTitle>
@@ -221,8 +257,8 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
         </Card>
       )}
 
-      {/* Payment methods - only show if there's remaining */}
-      {remaining > 0.01 && (
+      {/* Payment methods - only show if signed and there's remaining */}
+      {signed && remaining > 0.01 && (
         <>
           {!mode && (
             <div className="grid gap-3">
@@ -301,7 +337,7 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
         </>
       )}
 
-      {remaining <= 0.01 && payments.some((p) => p.status !== "failed") && (
+      {signed && remaining <= 0.01 && payments.some((p) => p.status !== "failed") && (
         <Card className="border-success/30">
           <CardContent className="py-6 text-center">
             <p className="text-success font-semibold text-lg">✅ Todos os pagamentos foram gerados!</p>

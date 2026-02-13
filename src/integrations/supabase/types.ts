@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agreement_signatures: {
+        Row: {
+          agreement_id: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          signature_data: string | null
+          signature_type: string
+          signed_at: string
+          tenant_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          agreement_id: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          signature_data?: string | null
+          signature_type?: string
+          signed_at?: string
+          tenant_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          agreement_id?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          signature_data?: string | null
+          signature_type?: string
+          signed_at?: string
+          tenant_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_signatures_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_signatures_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agreements: {
         Row: {
           approved_by: string | null

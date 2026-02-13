@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       // Fetch tenant info
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("name, slug, logo_url, primary_color")
+        .select("name, slug, logo_url, primary_color, settings")
         .eq("id", agreement.tenant_id)
         .single();
 
@@ -168,6 +168,110 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: true });
 
       return new Response(JSON.stringify({ payments: payments || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "check-signature") {
+      const { data: sig } = await supabase
+        .from("agreement_signatures")
+        .select("id, signature_type, signed_at")
+        .eq("agreement_id", agreement.id)
+        .limit(1)
+        .maybeSingle();
+
+      return new Response(JSON.stringify({ signed: !!sig, signature: sig }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "save-signature") {
+      const { signature_type, signature_data, metadata } = params;
+
+      if (!signature_type) {
+        return new Response(JSON.stringify({ error: "Tipo de assinatura obrigatório" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if already signed
+      const { data: existing } = await supabase
+        .from("agreement_signatures")
+        .select("id")
+        .eq("agreement_id", agreement.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        return new Response(JSON.stringify({ error: "Acordo já assinado" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // For facial/draw with image data, upload to storage
+      let storedData = signature_data || null;
+      if (signature_data && signature_type === "draw" && signature_data.startsWith("data:image")) {
+        try {
+          const base64 = signature_data.split(",")[1];
+          const binaryStr = atob(base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+          const filePath = `${agreement.tenant_id}/${agreement.id}/signature.png`;
+          await supabase.storage.from("agreement-signatures").upload(filePath, bytes, {
+            contentType: "image/png", upsert: true,
+          });
+          storedData = filePath;
+        } catch (e) {
+          console.error("[portal-checkout] Storage upload error:", e.message);
+          // Keep base64 as fallback - but truncate if too large
+          storedData = signature_data.length > 50000 ? null : signature_data;
+        }
+      }
+
+      // For facial photos, upload each
+      let finalMetadata = metadata || {};
+      if (signature_type === "facial" && metadata?.photos) {
+        const uploadedPaths: string[] = [];
+        for (let i = 0; i < metadata.photos.length; i++) {
+          try {
+            const photo = metadata.photos[i];
+            const base64 = photo.split(",")[1];
+            const binaryStr = atob(base64);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            const filePath = `${agreement.tenant_id}/${agreement.id}/facial_${i}.jpg`;
+            await supabase.storage.from("agreement-signatures").upload(filePath, bytes, {
+              contentType: "image/jpeg", upsert: true,
+            });
+            uploadedPaths.push(filePath);
+          } catch (e) {
+            console.error("[portal-checkout] Facial upload error:", e.message);
+          }
+        }
+        finalMetadata = { ...metadata, photos: undefined, photo_paths: uploadedPaths };
+      }
+
+      // Get IP from request headers
+      const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown";
+      const userAgent = req.headers.get("user-agent") || "unknown";
+
+      const { data: sig, error: sigErr } = await supabase
+        .from("agreement_signatures")
+        .insert({
+          agreement_id: agreement.id,
+          tenant_id: agreement.tenant_id,
+          signature_type,
+          signature_data: storedData,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+          metadata: finalMetadata,
+        })
+        .select()
+        .single();
+
+      if (sigErr) throw sigErr;
+
+      return new Response(JSON.stringify({ signature: sig }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
