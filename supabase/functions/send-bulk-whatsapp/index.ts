@@ -82,7 +82,10 @@ Deno.serve(async (req) => {
     const settings = (tenant?.settings || {}) as Record<string, any>;
     const provider = settings.whatsapp_provider || (settings.gupshup_api_key ? "gupshup" : settings.baylers_api_key ? "baylers" : "");
 
-    // For Baylers, try whatsapp_instances table first, fallback to settings
+    // For Baylers, try whatsapp_instances table first, then global secrets, then legacy settings
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+
     let baylersInstance: { instance_url: string; api_key: string; instance_name: string } | null = null;
     if (provider === "baylers") {
       const { data: instances } = await supabase
@@ -95,7 +98,13 @@ Deno.serve(async (req) => {
         .single();
 
       if (instances) {
-        baylersInstance = instances as any;
+        const inst = instances as any;
+        // Use global Evolution URL as fallback if instance has no URL
+        baylersInstance = {
+          instance_url: inst.instance_url || evolutionUrl,
+          api_key: inst.api_key || evolutionKey,
+          instance_name: inst.instance_name,
+        };
       } else if (settings.baylers_api_key && settings.baylers_instance_url) {
         // Fallback to legacy settings
         baylersInstance = {

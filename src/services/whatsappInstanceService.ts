@@ -55,17 +55,55 @@ export async function deleteWhatsAppInstance(id: string): Promise<void> {
 }
 
 export async function setDefaultInstance(id: string, tenantId: string): Promise<void> {
-  // Unset all defaults for tenant
   const { error: resetError } = await supabase
     .from("whatsapp_instances" as any)
     .update({ is_default: false } as any)
     .eq("tenant_id", tenantId);
   if (resetError) throw resetError;
 
-  // Set the chosen one
   const { error } = await supabase
     .from("whatsapp_instances" as any)
     .update({ is_default: true } as any)
     .eq("id", id);
   if (error) throw error;
+}
+
+// --- Evolution API proxy functions ---
+
+async function callEvolutionProxy(action: string, body: Record<string, any>) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error("Não autenticado");
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/evolution-proxy?action=${action}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const result = await resp.json();
+  if (!resp.ok) {
+    throw new Error(result?.error || `Erro na ação ${action}`);
+  }
+  return result;
+}
+
+export async function createEvolutionInstance(instanceName: string) {
+  return callEvolutionProxy("create", { instanceName });
+}
+
+export async function connectEvolutionInstance(instanceName: string) {
+  return callEvolutionProxy("connect", { instanceName });
+}
+
+export async function getEvolutionInstanceStatus(instanceName: string) {
+  return callEvolutionProxy("status", { instanceName });
+}
+
+export async function deleteEvolutionInstance(instanceName: string) {
+  return callEvolutionProxy("delete", { instanceName });
 }

@@ -3,87 +3,56 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff } from "lucide-react";
-import type { WhatsAppInstance } from "@/services/whatsappInstanceService";
 
 interface BaylersInstanceFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; instance_url: string; api_key: string; instance_name: string }) => void;
+  onSave: (data: { name: string }) => void;
   saving: boolean;
-  instance?: WhatsAppInstance | null;
+  tenantName: string;
 }
 
-const BaylersInstanceForm = ({ open, onClose, onSave, saving, instance }: BaylersInstanceFormProps) => {
+const BaylersInstanceForm = ({ open, onClose, onSave, saving, tenantName }: BaylersInstanceFormProps) => {
   const [name, setName] = useState("");
-  const [instanceUrl, setInstanceUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [instanceName, setInstanceName] = useState("");
-  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setName(instance?.name || "");
-      setInstanceUrl(instance?.instance_url || "");
-      setApiKey(instance?.api_key || "");
-      setInstanceName(instance?.instance_name || "");
-      setShowKey(false);
+      setName("");
     }
-  }, [open, instance]);
+  }, [open]);
 
-  const canSave = instanceUrl.trim() && apiKey.trim();
+  const instanceNamePreview = name.trim() ? `${tenantName} - ${name.trim()}` : "";
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{instance ? "Editar Instância" : "Nova Instância Baylers"}</DialogTitle>
+          <DialogTitle>Nova Instância</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Nome (apelido)</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Cobrança, Vendas" />
+            <Label>Nome da Instância *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Agente 01, Cobrança"
+              autoFocus
+            />
           </div>
-          <div className="space-y-2">
-            <Label>URL da Instância *</Label>
-            <Input value={instanceUrl} onChange={(e) => setInstanceUrl(e.target.value)} placeholder="https://minha-instancia.com" />
-          </div>
-          <div className="space-y-2">
-            <Label>API Key *</Label>
-            <div className="relative">
-              <Input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Chave de API"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          {instanceNamePreview && (
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs text-muted-foreground mb-1">Nome na Evolution API:</p>
+              <p className="text-sm font-medium">{instanceNamePreview}</p>
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Nome da Instância (API)</Label>
-            <Input value={instanceName} onChange={(e) => setInstanceName(e.target.value)} placeholder="default" />
-            <p className="text-xs text-muted-foreground">Nome técnico usado na chamada da API</p>
-          </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
-            disabled={!canSave || saving}
-            onClick={() => onSave({
-              name: name.trim(),
-              instance_url: instanceUrl.trim().replace(/\/+$/, ""),
-              api_key: apiKey.trim(),
-              instance_name: instanceName.trim() || "default",
-            })}
+            disabled={!name.trim() || saving}
+            onClick={() => onSave({ name: name.trim() })}
           >
-            {saving ? "Salvando..." : "Salvar"}
+            {saving ? "Criando..." : "Criar"}
           </Button>
         </DialogFooter>
       </DialogContent>
