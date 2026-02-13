@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate, formatPhone } from "@/lib/formatters";
-import { ArrowLeft, User, Phone, Mail, Building, UserCheck, DollarSign, AlertTriangle } from "lucide-react";
+import { ArrowLeft, User, Phone, Mail, Building, UserCheck, DollarSign, AlertTriangle, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -103,6 +103,10 @@ const ClientDetailPage = () => {
           <h1 className="text-2xl font-bold text-foreground">{first.nome_completo}</h1>
           <p className="text-muted-foreground text-sm">Detalhes do cliente</p>
         </div>
+        <Button onClick={() => navigate(`/atendimento/${first.id}`)} className="gap-2 ml-auto">
+          <Headset className="w-4 h-4" />
+          Atender
+        </Button>
       </div>
 
       {/* Client Info - Clean list style */}
