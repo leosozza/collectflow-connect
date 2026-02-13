@@ -48,6 +48,11 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [phone, setPhone] = useState(defaultValues?.phone || "");
   const [email, setEmail] = useState(defaultValues?.email || "");
   const [externalId, setExternalId] = useState(defaultValues?.external_id || "");
+  const [endereco, setEndereco] = useState(defaultValues?.endereco || "");
+  const [cidade, setCidade] = useState(defaultValues?.cidade || "");
+  const [uf, setUf] = useState(defaultValues?.uf || "");
+  const [cep, setCep] = useState(defaultValues?.cep || "");
+  const [observacoes, setObservacoes] = useState(defaultValues?.observacoes || "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +63,11 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       external_id: externalId.trim() || undefined,
+      endereco: endereco.trim() || undefined,
+      cidade: cidade.trim() || undefined,
+      uf: uf.trim() || undefined,
+      cep: cep.trim() || undefined,
+      observacoes: observacoes.trim() || undefined,
       numero_parcela: parseInt(numeroParcela) || 1,
       total_parcelas: parseInt(totalParcelas) || 1,
       valor_entrada: parseFloat(valorEntrada) || 0,
@@ -228,6 +238,57 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
               <SelectItem value="quebrado">Quebrado</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="col-span-2 space-y-2">
+          <Label>Endereço</Label>
+          <Input
+            value={endereco}
+            onChange={(e) => setEndereco(e.target.value)}
+            placeholder="Rua, número, bairro"
+            maxLength={300}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Cidade</Label>
+          <Input
+            value={cidade}
+            onChange={(e) => setCidade(e.target.value)}
+            placeholder="Cidade"
+            maxLength={100}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>UF</Label>
+          <Input
+            value={uf}
+            onChange={(e) => setUf(e.target.value.toUpperCase())}
+            placeholder="SP"
+            maxLength={2}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>CEP</Label>
+          <Input
+            value={cep}
+            onChange={(e) => setCep(e.target.value)}
+            placeholder="00000-000"
+            maxLength={10}
+          />
+        </div>
+
+        <div className="col-span-2 space-y-2">
+          <Label>Observações</Label>
+          <textarea
+            className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            value={observacoes}
+            onChange={(e) => setObservacoes(e.target.value)}
+            placeholder="Anotações sobre o cliente"
+            maxLength={1000}
+          />
         </div>
       </div>
 

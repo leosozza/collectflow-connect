@@ -23,6 +23,11 @@ export interface Client {
   created_at: string;
   updated_at: string;
   tenant_id: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
+  observacoes: string | null;
 }
 
 export interface ClientFormData {
@@ -32,6 +37,11 @@ export interface ClientFormData {
   phone?: string;
   email?: string;
   external_id?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  observacoes?: string;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;

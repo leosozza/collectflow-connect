@@ -214,63 +214,78 @@ export type Database = {
       }
       clients: {
         Row: {
+          cep: string | null
+          cidade: string | null
           cpf: string
           created_at: string
           credor: string
           data_vencimento: string
           email: string | null
+          endereco: string | null
           external_id: string | null
           id: string
           nome_completo: string
           numero_parcela: number
+          observacoes: string | null
           operator_id: string | null
           phone: string | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
           tenant_id: string | null
           total_parcelas: number
+          uf: string | null
           updated_at: string
           valor_entrada: number
           valor_pago: number
           valor_parcela: number
         }
         Insert: {
+          cep?: string | null
+          cidade?: string | null
           cpf: string
           created_at?: string
           credor?: string
           data_vencimento: string
           email?: string | null
+          endereco?: string | null
           external_id?: string | null
           id?: string
           nome_completo: string
           numero_parcela?: number
+          observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
           total_parcelas?: number
+          uf?: string | null
           updated_at?: string
           valor_entrada?: number
           valor_pago?: number
           valor_parcela?: number
         }
         Update: {
+          cep?: string | null
+          cidade?: string | null
           cpf?: string
           created_at?: string
           credor?: string
           data_vencimento?: string
           email?: string | null
+          endereco?: string | null
           external_id?: string | null
           id?: string
           nome_completo?: string
           numero_parcela?: number
+          observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
           total_parcelas?: number
+          uf?: string | null
           updated_at?: string
           valor_entrada?: number
           valor_pago?: number
