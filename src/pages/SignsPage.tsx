@@ -203,8 +203,8 @@ const SignsPage = () => {
             {/* Mobile or Desktop rendering */}
             {isMobile ? (
               /* On real mobile: no phone frame, render content directly */
-              <div className="w-full min-h-[500px] bg-background rounded-xl overflow-hidden border relative">
-                <div className={`${isFullscreenMode ? "absolute inset-0" : "p-3"} h-full`}>
+              <div className="w-full min-h-[500px] bg-background rounded-xl overflow-hidden border relative flex flex-col">
+                <div className={`${isFullscreenMode ? "absolute inset-0" : ""} flex-1 flex flex-col`}>
                   {renderPlaygroundContent()}
                 </div>
               </div>
@@ -229,7 +229,7 @@ const SignsPage = () => {
                   </div>
 
                   {/* Content */}
-                  <div className={`flex-1 overflow-y-auto relative ${isFullscreenMode ? "" : "p-3"}`}>
+                  <div className={`flex-1 overflow-hidden relative flex flex-col ${isFullscreenMode ? "" : ""}`}>
                     {renderPlaygroundContent()}
                   </div>
 
@@ -252,52 +252,50 @@ const SignsPage = () => {
 /* ======================== Playground Sub-Components ======================== */
 
 const PlaygroundTermo = ({ onNext }: { onNext: () => void }) => (
-  <div className="space-y-4">
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-primary" />
-          <CardTitle className="text-base">Termo do Acordo</CardTitle>
+  <div className="flex flex-col h-full">
+    <div className="flex-1 overflow-y-auto space-y-3 p-3">
+      <div className="flex items-center gap-2">
+        <Shield className="w-5 h-5 text-primary" />
+        <h3 className="font-semibold text-sm text-foreground">Termo do Acordo</h3>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Eu, <strong className="text-foreground">{MOCK_AGREEMENT.client_name}</strong>, declaro que estou ciente e de acordo com os seguintes termos:
+      </p>
+      <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 text-xs">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Credor</span>
+          <span className="font-medium text-foreground">{MOCK_AGREEMENT.credor}</span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">
-          Eu, <strong className="text-foreground">{MOCK_AGREEMENT.client_name}</strong>, declaro que estou ciente e de acordo com os seguintes termos:
-        </p>
-        <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Credor</span>
-            <span className="font-medium text-foreground">{MOCK_AGREEMENT.credor}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Valor original</span>
-            <span className="text-foreground line-through">{formatCurrency(MOCK_AGREEMENT.original_total)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Valor acordado</span>
-            <span className="font-bold text-foreground">{formatCurrency(MOCK_AGREEMENT.proposed_total)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Desconto</span>
-            <span className="font-medium text-primary">{MOCK_AGREEMENT.discount_percent}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Parcelas</span>
-            <span className="text-foreground">{MOCK_AGREEMENT.new_installments}x de {formatCurrency(MOCK_AGREEMENT.new_installment_value)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">1º vencimento</span>
-            <span className="text-foreground">{new Date(MOCK_AGREEMENT.first_due_date + "T12:00:00").toLocaleDateString("pt-BR")}</span>
-          </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Valor original</span>
+          <span className="text-foreground line-through">{formatCurrency(MOCK_AGREEMENT.original_total)}</span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Ao assinar digitalmente, você concorda com todas as condições acima. Esta assinatura tem validade jurídica conforme Art. 10, §2º da MP nº 2.200-2/2001.
-        </p>
-      </CardContent>
-    </Card>
-    <Button className="w-full" onClick={onNext}>
-      Li e concordo — Prosseguir para assinatura
-    </Button>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Valor acordado</span>
+          <span className="font-bold text-foreground">{formatCurrency(MOCK_AGREEMENT.proposed_total)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Desconto</span>
+          <span className="font-medium text-primary">{MOCK_AGREEMENT.discount_percent}%</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Parcelas</span>
+          <span className="text-foreground">{MOCK_AGREEMENT.new_installments}x de {formatCurrency(MOCK_AGREEMENT.new_installment_value)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">1º vencimento</span>
+          <span className="text-foreground">{new Date(MOCK_AGREEMENT.first_due_date + "T12:00:00").toLocaleDateString("pt-BR")}</span>
+        </div>
+      </div>
+      <p className="text-[10px] text-muted-foreground leading-relaxed">
+        Ao assinar digitalmente, você concorda com todas as condições acima. Esta assinatura tem validade jurídica conforme Art. 10, §2º da MP nº 2.200-2/2001.
+      </p>
+    </div>
+    <div className="p-3 border-t shrink-0">
+      <Button className="w-full text-xs" size="sm" onClick={onNext}>
+        Li e concordo — Prosseguir
+      </Button>
+    </div>
   </div>
 );
 
