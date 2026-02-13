@@ -700,6 +700,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string | null
+          threecplus_agent_id: number | null
           updated_at: string
           user_id: string
         }
@@ -711,6 +712,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
+          threecplus_agent_id?: number | null
           updated_at?: string
           user_id: string
         }
@@ -722,6 +724,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
+          threecplus_agent_id?: number | null
           updated_at?: string
           user_id?: string
         }
