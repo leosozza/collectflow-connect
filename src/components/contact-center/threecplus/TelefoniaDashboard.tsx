@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,112 @@ const TelefoniaDashboard = () => {
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Today's date for filtering
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
+
+  // Fetch profiles with threecplus_agent_id mapping
+  const { data: profileMappings = [] } = useQuery({
+    queryKey: ["agent-profile-mappings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, user_id, threecplus_agent_id" as any)
+        .not("threecplus_agent_id" as any, "is", null);
+      if (error) throw error;
+      return (data || []) as unknown as { id: string; user_id: string; threecplus_agent_id: number }[];
+    },
+  });
+
+  // Fetch today's call dispositions (contacts count per operator)
+  const { data: todayDispositions = [] } = useQuery({
+    queryKey: ["agent-dispositions-today", todayStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("call_dispositions")
+        .select("operator_id")
+        .gte("created_at", todayStart);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60000,
+  });
+
+  // Fetch today's agreements (by created_by)
+  const { data: todayAgreements = [] } = useQuery({
+    queryKey: ["agent-agreements-today", todayStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agreements")
+        .select("created_by")
+        .gte("created_at", todayStart);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60000,
+  });
+
+  // Fetch today's payments (clients updated to 'pago' today)
+  const { data: todayPayments = [] } = useQuery({
+    queryKey: ["agent-payments-today", todayStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("operator_id")
+        .eq("status", "pago")
+        .gte("updated_at", todayStart);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 60000,
+  });
+
+  // Build metrics map: threecplus_agent_id -> { contacts, agreements, payments }
+  const agentMetrics = useMemo(() => {
+    const metrics: Record<number, { contacts: number; agreements: number; payments: number }> = {};
+
+    // Create lookup: profile_id -> threecplus_agent_id, user_id -> threecplus_agent_id
+    const profileIdToAgent = new Map<string, number>();
+    const userIdToAgent = new Map<string, number>();
+    for (const p of profileMappings) {
+      profileIdToAgent.set(p.id, p.threecplus_agent_id);
+      userIdToAgent.set(p.user_id, p.threecplus_agent_id);
+    }
+
+    // Count contacts (operator_id = profile.id)
+    for (const d of todayDispositions) {
+      const agentId = profileIdToAgent.get(d.operator_id);
+      if (agentId != null) {
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
+        metrics[agentId].contacts++;
+      }
+    }
+
+    // Count agreements (created_by = user_id)
+    for (const a of todayAgreements) {
+      const agentId = userIdToAgent.get(a.created_by);
+      if (agentId != null) {
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
+        metrics[agentId].agreements++;
+      }
+    }
+
+    // Count payments (operator_id = profile.id)
+    for (const p of todayPayments) {
+      if (!p.operator_id) continue;
+      const agentId = profileIdToAgent.get(p.operator_id);
+      if (agentId != null) {
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
+        metrics[agentId].payments++;
+      }
+    }
+
+    return metrics;
+  }, [profileMappings, todayDispositions, todayAgreements, todayPayments]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -215,6 +322,7 @@ const TelefoniaDashboard = () => {
           domain={domain}
           apiToken={apiToken}
           onAgentClick={(agent) => setSelectedAgent(agent)}
+          agentMetrics={agentMetrics}
         />
       </div>
 
