@@ -1,68 +1,119 @@
 
 
-# Playground Independente + Camera Real + Rotacao Landscape
+# Facial Fullscreen no Celular + Camera Fix + Mobile Responsivo
 
-## Resumo das mudancas
+## Problemas Identificados
 
-Tres ajustes principais na pagina Signs:
+### 1. Camera nao captura (BUG)
+O `startCamera` tenta definir `videoRef.current.srcObject` enquanto o video ainda nao existe no DOM. O fluxo atual:
+- Estado e `idle` -> video NAO esta renderizado
+- `startCamera` obtem o stream e tenta `videoRef.current.srcObject = mediaStream` -> **videoRef.current e NULL**
+- So depois muda para `capturing` -> video aparece, mas sem stream
 
-### 1. Badges do Playground independentes das configuracoes
+**Correcao:** Usar um `useEffect` que observa o `stream` e o `videoRef` para atribuir o srcObject quando ambos estiverem disponiveis.
 
-Atualmente, clicar numa badge no playground altera o `signature_type` salvo no tenant (chama `updateTenant`). Isso esta errado -- o playground deve ser apenas uma simulacao local sem afetar a configuracao real.
+### 2. Facial deve ser fullscreen dentro do celular
+Atualmente o `PlaygroundAssinatura` envolve tudo em um `Card`. Para o modo facial (estado capturing), o conteudo deve preencher toda a tela do celular, sem Card, sem padding -- simulando a experiencia real de camera fullscreen.
 
-**Mudanca em `SignsPage.tsx`:**
-- Adicionar um estado local `playgroundType` (iniciando em "click") separado de `signatureType` (que e a configuracao salva)
-- As badges do playground alteram apenas `playgroundType` sem chamar `updateTenant`
-- O componente `PlaygroundAssinatura` recebe `playgroundType` em vez de `activeType`
-- Remover toda a logica async dos badges (sem mais `updateTenant` / `refetch` no playground)
+### 3. Mobile deve mostrar fullscreen sem frame de celular
+Quando o usuario esta em um dispositivo mobile real, nao faz sentido mostrar um celular dentro do celular. O conteudo deve aparecer direto em tela cheia.
 
-### 2. Camera real no Reconhecimento Facial
+---
 
-O componente `SignatureFacial` ja implementa a camera corretamente com `getUserMedia` chamado no click do botao "Iniciar Captura". O fluxo ja funciona:
-- Estado `idle`: mostra botao "Iniciar Captura"
-- Click chama `startCamera` que faz `getUserMedia` direto no handler (padrao correto de gesture)
-- Estado `capturing`: mostra video com overlay do rosto (oval, landmarks, instrucoes)
-- Captura 3 fotos automaticamente com countdown
+## Mudancas por Arquivo
 
-Nenhuma mudanca necessaria no `SignatureFacial.tsx` -- a camera ja abre de verdade. Se nao estava funcionando antes, era porque o preview do Lovable pode bloquear permissoes de camera. O componente em si esta correto.
+### `src/components/portal/signatures/SignatureFacial.tsx`
 
-### 3. Rotacao do celular para landscape na assinatura "Desenho"
+**Fix da camera:**
+- Adicionar `useEffect` que observa `stream` e atribui `videoRef.current.srcObject = stream` quando o video element existir
+- Remover a atribuicao de `srcObject` de dentro do `startCamera` (que roda antes do video estar no DOM)
 
-Quando o tipo selecionado for "draw", o frame do celular deve girar 90 graus para simular o modo paisagem, dando mais espaco horizontal para o cliente desenhar.
+```text
+useEffect(() => {
+  if (stream && videoRef.current) {
+    videoRef.current.srcObject = stream;
+  }
+}, [stream, step]);
+```
 
-**Mudanca em `SignsPage.tsx`:**
-- Quando `playgroundStep === "assinatura"` e `playgroundType === "draw"`, aplicar uma transformacao CSS no container do celular: `rotate(90deg)` com transicao suave
-- Ajustar as dimensoes: o frame passa de `320x640` para `640x320` (visualmente rotacionado)
-- Usar `transition-transform duration-500` para animar a rotacao
-- Quando voltar para outro step ou outro tipo, o celular retorna a posicao vertical
+**Modo fullscreen (nova prop `fullscreen`):**
+- Adicionar prop opcional `fullscreen?: boolean`
+- Quando `fullscreen` e true e estado e `capturing`:
+  - Remover espacamento externo, o container do video ocupa `absolute inset-0` preenchendo o pai inteiro
+  - Progresso fica sobreposto na parte inferior
+- Quando `fullscreen` e true e estado e `idle`:
+  - Mostrar tela de inicio centralizada com fundo escuro, ocupando todo o espaco
+
+### `src/pages/SignsPage.tsx`
+
+**PlaygroundAssinatura - facial fullscreen:**
+- Quando `type === "facial"`, nao renderizar dentro de Card
+- Renderizar `SignatureFacial` diretamente com `fullscreen={true}`, ocupando toda a area de conteudo do celular
+- O container de conteudo do celular perde padding quando for facial
+
+**Mobile responsivo:**
+- Importar `useIsMobile` 
+- Quando `isMobile` for true:
+  - Nao renderizar o frame do celular (bezel, status bar, home indicator)
+  - Renderizar o conteudo diretamente em tela cheia
+  - Badges ficam no topo como overlay ou barra fixa
+
+---
 
 ## Detalhes Tecnicos
 
-### Arquivo: `src/pages/SignsPage.tsx`
+### SignatureFacial.tsx - Camera Fix
 
-**Novo estado local:**
+O problema raiz e uma race condition: o elemento `<video>` so existe no DOM quando `step === "capturing"`, mas `startCamera` tenta acessar `videoRef.current` antes de mudar o step. A solucao e um effect que sincroniza o stream com o video element apos a renderizacao.
+
+### SignatureFacial.tsx - Modo Fullscreen
+
+Estado `idle` com fullscreen:
+- Fundo escuro (`bg-foreground/95`) ocupando todo o container
+- Icone, instrucoes e botao centralizados
+
+Estado `capturing` com fullscreen:
+- Video ocupa `absolute inset-0` com `object-cover`
+- FaceOverlay ja e absolute, funciona sem mudancas
+- Barra de progresso sobreposta no bottom com `absolute bottom-0`
+
+Estado `done` com fullscreen:
+- Grid de fotos com fundo semi-transparente
+
+### SignsPage.tsx - Conteudo condicional
+
 ```text
-const [playgroundType, setPlaygroundType] = useState<"click" | "facial" | "draw">("click");
+// No container de conteudo do celular:
+<div className={`flex-1 overflow-y-auto ${
+  playgroundStep === "assinatura" && playgroundType === "facial" ? "" : "p-3"
+}`}>
 ```
 
-**Badges simplificadas (sem async/updateTenant):**
-- Cada badge apenas faz `setPlaygroundType(type)` e `resetPlayground()`
-- Estilo: a badge ativa e determinada por `playgroundType` (nao mais `activeType`)
+PlaygroundAssinatura para facial:
+- Sem Card wrapper
+- SignatureFacial recebe `fullscreen={true}` e `className="h-full"`
 
-**Rotacao do frame mobile:**
-- Calcular `isLandscape = playgroundStep === "assinatura" && playgroundType === "draw"`
-- No container do celular, aplicar classe condicional:
-  - Vertical (padrao): `w-[320px]`, inner height `640px`
-  - Landscape (draw): aplicar `transform rotate-90` no container externo, mantendo as mesmas dimensoes internas mas visualmente rotacionado
-- Adicionar `transition-all duration-500 ease-in-out` para animar suavemente
+### SignsPage.tsx - Mobile
 
-**Componente PlaygroundAssinatura:**
-- Recebe `playgroundType` em vez de `activeType`
+```text
+const isMobile = useIsMobile();
+
+// Se mobile, renderizar conteudo direto sem phone frame
+{isMobile ? (
+  <div className="w-full min-h-[80vh] bg-background rounded-xl overflow-hidden border">
+    {/* conteudo direto */}
+  </div>
+) : (
+  <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] ...">
+    {/* phone frame */}
+  </div>
+)}
+```
 
 ### Arquivos modificados
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/pages/SignsPage.tsx` | Estado local para playground, badges sem updateTenant, rotacao landscape para draw |
+| `src/components/portal/signatures/SignatureFacial.tsx` | Fix camera (useEffect para srcObject), prop fullscreen para modo tela cheia |
+| `src/pages/SignsPage.tsx` | Facial sem Card (fullscreen no celular), mobile sem phone frame, padding condicional |
 
-Nenhum arquivo novo. Nenhuma mudanca nos componentes de assinatura (`SignatureFacial`, `SignatureDraw`, `SignatureClick`) -- eles ja funcionam corretamente.
