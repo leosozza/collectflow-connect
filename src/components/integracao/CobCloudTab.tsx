@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Wifi, WifiOff, Download, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown, DatabaseBackup } from "lucide-react";
+import { Wifi, WifiOff, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown } from "lucide-react";
+import CobCloudPreviewCard from "./cobcloud/CobCloudPreviewCard";
 
 interface LogEntry {
   id: string;
@@ -24,12 +24,7 @@ const CobCloudTab = () => {
   const { tenant, refetch } = useTenant();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importingAll, setImportingAll] = useState(false);
-  const [importAllResult, setImportAllResult] = useState<{ imported: number; pages: number; total: number } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [importCpf, setImportCpf] = useState("");
-  const [importLimit, setImportLimit] = useState("100");
 
   // Credentials state
   const [tokenCompany, setTokenCompany] = useState("");
@@ -102,41 +97,6 @@ const CobCloudTab = () => {
     }
   };
 
-  const handleImport = async () => {
-    setImporting(true);
-    try {
-      const result = await cobcloudService.importTitulos({
-        limit: Number(importLimit) || 100,
-        cpf: importCpf || undefined,
-      });
-      addLog("Importar Títulos", "success", `${result.imported} títulos importados de ${result.total} encontrados`);
-      toast({ title: "Importação concluída", description: `${result.imported} títulos importados` });
-    } catch (e: any) {
-      addLog("Importar Títulos", "error", e.message);
-      toast({ title: "Erro na importação", description: e.message, variant: "destructive" });
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleImportAll = async () => {
-    setImportingAll(true);
-    setImportAllResult(null);
-    try {
-      const result = await cobcloudService.importAll({
-        cpf: importCpf || undefined,
-      });
-      setImportAllResult({ imported: result.imported, pages: result.pages, total: result.total });
-      addLog("Importar Carteira Completa", "success", `${result.imported} títulos importados de ${result.total} encontrados em ${result.pages} páginas`);
-      toast({ title: "Importação completa!", description: `${result.imported} títulos importados de ${result.pages} páginas` });
-    } catch (e: any) {
-      addLog("Importar Carteira Completa", "error", e.message);
-      toast({ title: "Erro na importação completa", description: e.message, variant: "destructive" });
-    } finally {
-      setImportingAll(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Credentials Card */}
@@ -170,26 +130,12 @@ const CobCloudTab = () => {
                     </a>
                   </li>
                   <li>Faça login com suas credenciais de administrador</li>
-                  <li>
-                    No menu lateral, vá em <strong>Configurações</strong> → <strong>Integrações</strong> ou <strong>API</strong>
-                  </li>
-                  <li>
-                    Localize a seção <strong>"Tokens de API"</strong> ou <strong>"Chaves de Acesso"</strong>
-                  </li>
-                  <li>
-                    Copie o <strong>Token Assessoria</strong> — este é o token que identifica sua assessoria/empresa junto à API
-                  </li>
-                  <li>
-                    Copie o <strong>Token Client</strong> — este é o token de autenticação do cliente da API
-                  </li>
+                  <li>No menu lateral, vá em <strong>Configurações</strong> → <strong>Integrações</strong> ou <strong>API</strong></li>
+                  <li>Localize a seção <strong>"Tokens de API"</strong> ou <strong>"Chaves de Acesso"</strong></li>
+                  <li>Copie o <strong>Token Assessoria</strong></li>
+                  <li>Copie o <strong>Token Client</strong></li>
                   <li>Cole ambos os tokens nos campos abaixo e clique em "Salvar Credenciais"</li>
                 </ol>
-                <div className="rounded bg-accent/50 p-3 mt-2">
-                  <p className="text-xs text-muted-foreground">
-                    <strong>💡 Dica:</strong> Se você não encontrar os tokens, entre em contato com o suporte do CobCloud ou com o responsável técnico da sua conta. 
-                    Os tokens também podem estar disponíveis na seção "Minha Conta" ou "Perfil da Assessoria".
-                  </p>
-                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -197,20 +143,8 @@ const CobCloudTab = () => {
             <div className="space-y-1.5">
               <Label htmlFor="token-company">Token Company</Label>
               <div className="relative">
-                <Input
-                  id="token-company"
-                  type={showCompany ? "text" : "password"}
-                  placeholder="Token da empresa"
-                  value={tokenCompany}
-                  onChange={(e) => setTokenCompany(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowCompany(!showCompany)}
-                >
+                <Input id="token-company" type={showCompany ? "text" : "password"} placeholder="Token da empresa" value={tokenCompany} onChange={(e) => setTokenCompany(e.target.value)} />
+                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowCompany(!showCompany)}>
                   {showCompany ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
@@ -218,20 +152,8 @@ const CobCloudTab = () => {
             <div className="space-y-1.5">
               <Label htmlFor="token-assessoria">Token Assessoria (opcional)</Label>
               <div className="relative">
-                <Input
-                  id="token-assessoria"
-                  type={showAssessoria ? "text" : "password"}
-                  placeholder="Token da assessoria"
-                  value={tokenAssessoria}
-                  onChange={(e) => setTokenAssessoria(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowAssessoria(!showAssessoria)}
-                >
+                <Input id="token-assessoria" type={showAssessoria ? "text" : "password"} placeholder="Token da assessoria" value={tokenAssessoria} onChange={(e) => setTokenAssessoria(e.target.value)} />
+                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowAssessoria(!showAssessoria)}>
                   {showAssessoria ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
@@ -239,20 +161,8 @@ const CobCloudTab = () => {
             <div className="space-y-1.5">
               <Label htmlFor="token-client">Token Client</Label>
               <div className="relative">
-                <Input
-                  id="token-client"
-                  type={showClient ? "text" : "password"}
-                  placeholder="Token do client/credor"
-                  value={tokenClient}
-                  onChange={(e) => setTokenClient(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowClient(!showClient)}
-                >
+                <Input id="token-client" type={showClient ? "text" : "password"} placeholder="Token do client/credor" value={tokenClient} onChange={(e) => setTokenClient(e.target.value)} />
+                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowClient(!showClient)}>
                   {showClient ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
@@ -263,111 +173,37 @@ const CobCloudTab = () => {
             Salvar Credenciais
           </Button>
           {hasCredentials && (
-            <p className="text-sm text-success flex items-center gap-1">
+            <p className="text-sm text-green-500 flex items-center gap-1">
               <CheckCircle2 className="w-4 h-4" /> Credenciais configuradas
             </p>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {connected === null ? (
-                <WifiOff className="w-5 h-5 text-muted-foreground" />
-              ) : connected ? (
-                <Wifi className="w-5 h-5 text-success" />
-              ) : (
-                <WifiOff className="w-5 h-5 text-destructive" />
-              )}
-              Status da Conexão
-            </CardTitle>
-            <CardDescription>
-              {connected === null ? "Clique para testar a conexão" : connected ? "API CobCloud conectada" : "Sem conexão com a API"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={handleTestConnection} disabled={testing || !hasCredentials} className="w-full">
-              {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Testar Conexão
-            </Button>
-            {!hasCredentials && (
-              <p className="text-xs text-muted-foreground mt-2">Salve as credenciais acima para testar</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Download className="w-5 h-5" />
-              Importar Títulos
-            </CardTitle>
-            <CardDescription>Buscar títulos do CobCloud e importar para o sistema</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="import-cpf">CPF (opcional)</Label>
-                <Input id="import-cpf" placeholder="000.000.000-00" value={importCpf} onChange={(e) => setImportCpf(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="import-limit">Limite</Label>
-                <Input id="import-limit" type="number" value={importLimit} onChange={(e) => setImportLimit(e.target.value)} />
-              </div>
-            </div>
-            <Button onClick={handleImport} disabled={importing || !hasCredentials} className="w-full">
-              {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-              Importar
-            </Button>
-            {!hasCredentials && (
-              <p className="text-xs text-muted-foreground">Salve as credenciais acima para importar</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Import All Card */}
+      {/* Connection Test */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <DatabaseBackup className="w-5 h-5" />
-            Importar Carteira Completa
+            {connected === null ? <WifiOff className="w-5 h-5 text-muted-foreground" /> : connected ? <Wifi className="w-5 h-5 text-green-500" /> : <WifiOff className="w-5 h-5 text-destructive" />}
+            Status da Conexão
           </CardTitle>
           <CardDescription>
-            Importa automaticamente todos os títulos do CobCloud, percorrendo todas as páginas da API (até 10.000 registros por execução).
+            {connected === null ? "Clique para testar a conexão" : connected ? "API CobCloud conectada" : "Sem conexão com a API"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {importingAll && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Importando... isso pode levar alguns minutos
-              </div>
-              <Progress value={undefined} className="h-2" />
-            </div>
-          )}
-          {importAllResult && !importingAll && (
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
-              <p className="flex items-center gap-2 font-medium text-card-foreground">
-                <CheckCircle2 className="w-4 h-4 text-success" />
-                Importação finalizada
-              </p>
-              <p className="text-muted-foreground">{importAllResult.imported} títulos importados de {importAllResult.total} encontrados em {importAllResult.pages} página(s)</p>
-            </div>
-          )}
-          <Button onClick={handleImportAll} disabled={importingAll || !hasCredentials} className="w-full" variant="default">
-            {importingAll ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <DatabaseBackup className="w-4 h-4 mr-2" />}
-            {importingAll ? "Importando..." : "Importar Carteira Completa"}
+        <CardContent>
+          <Button onClick={handleTestConnection} disabled={testing || !hasCredentials} className="w-full sm:w-auto">
+            {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Testar Conexão
           </Button>
-          {!hasCredentials && (
-            <p className="text-xs text-muted-foreground">Salve as credenciais acima para importar</p>
-          )}
+          {!hasCredentials && <p className="text-xs text-muted-foreground mt-2">Salve as credenciais acima para testar</p>}
         </CardContent>
       </Card>
 
+      {/* Preview + Import Card */}
+      <CobCloudPreviewCard hasCredentials={hasCredentials} onLog={addLog} />
+
+      {/* Export info */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -380,6 +216,7 @@ const CobCloudTab = () => {
         </CardHeader>
       </Card>
 
+      {/* Logs */}
       {logs.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Log de Sincronizações</CardTitle></CardHeader>
@@ -388,7 +225,7 @@ const CobCloudTab = () => {
               {logs.map((log) => (
                 <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 text-sm">
                   {log.status === "success" ? (
-                    <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
                   ) : (
                     <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
                   )}

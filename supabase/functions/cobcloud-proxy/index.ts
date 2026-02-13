@@ -358,6 +358,47 @@ async function handleBaixarTitulo(body: any, creds: CobCloudCredentials) {
   return json({ status: res.status, data });
 }
 
+async function handlePreview(body: any, creds: CobCloudCredentials) {
+  const headers = buildCobCloudHeaders(creds);
+
+  const statuses = ["aberto", "pago", "quebrado"];
+  const dateType = body.date_type ? String(body.date_type).slice(0, 30) : undefined;
+  const dateValue = body.date_value ? String(body.date_value).slice(0, 50) : undefined;
+
+  const results = await Promise.all(
+    statuses.map(async (status) => {
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", "1");
+      params.set("status", status);
+      if (dateType) params.set("date_type", dateType);
+      if (dateValue) params.set("date_value", dateValue);
+
+      try {
+        const res = await fetchWithRetry(
+          `${COBCLOUD_BASE}/cli/titulos/listar?${params}`,
+          headers
+        );
+        if (!res.ok) return { status, count: 0 };
+        const data = await res.json();
+        const count = data.total || data.count || (data.data || data.titulos || []).length || 0;
+        return { status, count: Number(count) };
+      } catch {
+        return { status, count: 0 };
+      }
+    })
+  );
+
+  const byStatus: Record<string, number> = {};
+  let total = 0;
+  for (const r of results) {
+    byStatus[r.status] = r.count;
+    total += r.count;
+  }
+
+  return json({ total, byStatus });
+}
+
 async function handleImportAll(body: any, creds: CobCloudCredentials) {
   const headers = buildCobCloudHeaders(creds);
   const admin = getSupabaseAdmin();
@@ -368,6 +409,8 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
 
   const cpfFilter = body.cpf ? String(body.cpf).slice(0, 20) : undefined;
   const statusFilter = body.status ? String(body.status).slice(0, 30) : undefined;
+  const dateType = body.date_type ? String(body.date_type).slice(0, 30) : undefined;
+  const dateValue = body.date_value ? String(body.date_value).slice(0, 50) : undefined;
 
   let page = 1;
   let totalImported = 0;
@@ -380,6 +423,8 @@ async function handleImportAll(body: any, creds: CobCloudCredentials) {
     params.set("limit", String(PAGE_SIZE));
     if (cpfFilter) params.set("cpf", cpfFilter);
     if (statusFilter) params.set("status", statusFilter);
+    if (dateType) params.set("date_type", dateType);
+    if (dateValue) params.set("date_value", dateValue);
 
     let res: Response;
     try {
@@ -468,6 +513,8 @@ Deno.serve(async (req) => {
         return await handleStatus(creds);
       case "import-titulos":
         return await handleImportTitulos(body, creds);
+      case "preview":
+        return await handlePreview(body, creds);
       case "import-all":
         return await handleImportAll(body, creds);
       case "export-devedores":

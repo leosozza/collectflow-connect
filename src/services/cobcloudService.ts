@@ -20,14 +20,29 @@ async function callProxy(action: string, body: Record<string, unknown> = {}) {
   return data;
 }
 
+export interface PreviewResult {
+  total: number;
+  byStatus: Record<string, number>;
+}
+
+export interface ImportFilters {
+  cpf?: string;
+  status?: string;
+  date_type?: string;
+  date_value?: string;
+}
+
 export const cobcloudService = {
   testConnection: () => callProxy("status"),
+
+  preview: (filters?: { date_type?: string; date_value?: string }): Promise<PreviewResult> =>
+    callProxy("preview", filters || {}),
 
   importTitulos: (filters?: { page?: number; limit?: number; cpf?: string; status?: string }) =>
     callProxy("import-titulos", filters || {}),
 
-  importAll: (filters?: { cpf?: string; status?: string }) =>
-    callProxy("import-all", filters || {}),
+  importAll: (filters?: ImportFilters) =>
+    callProxy("import-all", (filters || {}) as Record<string, unknown>),
 
   exportDevedores: (clientIds: string[]) =>
     callProxy("export-devedores", { clientIds }),
