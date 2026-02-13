@@ -1,36 +1,48 @@
 
 
-# Ajustes de Acesso para Operador
+# Adicionar Configuracao de Credenciais CobCloud
 
-## 3 Alteracoes Necessarias
+## Problema
 
-### 1. Liberar Contact Center para Operador (sidebar)
+A aba CobCloud na pagina de Integracoes nao possui campos para inserir as credenciais da API (Token Assessoria e Token Client). A edge function `cobcloud-proxy` espera dois secrets (`COBCLOUD_TOKEN_ASSESSORIA` e `COBCLOUD_TOKEN_CLIENT`) que nao estao configurados, impedindo qualquer operacao de importacao.
 
-No `AppLayout.tsx`, mover os itens de `contactCenterItems` para fora da condicao `isAdmin`, permitindo que operadores vejam a secao "Contact Center" com a aba WhatsApp. A aba Telefonia continuara com restricao de admin dentro da propria pagina (`ContactCenterPage.tsx`).
+## Solucao
 
-### 2. Remover "Log de Importacoes" do menu do Operador
+Adicionar um card de "Credenciais" no topo da aba CobCloud com campos para Token Assessoria e Token Client. Os valores serao salvos na tabela `tenants` no campo `settings` (JSON), e a edge function sera atualizada para ler as credenciais de la em vez de secrets fixos do ambiente.
 
-No `AppLayout.tsx`, remover o item `{ label: "Log de Importações", path: "/cadastro" }` do array `preContactItems` que atualmente aparece para nao-admins (linha 50). Esse item so deve aparecer na secao "Avancado" para admins.
+Isso permite que cada tenant tenha suas proprias credenciais CobCloud, alinhado com a arquitetura multi-tenant.
 
-### 3. Filtrar Carteira por Operador (apenas clientes vinculados)
+## Alteracoes
 
-No `clientService.ts`, na funcao `fetchClients`, adicionar um filtro por `operator_id` quando o usuario for operador. O `profile.id` do operador sera passado como parametro.
+### 1. CobCloudTab.tsx - Adicionar card de credenciais
 
-No `CarteiraPage.tsx`, passar o `profile.id` e o role do usuario para a funcao `fetchClients`, aplicando o filtro `operator_id` somente quando o usuario nao for admin.
+- Adicionar dois campos de input: "Token Assessoria" e "Token Client"
+- Carregar valores existentes do `tenant.settings.cobcloud_token_assessoria` e `cobcloud_token_client`
+- Botao "Salvar Credenciais" que atualiza o campo `settings` do tenant
+- Campos com tipo `password` para seguranca visual
+- Desabilitar botoes de Testar Conexao e Importar enquanto credenciais nao estiverem salvas
+
+### 2. cobcloud-proxy (edge function) - Ler credenciais do tenant
+
+- Apos verificar o admin, buscar o tenant do usuario via `profiles.tenant_id`
+- Ler as credenciais de `tenants.settings` (campos `cobcloud_token_assessoria` e `cobcloud_token_client`)
+- Manter fallback para env vars (`COBCLOUD_TOKEN_ASSESSORIA` / `COBCLOUD_TOKEN_CLIENT`) caso existam
+- Passar o `tenant_id` para as funcoes de importacao para que os clientes sejam criados com o tenant correto
+
+### 3. Importacao com tenant_id
+
+- Na funcao `handleImportTitulos`, incluir o `tenant_id` do usuario ao inserir novos clientes na tabela `clients`, garantindo que os registros importados pertencam ao tenant correto
 
 ## Detalhes Tecnicos
 
-**Arquivo: `src/components/AppLayout.tsx`**
-- Remover a linha com "Log de Importacoes" do `preContactItems` (condicao `!isAdmin`)
-- Mover `contactCenterItems` para fora do bloco `isAdmin`, mantendo Telefonia e WhatsApp visiveis para todos. A restricao de acesso a Telefonia ja existe em `ContactCenterPage.tsx`
+**CobCloudTab.tsx**: Usar `useTenant()` para acessar e atualizar `tenant.settings`. Chamar `updateTenant` para salvar as credenciais no campo JSON `settings`.
 
-**Arquivo: `src/services/clientService.ts`**
-- Adicionar parametro opcional `operatorId?: string` na funcao `fetchClients`
-- Quando `operatorId` for informado, adicionar `.eq("operator_id", operatorId)` na query
+**cobcloud-proxy/index.ts**: Modificar `getCobCloudHeaders` para aceitar credenciais como parametro. No handler principal, apos `verifyAdmin`, buscar o perfil do usuario para obter `tenant_id`, depois buscar `tenants.settings` para extrair os tokens. Passar esses tokens para as funcoes que precisam dos headers.
 
-**Arquivo: `src/pages/CarteiraPage.tsx`**
-- Usar `useTenant` para verificar se o usuario e admin
-- Se nao for admin, passar `profile.id` como `operatorId` para `fetchClients`
-
-Nenhuma alteracao no banco de dados e necessaria -- a coluna `operator_id` ja existe na tabela `clients` e o RLS ja filtra por tenant.
+**Fluxo**:
+1. Admin abre aba CobCloud
+2. Insere Token Assessoria e Token Client
+3. Clica "Salvar Credenciais" (salva em `tenants.settings`)
+4. Clica "Testar Conexao" (edge function le credenciais do tenant)
+5. Clica "Importar" (importa titulos com `tenant_id` correto)
 
