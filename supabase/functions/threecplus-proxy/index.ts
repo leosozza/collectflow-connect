@@ -83,8 +83,8 @@ Deno.serve(async (req) => {
           name: campaign_name,
           start_time: start_time || '08:00',
           end_time: end_time || '18:30',
+          qualification_list: qualification_list_id || null,
         };
-        if (qualification_list_id) campaignBody.qualification_list_id = qualification_list_id;
         body = JSON.stringify(campaignBody);
         break;
       }
