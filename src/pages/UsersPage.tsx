@@ -48,6 +48,7 @@ interface Profile {
   role: "admin" | "operador";
   commission_rate: number;
   commission_grade_id: string | null;
+  threecplus_agent_id: number | null;
 }
 
 const UsersPage = () => {
@@ -57,6 +58,7 @@ const UsersPage = () => {
   const [editRole, setEditRole] = useState<string>("operador");
   const [editGradeId, setEditGradeId] = useState<string>("none");
   const [editName, setEditName] = useState<string>("");
+  const [editAgentId, setEditAgentId] = useState<string>("");
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
 
   const { data: users = [], isLoading } = useQuery({
@@ -86,10 +88,10 @@ const UsersPage = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_grade_id, full_name }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string }) => {
+    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null }) => {
       const { error } = await supabase
         .from("profiles")
-        .update({ role, commission_grade_id, full_name })
+        .update({ role, commission_grade_id, full_name, threecplus_agent_id } as any)
         .eq("id", id);
       if (error) throw error;
     },
@@ -122,6 +124,7 @@ const UsersPage = () => {
     setEditRole(user.role);
     setEditGradeId(user.commission_grade_id || "none");
     setEditName(user.full_name);
+    setEditAgentId(user.threecplus_agent_id?.toString() || "");
   };
 
   const getGradeName = (gradeId: string | null) => {
@@ -152,13 +155,14 @@ const UsersPage = () => {
               <TableHead>Email</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Grade de Comissão</TableHead>
+              <TableHead>Agente 3CPlus</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">Carregando...</TableCell>
               </TableRow>
             ) : users.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
@@ -166,6 +170,7 @@ const UsersPage = () => {
                 <TableCell className="text-muted-foreground text-sm">{u.email}</TableCell>
                 <TableCell className="capitalize text-muted-foreground">{u.role}</TableCell>
                 <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
+                <TableCell className="text-muted-foreground font-mono text-sm">{u.threecplus_agent_id || "—"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
@@ -221,6 +226,16 @@ const UsersPage = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>ID Agente 3CPlus</Label>
+              <Input
+                type="number"
+                value={editAgentId}
+                onChange={(e) => setEditAgentId(e.target.value)}
+                placeholder="Ex: 12345"
+              />
+              <p className="text-[11px] text-muted-foreground">Vincule o ID do agente na plataforma de telefonia</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
@@ -232,6 +247,7 @@ const UsersPage = () => {
                     role: editRole as "admin" | "operador",
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
+                    threecplus_agent_id: editAgentId ? parseInt(editAgentId) : null,
                   });
                 }
               }}
