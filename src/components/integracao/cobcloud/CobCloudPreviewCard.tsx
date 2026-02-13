@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RefreshCw, Loader2, DatabaseBackup, FileText, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { RefreshCw, Loader2, DatabaseBackup, FileText, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
 
 interface Props {
   hasCredentials: boolean;
@@ -23,7 +22,7 @@ const STATUS_CONFIG = {
 const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
-  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [preview, setPreview] = useState<(PreviewResult & { source?: string }) | null>(null);
 
   // Filters
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["aberto", "pago", "quebrado"]);
@@ -33,7 +32,7 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
 
   // Import state
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; pages: number; total: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; pages: number; total: number; source?: string } | null>(null);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -47,8 +46,9 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
       }
       const result = await cobcloudService.preview(dateFilters);
       setPreview(result);
-      onLog("Sincronizar Preview", "success", `Total: ${result.total} títulos encontrados`);
-      toast({ title: "Sincronização concluída", description: `${result.total} títulos encontrados` });
+      const sourceLabel = result.source === "devedores" ? " (fonte: devedores)" : "";
+      onLog("Sincronizar Preview", "success", `Total: ${result.total} registros encontrados${sourceLabel}`);
+      toast({ title: "Sincronização concluída", description: `${result.total} registros encontrados${sourceLabel}` });
     } catch (e: any) {
       onLog("Sincronizar Preview", "error", e.message);
       toast({ title: "Erro ao sincronizar", description: e.message, variant: "destructive" });
@@ -82,13 +82,13 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
       }
 
       const result = await cobcloudService.importAll(filters);
-      setImportResult({ imported: result.imported, pages: result.pages, total: result.total });
+      setImportResult({ imported: result.imported, pages: result.pages, total: result.total, source: result.source });
       onLog(
         importAll ? "Importar Tudo" : "Importar Filtrado",
         "success",
-        `${result.imported} títulos importados de ${result.total} em ${result.pages} página(s)`
+        `${result.imported} registros importados de ${result.total} em ${result.pages} página(s)`
       );
-      toast({ title: "Importação concluída!", description: `${result.imported} títulos importados` });
+      toast({ title: "Importação concluída!", description: `${result.imported} registros importados` });
     } catch (e: any) {
       onLog("Importar", "error", e.message);
       toast({ title: "Erro na importação", description: e.message, variant: "destructive" });
@@ -136,6 +136,26 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
         {/* Step 2: Preview summary */}
         {preview && (
           <div className="space-y-4">
+            {preview.total === 0 && (
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-card-foreground">Nenhum registro encontrado</p>
+                  <p className="text-muted-foreground mt-1">
+                    O sistema testou os endpoints de títulos e devedores e não encontrou dados. 
+                    Verifique se as credenciais estão corretas e se existem dados cadastrados no CobCloud.
+                    Use o botão "Testar Conexão" acima para ver a contagem em cada endpoint.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {preview.source && (
+              <p className="text-xs text-muted-foreground">
+                Fonte dos dados: <strong className="text-card-foreground">{preview.source === "devedores" ? "Endpoint de Devedores" : "Endpoint de Títulos"}</strong>
+              </p>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-3">
               {(Object.entries(STATUS_CONFIG) as [string, typeof STATUS_CONFIG.aberto][]).map(([key, cfg]) => {
                 const count = preview.byStatus[key] || 0;
@@ -204,7 +224,8 @@ const CobCloudPreviewCard = ({ hasCredentials, onLog }: Props) => {
                   Importação finalizada
                 </p>
                 <p className="text-muted-foreground">
-                  {importResult.imported} títulos importados de {importResult.total} encontrados em {importResult.pages} página(s)
+                  {importResult.imported} registros importados de {importResult.total} encontrados em {importResult.pages} página(s)
+                  {importResult.source && ` (fonte: ${importResult.source})`}
                 </p>
               </div>
             )}

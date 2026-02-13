@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Wifi, WifiOff, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown } from "lucide-react";
+import { Wifi, WifiOff, Upload, Loader2, CheckCircle2, XCircle, KeyRound, Save, Eye, EyeOff, HelpCircle, ChevronDown, Database } from "lucide-react";
 import CobCloudPreviewCard from "./cobcloud/CobCloudPreviewCard";
 
 interface LogEntry {
@@ -25,6 +25,7 @@ const CobCloudTab = () => {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [connectionDetail, setConnectionDetail] = useState<{ devedores_count?: number; titulos_count?: number } | null>(null);
 
   // Credentials state
   const [tokenCompany, setTokenCompany] = useState("");
@@ -81,15 +82,21 @@ const CobCloudTab = () => {
     try {
       const result = await cobcloudService.testConnection();
       setConnected(result.connected);
+      setConnectionDetail({
+        devedores_count: result.devedores_count,
+        titulos_count: result.titulos_count,
+      });
+      const detail = `Devedores: ${result.devedores_count ?? 0} | Títulos: ${result.titulos_count ?? 0}`;
       addLog("Teste de Conexão", result.connected ? "success" : "error",
-        result.connected ? "Conectado com sucesso" : `Falha: status ${result.status}`);
+        result.connected ? `Conectado. ${detail}` : `Falha: status ${result.status}`);
       toast({
         title: result.connected ? "Conectado!" : "Falha na conexão",
-        description: result.connected ? "API CobCloud acessível" : "Verifique as credenciais configuradas",
+        description: result.connected ? `API CobCloud acessível. ${detail}` : "Verifique as credenciais configuradas",
         variant: result.connected ? "default" : "destructive",
       });
     } catch (e: any) {
       setConnected(false);
+      setConnectionDetail(null);
       addLog("Teste de Conexão", "error", e.message);
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     } finally {
@@ -191,12 +198,27 @@ const CobCloudTab = () => {
             {connected === null ? "Clique para testar a conexão" : connected ? "API CobCloud conectada" : "Sem conexão com a API"}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button onClick={handleTestConnection} disabled={testing || !hasCredentials} className="w-full sm:w-auto">
             {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Testar Conexão
           </Button>
           {!hasCredentials && <p className="text-xs text-muted-foreground mt-2">Salve as credenciais acima para testar</p>}
+          
+          {connectionDetail && connected && (
+            <div className="flex flex-wrap gap-4 mt-2">
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                <Database className="w-4 h-4 text-primary" />
+                <span className="text-muted-foreground">Devedores:</span>
+                <strong className="text-card-foreground">{connectionDetail.devedores_count ?? 0}</strong>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                <Database className="w-4 h-4 text-primary" />
+                <span className="text-muted-foreground">Títulos:</span>
+                <strong className="text-card-foreground">{connectionDetail.titulos_count ?? 0}</strong>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
