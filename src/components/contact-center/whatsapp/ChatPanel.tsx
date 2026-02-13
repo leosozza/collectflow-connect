@@ -6,6 +6,7 @@ import { Phone, User, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
+import AISuggestion from "./AISuggestion";
 import { Conversation, ChatMessage } from "@/services/conversationService";
 
 interface ChatPanelProps {
@@ -19,6 +20,7 @@ interface ChatPanelProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   instanceName?: string;
+  clientInfo?: any;
 }
 
 const ChatPanel = ({
@@ -32,6 +34,7 @@ const ChatPanel = ({
   sidebarOpen,
   onToggleSidebar,
   instanceName,
+  clientInfo,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +107,13 @@ const ChatPanel = ({
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
+
+      {/* AI Suggestion */}
+      {conversation && messages.length > 0 && (
+        <div className="px-4 py-1.5 border-t border-border/50">
+          <AISuggestion messages={messages} clientInfo={clientInfo} onSend={onSend} disabled={sending} />
+        </div>
+      )}
 
       {/* Input */}
       <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} disabled={sending} />

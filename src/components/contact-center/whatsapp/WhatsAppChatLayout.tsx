@@ -261,10 +261,12 @@ const WhatsAppChatLayout = () => {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           instanceName={selectedInstanceName}
+          clientInfo={null}
         />
         {sidebarOpen && (
           <ContactSidebar
             conversation={selectedConv}
+            messages={messages}
             onClientLinked={loadConversations}
           />
         )}
