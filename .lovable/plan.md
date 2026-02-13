@@ -1,69 +1,67 @@
 
 
-# Redesign do Painel de Tabulacao - Botoes Visuais e Intuitivos
+# Adicionar Abas de Historico e Conversa WhatsApp
 
 ## O que sera feito
 
-Redesenhar o `DispositionPanel` para ter botoes grandes, coloridos e agrupados por categoria, inspirado na referencia visual enviada. Os botoes atuais (pequenos, outline, sem cor) serao substituidos por botoes largos com cores distintas por grupo, icones a esquerda e texto centralizado.
+Transformar a area do historico (coluna direita do atendimento) em um componente com abas (Tabs). A primeira aba mostra o historico atual (timeline de tabulacoes, acordos e mensagens). A segunda aba mostra uma interface de conversa WhatsApp estilo chat, preparada para integracao futura.
 
 ### Layout proposto
 
 ```text
-+----------------------------------------------+
-|  Acoes                                        |
-+----------------------------------------------+
-|                                               |
-|  AGENDAR                                      |
-|  [====== Retornar Ligacao (azul) ======]      |
-|                                               |
-|  RESULTADO DA LIGACAO                         |
-|  [=== Caixa Postal (vermelho) ===]            |
-|  [=== Lig. Interrompida (amarelo) ===]        |
-|  [=== Nao Atende (laranja) ====]              |
-|                                               |
-|  CONTATO                                      |
-|  [=== Contato Incorreto (cinza) ===]          |
-|  [=== Promessa Pagamento (verde) ===]         |
-|                                               |
-|  NEGOCIACAO                                   |
-|  [======= NEGOCIAR (verde destaque) ========] |
-|                                               |
-|  Observacoes: [__________________________]    |
-+----------------------------------------------+
++--------------------------------------------------+
+|  [ Historico ]  [ Conversa WhatsApp ]             |
++--------------------------------------------------+
+|                                                    |
+|  (conteudo da aba selecionada)                     |
+|                                                    |
+|  Aba Historico: timeline atual (sem mudancas)      |
+|                                                    |
+|  Aba Conversa: interface estilo chat               |
+|  +----------------------------------------------+ |
+|  |  Mensagens do cliente (esquerda, cinza)       | |
+|  |  Mensagens enviadas (direita, verde)          | |
+|  |  ...                                          | |
+|  +----------------------------------------------+ |
+|  |  [ Digite sua mensagem...     ] [ Enviar ]    | |
+|  +----------------------------------------------+ |
+|                                                    |
++--------------------------------------------------+
 ```
 
-### Comportamento
-- Cada grupo tem um titulo em cinza (label) como "AGENDAR", "RESULTADO DA LIGACAO", etc.
-- Botoes sao largos (full-width ou 2 colunas) com fundo colorido, texto branco e icone
-- "Retornar Ligacao" ao clicar expande o campo de data/hora inline (como ja funciona)
-- "Negociar" e o botao principal, maior e em destaque
-- Campo de observacoes fica no final
-- Cores por tipo: vermelho para caixa postal, amarelo para interrompida, azul para retorno, verde para promessa/negociar, cinza para contato incorreto
+## Comportamento
+
+- Aba "Historico" exibe a timeline existente sem alteracoes
+- Aba "Conversa" exibe as mensagens do `message_logs` formatadas como bolhas de chat (estilo WhatsApp)
+- Campo de digitacao no final da aba Conversa fica desabilitado com placeholder "Integracao em breve" (sera habilitado na fase de integracao)
+- As mensagens existentes no `message_logs` ja aparecem na conversa, organizadas cronologicamente
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivo: `src/components/atendimento/DispositionPanel.tsx`
+### Arquivo novo: `src/components/atendimento/WhatsAppChat.tsx`
 
-1. **Reorganizar botoes em grupos** com labels de secao (AGENDAR, RESULTADO, CONTATO, NEGOCIACAO)
-2. **Aplicar cores de fundo** usando classes Tailwind customizadas por tipo de tabulacao:
-   - `callback`: azul (`bg-blue-500 hover:bg-blue-600 text-white`)
-   - `voicemail`: vermelho (`bg-red-500 hover:bg-red-600 text-white`)
-   - `interrupted`: amarelo (`bg-yellow-500 hover:bg-yellow-600 text-white`)
-   - `no_answer`: laranja (`bg-orange-500 hover:bg-orange-600 text-white`)
-   - `wrong_contact`: cinza (`bg-gray-500 hover:bg-gray-600 text-white`)
-   - `promise`: verde (`bg-emerald-500 hover:bg-emerald-600 text-white`)
-   - `negotiated` (Negociar): verde escuro destaque (`bg-green-600 hover:bg-green-700 text-white`)
-3. **Botoes maiores**: `h-12` com `text-sm font-medium`, icone a esquerda, texto centralizado
-4. **Layout em grid**: secoes de 1-2 colunas conforme quantidade de botoes no grupo
-5. **Mover campo de observacoes** para baixo do painel, antes do botao Negociar
+- Componente que recebe as mensagens (`message_logs`) como prop
+- Renderiza cada mensagem como bolha de chat:
+  - Mensagens enviadas: alinhadas a direita, fundo verde
+  - Mensagens recebidas (futuro): alinhadas a esquerda, fundo cinza
+- Campo de input + botao "Enviar" no rodape, desabilitado por enquanto
+- ScrollArea para rolagem das mensagens
+- Mensagem vazia: "Nenhuma conversa registrada"
 
-### Arquivo: `src/services/dispositionService.ts`
+### Arquivo modificado: `src/components/atendimento/ClientTimeline.tsx`
 
-Sem alteracoes - os tipos e labels existentes serao mantidos.
+- Envolver o conteudo atual com o componente `Tabs` do Radix
+- Duas abas: "Historico" (conteudo atual) e "Conversa" (WhatsAppChat)
+- Receber `messages` como prop e passar para o WhatsAppChat
+- Renomear o componente ou manter o nome e adicionar as tabs internamente
+
+### Arquivo: `src/pages/AtendimentoPage.tsx`
+
+- Sem alteracoes significativas, pois `ClientTimeline` ja recebe `messages` como prop
 
 | Arquivo | Acao |
 |---------|------|
-| `src/components/atendimento/DispositionPanel.tsx` | Modificar - redesign visual com botoes coloridos agrupados |
-
+| `src/components/atendimento/WhatsAppChat.tsx` | Criar - interface de chat com bolhas |
+| `src/components/atendimento/ClientTimeline.tsx` | Modificar - adicionar Tabs com aba Historico e Conversa |
