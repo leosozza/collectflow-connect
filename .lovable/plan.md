@@ -1,74 +1,68 @@
 
 
-# Pagina Signs - Configuracao e Playground de Assinatura Digital
+# Playground Independente + Camera Real + Rotacao Landscape
 
-## Objetivo
+## Resumo das mudancas
 
-Criar uma nova pagina "/signs" no menu lateral em "Avancado" que concentra a configuracao do tipo de assinatura digital e oferece um Playground interativo para simular a experiencia completa do cliente (ver termos, assinar e aprovar).
+Tres ajustes principais na pagina Signs:
 
-## O que sera feito
+### 1. Badges do Playground independentes das configuracoes
 
-### 1. Nova pagina `SignsPage.tsx`
+Atualmente, clicar numa badge no playground altera o `signature_type` salvo no tenant (chama `updateTenant`). Isso esta errado -- o playground deve ser apenas uma simulacao local sem afetar a configuracao real.
 
-A pagina tera duas abas (Tabs):
+**Mudanca em `SignsPage.tsx`:**
+- Adicionar um estado local `playgroundType` (iniciando em "click") separado de `signatureType` (que e a configuracao salva)
+- As badges do playground alteram apenas `playgroundType` sem chamar `updateTenant`
+- O componente `PlaygroundAssinatura` recebe `playgroundType` em vez de `activeType`
+- Remover toda a logica async dos badges (sem mais `updateTenant` / `refetch` no playground)
 
-**Aba "Configuracao"**
-- Move o card de Assinatura Digital que hoje esta em `TenantSettingsPage.tsx` para esta pagina
-- Radio group com as 3 opcoes: Click, Reconhecimento Facial, Assinatura na Tela
-- Botao salvar que atualiza `settings.signature_type` do tenant
+### 2. Camera real no Reconhecimento Facial
 
-**Aba "Playground"**
-- Simulador completo da experiencia do cliente, dividido em etapas:
-  1. **Termo do Acordo**: Mostra um acordo ficticio de exemplo (dados mock) com o layout identico ao que o cliente ve no portal
-  2. **Assinatura**: Renderiza o componente de assinatura correspondente ao tipo configurado no tenant (SignatureClick, SignatureFacial ou SignatureDraw) em modo de demonstracao (sem salvar no banco)
-  3. **Confirmacao**: Tela de sucesso simulada mostrando que o acordo foi aprovado
-- Botao "Reiniciar Simulacao" para voltar ao inicio
-- Badge indicando qual tipo de assinatura esta ativo
-- Preview mobile-like: o playground sera renderizado dentro de um frame estilizado como celular para dar a sensacao real
+O componente `SignatureFacial` ja implementa a camera corretamente com `getUserMedia` chamado no click do botao "Iniciar Captura". O fluxo ja funciona:
+- Estado `idle`: mostra botao "Iniciar Captura"
+- Click chama `startCamera` que faz `getUserMedia` direto no handler (padrao correto de gesture)
+- Estado `capturing`: mostra video com overlay do rosto (oval, landmarks, instrucoes)
+- Captura 3 fotos automaticamente com countdown
 
-### 2. Atualizacoes no Sidebar (`AppLayout.tsx`)
+Nenhuma mudanca necessaria no `SignatureFacial.tsx` -- a camera ja abre de verdade. Se nao estava funcionando antes, era porque o preview do Lovable pode bloquear permissoes de camera. O componente em si esta correto.
 
-- Adicionar item "Signs" na secao "Avancado" com o icone `PenTool` de lucide-react
-- Path: `/signs`
-- Adicionar ao mapa de titulos do header
+### 3. Rotacao do celular para landscape na assinatura "Desenho"
 
-### 3. Rota no `App.tsx`
+Quando o tipo selecionado for "draw", o frame do celular deve girar 90 graus para simular o modo paisagem, dando mais espaco horizontal para o cliente desenhar.
 
-- Nova rota `/signs` protegida com `requireTenant`, dentro de `AppLayout`
-
-### 4. Limpeza do `TenantSettingsPage.tsx`
-
-- Remover o card de "Assinatura Digital" desta pagina (ja que agora fica em Signs)
-- Manter os demais cards (Dados da Empresa e Plano Atual)
+**Mudanca em `SignsPage.tsx`:**
+- Quando `playgroundStep === "assinatura"` e `playgroundType === "draw"`, aplicar uma transformacao CSS no container do celular: `rotate(90deg)` com transicao suave
+- Ajustar as dimensoes: o frame passa de `320x640` para `640x320` (visualmente rotacionado)
+- Usar `transition-transform duration-500` para animar a rotacao
+- Quando voltar para outro step ou outro tipo, o celular retorna a posicao vertical
 
 ## Detalhes Tecnicos
 
-### Arquivos novos
-| Arquivo | Descricao |
-|---|---|
-| `src/pages/SignsPage.tsx` | Pagina principal com abas Configuracao e Playground |
+### Arquivo: `src/pages/SignsPage.tsx`
 
-### Arquivos modificados
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/AppLayout.tsx` | Adicionar "Signs" em advancedNavItems |
-| `src/App.tsx` | Nova rota `/signs` |
-| `src/pages/TenantSettingsPage.tsx` | Remover card de assinatura digital |
-
-### Playground - Modo Demo
-Os componentes de assinatura existentes (SignatureClick, SignatureFacial, SignatureDraw) serao reutilizados diretamente no playground. O `onConfirm` no modo playground nao chama a edge function, apenas avanca para a tela de sucesso simulada.
-
-### Dados Mock do Acordo para Playground
+**Novo estado local:**
 ```text
-Cliente: Maria Silva Exemplo
-Credor: Empresa Demonstracao S.A.
-Valor Original: R$ 5.000,00
-Valor Acordado: R$ 2.500,00
-Desconto: 50%
-Parcelas: 5x de R$ 500,00
-Primeiro Vencimento: 30 dias a partir de hoje
+const [playgroundType, setPlaygroundType] = useState<"click" | "facial" | "draw">("click");
 ```
 
-### Frame Mobile no Playground
-O simulador sera exibido dentro de um container estilizado como tela de celular (bordas arredondadas, proporcao 9:16, max-width de ~375px, sombra) para dar a experiencia visual real de como o cliente ve no dispositivo movel.
+**Badges simplificadas (sem async/updateTenant):**
+- Cada badge apenas faz `setPlaygroundType(type)` e `resetPlayground()`
+- Estilo: a badge ativa e determinada por `playgroundType` (nao mais `activeType`)
 
+**Rotacao do frame mobile:**
+- Calcular `isLandscape = playgroundStep === "assinatura" && playgroundType === "draw"`
+- No container do celular, aplicar classe condicional:
+  - Vertical (padrao): `w-[320px]`, inner height `640px`
+  - Landscape (draw): aplicar `transform rotate-90` no container externo, mantendo as mesmas dimensoes internas mas visualmente rotacionado
+- Adicionar `transition-all duration-500 ease-in-out` para animar suavemente
+
+**Componente PlaygroundAssinatura:**
+- Recebe `playgroundType` em vez de `activeType`
+
+### Arquivos modificados
+
+| Arquivo | Mudanca |
+|---|---|
+| `src/pages/SignsPage.tsx` | Estado local para playground, badges sem updateTenant, rotacao landscape para draw |
+
+Nenhum arquivo novo. Nenhuma mudanca nos componentes de assinatura (`SignatureFacial`, `SignatureDraw`, `SignatureClick`) -- eles ja funcionam corretamente.
