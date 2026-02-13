@@ -1,57 +1,119 @@
 
-# Redesign do Portal - Inspirado no Acordo Certo
 
-## Objetivo
+# Assinatura Digital de Acordos
 
-Redesenhar a landing page e demais telas do portal do devedor para um visual moderno, limpo e profissional, inspirado no layout do Acordo Certo, mantendo as cores e identidade do tenant.
+## Resumo
 
-## Mudancas Visuais
+Criar um sistema proprio de assinatura digital com 3 modalidades configuraveis por tenant: **Click** (aceite simples), **Reconhecimento Facial** (captura de foto com instrucoes) e **Assinatura na Tela** (desenho com dedo/caneta). O tenant escolhe qual tipo usar nas configuracoes.
 
-### 1. PortalHero (Landing Page)
+## Fluxo do Usuario
 
-**Layout atual**: Banner gradient full-width com texto centralizado.
+```text
+Acordo Aprovado --> Link de Checkout --> Tela de Assinatura --> Pagamento
+                                              |
+                                   Tipo definido pelo tenant:
+                                   - Click: botao "Li e aceito"
+                                   - Facial: captura foto seguindo instrucoes
+                                   - Assinatura: desenha com dedo/caneta
+```
 
-**Novo layout**:
-- Fundo branco/claro (sem gradient pesado)
-- Layout em duas colunas (desktop): texto a esquerda, ilustracao/grafico decorativo a direita
-- Card branco com sombra sutil contendo o campo CPF
-- Titulo grande com parte do texto na cor primaria do tenant (ex: "com ate 90% de desconto" em laranja)
-- Subtitulo em cinza claro
-- Botao de consulta na cor primaria do tenant
-- Badge sutil acima do titulo ("Negocie online")
-- Secao de beneficios abaixo com icones em circulos suaves e fundo claro
+## Componentes Novos
 
-### 2. PortalLayout (Header e Footer)
+### 1. Tabela `agreement_signatures` (migracao)
 
-- Header mais limpo e fino, com fundo branco e borda inferior sutil
-- Footer minimalista com texto cinza
+| Coluna | Tipo | Descricao |
+|---|---|---|
+| id | uuid | PK |
+| agreement_id | uuid | FK para agreements |
+| tenant_id | uuid | Isolamento multi-tenant |
+| signature_type | text | "click", "facial", "draw" |
+| signature_data | text | Base64 da imagem (foto ou assinatura desenhada) |
+| ip_address | text | IP do cliente no momento da assinatura |
+| user_agent | text | Navegador/dispositivo |
+| signed_at | timestamptz | Momento exato da assinatura |
+| metadata | jsonb | Dados extras (instrucoes seguidas, etc) |
 
-### 3. PortalDebtList (Lista de Dividas)
+- RLS: leitura publica via checkout_token (como agreements), service_role para insert, admins do tenant podem ver.
 
-- Cards com bordas arredondadas maiores e sombras mais suaves
-- Resumo no topo em card com fundo levemente colorido (tom claro da cor primaria)
-- Badges mais modernos com cores suaves
-- Espacamento mais generoso
+### 2. Configuracao no Tenant
 
-### 4. PortalNegotiation (Simulador)
+Adicionar no campo `settings` (jsonb) do tenant a chave `signature_type` com valores possiveis: `"click"`, `"facial"`, `"draw"`. Default: `"click"`.
 
-- Cards de opcao com hover mais suave
-- Badges de desconto com fundo verde claro
-- Visual mais espacado e limpo
+### 3. Pagina de Configuracoes (`TenantSettingsPage.tsx`)
 
-## Arquivos Modificados
+Novo card "Assinatura Digital" com:
+- Radio group para selecionar o tipo: Click, Reconhecimento Facial, Assinatura na Tela
+- Descricao de cada opcao
+- Salva no `settings.signature_type` do tenant
 
-| Arquivo | Tipo de Mudanca |
-|---|---|
-| `src/components/portal/PortalHero.tsx` | Redesign completo do layout |
-| `src/components/portal/PortalLayout.tsx` | Refinamento do header/footer |
-| `src/components/portal/PortalDebtList.tsx` | Ajustes visuais nos cards |
-| `src/components/portal/PortalNegotiation.tsx` | Ajustes visuais nos cards |
+### 4. Componentes de Assinatura
+
+| Componente | Arquivo | Descricao |
+|---|---|---|
+| `SignatureClick` | `src/components/portal/signatures/SignatureClick.tsx` | Checkbox "Li e aceito os termos" + botao confirmar |
+| `SignatureFacial` | `src/components/portal/signatures/SignatureFacial.tsx` | Acessa camera, exibe instrucoes (olhe para frente, vire a esquerda, sorria), captura fotos |
+| `SignatureDraw` | `src/components/portal/signatures/SignatureDraw.tsx` | Canvas para desenhar assinatura com dedo/caneta, botoes limpar e confirmar |
+| `SignatureStep` | `src/components/portal/signatures/SignatureStep.tsx` | Wrapper que escolhe o componente correto baseado no tipo configurado |
+
+### 5. Fluxo no Portal (PortalCheckout)
+
+Antes de exibir as opcoes de pagamento, inserir o passo de assinatura:
+1. Exibe o Termo do Acordo (resumo das clausulas)
+2. Exibe o componente de assinatura correspondente ao tipo do tenant
+3. Ao assinar, salva na tabela `agreement_signatures` via edge function
+4. Libera os botoes de pagamento
+
+### 6. Edge Function `portal-checkout/index.ts`
+
+Novas actions:
+- `check-signature`: verifica se ja existe assinatura para o acordo
+- `save-signature`: recebe tipo, dados (base64), IP, user-agent e salva
+
+### 7. Armazenamento
+
+- Para `click`: salva apenas metadados (IP, timestamp, user-agent)
+- Para `facial`: salva fotos como base64 no campo `signature_data` (ou upload para storage bucket `agreement-signatures`)
+- Para `draw`: salva imagem PNG da assinatura como base64
 
 ## Detalhes Tecnicos
 
-- Nenhuma dependencia nova necessaria
-- Uso de Tailwind CSS existente com classes utilitarias
-- Cores dinamicas do tenant aplicadas via `style` inline onde necessario
-- Layout responsivo: coluna unica em mobile, duas colunas em desktop
-- Framer Motion ja disponivel para animacoes sutis de entrada (fade-in nos cards)
+### SignatureDraw
+- Usa elemento HTML `<canvas>` com eventos touch/mouse
+- Suporta touch (celular) e mouse (desktop)
+- Gera PNG via `canvas.toDataURL("image/png")`
+- Botao para limpar e refazer
+
+### SignatureFacial
+- Usa `navigator.mediaDevices.getUserMedia({ video: true })` para acessar camera
+- Sequencia de 3 instrucoes com timer (ex: "Olhe para frente", "Vire levemente para a esquerda", "Sorria")
+- Captura frame do video via canvas temporario
+- Salva as 3 fotos como array no metadata
+
+### Storage
+- Criar bucket `agreement-signatures` (privado)
+- Upload das imagens via edge function com service_role
+- Armazena path no campo `signature_data`
+
+### Arquivos Modificados
+
+| Arquivo | Mudanca |
+|---|---|
+| `src/pages/TenantSettingsPage.tsx` | Novo card de configuracao de assinatura |
+| `src/components/portal/PortalCheckout.tsx` | Adicionar step de assinatura antes do pagamento |
+| `supabase/functions/portal-checkout/index.ts` | Actions check-signature e save-signature |
+
+### Arquivos Novos
+
+| Arquivo |
+|---|
+| `src/components/portal/signatures/SignatureStep.tsx` |
+| `src/components/portal/signatures/SignatureClick.tsx` |
+| `src/components/portal/signatures/SignatureFacial.tsx` |
+| `src/components/portal/signatures/SignatureDraw.tsx` |
+
+### Migracao
+
+- Criar tabela `agreement_signatures`
+- Criar bucket `agreement-signatures`
+- RLS policies para acesso publico via checkout_token e admin do tenant
+
