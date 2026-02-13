@@ -1,10 +1,13 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Headphones, Phone, MessageCircle } from "lucide-react";
 import TelefoniaTab from "@/components/contact-center/TelefoniaTab";
 import WhatsAppTab from "@/components/contact-center/WhatsAppTab";
 
-const ContactCenterPage = () => {
+interface ContactCenterPageProps {
+  channel: "telefonia" | "whatsapp";
+}
+
+const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const { profile } = useAuth();
 
   if (profile?.role !== "admin") {
@@ -20,29 +23,18 @@ const ContactCenterPage = () => {
       <div className="flex items-center gap-3">
         <Headphones className="w-7 h-7 text-primary" />
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Contact Center</h1>
-          <p className="text-muted-foreground">Gerencie telefonia e canais de comunicação</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            {channel === "telefonia" ? "Telefonia" : "WhatsApp"}
+          </h1>
+          <p className="text-muted-foreground">
+            {channel === "telefonia"
+              ? "Gerencie campanhas e discagem automática"
+              : "Gerencie comunicações via WhatsApp"}
+          </p>
         </div>
       </div>
 
-      <Tabs defaultValue="telefonia">
-        <TabsList>
-          <TabsTrigger value="telefonia" className="gap-2">
-            <Phone className="w-4 h-4" />
-            Telefonia
-          </TabsTrigger>
-          <TabsTrigger value="whatsapp" className="gap-2">
-            <MessageCircle className="w-4 h-4" />
-            WhatsApp
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="telefonia">
-          <TelefoniaTab />
-        </TabsContent>
-        <TabsContent value="whatsapp">
-          <WhatsAppTab />
-        </TabsContent>
-      </Tabs>
+      {channel === "telefonia" ? <TelefoniaTab /> : <WhatsAppTab />}
     </div>
   );
 };

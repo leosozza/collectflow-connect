@@ -23,7 +23,9 @@ import {
   FileText,
   ChevronDown,
   Shield,
-  Headphones
+  Headphones,
+  Phone,
+  MessageCircle
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -51,13 +53,17 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Carteira", icon: Wallet, path: "/carteira" },
     ...(!isAdmin ? [{ label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" }] : []),
     ...(isAdmin ? [
-      { label: "Contact Center", icon: Headphones, path: "/contact-center" },
       { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
       { label: "Acordos", icon: Handshake, path: "/acordos" },
       { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
       { label: "Integração", icon: Cloud, path: "/integracao" },
     ] : []),
   ];
+
+  const contactCenterItems = isAdmin ? [
+    { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
+    { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
+  ] : [];
 
   const advancedNavItems = isAdmin ? [
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
@@ -74,13 +80,16 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
   const isAdvancedRoute = advancedNavItems.some(item => location.pathname === item.path);
   const isSuperAdminRoute = superAdminNavItems.some(item => location.pathname === item.path);
+  const isContactCenterRoute = contactCenterItems.some(item => location.pathname === item.path);
 
   const [advancedOpen, setAdvancedOpen] = useState(isAdvancedRoute);
   const [superAdminOpen, setSuperAdminOpen] = useState(isSuperAdminRoute);
+  const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
 
   useEffect(() => {
     if (isAdvancedRoute) setAdvancedOpen(true);
     if (isSuperAdminRoute) setSuperAdminOpen(true);
+    if (isContactCenterRoute) setContactCenterOpen(true);
   }, [location.pathname]);
 
   const handleSignOut = async () => {
@@ -132,6 +141,41 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               </Link>
             );
           })}
+
+          {contactCenterItems.length > 0 && (
+            <Collapsible open={contactCenterOpen} onOpenChange={setContactCenterOpen}>
+              <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 mt-1 rounded-lg text-sm font-medium transition-colors ${isContactCenterRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
+                <div className="flex items-center gap-3">
+                  <Headphones className="w-5 h-5 flex-shrink-0" />
+                  {!collapsed && "Contact Center"}
+                </div>
+                {!collapsed && <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${contactCenterOpen ? "rotate-180" : ""}`} />}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1 ml-4">
+                {contactCenterItems.map((item) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      title={collapsed ? item.label : undefined}
+                      className={`
+                        flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? "bg-primary text-primary-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        }
+                      `}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      {!collapsed && item.label}
+                    </Link>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
           {advancedNavItems.length > 0 && (
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>

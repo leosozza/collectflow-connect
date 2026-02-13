@@ -109,11 +109,21 @@ const App = () => (
               }
             />
             <Route
-              path="/contact-center"
+              path="/contact-center/telefonia"
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <ContactCenterPage />
+                    <ContactCenterPage channel="telefonia" />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contact-center/whatsapp"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <ContactCenterPage channel="whatsapp" />
                   </AppLayout>
                 </ProtectedRoute>
               }
