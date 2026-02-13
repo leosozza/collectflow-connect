@@ -18,7 +18,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const baseUrl = `https://${domain}/api/v1`;
+    // Strip protocol if user included it in domain
+    const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    const baseUrl = `https://${cleanDomain}/api/v1`;
     const authParam = `api_token=${api_token}`;
 
     let url = '';
