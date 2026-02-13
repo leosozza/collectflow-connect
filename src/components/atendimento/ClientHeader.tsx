@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers } from "lucide-react";
+import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +21,11 @@ interface ClientHeaderProps {
     quebra?: number | null;
     status?: string;
     operator_id?: string | null;
+    endereco?: string | null;
+    cidade?: string | null;
+    uf?: string | null;
+    cep?: string | null;
+    observacoes?: string | null;
   };
   totalAberto: number;
   totalPago: number;
@@ -114,7 +119,25 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
                 </span>
               </div>
             )}
+            {(client.endereco || client.cidade || client.uf || client.cep) && (
+              <InfoItem
+                icon={MapPin}
+                label="Endereço"
+                value={[client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ")}
+              />
+            )}
           </div>
+          {client.observacoes && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <div className="flex items-start gap-2 text-sm">
+                <StickyNote className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
+                <div>
+                  <span className="text-muted-foreground">Observações: </span>
+                  <span className="text-foreground">{client.observacoes}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
