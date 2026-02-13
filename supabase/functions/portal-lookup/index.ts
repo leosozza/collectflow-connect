@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
     }
 
     const cleanCpf = cpf.replace(/\D/g, "");
+    const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 
     // Find tenant by slug
     let tenantId: string | null = null;
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
       const { data: clientDebts } = await supabase
         .from("clients")
         .select("nome_completo")
-        .eq("cpf", cleanCpf)
+        .in("cpf", [cleanCpf, formattedCpf])
         .eq("tenant_id", tenantId)
         .limit(1);
 
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
       const { data: debts } = await supabase
         .from("clients")
         .select("nome_completo, credor, valor_parcela")
-        .eq("cpf", cleanCpf)
+        .in("cpf", [cleanCpf, formattedCpf])
         .eq("tenant_id", tenantId)
         .eq("status", "pendente");
 
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
     let query = supabase
       .from("clients")
       .select("nome_completo, credor, numero_parcela, total_parcelas, valor_parcela, valor_pago, data_vencimento, status")
-      .eq("cpf", cleanCpf)
+      .in("cpf", [cleanCpf, formattedCpf])
       .order("data_vencimento", { ascending: true });
 
     if (tenantId) {
