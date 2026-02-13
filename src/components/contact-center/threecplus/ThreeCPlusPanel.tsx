@@ -15,6 +15,8 @@ import SchedulesPanel from "./SchedulesPanel";
 import SMSPanel from "./SMSPanel";
 import UsersPanel from "./UsersPanel";
 import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
+import RoutesPanel from "./RoutesPanel";
+import OfficeHoursPanel from "./OfficeHoursPanel";
 
 const ThreeCPlusPanel = () => {
   const { tenant } = useTenant();
@@ -56,6 +58,8 @@ const ThreeCPlusPanel = () => {
           <TabsTrigger value="sms" className="text-xs px-3 h-8">SMS</TabsTrigger>
           <TabsTrigger value="users" className="text-xs px-3 h-8">Usuários</TabsTrigger>
           <TabsTrigger value="receptive" className="text-xs px-3 h-8">Receptivo</TabsTrigger>
+          <TabsTrigger value="routes" className="text-xs px-3 h-8">Rotas</TabsTrigger>
+          <TabsTrigger value="office-hours" className="text-xs px-3 h-8">Horários</TabsTrigger>
         </TabsList>
       </div>
 
@@ -72,6 +76,8 @@ const ThreeCPlusPanel = () => {
       <TabsContent value="sms"><SMSPanel /></TabsContent>
       <TabsContent value="users"><UsersPanel /></TabsContent>
       <TabsContent value="receptive"><ReceptiveQueuesPanel /></TabsContent>
+      <TabsContent value="routes"><RoutesPanel /></TabsContent>
+      <TabsContent value="office-hours"><OfficeHoursPanel /></TabsContent>
     </Tabs>
   );
 };

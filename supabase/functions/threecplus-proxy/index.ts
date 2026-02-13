@@ -411,6 +411,76 @@ Deno.serve(async (req) => {
         url = buildUrl(baseUrl, 'receptive_number_setting', authParam);
         break;
 
+      // ── Routes ──
+      case 'list_routes':
+        url = buildUrl(baseUrl, 'routes', authParam);
+        break;
+
+      case 'update_routes': {
+        const err = requireField(body, 'routes_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'routes', authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify(body.routes_data);
+        break;
+      }
+
+      case 'route_hangup_report': {
+        const err = requireField(body, 'route_id', corsHeaders);
+        if (err) return err;
+        const params: Record<string, string> = {};
+        if (body.startDate) params.startDate = formatDateParam(body.startDate, '00:00:00');
+        if (body.endDate) params.endDate = formatDateParam(body.endDate, '23:59:59');
+        url = buildUrl(baseUrl, `routes/${body.route_id}/hangupCauseReport`, authParam, params);
+        break;
+      }
+
+      // ── Office Hours ──
+      case 'list_office_hours':
+        url = buildUrl(baseUrl, 'office_hours', authParam);
+        break;
+
+      case 'get_office_hours': {
+        const err = requireField(body, 'office_hours_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `office_hours/${body.office_hours_id}`, authParam);
+        break;
+      }
+
+      case 'create_office_hours': {
+        const err = requireField(body, 'office_hours_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'office_hours', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.office_hours_data);
+        break;
+      }
+
+      case 'update_office_hours': {
+        const err = requireField(body, 'office_hours_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `office_hours/${body.office_hours_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify(body.office_hours_data || {});
+        break;
+      }
+
+      case 'delete_office_hours': {
+        const err = requireField(body, 'office_hours_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `office_hours/${body.office_hours_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── Work Break Intervals ──
+      case 'list_work_break_intervals': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ status: 400, detail: `Unknown action: ${action}` }),
