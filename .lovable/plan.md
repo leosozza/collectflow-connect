@@ -1,75 +1,82 @@
 
+# Corrigir Sincronizacao CobCloud - Parser de Resposta Incorreto
 
-# Corrigir Importacao CobCloud - API Retornando Zero Resultados
+## Problema Identificado
 
-## Problema
+Analisando os logs da edge function, encontrei **dois problemas criticos**:
 
-A conexao com CobCloud funciona (status 200), mas a sincronizacao e importacao retornam 0 registros. Isso acontece porque:
+### 1. O parser nao reconhece o formato de resposta da API CobCloud
 
-1. O teste de conexao usa o endpoint `/cli/devedores/listar` (que funciona e encontra dados)
-2. O preview e importacao usam `/cli/titulos/listar` (que retorna vazio)
-3. Nao temos logs do que a API CobCloud realmente retorna, dificultando o diagnostico
-4. Os valores de status usados no filtro (`aberto`, `pago`, `quebrado`) podem nao corresponder aos valores reais da API
+A API CobCloud retorna dados neste formato:
+```text
+{"value":{"limit":1,"page":1,"query":[{...},{...}]}}
+```
+
+Porem, a funcao `extractArray` procura por `data`, `titulos`, `devedores`, `results` - mas **nunca procura por `value.query`**, entao sempre retorna um array vazio `[]`.
+
+Da mesma forma, `extractTotal` procura por `total`, `count`, `totalCount` - mas o campo total da API pode estar em `value.total` ou simplesmente nao existir.
+
+Isso explica por que o `detectEndpoint` sempre diz "No data found in either endpoint" mesmo recebendo dados validos.
+
+### 2. Os filtros de status "pago" e "quebrado" causam erro 500
+
+Os logs mostram claramente:
+```text
+status=pago error: 500 "Ocorreu um erro interno"
+status=quebrado error: 500 "Ocorreu um erro interno"
+```
+
+Apenas `status=aberto` funciona. O status real dos titulos na API inclui valores como "aberto" e "baixado" (nao "pago" ou "quebrado"). Os filtros estao usando valores incorretos que a API nao reconhece.
 
 ## Solucao
 
-### 1. Adicionar logging de debug na Edge Function
+### 1. Edge Function `cobcloud-proxy/index.ts`
 
-Incluir `console.log` para registrar as respostas brutas da API CobCloud em todas as chamadas (preview, import, status). Isso permite diagnosticar exatamente o que a API retorna.
+**Corrigir `extractArray`** para reconhecer o formato real da API:
+- Adicionar verificacao para `data?.value?.query` (formato principal do CobCloud)
+- Manter os fallbacks existentes para compatibilidade
 
-### 2. Usar tambem `/cli/devedores/listar` como fonte de dados
+**Corrigir `extractTotal`** para buscar o total no formato correto:
+- Verificar `data?.value?.total` e `data?.value?.count`
+- Se nao houver campo de total, usar o tamanho do array
 
-Ja que sabemos que `/cli/devedores/listar` retorna dados, vamos:
-- Adicionar uma chamada ao endpoint de devedores no preview para contagem
-- Tentar ambos os endpoints (`titulos` e `devedores`) e usar o que retornar dados
-- Logar a resposta de ambos para entender a estrutura
+**Corrigir `handlePreview`** para nao depender de status invalidos:
+- Buscar o total geral SEM filtro de status (apenas uma chamada sem filtro)
+- Tentar apenas o status "aberto" (que funciona)
+- Para "baixado" (equivalente a pago no CobCloud), tentar com esse valor
+- Tratar erros 500 graciosamente sem quebrar a contagem total
+- Remover "quebrado" ou tentar valores alternativos da API
 
-### 3. Preview mais robusto com fallback
+**Atualizar o `mapStatus`** e os status cards na UI:
+- Usar "aberto" e "baixado" como valores reais da API
+- Mapear "baixado" para "Pago/Quitado" na interface
 
-O handler `handlePreview` vai:
-1. Primeiro tentar `/cli/titulos/listar` sem filtro de status (apenas limit=1) para ver se existe algum dado
-2. Se retornar 0, tentar `/cli/devedores/listar` como alternativa
-3. Logar a resposta bruta de cada chamada para debug
-4. Retornar o total encontrado e a fonte dos dados
+### 2. UI `CobCloudPreviewCard.tsx`
 
-### 4. Importacao com endpoint correto
+- Atualizar STATUS_CONFIG para usar os valores reais da API: "aberto" e "baixado"
+- Ao sincronizar, mostrar o total geral mesmo que contagens por status falhem
+- Adicionar card para status "baixado" no lugar de "pago"
 
-O handler `handleImportAll` vai:
-- Testar automaticamente qual endpoint tem dados antes de iniciar o loop
-- Usar o endpoint que retorna resultados
-- Logar cada pagina para acompanhamento
+### 3. Service `cobcloudService.ts`
 
-## Alteracoes Tecnicas
+- Sem alteracoes necessarias (os filtros sao passados da UI para a edge function)
 
-### Edge Function `cobcloud-proxy/index.ts`
+## Resumo das correcoes
 
-**handlePreview** - Adicionar:
 ```text
-- console.log com a URL chamada e resposta bruta
-- Chamada sem filtro de status primeiro (para ver total geral)
-- Fallback para /cli/devedores/listar se titulos retornar vazio
-- Retorno inclui campo "source" indicando qual endpoint foi usado
+extractArray(data):
+  ANTES: verifica data, titulos, devedores, results
+  DEPOIS: verifica value.query, data, titulos, devedores, results
+
+extractTotal(data):
+  ANTES: verifica total, count, totalCount
+  DEPOIS: verifica value.total, value.count, total, count, totalCount
+
+handlePreview:
+  ANTES: filtra por "aberto", "pago", "quebrado" (2 causam erro 500)
+  DEPOIS: busca total sem filtro + filtra por "aberto", "baixado"
+
+STATUS_CONFIG na UI:
+  ANTES: aberto, pago, quebrado
+  DEPOIS: aberto, baixado (+ total geral como referencia)
 ```
-
-**handleImportAll** - Adicionar:
-```text
-- console.log com a URL e resposta de cada pagina
-- Deteccao automatica do endpoint correto (titulos vs devedores)
-- Log de erro mais detalhado quando pagina retorna vazio
-```
-
-**handleStatus** - Adicionar:
-```text
-- Testar ambos endpoints e retornar contagem de cada
-- Retorno: { connected, status, devedores_count, titulos_count }
-```
-
-### UI `CobCloudTab.tsx`
-
-- Exibir informacao de debug quando a sincronizacao retorna 0 (ex: "Nenhum titulo encontrado. Verifique as credenciais e se existem dados cadastrados no CobCloud.")
-- Mostrar o resultado do teste de conexao com mais detalhes (contagem de devedores vs titulos)
-
-### Service `cobcloudService.ts`
-
-- Atualizar tipagem do `testConnection` para incluir os novos campos de contagem
-
