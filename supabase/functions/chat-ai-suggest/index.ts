@@ -115,6 +115,9 @@ Regras:
       ],
     };
 
+    // Enable streaming for suggest action
+    const useStream = action === "suggest";
+
     if (useToolCalling) {
       aiBody.tools = [
         {
@@ -163,6 +166,10 @@ Regras:
       aiBody.tool_choice = { type: "function", function: { name: "classify_intent" } };
     }
 
+    if (useStream) {
+      aiBody.stream = true;
+    }
+
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -190,6 +197,13 @@ Regras:
       return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Stream response for suggest
+    if (useStream) {
+      return new Response(aiResp.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
       });
     }
 
