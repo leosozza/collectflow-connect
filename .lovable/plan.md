@@ -1,42 +1,36 @@
 
 
-# Configurar Webhook Automaticamente para Receber Conversas
+# Ajustes de Acesso para Operador
 
-## Problema Identificado
+## 3 Alteracoes Necessarias
 
-A instancia "TEMIS - Cobranca 01" esta conectada, mas as conversas nao aparecem porque o **webhook da Evolution API nao foi configurado**. Sem o webhook, as mensagens recebidas pelo WhatsApp nao sao enviadas para o sistema, e portanto nenhuma conversa e criada no banco de dados.
+### 1. Liberar Contact Center para Operador (sidebar)
 
-O sistema ja possui a logica de webhook pronta (`whatsapp-webhook` edge function e a acao `setWebhook` no `evolution-proxy`), mas **nunca chama automaticamente** a configuracao do webhook ao criar ou conectar uma instancia.
+No `AppLayout.tsx`, mover os itens de `contactCenterItems` para fora da condicao `isAdmin`, permitindo que operadores vejam a secao "Contact Center" com a aba WhatsApp. A aba Telefonia continuara com restricao de admin dentro da propria pagina (`ContactCenterPage.tsx`).
 
-## Solucao
+### 2. Remover "Log de Importacoes" do menu do Operador
 
-Configurar automaticamente o webhook da Evolution API em dois momentos:
-1. Ao **criar** uma nova instancia
-2. Ao **conectar/reconectar** (QR Code) uma instancia existente
+No `AppLayout.tsx`, remover o item `{ label: "Log de Importações", path: "/cadastro" }` do array `preContactItems` que atualmente aparece para nao-admins (linha 50). Esse item so deve aparecer na secao "Avancado" para admins.
 
-Adicionalmente, incluir um botao manual para reconfigurar o webhook caso necessario.
+### 3. Filtrar Carteira por Operador (apenas clientes vinculados)
 
-## Alteracoes
+No `clientService.ts`, na funcao `fetchClients`, adicionar um filtro por `operator_id` quando o usuario for operador. O `profile.id` do operador sera passado como parametro.
 
-### 1. Servico (`whatsappInstanceService.ts`)
-
-Adicionar uma nova funcao `setEvolutionWebhook` que chama o `evolution-proxy` com a acao `setWebhook`, passando o `instanceName` e a URL do webhook (`/functions/v1/whatsapp-webhook`).
-
-### 2. Componente (`BaylersInstancesList.tsx`)
-
-- Na funcao `handleCreate`: apos criar a instancia, chamar `setEvolutionWebhook` automaticamente.
-- Na funcao `handleConnect`: apos conectar (QR Code), chamar `setEvolutionWebhook` automaticamente.
-- Adicionar um botao de "Configurar Webhook" nos botoes de acao de cada instancia, para reconfigurar manualmente se necessario.
-- Exibir toast confirmando que o webhook foi configurado.
-
-### 3. Acionar Webhook para Instancia Existente
-
-Como a instancia "TEMIS - Cobranca 01" ja existe e esta conectada, o usuario podera clicar no novo botao de webhook para configura-la sem precisar reconectar.
+No `CarteiraPage.tsx`, passar o `profile.id` e o role do usuario para a funcao `fetchClients`, aplicando o filtro `operator_id` somente quando o usuario nao for admin.
 
 ## Detalhes Tecnicos
 
-- URL do webhook: `{VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`
-- Eventos configurados: `MESSAGES_UPSERT`, `MESSAGES_UPDATE`, `CONNECTION_UPDATE`
-- A funcao `setWebhook` ja existe no `evolution-proxy` (linhas 208-240), so precisa ser chamada pelo frontend
-- Nenhuma alteracao no banco de dados e necessaria
+**Arquivo: `src/components/AppLayout.tsx`**
+- Remover a linha com "Log de Importacoes" do `preContactItems` (condicao `!isAdmin`)
+- Mover `contactCenterItems` para fora do bloco `isAdmin`, mantendo Telefonia e WhatsApp visiveis para todos. A restricao de acesso a Telefonia ja existe em `ContactCenterPage.tsx`
+
+**Arquivo: `src/services/clientService.ts`**
+- Adicionar parametro opcional `operatorId?: string` na funcao `fetchClients`
+- Quando `operatorId` for informado, adicionar `.eq("operator_id", operatorId)` na query
+
+**Arquivo: `src/pages/CarteiraPage.tsx`**
+- Usar `useTenant` para verificar se o usuario e admin
+- Se nao for admin, passar `profile.id` como `operatorId` para `fetchClients`
+
+Nenhuma alteracao no banco de dados e necessaria -- a coluna `operator_id` ja existe na tabela `clients` e o RLS ja filtra por tenant.
 
