@@ -1,11 +1,16 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutDashboard, List, Send, History, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, List, Send, History, AlertTriangle, BarChart3, Users, Tag, ShieldBan, UsersRound } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { Card, CardContent } from "@/components/ui/card";
 import CampaignsPanel from "./CampaignsPanel";
 import MailingPanel from "./MailingPanel";
-import HistoryPanel from "./HistoryPanel";
+import CallHistoryPanel from "./CallHistoryPanel";
 import TelefoniaDashboard from "./TelefoniaDashboard";
+import CallsChart from "./CallsChart";
+import AgentsReportPanel from "./AgentsReportPanel";
+import QualificationsPanel from "./QualificationsPanel";
+import BlockListPanel from "./BlockListPanel";
+import TeamsPanel from "./TeamsPanel";
 
 const ThreeCPlusPanel = () => {
   const { tenant } = useTenant();
@@ -31,7 +36,7 @@ const ThreeCPlusPanel = () => {
   return (
     <div className="mt-4">
       <Tabs defaultValue="dashboard">
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="dashboard" className="gap-2">
             <LayoutDashboard className="w-4 h-4" />
             Dashboard
@@ -42,11 +47,31 @@ const ThreeCPlusPanel = () => {
           </TabsTrigger>
           <TabsTrigger value="mailing" className="gap-2">
             <Send className="w-4 h-4" />
-            Enviar Mailing
+            Mailing
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <History className="w-4 h-4" />
-            Histórico
+            Chamadas
+          </TabsTrigger>
+          <TabsTrigger value="chart" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Gráficos
+          </TabsTrigger>
+          <TabsTrigger value="agents-report" className="gap-2">
+            <Users className="w-4 h-4" />
+            Produtividade
+          </TabsTrigger>
+          <TabsTrigger value="qualifications" className="gap-2">
+            <Tag className="w-4 h-4" />
+            Qualificações
+          </TabsTrigger>
+          <TabsTrigger value="blocklist" className="gap-2">
+            <ShieldBan className="w-4 h-4" />
+            Bloqueio
+          </TabsTrigger>
+          <TabsTrigger value="teams" className="gap-2">
+            <UsersRound className="w-4 h-4" />
+            Equipes
           </TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
@@ -59,7 +84,22 @@ const ThreeCPlusPanel = () => {
           <MailingPanel />
         </TabsContent>
         <TabsContent value="history">
-          <HistoryPanel />
+          <CallHistoryPanel />
+        </TabsContent>
+        <TabsContent value="chart">
+          <CallsChart />
+        </TabsContent>
+        <TabsContent value="agents-report">
+          <AgentsReportPanel />
+        </TabsContent>
+        <TabsContent value="qualifications">
+          <QualificationsPanel />
+        </TabsContent>
+        <TabsContent value="blocklist">
+          <BlockListPanel />
+        </TabsContent>
+        <TabsContent value="teams">
+          <TeamsPanel />
         </TabsContent>
       </Tabs>
     </div>

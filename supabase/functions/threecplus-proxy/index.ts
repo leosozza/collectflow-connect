@@ -3,6 +3,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function buildUrl(baseUrl: string, path: string, authParam: string, queryParams?: Record<string, string>) {
+  let url = `${baseUrl}/${path}?${authParam}`;
+  if (queryParams) {
+    for (const [key, value] of Object.entries(queryParams)) {
+      if (value !== undefined && value !== null) {
+        url += `&${key}=${encodeURIComponent(value)}`;
+      }
+    }
+  }
+  return url;
+}
+
+function requireField(body: Record<string, any>, field: string, corsHeaders: Record<string, string>) {
+  if (!body[field]) {
+    return new Response(
+      JSON.stringify({ status: 400, detail: `${field} is required` }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  return null;
+}
+
+function formatDateParam(dateStr: string | undefined, defaultTime: string): string {
+  if (!dateStr) {
+    const now = new Date();
+    const ymd = now.toISOString().split('T')[0];
+    return `${ymd} ${defaultTime}`;
+  }
+  if (dateStr.includes(' ') || dateStr.includes('T')) return dateStr.replace('T', ' ').split('.')[0];
+  return `${dateStr} ${defaultTime}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -10,12 +42,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const {
-      action, domain, api_token,
-      campaign_id, list_id, mailings,
-      campaign_name, start_time, end_time, qualification_list_id,
-      agent_id, campaign_data,
-    } = body;
+    const { action, domain, api_token } = body;
 
     if (!domain || !api_token) {
       return new Response(
@@ -33,139 +60,261 @@ Deno.serve(async (req) => {
     let reqBody: string | undefined;
 
     switch (action) {
-      // ── Existing actions ──
+      // ── Campaigns ──
       case 'list_campaigns':
-        url = `${baseUrl}/campaigns?${authParam}`;
+        url = buildUrl(baseUrl, 'campaigns', authParam);
         break;
 
-      case 'get_campaign_lists':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/lists?${authParam}`;
+      case 'get_campaign_lists': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists`, authParam);
         break;
+      }
 
-      case 'create_list':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/lists?${authParam}`;
+      case 'create_list': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists`, authParam);
         method = 'POST';
         reqBody = JSON.stringify({ name: `CollectFlow ${new Date().toLocaleDateString('pt-BR')}` });
         break;
+      }
 
-      case 'send_mailing':
-        if (!campaign_id || !list_id || !mailings) {
+      case 'send_mailing': {
+        if (!body.campaign_id || !body.list_id || !body.mailings) {
           return new Response(JSON.stringify({ status: 400, detail: 'campaign_id, list_id and mailings are required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
-        url = `${baseUrl}/campaigns/${campaign_id}/lists/${list_id}/mailing?${authParam}`;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/${body.list_id}/mailing`, authParam);
         method = 'POST';
         reqBody = JSON.stringify({
           header: ['identifier', 'areacodephone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
-          mailing: mailings,
-        });
-        break;
-
-      case 'create_campaign': {
-        if (!campaign_name) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_name is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns?${authParam}`;
-        method = 'POST';
-        reqBody = JSON.stringify({
-          name: campaign_name,
-          start_time: start_time || '08:00',
-          end_time: end_time || '18:30',
-          qualification_list: qualification_list_id || null,
+          mailing: body.mailings,
         });
         break;
       }
 
-      // ── Dashboard: agents ──
+      case 'create_campaign': {
+        const err = requireField(body, 'campaign_name', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'campaigns', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({
+          name: body.campaign_name,
+          start_time: body.start_time || '08:00',
+          end_time: body.end_time || '18:30',
+          qualification_list: body.qualification_list_id || null,
+        });
+        break;
+      }
+
+      case 'update_campaign': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
+        method = 'PATCH';
+        reqBody = JSON.stringify(body.campaign_data || {});
+        break;
+      }
+
+      case 'pause_campaign': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/pause`, authParam);
+        method = 'PUT';
+        break;
+      }
+
+      case 'resume_campaign': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/resume`, authParam);
+        method = 'PUT';
+        break;
+      }
+
+      // ── Agents ──
       case 'agents_online':
-        url = `${baseUrl}/agents/online?${authParam}`;
+        url = buildUrl(baseUrl, 'agents/online', authParam);
         break;
 
       case 'agents_status':
-        url = `${baseUrl}/agents/status?${authParam}`;
+        url = buildUrl(baseUrl, 'agents/status', authParam);
         break;
 
-      case 'logout_agent':
-        if (!agent_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'agent_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/agents/${agent_id}/logout?${authParam}`;
+      case 'logout_agent': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `agents/${body.agent_id}/logout`, authParam);
         method = 'POST';
         break;
+      }
 
-      // ── Dashboard: calls ──
+      // ── Calls ──
       case 'company_calls':
-        url = `${baseUrl}/company/calls?${authParam}`;
+        url = buildUrl(baseUrl, 'company/calls', authParam);
         break;
 
-      case 'campaign_calls':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/calls?${authParam}`;
+      case 'campaign_calls': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/calls`, authParam);
+        break;
+      }
+
+      case 'campaign_agents_status': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents/status`, authParam);
+        break;
+      }
+
+      case 'campaign_statistics': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        const startDate = formatDateParam(body.startDate, '00:00:00');
+        const endDate = formatDateParam(body.endDate, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/statistics`, authParam, { startDate, endDate });
+        break;
+      }
+
+      // ── NEW: Recordings ──
+      case 'get_recording': {
+        const err = requireField(body, 'call_id', corsHeaders);
+        if (err) return err;
+        const type = body.recording_type || 'recording'; // recording, recording_amd, recording_consult, recording_transfer, recording_after_consult_cancel
+        url = buildUrl(baseUrl, `calls/${body.call_id}/${type}`, authParam);
+        break;
+      }
+
+      // ── NEW: Spy ──
+      case 'spy_agent': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'spy', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({
+          agent_id: body.agent_id,
+          extension: body.extension || undefined,
+          phone_number: body.phone_number || undefined,
+        });
+        break;
+      }
+
+      // ── NEW: Graphic Metrics ──
+      case 'campaign_graphic_metrics': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        const startDate = formatDateParam(body.startDate, '00:00:00');
+        const endDate = formatDateParam(body.endDate, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/metrics/graphic`, authParam, { startDate, endDate });
+        break;
+      }
+
+      // ── NEW: Calls Report (company) ──
+      case 'calls_report': {
+        const startDate = formatDateParam(body.startDate, '00:00:00');
+        const endDate = formatDateParam(body.endDate, '23:59:59');
+        const params: Record<string, string> = { startDate, endDate };
+        if (body.campaign_id) params.campaign_id = body.campaign_id;
+        if (body.agent_id) params.agent_id = body.agent_id;
+        if (body.status) params.status = body.status;
+        if (body.page) params.page = body.page;
+        url = buildUrl(baseUrl, 'company/calls/report', authParam, params);
+        break;
+      }
+
+      // ── NEW: Agents Report ──
+      case 'agents_report': {
+        const startDate = formatDateParam(body.startDate, '00:00:00');
+        const endDate = formatDateParam(body.endDate, '23:59:59');
+        url = buildUrl(baseUrl, 'company/agents/report', authParam, { startDate, endDate });
+        break;
+      }
+
+      // ── NEW: Qualifications ──
+      case 'list_qualifications':
+        url = buildUrl(baseUrl, 'qualifications', authParam);
         break;
 
-      // ── Dashboard: campaign details ──
-      case 'campaign_agents_status':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/agents/status?${authParam}`;
+      case 'create_qualification': {
+        const err = requireField(body, 'qualification_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'qualifications', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.qualification_data);
         break;
+      }
 
-      case 'campaign_statistics':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        const now = new Date();
-        const todayStart = now.toISOString().replace('T', ' ').split('.')[0].replace(/\d{2}:\d{2}:\d{2}/, '00:00:00');
-        const todayEnd = now.toISOString().replace('T', ' ').split('.')[0].replace(/\d{2}:\d{2}:\d{2}/, '23:59:59');
-        const startDate = body.startDate || todayStart;
-        const endDate = body.endDate || todayEnd;
-        url = `${baseUrl}/campaigns/${campaign_id}/statistics?${authParam}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
-        break;
-
-      // ── Dashboard: campaign controls ──
-      case 'update_campaign':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}?${authParam}`;
-        method = 'PATCH';
-        reqBody = JSON.stringify(campaign_data || {});
-        break;
-
-      case 'pause_campaign':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/pause?${authParam}`;
+      case 'update_qualification': {
+        const err = requireField(body, 'qualification_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
         method = 'PUT';
+        reqBody = JSON.stringify(body.qualification_data || {});
+        break;
+      }
+
+      case 'delete_qualification': {
+        const err = requireField(body, 'qualification_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── NEW: Block List ──
+      case 'list_block_list':
+        url = buildUrl(baseUrl, 'block_lists', authParam);
         break;
 
-      case 'resume_campaign':
-        if (!campaign_id) {
-          return new Response(JSON.stringify({ status: 400, detail: 'campaign_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        url = `${baseUrl}/campaigns/${campaign_id}/resume?${authParam}`;
-        method = 'PUT';
+      case 'add_block_list': {
+        const err = requireField(body, 'phone_number', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'block_lists', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ phone_number: body.phone_number });
         break;
+      }
+
+      case 'remove_block_list': {
+        const err = requireField(body, 'block_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `block_lists/${body.block_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── NEW: Teams ──
+      case 'list_teams':
+        url = buildUrl(baseUrl, 'teams', authParam);
+        break;
+
+      case 'get_team': {
+        const err = requireField(body, 'team_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `teams/${body.team_id}`, authParam);
+        break;
+      }
+
+      case 'create_team': {
+        const err = requireField(body, 'team_data', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'teams', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify(body.team_data);
+        break;
+      }
+
+      case 'update_team': {
+        const err = requireField(body, 'team_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `teams/${body.team_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify(body.team_data || {});
+        break;
+      }
 
       default:
         return new Response(
@@ -185,8 +334,25 @@ Deno.serve(async (req) => {
     }
 
     const response = await fetch(url, fetchOptions);
-    const data = await response.json();
 
+    // Handle recording endpoints that return audio
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('audio') || action === 'get_recording') {
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({ status: response.status, detail: 'Recording not available' }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Return the audio URL from the redirect or the response URL
+      const finalUrl = response.url;
+      return new Response(
+        JSON.stringify({ status: 200, url: finalUrl }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
 
     return new Response(
