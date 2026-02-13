@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
+import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 
 interface KpiItem {
@@ -37,6 +38,7 @@ const TelefoniaDashboard = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [interval, setRefreshInterval] = useState(30);
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
@@ -215,9 +217,20 @@ const TelefoniaDashboard = () => {
             loggingOut={loggingOut}
             domain={domain}
             apiToken={apiToken}
+            onAgentClick={(agent) => setSelectedAgent(agent)}
           />
         </CardContent>
       </Card>
+
+      <AgentDetailSheet
+        agent={selectedAgent}
+        open={!!selectedAgent}
+        onOpenChange={(open) => { if (!open) setSelectedAgent(null); }}
+        domain={domain}
+        apiToken={apiToken}
+        onLogout={handleLogout}
+        loggingOut={loggingOut}
+      />
 
       {/* Campaigns */}
       <div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { 
@@ -43,6 +44,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
+  useActivityTracker();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 

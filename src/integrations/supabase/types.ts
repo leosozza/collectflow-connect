@@ -821,6 +821,47 @@ export type Database = {
           },
         ]
       }
+      user_activity_logs: {
+        Row: {
+          action_detail: string | null
+          activity_type: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          page_path: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          action_detail?: string | null
+          activity_type: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          action_detail?: string | null
+          activity_type?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_activity_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
