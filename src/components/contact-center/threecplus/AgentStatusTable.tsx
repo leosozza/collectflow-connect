@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface Agent {
   id: number;
   name: string;
-  status: string;
+  status: string | number;
   campaign?: string;
   campaign_name?: string;
   status_time?: string;
@@ -32,9 +32,15 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   offline: { label: "Offline", className: "bg-muted text-muted-foreground border-border" },
 };
 
-function getStatusInfo(status: string) {
-  const normalized = status?.toLowerCase().replace(/[\s-]/g, '_') || 'offline';
-  return statusConfig[normalized] || { label: status || "—", className: "bg-muted text-muted-foreground border-border" };
+const numericStatusMap: Record<number, string> = {
+  0: 'offline', 1: 'idle', 2: 'on_call', 3: 'paused', 4: 'acw', 5: 'manual',
+};
+
+function getStatusInfo(status: string | number) {
+  const normalized = typeof status === 'number'
+    ? (numericStatusMap[status] || 'offline')
+    : (status?.toLowerCase().replace(/[\s-]/g, '_') || 'offline');
+  return statusConfig[normalized] || { label: String(status) || "—", className: "bg-muted text-muted-foreground border-border" };
 }
 
 const AgentStatusTable = ({ agents, loading, onLogout, loggingOut }: AgentStatusTableProps) => {

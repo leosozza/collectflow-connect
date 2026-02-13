@@ -55,7 +55,10 @@ const TelefoniaDashboard = () => {
       // Enrich campaigns with statistics
       const enriched = await Promise.all(
         campList
-          .filter((c: any) => c.status === "running" || c.status === "paused")
+          .filter((c: any) => {
+            const s = String(c.status ?? "").toLowerCase();
+            return s === "running" || s === "paused" || !c.paused;
+          })
           .map(async (c: any) => {
             try {
               const stats = await invoke("campaign_statistics", { campaign_id: c.id });
@@ -109,9 +112,11 @@ const TelefoniaDashboard = () => {
 
   // KPI computations
   const onlineCount = agents.length;
-  const onCallCount = agents.filter((a: any) => ['on_call', 'ringing'].includes(a.status?.toLowerCase().replace(/[\s-]/g, '_'))).length;
-  const pausedCount = agents.filter((a: any) => a.status?.toLowerCase().replace(/[\s-]/g, '_') === 'paused').length;
-  const idleCount = agents.filter((a: any) => ['idle', 'available'].includes(a.status?.toLowerCase().replace(/[\s-]/g, '_'))).length;
+  // 3CPlus returns status as number: 0=offline, 1=online/idle, 2=on_call, 3=paused, 4=ACW etc.
+  const statusStr = (s: any) => String(s ?? "").toLowerCase().replace(/[\s-]/g, '_');
+  const onCallCount = agents.filter((a: any) => a.status === 2 || ['on_call', 'ringing'].includes(statusStr(a.status))).length;
+  const pausedCount = agents.filter((a: any) => a.status === 3 || statusStr(a.status) === 'paused').length;
+  const idleCount = agents.filter((a: any) => a.status === 1 || ['idle', 'available'].includes(statusStr(a.status))).length;
   const activeCalls = companyCalls?.active ?? companyCalls?.data?.active ?? "—";
   const completedCalls = companyCalls?.completed ?? companyCalls?.data?.completed ?? "—";
 
