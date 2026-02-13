@@ -387,6 +387,47 @@ export type Database = {
           },
         ]
       }
+      disposition_automations: {
+        Row: {
+          action_config: Json | null
+          action_type: string
+          created_at: string
+          disposition_type: string
+          id: string
+          is_active: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          action_config?: Json | null
+          action_type: string
+          created_at?: string
+          disposition_type: string
+          id?: string
+          is_active?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          action_config?: Json | null
+          action_type?: string
+          created_at?: string
+          disposition_type?: string
+          id?: string
+          is_active?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disposition_automations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number

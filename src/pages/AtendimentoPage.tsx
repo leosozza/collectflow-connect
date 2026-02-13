@@ -8,6 +8,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { formatCPF } from "@/lib/formatters";
 import { createAgreement } from "@/services/agreementService";
 import { createDisposition, fetchDispositions, type DispositionType } from "@/services/dispositionService";
+import { executeAutomations } from "@/services/dispositionAutomationService";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -112,6 +113,10 @@ const AtendimentoPage = () => {
     onSuccess: (_, variables) => {
       trackAction("tabulacao", { tipo: variables.type, client_id: id });
       queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+      // Execute post-disposition automations
+      if (tenant?.id && id) {
+        executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
+      }
     },
   });
 

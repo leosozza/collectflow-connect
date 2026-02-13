@@ -15,6 +15,7 @@ import RulesList from "@/components/automacao/RulesList";
 import RuleForm from "@/components/automacao/RuleForm";
 import MessageHistory from "@/components/automacao/MessageHistory";
 import GupshupSettings from "@/components/automacao/GupshupSettings";
+import DispositionAutomationsTab from "@/components/automacao/DispositionAutomationsTab";
 
 const AutomacaoPage = () => {
   const { tenant, isTenantAdmin } = useTenant();
@@ -101,6 +102,7 @@ const AutomacaoPage = () => {
       <Tabs defaultValue="regras">
         <TabsList>
           <TabsTrigger value="regras">Regras</TabsTrigger>
+          <TabsTrigger value="pos-tabulacao">Pós-Tabulação</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
           <TabsTrigger value="config">Configurações</TabsTrigger>
         </TabsList>
@@ -132,6 +134,10 @@ const AutomacaoPage = () => {
               )}
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="pos-tabulacao">
+          <DispositionAutomationsTab />
         </TabsContent>
 
         <TabsContent value="historico">
