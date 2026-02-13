@@ -34,7 +34,8 @@ const SignsPage = () => {
   const [signatureType, setSignatureType] = useState<string>(tenantSettings?.signature_type || "click");
   const [saving, setSaving] = useState(false);
 
-  // Playground state
+  // Playground state (independent from config)
+  const [playgroundType, setPlaygroundType] = useState<"click" | "facial" | "draw">("click");
   const [playgroundStep, setPlaygroundStep] = useState<"termo" | "assinatura" | "confirmacao">("termo");
 
   if (!isTenantAdmin) {
@@ -45,7 +46,7 @@ const SignsPage = () => {
     );
   }
 
-  const activeType = (tenantSettings?.signature_type || "click") as string;
+  
 
   const handleSaveSignatureType = async () => {
     if (!tenant) return;
@@ -158,22 +159,16 @@ const SignsPage = () => {
                     facial: <Camera className="w-3 h-3" />,
                     draw: <PenTool className="w-3 h-3" />,
                   };
-                  const isActive = activeType === type;
+                  const isActive = playgroundType === type;
                   return (
                     <Badge
                       key={type}
                       variant={isActive ? "default" : "outline"}
                       className={`cursor-pointer gap-1 ${isActive ? "" : "opacity-50"}`}
-                      onClick={async () => {
-                        if (!tenant || isActive) return;
-                        try {
-                          await updateTenant(tenant.id, {
-                            settings: { ...tenantSettings, signature_type: type },
-                          });
-                          await refetch();
-                          setSignatureType(type);
-                          resetPlayground();
-                        } catch {}
+                      onClick={() => {
+                        if (isActive) return;
+                        setPlaygroundType(type);
+                        resetPlayground();
                       }}
                     >
                       {icons[type]}
@@ -185,7 +180,7 @@ const SignsPage = () => {
             </div>
 
             {/* Mobile Frame - iPhone style */}
-            <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl">
+            <div className={`relative w-[320px] bg-foreground/90 rounded-[3rem] p-3 shadow-2xl transition-all duration-500 ease-in-out ${playgroundStep === "assinatura" && playgroundType === "draw" ? "rotate-90 scale-90" : "rotate-0"}`}>
               {/* Phone bezel inner */}
               <div className="relative bg-background rounded-[2.2rem] overflow-hidden flex flex-col" style={{ height: 640 }}>
                 {/* Status Bar */}
@@ -211,7 +206,7 @@ const SignsPage = () => {
                   )}
                   {playgroundStep === "assinatura" && (
                     <PlaygroundAssinatura
-                      type={activeType}
+                      type={playgroundType}
                       primaryColor={tenant?.primary_color || "#F97316"}
                       onConfirm={() => setPlaygroundStep("confirmacao")}
                     />
