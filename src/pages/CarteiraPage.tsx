@@ -18,7 +18,7 @@ import ClientFilters from "@/components/clients/ClientFilters";
 import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -263,6 +263,15 @@ const CarteiraPage = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-primary hover:text-primary"
+                          onClick={() => navigate(`/atendimento/${client.id}`)}
+                          title="Atender"
+                        >
+                          <Headset className="w-4 h-4" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
