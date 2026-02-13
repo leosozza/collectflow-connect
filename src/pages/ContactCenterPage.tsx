@@ -1,5 +1,4 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Headphones } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppTab from "@/components/contact-center/WhatsAppTab";
 
@@ -19,21 +18,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Headphones className="w-7 h-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {channel === "telefonia" ? "Telefonia" : "WhatsApp"}
-          </h1>
-          <p className="text-muted-foreground">
-            {channel === "telefonia"
-              ? "Gerencie campanhas e discagem automática"
-              : "Gerencie comunicações via WhatsApp"}
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {channel === "telefonia" ? <ThreeCPlusPanel /> : <WhatsAppTab />}
     </div>
   );
