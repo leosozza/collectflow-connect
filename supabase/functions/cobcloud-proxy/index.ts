@@ -9,15 +9,16 @@ const corsHeaders = {
 
 const COBCLOUD_BASE = "https://api-v3.cob.cloud";
 
-function getCobCloudHeaders() {
-  const tokenAssessoria = Deno.env.get("COBCLOUD_TOKEN_ASSESSORIA");
-  const tokenClient = Deno.env.get("COBCLOUD_TOKEN_CLIENT");
-  if (!tokenAssessoria || !tokenClient) {
-    throw new Error("Credenciais CobCloud não configuradas");
-  }
+interface CobCloudCredentials {
+  tokenAssessoria: string;
+  tokenClient: string;
+  tenantId: string;
+}
+
+function buildCobCloudHeaders(creds: CobCloudCredentials) {
   return {
-    token_assessoria: tokenAssessoria,
-    token_client: tokenClient,
+    token_assessoria: creds.tokenAssessoria,
+    token_client: creds.tokenClient,
     "Content-Type": "application/json",
   };
 }
@@ -29,7 +30,7 @@ function getSupabaseAdmin() {
   );
 }
 
-async function verifyAdmin(req: Request) {
+async function verifyAdminAndGetCredentials(req: Request): Promise<CobCloudCredentials> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader) throw new Error("Não autenticado");
 
@@ -43,9 +44,11 @@ async function verifyAdmin(req: Request) {
   if (error || !user) throw new Error("Token inválido");
 
   const admin = getSupabaseAdmin();
+
+  // Fetch profile with tenant_id and role
   const { data: profile } = await admin
     .from("profiles")
-    .select("role")
+    .select("role, tenant_id")
     .eq("user_id", user.id)
     .single();
 
@@ -53,7 +56,26 @@ async function verifyAdmin(req: Request) {
     throw new Error("Acesso restrito a administradores");
   }
 
-  return user;
+  if (!profile.tenant_id) {
+    throw new Error("Usuário sem empresa vinculada");
+  }
+
+  // Fetch tenant settings for credentials
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("settings")
+    .eq("id", profile.tenant_id)
+    .single();
+
+  const settings = tenant?.settings as Record<string, any> | null;
+  const tokenAssessoria = settings?.cobcloud_token_assessoria || Deno.env.get("COBCLOUD_TOKEN_ASSESSORIA");
+  const tokenClient = settings?.cobcloud_token_client || Deno.env.get("COBCLOUD_TOKEN_CLIENT");
+
+  if (!tokenAssessoria || !tokenClient) {
+    throw new Error("Credenciais CobCloud não configuradas");
+  }
+
+  return { tokenAssessoria, tokenClient, tenantId: profile.tenant_id };
 }
 
 function json(data: unknown, status = 200) {
@@ -67,23 +89,8 @@ function errorResponse(message: string, status = 400) {
   return json({ error: message }, status);
 }
 
-// --- Route handlers ---
+// --- Validation schemas ---
 
-async function handleStatus() {
-  try {
-    const headers = getCobCloudHeaders();
-    const res = await fetch(`${COBCLOUD_BASE}/cli/titulos/listar?page=1&limit=1`, {
-      method: "GET",
-      headers,
-    });
-    const ok = res.status === 200;
-    return json({ connected: ok, status: res.status });
-  } catch (e) {
-    return json({ connected: false, error: e.message });
-  }
-}
-
-// Validation schemas for imported data
 const importedRecordSchema = z.object({
   nome_completo: z.string().trim().min(1).max(200),
   cpf: z.string().trim().min(1).max(20),
@@ -112,6 +119,8 @@ const baixarRequestSchema = z.object({
   dataPagamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+// --- Helpers ---
+
 function sanitizeString(s: string, maxLen: number): string {
   return s.replace(/[<>"'&]/g, "").slice(0, maxLen).trim();
 }
@@ -125,8 +134,33 @@ function safeNumber(val: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-async function handleImportTitulos(body: any) {
-  const headers = getCobCloudHeaders();
+function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
+  if (!s) return "pendente";
+  const lower = s.toLowerCase();
+  if (lower.includes("pago") || lower.includes("quitado") || lower.includes("liquidado"))
+    return "pago";
+  if (lower.includes("quebr") || lower.includes("parcial")) return "quebrado";
+  return "pendente";
+}
+
+// --- Route handlers ---
+
+async function handleStatus(creds: CobCloudCredentials) {
+  try {
+    const headers = buildCobCloudHeaders(creds);
+    const res = await fetch(`${COBCLOUD_BASE}/cli/titulos/listar?page=1&limit=1`, {
+      method: "GET",
+      headers,
+    });
+    const ok = res.status === 200;
+    return json({ connected: ok, status: res.status });
+  } catch (e) {
+    return json({ connected: false, error: e.message });
+  }
+}
+
+async function handleImportTitulos(body: any, creds: CobCloudCredentials) {
+  const headers = buildCobCloudHeaders(creds);
   const admin = getSupabaseAdmin();
 
   const parsed = importRequestSchema.safeParse(body);
@@ -192,12 +226,13 @@ async function handleImportTitulos(body: any) {
       .select("id")
       .eq("cpf", rec.cpf)
       .eq("numero_parcela", rec.numero_parcela)
+      .eq("tenant_id", creds.tenantId)
       .maybeSingle();
 
     if (existing) {
       await admin.from("clients").update(rec).eq("id", existing.id);
     } else {
-      await admin.from("clients").insert(rec);
+      await admin.from("clients").insert({ ...rec, tenant_id: creds.tenantId });
     }
     imported++;
   }
@@ -205,8 +240,8 @@ async function handleImportTitulos(body: any) {
   return json({ imported, skipped, total: titulos.length });
 }
 
-async function handleExportDevedores(body: any) {
-  const headers = getCobCloudHeaders();
+async function handleExportDevedores(body: any, creds: CobCloudCredentials) {
+  const headers = buildCobCloudHeaders(creds);
   const admin = getSupabaseAdmin();
 
   const parsed = exportRequestSchema.safeParse(body);
@@ -218,12 +253,12 @@ async function handleExportDevedores(body: any) {
   const { data: clients, error } = await admin
     .from("clients")
     .select("*")
-    .in("id", clientIds);
+    .in("id", clientIds)
+    .eq("tenant_id", creds.tenantId);
 
   if (error) return errorResponse(error.message);
   if (!clients || clients.length === 0) return errorResponse("Clientes não encontrados");
 
-  // Group by CPF (one devedor can have multiple titles)
   const grouped: Record<string, any[]> = {};
   for (const c of clients) {
     if (!grouped[c.cpf]) grouped[c.cpf] = [];
@@ -259,8 +294,8 @@ async function handleExportDevedores(body: any) {
   return json({ sent: Object.keys(grouped).length, results });
 }
 
-async function handleBaixarTitulo(body: any) {
-  const headers = getCobCloudHeaders();
+async function handleBaixarTitulo(body: any, creds: CobCloudCredentials) {
+  const headers = buildCobCloudHeaders(creds);
 
   const parsed = baixarRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -282,15 +317,6 @@ async function handleBaixarTitulo(body: any) {
   return json({ status: res.status, data });
 }
 
-function mapStatus(s: string | undefined): "pendente" | "pago" | "quebrado" {
-  if (!s) return "pendente";
-  const lower = s.toLowerCase();
-  if (lower.includes("pago") || lower.includes("quitado") || lower.includes("liquidado"))
-    return "pago";
-  if (lower.includes("quebr") || lower.includes("parcial")) return "quebrado";
-  return "pendente";
-}
-
 // --- Main handler ---
 
 Deno.serve(async (req) => {
@@ -299,42 +325,30 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const path = url.pathname.split("/").pop() || "";
-
-    // Status endpoint doesn't need admin (but needs auth)
-    if (path === "status" || path === "cobcloud-proxy") {
-      if (req.method === "GET" || (req.method === "POST" && path === "cobcloud-proxy")) {
-        // For GET /status, verify auth
-        await verifyAdmin(req);
-
-        if (req.method === "GET" || path === "status") {
-          return await handleStatus();
-        }
-      }
-    }
-
-    // All POST routes require admin
-    await verifyAdmin(req);
+    // All routes require admin auth + tenant credentials
+    const creds = await verifyAdminAndGetCredentials(req);
 
     const body = req.method !== "GET" ? await req.json() : {};
+    const url = new URL(req.url);
+    const path = url.pathname.split("/").pop() || "";
     const action = body.action || path;
 
     switch (action) {
       case "status":
-        return await handleStatus();
+      case "cobcloud-proxy":
+        return await handleStatus(creds);
       case "import-titulos":
-        return await handleImportTitulos(body);
+        return await handleImportTitulos(body, creds);
       case "export-devedores":
-        return await handleExportDevedores(body);
+        return await handleExportDevedores(body, creds);
       case "baixar-titulo":
-        return await handleBaixarTitulo(body);
+        return await handleBaixarTitulo(body, creds);
       default:
         return errorResponse(`Ação desconhecida: ${action}`, 404);
     }
   } catch (e) {
     console.error("cobcloud-proxy error:", e);
-    const safeMessages = ["Não autenticado", "Token inválido", "Acesso restrito a administradores", "Credenciais CobCloud não configuradas"];
+    const safeMessages = ["Não autenticado", "Token inválido", "Acesso restrito a administradores", "Credenciais CobCloud não configuradas", "Usuário sem empresa vinculada"];
     const msg = safeMessages.includes(e.message) ? e.message : "Erro interno do servidor";
     return errorResponse(msg, e.message === "Não autenticado" || e.message === "Token inválido" ? 401 : 500);
   }
