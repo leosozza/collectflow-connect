@@ -1,168 +1,69 @@
 
 
-# Arquitetura do Fluxo de Cobrança - Visao Completa
+# Redesign do Painel de Tabulacao - Botoes Visuais e Intuitivos
 
-## Fluxo Geral
+## O que sera feito
 
-O sistema opera como uma plataforma de cobranca onde a carteira de clientes entra via CSV/API, passa por um processo de acionamento (discador ou WhatsApp em lote), e cada contato gera tabulacoes que alimentam automacoes e acordos.
+Redesenhar o `DispositionPanel` para ter botoes grandes, coloridos e agrupados por categoria, inspirado na referencia visual enviada. Os botoes atuais (pequenos, outline, sem cor) serao substituidos por botoes largos com cores distintas por grupo, icones a esquerda e texto centralizado.
+
+### Layout proposto
 
 ```text
-                    +------------------+
-                    |  Entrada de      |
-                    |  Carteira        |
-                    |  (CSV / API)     |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    |  Carteira        |
-                    |  /carteira       |
-                    |  (filtros,       |
-                    |   segmentacao)   |
-                    +--------+---------+
-                             |
-                 +-----------+-----------+
-                 |                       |
-        +--------v--------+    +--------v--------+
-        |  Discador       |    |  Disparo WA     |
-        |  (3CPlus)       |    |  em Lote        |
-        |  Integracao API |    |  (Gupshup/Meta) |
-        +--------+--------+    +-----------------+
-                 |
-        +--------v--------+
-        |  Tela do        |
-        |  Operador       |
-        |  /atendimento   |
-        |  (perfil +      |
-        |   tabulacao +   |
-        |   whatsapp +    |
-        |   negociacao)   |
-        +--------+--------+
-                 |
-        +--------v--------+
-        |  Tabulacao       |
-        |  (resultado da   |
-        |   ligacao)       |
-        +--------+---------+
-                 |
-        +--------v---------+
-        |  Automacoes      |
-        |  (boleto, pix,   |
-        |   link pgto)     |
-        +------------------+
-                 |
-        +--------v---------+
-        |  Acordos         |
-        |  /acordos        |
-        |  (acompanhamento)|
-        +------------------+
++----------------------------------------------+
+|  Acoes                                        |
++----------------------------------------------+
+|                                               |
+|  AGENDAR                                      |
+|  [====== Retornar Ligacao (azul) ======]      |
+|                                               |
+|  RESULTADO DA LIGACAO                         |
+|  [=== Caixa Postal (vermelho) ===]            |
+|  [=== Lig. Interrompida (amarelo) ===]        |
+|  [=== Nao Atende (laranja) ====]              |
+|                                               |
+|  CONTATO                                      |
+|  [=== Contato Incorreto (cinza) ===]          |
+|  [=== Promessa Pagamento (verde) ===]         |
+|                                               |
+|  NEGOCIACAO                                   |
+|  [======= NEGOCIAR (verde destaque) ========] |
+|                                               |
+|  Observacoes: [__________________________]    |
++----------------------------------------------+
 ```
 
----
-
-## O que ja existe no sistema
-
-| Funcionalidade | Status |
-|---|---|
-| Importacao de carteira via CSV/Excel | Pronto |
-| Listagem e filtros da carteira | Pronto |
-| Perfil do cliente (/carteira/:cpf) com dados, titulos e historico | Pronto |
-| Gestao de acordos (/acordos) com aprovacao e geracao de parcelas | Pronto |
-| Automacao de mensagens (regras de cobranca) | Pronto |
-| Integracao Negociarie (boletos, pix, cartao) | Pronto |
-| Integracao Gupshup (WhatsApp) | Parcial (configuracao pronta, disparo individual) |
-| Notificacoes em tempo real (acordos e pagamentos) | Pronto |
-
-## O que precisa ser construido (em fases)
+### Comportamento
+- Cada grupo tem um titulo em cinza (label) como "AGENDAR", "RESULTADO DA LIGACAO", etc.
+- Botoes sao largos (full-width ou 2 colunas) com fundo colorido, texto branco e icone
+- "Retornar Ligacao" ao clicar expande o campo de data/hora inline (como ja funciona)
+- "Negociar" e o botao principal, maior e em destaque
+- Campo de observacoes fica no final
+- Cores por tipo: vermelho para caixa postal, amarelo para interrompida, azul para retorno, verde para promessa/negociar, cinza para contato incorreto
 
 ---
 
-### FASE 1 - Tela de Atendimento do Operador (nova pagina /atendimento/:id)
+## Detalhes Tecnicos
 
-Esta e a pagina central do fluxo. O operador acessa via link do discador ou pela carteira.
+### Arquivo: `src/components/atendimento/DispositionPanel.tsx`
 
-**Conteudo da tela:**
+1. **Reorganizar botoes em grupos** com labels de secao (AGENDAR, RESULTADO, CONTATO, NEGOCIACAO)
+2. **Aplicar cores de fundo** usando classes Tailwind customizadas por tipo de tabulacao:
+   - `callback`: azul (`bg-blue-500 hover:bg-blue-600 text-white`)
+   - `voicemail`: vermelho (`bg-red-500 hover:bg-red-600 text-white`)
+   - `interrupted`: amarelo (`bg-yellow-500 hover:bg-yellow-600 text-white`)
+   - `no_answer`: laranja (`bg-orange-500 hover:bg-orange-600 text-white`)
+   - `wrong_contact`: cinza (`bg-gray-500 hover:bg-gray-600 text-white`)
+   - `promise`: verde (`bg-emerald-500 hover:bg-emerald-600 text-white`)
+   - `negotiated` (Negociar): verde escuro destaque (`bg-green-600 hover:bg-green-700 text-white`)
+3. **Botoes maiores**: `h-12` com `text-sm font-medium`, icone a esquerda, texto centralizado
+4. **Layout em grid**: secoes de 1-2 colunas conforme quantidade de botoes no grupo
+5. **Mover campo de observacoes** para baixo do painel, antes do botao Negociar
 
-1. **Header com dados do cliente**
-   - Nome, CPF, telefone, email, credor
-   - ID externo / numero de contrato (campo novo na tabela `clients`)
-   - Valor total em aberto
+### Arquivo: `src/services/dispositionService.ts`
 
-2. **Painel de Tabulacao** (botoes de acao rapida)
-   - Caixa Postal
-   - Ligacao Interrompida
-   - Contato Incorreto
-   - Retornar Ligacao (com campo de data/hora)
-   - **Negociar** (abre painel de negociacao)
+Sem alteracoes - os tipos e labels existentes serao mantidos.
 
-3. **Painel de Negociacao** (ao clicar "Negociar")
-   - Templates prontos de negociacao (ex: "30% desconto a vista", "parcelamento em 6x")
-   - Simulador manual (informar desconto %, qtd parcelas, valor entrada)
-   - Botao para gerar o acordo (envia para /acordos)
-
-4. **Chat WhatsApp** (lateral ou aba)
-   - Enviar mensagem direta ao cliente via Gupshup/Meta
-   - Historico de mensagens enviadas
-
-5. **Historico do cliente** (timeline)
-   - Tabulacoes anteriores, acordos, pagamentos, mensagens
-
-**Mudancas no banco de dados:**
-- Adicionar campo `external_id` (text, nullable) na tabela `clients` para identificacao externa
-- Criar tabela `call_dispositions` (tabulacoes): id, client_id, tenant_id, operator_id, disposition_type, notes, scheduled_callback, created_at
-- Cada disposition_type pode ter automacoes vinculadas (fase posterior)
-
----
-
-### FASE 2 - Integracao com Discador 3CPlus
-
-**Como funciona:**
-- A 3CPlus recebe uma lista de telefones/clientes via API
-- Quando o discador conecta uma ligacao, abre a URL do sistema com o ID do cliente
-- O operador ve a tela de atendimento e tabula
-
-**O que construir:**
-- Edge function `3cplus-export` para enviar lote de clientes filtrados ao discador
-- Configuracao de credenciais 3CPlus nas configuracoes do tenant
-- Botao "Enviar para Discador" na pagina de carteira (acao em lote)
-- URL publica `/atendimento/:id` que o discador abre (com autenticacao do operador)
-
----
-
-### FASE 3 - Disparo de WhatsApp em Lote
-
-**Como funciona:**
-- Admin seleciona clientes na carteira (checkbox)
-- Escolhe um template de mensagem
-- Sistema dispara para todos via Gupshup/Meta API
-- Cada envio e registrado em `message_logs`
-
-**O que construir:**
-- Selecao multipla na tabela da carteira
-- Dialog de disparo em lote com selecao de template
-- Logica de envio em batch via edge function existente (`send-notifications`)
-- Progresso/resultado do envio
-
----
-
-### FASE 4 - Automacoes pos-tabulacao
-
-**Como funciona:**
-- Cada tipo de tabulacao pode disparar uma acao automatica
-- Ex: "Negociar" -> gera link de pagamento e envia por WhatsApp
-- Ex: "Retornar ligacao" -> agenda lembrete para o operador
-- Configuravel pelo admin na pagina de automacao
-
-**O que construir:**
-- Vincular `disposition_type` a acoes automaticas na tabela `collection_rules`
-- Triggers ou edge functions que executam as acoes ao salvar uma tabulacao
-
----
-
-## Sugestao de Ordem de Implementacao
-
-Recomendo comecar pela **Fase 1** (Tela de Atendimento), pois e o nucleo do fluxo e pode ser usado imediatamente sem o discador (operadores acessam via carteira). As integracoes externas (3CPlus, WhatsApp em lote) podem ser adicionadas incrementalmente.
-
-**Proximo passo sugerido:** Implementar a Fase 1 - criar a tabela `call_dispositions`, adicionar campo `external_id` nos clientes, e construir a pagina `/atendimento/:id`.
-
-Deseja que eu detalhe o plano de implementacao da Fase 1?
+| Arquivo | Acao |
+|---------|------|
+| `src/components/atendimento/DispositionPanel.tsx` | Modificar - redesign visual com botoes coloridos agrupados |
 
