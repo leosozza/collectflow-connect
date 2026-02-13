@@ -5,16 +5,19 @@ import { updateTenant } from "@/services/tenantService";
 import {
   fetchWhatsAppInstances,
   createWhatsAppInstance,
-  updateWhatsAppInstance,
   deleteWhatsAppInstance,
   setDefaultInstance,
+  createEvolutionInstance,
+  connectEvolutionInstance,
+  getEvolutionInstanceStatus,
+  deleteEvolutionInstance,
   WhatsAppInstance,
 } from "@/services/whatsappInstanceService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Plus, Star, Pencil, Trash2, Radio } from "lucide-react";
+import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2 } from "lucide-react";
 import BaylersInstanceForm from "./BaylersInstanceForm";
 import {
   AlertDialog,
@@ -26,6 +29,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const BaylersInstancesList = () => {
   const { tenant, refetch: refetchTenant } = useTenant();
@@ -35,9 +44,12 @@ const BaylersInstancesList = () => {
   const activeProvider = settings.whatsapp_provider || "";
 
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<WhatsAppInstance | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WhatsAppInstance | null>(null);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [statusMap, setStatusMap] = useState<Record<string, string>>({});
+  const [loadingStatus, setLoadingStatus] = useState<Record<string, boolean>>({});
 
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ["whatsapp-instances", tenant?.id],
@@ -45,36 +57,75 @@ const BaylersInstancesList = () => {
     enabled: !!tenant?.id,
   });
 
-  const handleSave = async (data: { name: string; instance_url: string; api_key: string; instance_name: string }) => {
+  const handleCreate = async (data: { name: string }) => {
     if (!tenant) return;
     setSaving(true);
     try {
-      if (editing) {
-        await updateWhatsAppInstance(editing.id, data);
-        toast({ title: "Instância atualizada!" });
-      } else {
-        const isFirst = instances.length === 0;
-        await createWhatsAppInstance({
-          ...data,
-          tenant_id: tenant.id,
-          is_default: isFirst,
-          status: "active",
+      const instanceName = `${tenant.name} - ${data.name}`;
+      const result = await createEvolutionInstance(instanceName);
+
+      const hash = result?.hash?.apikey || "";
+      const isFirst = instances.length === 0;
+
+      await createWhatsAppInstance({
+        name: data.name,
+        instance_name: instanceName,
+        instance_url: "",
+        api_key: hash,
+        tenant_id: tenant.id,
+        is_default: isFirst,
+        status: "active",
+      });
+
+      if (isFirst) {
+        await updateTenant(tenant.id, {
+          settings: { ...settings, whatsapp_provider: "baylers" },
         });
-        if (isFirst) {
-          await updateTenant(tenant.id, {
-            settings: { ...settings, whatsapp_provider: "baylers" },
-          });
-          await refetchTenant();
-        }
-        toast({ title: "Instância adicionada!" });
+        await refetchTenant();
       }
+
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
       setFormOpen(false);
-      setEditing(null);
+      toast({ title: "Instância criada!" });
+
+      // Show QR code if available
+      const qr = result?.qrcode?.base64 || result?.base64;
+      if (qr) {
+        setQrCodeData(qr);
+        setQrDialogOpen(true);
+      }
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao criar instância", description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleConnect = async (inst: WhatsAppInstance) => {
+    try {
+      const result = await connectEvolutionInstance(inst.instance_name);
+      const qr = result?.base64 || result?.qrcode?.base64;
+      if (qr) {
+        setQrCodeData(qr);
+        setQrDialogOpen(true);
+      } else {
+        toast({ title: "Instância já conectada ou QR indisponível" });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCheckStatus = async (inst: WhatsAppInstance) => {
+    setLoadingStatus((prev) => ({ ...prev, [inst.id]: true }));
+    try {
+      const result = await getEvolutionInstanceStatus(inst.instance_name);
+      const state = result?.instance?.state || result?.state || "unknown";
+      setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
+    } catch {
+      setStatusMap((prev) => ({ ...prev, [inst.id]: "error" }));
+    } finally {
+      setLoadingStatus((prev) => ({ ...prev, [inst.id]: false }));
     }
   };
 
@@ -96,6 +147,12 @@ const BaylersInstancesList = () => {
   const handleDelete = async () => {
     if (!deleteTarget || !tenant) return;
     try {
+      // Delete from Evolution API first (best effort)
+      try {
+        await deleteEvolutionInstance(deleteTarget.instance_name);
+      } catch {
+        // Ignore Evolution API errors on delete
+      }
       await deleteWhatsAppInstance(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
       toast({ title: "Instância removida" });
@@ -105,6 +162,14 @@ const BaylersInstancesList = () => {
     }
   };
 
+  const getStatusBadge = (instId: string) => {
+    const state = statusMap[instId];
+    if (!state) return null;
+    if (state === "open") return <Badge className="bg-green-100 text-green-700 text-xs gap-1"><Wifi className="w-3 h-3" />Conectado</Badge>;
+    if (state === "connecting") return <Badge className="bg-yellow-100 text-yellow-700 text-xs">Conectando...</Badge>;
+    return <Badge variant="outline" className="text-xs gap-1"><WifiOff className="w-3 h-3" />Desconectado</Badge>;
+  };
+
   return (
     <>
       <Card className={activeProvider === "baylers" ? "ring-2 ring-primary" : ""}>
@@ -112,7 +177,7 @@ const BaylersInstancesList = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-lg">
               <MessageSquare className="w-5 h-5" />
-              Baylers
+              Baylers (Evolution API)
             </CardTitle>
             <div className="flex items-center gap-2">
               {instances.length > 0 && (
@@ -125,7 +190,7 @@ const BaylersInstancesList = () => {
               )}
             </div>
           </div>
-          <CardDescription>Conexão não-oficial via instância própria</CardDescription>
+          <CardDescription>Conexão via Evolution API — apenas informe o nome da instância</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? (
@@ -137,12 +202,9 @@ const BaylersInstancesList = () => {
           ) : (
             <div className="space-y-2">
               {instances.map((inst) => (
-                <div
-                  key={inst.id}
-                  className="flex items-center justify-between rounded-lg border p-3 gap-2"
-                >
+                <div key={inst.id} className="flex items-center justify-between rounded-lg border p-3 gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm truncate">
                         {inst.name || inst.instance_name}
                       </span>
@@ -151,18 +213,35 @@ const BaylersInstancesList = () => {
                           <Star className="w-3 h-3 fill-current" />Padrão
                         </Badge>
                       )}
+                      {getStatusBadge(inst.id)}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{inst.instance_url}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{inst.instance_name}</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleConnect(inst)}
+                      title="QR Code / Conectar"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleCheckStatus(inst)}
+                      title="Verificar status"
+                      disabled={loadingStatus[inst.id]}
+                    >
+                      {loadingStatus[inst.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                    </Button>
                     {!inst.is_default && (
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetDefault(inst)} title="Definir como padrão">
                         <Star className="w-4 h-4" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(inst); setFormOpen(true); }}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(inst)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -175,7 +254,7 @@ const BaylersInstancesList = () => {
           <Button
             variant="outline"
             className="w-full gap-2"
-            onClick={() => { setEditing(null); setFormOpen(true); }}
+            onClick={() => setFormOpen(true)}
           >
             <Plus className="w-4 h-4" /> Nova Instância
           </Button>
@@ -184,18 +263,39 @@ const BaylersInstancesList = () => {
 
       <BaylersInstanceForm
         open={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSave={handleSave}
+        onClose={() => setFormOpen(false)}
+        onSave={handleCreate}
         saving={saving}
-        instance={editing}
+        tenantName={tenant?.name || ""}
       />
 
+      {/* QR Code Dialog */}
+      <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Escaneie o QR Code</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center p-4">
+            {qrCodeData ? (
+              <img
+                src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
+                alt="QR Code WhatsApp"
+                className="w-64 h-64 object-contain"
+              />
+            ) : (
+              <p className="text-muted-foreground">QR Code indisponível</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover instância?</AlertDialogTitle>
             <AlertDialogDescription>
-              A instância "{deleteTarget?.name || deleteTarget?.instance_name}" será removida permanentemente.
+              A instância "{deleteTarget?.name || deleteTarget?.instance_name}" será removida do sistema e da Evolution API.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

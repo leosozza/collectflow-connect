@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.send-bulk-whatsapp]
 verify_jwt = false
+
+[functions.evolution-proxy]
+verify_jwt = false
