@@ -1,68 +1,63 @@
 
-# Correcao da Experiencia Mobile: Reconhecimento Facial e Assinatura na Tela
+# Indicadores Visuais de Pontos Faciais no Reconhecimento
 
-## Problemas Identificados
+## O que muda
 
-1. **Reconhecimento Facial no mobile**: A tela de "Iniciar Captura" e a captura em si nao abrem em tela cheia real. Ficam dentro de um container com borda, sem ocupar a tela toda do dispositivo.
+O overlay SVG existente no componente `SignatureFacial.tsx` sera substituido por uma versao muito mais visivel e profissional, com:
 
-2. **Assinatura na Tela no mobile**: Quando o usuario gira o celular para paisagem, o layout inteiro gira junto e a area de assinatura fica cortada/inutilizavel. Nao ha tratamento de orientacao.
+1. **Pontos maiores e brilhantes** nos olhos, nariz e boca (circulos com glow animado)
+2. **Labels textuais** ao lado de cada ponto: "Olho esquerdo", "Olho direito", "Nariz", "Boca"
+3. **Linhas de conexao** entre os pontos formando um mesh facial visivel (triangulacao entre olhos-nariz-boca)
+4. **Animacao de "scanning"** - os pontos pulsam e as labels aparecem sequencialmente com um efeito de fade-in, simulando deteccao em tempo real
+5. **Badge de status** mostrando "Pontos detectados: 7/7" com check animado
 
----
-
-## Solucao
-
-### 1. Fullscreen real no mobile (Facial e Draw)
-
-No `SignsPage.tsx`, quando `isMobile` e `playgroundStep === "assinatura"` com tipo `facial` ou `draw`, renderizar o conteudo como um **overlay fixo** (`fixed inset-0 z-50`) cobrindo toda a viewport, em vez de dentro do container com borda.
-
-Isso garante que:
-- A camera do facial ocupe 100% da tela
-- A area de assinatura ocupe 100% da tela
-- O header e badges do playground fiquem escondidos durante a assinatura
-
-### 2. Orientacao fixa para Assinatura na Tela (Draw)
-
-No componente `SignatureDraw.tsx`, quando `fullscreen=true`:
-- Usar a Screen Orientation API (`screen.orientation.lock('landscape')`) para tentar travar em paisagem automaticamente
-- Como fallback (iOS Safari nao suporta lock), aplicar uma **rotacao CSS de 90 graus** no container da assinatura para simular paisagem
-- O canvas deve se adaptar ao tamanho rotacionado (largura = altura da viewport, altura = largura da viewport)
-- Adicionar um botao de fechar/voltar visivel
-
-### 3. Ajustes no SignatureFacial.tsx
-
-- No modo `fullscreen`, garantir que o container use `fixed inset-0` em vez de `absolute inset-0` quando renderizado fora do frame do iPhone (mobile real)
-- O video deve ter `playsInline` (ja tem) e `object-cover` para preencher toda a tela
-
----
+O efeito e puramente visual/cosmético (nao usa uma biblioteca de deteccao real), mas da ao usuario a confianca de que o sistema esta analisando seu rosto.
 
 ## Detalhes Tecnicos
 
-### Arquivo: `src/pages/SignsPage.tsx`
-
-Mudancas no bloco mobile do playground:
-- Quando `isMobile && isFullscreenMode`, renderizar um portal/overlay fixo com `fixed inset-0 z-50 bg-background` fora do container normal
-- Incluir botao de "Voltar" no overlay para sair do modo fullscreen
-- O container normal com borda so aparece quando NAO esta em fullscreen
-
-### Arquivo: `src/components/portal/signatures/SignatureDraw.tsx`
-
-Mudancas no modo fullscreen:
-- Tentar `screen.orientation.lock('landscape')` no mount (com try/catch para browsers que nao suportam)
-- Fallback CSS: container com `transform: rotate(90deg)` e dimensoes invertidas (`width: 100vh, height: 100vw`)
-- Canvas redimensionado para aproveitar o espaco landscape
-- `screen.orientation.unlock()` no unmount
-- Adicionar `touch-action: none` para evitar scroll acidental no iOS
-
 ### Arquivo: `src/components/portal/signatures/SignatureFacial.tsx`
 
-Mudancas no modo fullscreen:
-- Trocar `absolute inset-0` por `fixed inset-0 z-50` nos estados idle, capturing, done e error quando em fullscreen real (mobile)
-- Garantir que a camera preencha toda a tela sem barras
+**Substituicao do SVG overlay (linhas 34-45)**:
 
-### Arquivos modificados
+O SVG atual com `opacity-40` sera substituido por um novo com:
+
+```
+- Circulos maiores (r=5-6) com filtro de glow (feGaussianBlur)
+- Opacidade total (sem opacity-40)
+- Labels SVG <text> ao lado de cada ponto
+- Animacao CSS keyframe para simular deteccao progressiva
+- Linhas de conexao com strokeWidth maior e dasharray animado
+- Pontos extras nas laterais do rosto (contorno da mandibula)
+```
+
+Pontos mapeados no viewBox 300x400:
+| Ponto | Posicao | Label |
+|---|---|---|
+| Olho esquerdo | (120, 170) | "Olho E." |
+| Olho direito | (180, 170) | "Olho D." |
+| Nariz | (150, 215) | "Nariz" |
+| Boca esquerda | (125, 255) | - |
+| Boca centro | (150, 260) | "Boca" |
+| Boca direita | (175, 255) | - |
+| Orelha esquerda | (90, 200) | - |
+| Orelha direita | (210, 200) | - |
+
+**Novo componente `FaceLandmarks`** (inline no mesmo arquivo):
+- Recebe `primaryColor` como prop
+- Usa `useEffect` com timer para animar a "deteccao" dos pontos um a um
+- Cada ponto aparece com scale animation de 0 para 1
+- Apos todos detectados, mostra badge "Rosto detectado"
+
+### Resultado visual esperado
+
+- Ao iniciar a captura, os pontos aparecem um a um sobre o rosto (olho esquerdo, olho direito, nariz, boca...)
+- Linhas conectam os pontos formando um triangulo facial
+- Cada ponto tem um circulo externo com glow pulsante
+- Labels aparecem brevemente ao lado de cada ponto detectado
+- Um badge no topo muda de "Detectando..." para "Rosto detectado" com check verde
+
+### Arquivo modificado
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/pages/SignsPage.tsx` | Overlay fixo no mobile para facial/draw em fullscreen |
-| `src/components/portal/signatures/SignatureDraw.tsx` | Orientacao landscape forcada + canvas adaptativo |
-| `src/components/portal/signatures/SignatureFacial.tsx` | Fixed positioning no fullscreen mobile |
+| `src/components/portal/signatures/SignatureFacial.tsx` | Novo overlay SVG com pontos faciais visiveis, labels, animacoes de deteccao e badge de status |
