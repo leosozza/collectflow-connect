@@ -1,11 +1,32 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, List, Send, History } from "lucide-react";
-import ConfigPanel from "./ConfigPanel";
+import { List, Send, History, AlertTriangle } from "lucide-react";
+import { useTenant } from "@/hooks/useTenant";
+import { Card, CardContent } from "@/components/ui/card";
 import CampaignsPanel from "./CampaignsPanel";
 import MailingPanel from "./MailingPanel";
 import HistoryPanel from "./HistoryPanel";
 
 const ThreeCPlusPanel = () => {
+  const { tenant } = useTenant();
+  const settings = (tenant?.settings as Record<string, any>) || {};
+  const hasCredentials = settings.threecplus_domain && settings.threecplus_api_token;
+
+  if (!hasCredentials) {
+    return (
+      <div className="mt-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 py-6">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Credenciais 3CPlus não configuradas. Vá em{" "}
+              <strong>Integrações → Telefonia</strong> para configurar domínio e token de API.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4">
       <Tabs defaultValue="campaigns">
@@ -22,10 +43,6 @@ const ThreeCPlusPanel = () => {
             <History className="w-4 h-4" />
             Histórico
           </TabsTrigger>
-          <TabsTrigger value="config" className="gap-2">
-            <Settings className="w-4 h-4" />
-            Configuração
-          </TabsTrigger>
         </TabsList>
         <TabsContent value="campaigns">
           <CampaignsPanel />
@@ -35,9 +52,6 @@ const ThreeCPlusPanel = () => {
         </TabsContent>
         <TabsContent value="history">
           <HistoryPanel />
-        </TabsContent>
-        <TabsContent value="config">
-          <ConfigPanel />
         </TabsContent>
       </Tabs>
     </div>
