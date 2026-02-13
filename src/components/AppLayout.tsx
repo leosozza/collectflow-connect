@@ -311,6 +311,31 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </Button>
           </div>
           <div className="flex items-center gap-2">
+            {(() => {
+              const pageTitles: Record<string, string> = {
+                "/": "Dashboard",
+                "/carteira": "Carteira",
+                "/contact-center/telefonia": "Telefonia",
+                "/contact-center/whatsapp": "WhatsApp",
+                "/acordos": "Acordos",
+                "/financeiro": "Financeiro",
+                "/relatorios": "Relatórios",
+                "/integracao": "Integração",
+                "/configuracoes": "Configurações",
+                "/automacao": "Automação",
+                "/usuarios": "Usuários",
+                "/cadastro": "Log de Importações",
+                "/tenant/configuracoes": "Empresa",
+                "/auditoria": "Auditoria",
+                "/admin/tenants": "Tenants",
+              };
+              const title = pageTitles[location.pathname];
+              return title ? (
+                <h1 className="text-sm font-semibold text-foreground">{title}</h1>
+              ) : null;
+            })()}
+          </div>
+          <div className="flex items-center gap-2">
             <NotificationBell />
             <span className="text-sm text-muted-foreground">
               {isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Administrador" : "Operador"}
