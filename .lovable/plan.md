@@ -1,127 +1,238 @@
 
+# WhatsApp CRM Conversacional Completo
 
-# Evolution API via Secrets Globais
-
-## Resumo
-
-A URL e a API Key do servidor Evolution API serao armazenadas como **secrets globais** do projeto, nao mais por instancia. Quando o admin clicar "Nova Instancia", ele informa apenas o **nome** (ex: "Agente 01"). O sistema automaticamente:
-
-1. Gera o `instanceName` no formato **"{nome_empresa} - {nome_digitado}"**
-2. Chama a Evolution API para criar a instancia
-3. Exibe o QR Code para conexao
-4. Salva no banco com o token especifico retornado pela API
-
-## O que muda
-
-### 1. Dois novos secrets globais
-
-| Secret | Valor |
-|---|---|
-| `EVOLUTION_API_URL` | URL base do servidor Evolution (ex: `https://evolution.minhaempresa.com`) |
-| `EVOLUTION_API_KEY` | API Key global do servidor Evolution |
-
-Esses secrets ficam disponiveis nas edge functions via `Deno.env.get()`.
-
-### 2. Nova edge function: `evolution-proxy`
-
-Centraliza todas as chamadas a Evolution API, evitando expor credenciais no frontend.
-
-Acoes suportadas (via query param `action`):
-
-- **create** - `POST /instance/create` - cria instancia e retorna QR code
-- **connect** - `GET /instance/connect/{instanceName}` - retorna QR code para reconexao
-- **status** - `GET /instance/connectionState/{instanceName}` - retorna estado (open/close/connecting)
-- **delete** - `DELETE /instance/delete/{instanceName}` - remove instancia do servidor
-
-### 3. Formulario simplificado (BaylersInstanceForm)
-
-Campos atuais removidos: URL da Instancia, API Key, Nome da Instancia (API).
-
-Novo formulario:
-- **Nome da Instancia** (obrigatorio) - ex: "Agente 01", "Cobranca"
-- O `instanceName` na API sera gerado como: `"{tenant.name} - {nome}"`
-- Exibicao informativa do nome que sera criado na API
-
-### 4. Fluxo de criacao com QR Code
-
-```text
-1. Admin clica "+ Nova Instancia"
-2. Digita o nome (ex: "Agente 01")
-3. Clica "Criar"
-4. Frontend chama edge function evolution-proxy?action=create
-   - Edge function usa secrets EVOLUTION_API_URL + EVOLUTION_API_KEY
-   - Chama POST {url}/instance/create com instanceName = "Temis - Agente 01"
-5. Se sucesso:
-   - Salva no banco: instance_name, api_key (hash retornado), instance_url (do secret)
-   - Exibe QR Code em um Dialog para escanear
-6. Se erro: exibe mensagem
-```
-
-### 5. Botoes na lista de instancias
-
-Cada instancia tera:
-- **QR Code / Conectar** - chama connect para exibir QR code
-- **Status** - indicador visual (conectado/desconectado) consultando connectionState
-- **Definir padrao** (estrela)
-- **Remover** - remove do banco E chama delete na Evolution API
-
-### 6. Atualizacao do send-bulk-whatsapp
-
-A edge function de envio em lote passa a usar os secrets `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` como fallback caso a instancia no banco nao tenha URL/key proprios.
+Sistema de atendimento WhatsApp estilo CRM (como Kommo/Octadesk) integrado ao /contact-center/whatsapp, com 4 fases de implementacao.
 
 ---
 
-## Detalhes tecnicos
+## Visao Geral da Arquitetura
 
-### Edge function: `evolution-proxy/index.ts`
-
-```text
-POST /evolution-proxy?action=create
-Body: { instanceName: "Temis - Agente 01", tenantId: "uuid" }
--> Chama POST {EVOLUTION_API_URL}/instance/create
--> Retorna: { instance, hash, qrcode }
-
-POST /evolution-proxy?action=connect
-Body: { instanceName: "Temis - Agente 01" }
--> Chama GET {EVOLUTION_API_URL}/instance/connect/{instanceName}
--> Retorna: { base64: "data:image/png;base64,..." }
-
-POST /evolution-proxy?action=status
-Body: { instanceName: "Temis - Agente 01" }
--> Chama GET {EVOLUTION_API_URL}/instance/connectionState/{instanceName}
--> Retorna: { state: "open" | "close" | "connecting" }
-
-POST /evolution-proxy?action=delete
-Body: { instanceName: "Temis - Agente 01" }
--> Chama DELETE {EVOLUTION_API_URL}/instance/delete/{instanceName}
-```
-
-Todas as acoes validam JWT do usuario autenticado.
-
-### Arquivos a criar
-
-| Arquivo | Descricao |
-|---|---|
-| `supabase/functions/evolution-proxy/index.ts` | Proxy para a Evolution API usando secrets globais |
-
-### Arquivos a modificar
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/integracao/BaylersInstanceForm.tsx` | Simplificar para apenas campo "Nome", receber tenantName como prop, mostrar preview do instanceName |
-| `src/components/integracao/BaylersInstancesList.tsx` | Chamar evolution-proxy para criar/conectar/deletar, exibir QR code em Dialog, mostrar status de conexao |
-| `src/services/whatsappInstanceService.ts` | Adicionar funcoes para chamar a edge function (createEvolutionInstance, connectInstance, getInstanceStatus, deleteEvolutionInstance) |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Usar EVOLUTION_API_URL e EVOLUTION_API_KEY dos secrets como fallback |
-| `supabase/config.toml` | Adicionar `[functions.evolution-proxy]` com verify_jwt = false |
-
-### Tabela whatsapp_instances
-
-Continua igual. Os campos `instance_url` e `api_key` serao preenchidos com os valores do secret global (URL) e do token especifico retornado pela API (hash.apikey). Isso garante que o envio de mensagens continue funcionando sem mudancas.
-
-### Config TOML
+O sistema sera construido em 4 fases progressivas, cada uma entregando valor funcional independente:
 
 ```text
-[functions.evolution-proxy]
-verify_jwt = false
++-----------------------------------------------------------------------------------+
+|  /contact-center/whatsapp                                                         |
+|                                                                                   |
+|  +-------------+  +-------------------------------+  +-------------------------+  |
+|  | Lista de    |  | Painel de Chat                |  | Sidebar CRM            |  |
+|  | Conversas   |  |                               |  |                        |  |
+|  |             |  | [Header contato]              |  | Dados do cliente       |  |
+|  | Busca       |  | [Mensagens scrollable]        |  | Etiquetas              |  |
+|  | Filtros     |  | [Sugestao IA]                 |  | Historico parcelas     |  |
+|  | Status      |  | [Input: texto/audio/emoji]    |  | Timeline               |  |
+|  | Etiquetas   |  |                               |  | Notas internas         |  |
+|  |             |  |                               |  | Vincular cliente       |  |
+|  +-------------+  +-------------------------------+  +-------------------------+  |
++-----------------------------------------------------------------------------------+
 ```
 
+---
+
+## Fase 1 - Chat Funcional (MVP)
+
+### Banco de Dados
+
+Novas tabelas:
+
+**conversations** - Gerencia conversas agrupadas por contato
+- id, tenant_id, instance_id, remote_phone, remote_name, status (open/waiting/closed), assigned_to (profile_id), last_message_at, unread_count, created_at, updated_at
+
+**chat_messages** - Mensagens individuais (substitui message_logs para chat)
+- id, conversation_id, tenant_id, direction (inbound/outbound), message_type (text/image/audio/video/document/sticker), content, media_url, media_mime_type, status (pending/sent/delivered/read/failed), external_id, created_at
+
+Habilitar Realtime em ambas as tabelas para atualizacao em tempo real.
+
+RLS: operadores veem apenas conversas das instancias vinculadas via operator_instances; admins veem todas do tenant.
+
+### Edge Function: whatsapp-webhook
+
+Recebe webhooks da Evolution API (mensagens recebidas, status updates). Cria/atualiza conversations e chat_messages automaticamente.
+
+### Edge Function: send-whatsapp (atualizar evolution-proxy)
+
+Nova action "sendMessage" no evolution-proxy para enviar texto, midia via instancia especifica.
+
+### Frontend - Layout 3 paineis
+
+**ConversationList** (coluna esquerda ~300px)
+- Busca por nome/telefone
+- Filtro por status (aberta, aguardando, fechada)
+- Filtro por instancia
+- Lista com avatar, nome, ultima mensagem, hora, badge unread
+- Indicador de instancia
+
+**ChatPanel** (coluna central, flex-1)
+- Header: nome contato, telefone, status, instancia
+- Area de mensagens com scroll automatico, bolhas estilo WhatsApp
+- Tipos de mensagem: texto, imagem (preview), audio (player), documento (link download)
+- Input com campo texto + botao enviar
+- Status de entrega (enviado/entregue/lido) com icones
+
+**ContactSidebar** (coluna direita ~320px, colapsavel)
+- Dados basicos do contato (nome, telefone)
+- Botao "Vincular Cliente" para associar a um cliente cadastrado
+- Se vinculado: mostrar dados do cliente (CPF, parcelas, status)
+
+### Acesso
+
+- Remover restricao `profile?.role !== "admin"` da ContactCenterPage para channel whatsapp
+- Operadores veem apenas conversas das instancias vinculadas (via operator_instances)
+- Admins veem todas as conversas do tenant
+
+---
+
+## Fase 2 - Midia, Etiquetas e Busca
+
+### Audio
+
+- Gravador de audio no browser usando MediaRecorder API
+- Upload para storage bucket "chat-media"
+- Envio via Evolution API (formato OGG/OPUS)
+- Player inline nas mensagens recebidas/enviadas
+
+### Emoji Picker
+
+- Componente emoji picker (usando biblioteca leve como emoji-mart ou picker nativo)
+- Integrado ao input do chat
+
+### Upload de Midia
+
+- Botao de anexar (imagem, documento, video)
+- Upload para storage, envio via Evolution API
+- Preview inline (imagem) ou link (documento)
+
+### Sistema de Etiquetas
+
+Nova tabela **conversation_tags**:
+- id, tenant_id, name, color, created_at
+
+Nova tabela **conversation_tag_assignments**:
+- conversation_id, tag_id
+
+- UI para criar/gerenciar etiquetas
+- Atribuir etiquetas na sidebar do contato
+- Filtrar conversas por etiqueta na lista
+
+### Busca Global
+
+- Busca full-text em chat_messages.content
+- Busca por nome, telefone, etiqueta
+- Resultados com destaque e navegacao para a conversa
+
+---
+
+## Fase 3 - IA Inteligente
+
+### Sugestao de Resposta
+
+- Edge function "chat-ai-suggest" usando Lovable AI (gemini-3-flash-preview)
+- Contexto enviado: ultimas N mensagens + dados do cliente (se vinculado) + base de conhecimento
+- Botao "Sugestao IA" no chat que gera resposta sugerida
+- Operador pode editar antes de enviar ou descartar
+
+### Resumo da Conversa
+
+- Botao na sidebar para gerar resumo automatico da conversa
+- Util para handoff entre operadores
+
+### Classificacao Automatica
+
+- Ao receber mensagem, IA classifica intencao (cobranca, suporte, cancelamento, etc.)
+- Sugestao automatica de etiqueta baseada na classificacao
+
+---
+
+## Fase 4 - Automacao e Avancado
+
+### Distribuicao Automatica
+
+- Conversas novas atribuidas automaticamente ao operador com menos conversas abertas (round-robin)
+- Respeitar vinculo operador-instancia
+
+### Respostas Rapidas
+
+Nova tabela **quick_replies**: id, tenant_id, shortcut, content, category
+- Digitar "/" no chat abre lista de respostas rapidas
+- Admin configura templates
+
+### SLA e Alertas
+
+- Tempo maximo sem resposta configuravel
+- Notificacao quando conversa ultrapassa SLA
+- Indicador visual na lista de conversas
+
+### Notas Internas
+
+- Mensagens internas (nao enviadas ao cliente) dentro da conversa
+- Visivel apenas para operadores
+- Util para anotacoes e handoff
+
+---
+
+## Detalhes Tecnicos
+
+### Estrutura de Arquivos (novos)
+
+```text
+src/
+  components/
+    contact-center/
+      whatsapp/
+        ConversationList.tsx
+        ChatPanel.tsx
+        ChatMessage.tsx
+        ContactSidebar.tsx
+        ChatInput.tsx
+        ConversationFilters.tsx
+        EmojiPicker.tsx        (Fase 2)
+        AudioRecorder.tsx      (Fase 2)
+        TagManager.tsx         (Fase 2)
+        AISuggestion.tsx       (Fase 3)
+  services/
+    conversationService.ts
+    chatMessageService.ts
+  hooks/
+    useConversations.ts
+    useChatMessages.ts
+
+supabase/functions/
+  whatsapp-webhook/index.ts    (atualizar)
+  evolution-proxy/index.ts     (adicionar sendMessage)
+  chat-ai-suggest/index.ts     (Fase 3)
+```
+
+### Realtime
+
+- `conversations` e `chat_messages` com Realtime habilitado
+- Subscricao por tenant_id para atualizacao instantanea da lista e do chat
+
+### Storage
+
+- Bucket "chat-media" para arquivos de audio, imagem, documento
+- RLS: acesso por tenant_id
+
+### Webhook Evolution API
+
+- A Evolution API envia webhooks para mensagens recebidas e status updates
+- O endpoint whatsapp-webhook processa e armazena em conversations/chat_messages
+- Precisa configurar o webhook URL na instancia Evolution (via evolution-proxy action "setWebhook")
+
+---
+
+## Ordem de Implementacao
+
+Cada fase sera quebrada em prompts menores para implementacao incremental:
+
+**Fase 1** (prioridade):
+1. Migracoes DB (conversations, chat_messages)
+2. Edge function webhook + sendMessage
+3. ConversationList component
+4. ChatPanel + ChatMessage components
+5. ChatInput (texto)
+6. ContactSidebar + vincular cliente
+7. Integracao Realtime
+8. Abrir acesso para operadores
+
+**Fase 2**: Audio, Emoji, Upload, Etiquetas, Busca
+**Fase 3**: IA (sugestao, resumo, classificacao)
+**Fase 4**: Automacao, respostas rapidas, SLA, notas internas
