@@ -9,12 +9,12 @@ interface PortalLayoutProps {
 }
 
 const PortalLayout = ({ children, tenantName, tenantLogo, primaryColor }: PortalLayoutProps) => {
-  const color = primaryColor || "#2563eb";
+  const color = primaryColor || "#F97316";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      <header className="border-b bg-card sticky top-0 z-50 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           {tenantLogo ? (
             <img src={tenantLogo} alt={tenantName} className="h-9 w-auto" />
@@ -26,7 +26,7 @@ const PortalLayout = ({ children, tenantName, tenantLogo, primaryColor }: Portal
               {tenantName?.[0]?.toUpperCase() || "C"}
             </div>
           )}
-          <span className="font-semibold text-slate-900 text-lg">{tenantName || "Portal"}</span>
+          <span className="font-semibold text-foreground text-lg">{tenantName || "Portal"}</span>
         </div>
       </header>
 
@@ -34,13 +34,13 @@ const PortalLayout = ({ children, tenantName, tenantLogo, primaryColor }: Portal
       <main className="flex-1">{children}</main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-6 mt-8">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-slate-500">
+      <footer className="border-t bg-card py-6 mt-8">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4" />
             <span>Ambiente seguro e criptografado</span>
           </div>
-          <span className="hidden sm:inline text-slate-300">•</span>
+          <span className="hidden sm:inline text-muted-foreground/50">•</span>
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
             <span>Seus dados estão protegidos</span>

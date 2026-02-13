@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Percent, CreditCard, Handshake, ArrowRight } from "lucide-react";
+import { Search, Percent, CreditCard, Handshake } from "lucide-react";
 import { formatCPF } from "@/lib/formatters";
 
 interface PortalHeroProps {
@@ -25,7 +25,7 @@ const PortalHero = ({ tenantName, primaryColor, settings, onSearch, loading }: P
     if (clean.length === 11) onSearch(clean);
   };
 
-  const color = primaryColor || "#2563eb";
+  const color = primaryColor || "#F97316";
 
   const benefits = [
     { icon: Percent, title: "Descontos exclusivos", desc: "Até 90% de desconto para pagamento à vista" },
@@ -37,15 +37,15 @@ const PortalHero = ({ tenantName, primaryColor, settings, onSearch, loading }: P
     <div className="space-y-12">
       {/* Hero */}
       <section
-        className="rounded-3xl p-8 md:p-16 text-center relative overflow-hidden"
+        className="rounded-2xl p-8 md:p-16 text-center relative overflow-hidden"
         style={{
-          background: `linear-gradient(145deg, #0f172a 0%, #1e293b 50%, ${color}22 100%)`,
+          background: `linear-gradient(135deg, ${color} 0%, ${color}dd 60%, #2D3748 100%)`,
         }}
       >
         <div className="relative z-10 max-w-2xl mx-auto space-y-6">
           <div
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium mb-2"
-            style={{ backgroundColor: `${color}20`, color: color }}
+            style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "#fff" }}
           >
             <Handshake className="w-4 h-4" />
             Negocie agora
@@ -54,7 +54,7 @@ const PortalHero = ({ tenantName, primaryColor, settings, onSearch, loading }: P
           <h1 className="text-3xl md:text-5xl font-bold leading-tight text-white">
             {heroTitle}
           </h1>
-          <p className="text-lg text-slate-300 max-w-lg mx-auto">
+          <p className="text-lg text-white/80 max-w-lg mx-auto">
             {heroSubtitle}
           </p>
 
@@ -64,14 +64,14 @@ const PortalHero = ({ tenantName, primaryColor, settings, onSearch, loading }: P
               value={cpf}
               onChange={(e) => setCpf(formatCPF(e.target.value))}
               maxLength={14}
-              className="bg-white/10 backdrop-blur-sm text-white border-white/20 h-12 text-base placeholder:text-slate-400 focus-visible:ring-white/30"
+              className="bg-white/95 text-foreground border-0 h-12 text-base placeholder:text-muted-foreground"
             />
             <Button
               type="submit"
               disabled={loading || cpf.replace(/\D/g, "").length !== 11}
               size="lg"
-              className="h-12 px-6 font-semibold text-white"
-              style={{ backgroundColor: color }}
+              className="h-12 px-6 font-semibold text-white border-2 border-white/30 hover:bg-white/20"
+              style={{ backgroundColor: "#2D3748" }}
             >
               <Search className="w-4 h-4 mr-2" />
               {loading ? "Buscando..." : "Consultar"}
@@ -79,25 +79,19 @@ const PortalHero = ({ tenantName, primaryColor, settings, onSearch, loading }: P
           </form>
         </div>
 
-        {/* Decorative elements */}
-        <div
-          className="absolute -top-24 -right-24 w-72 h-72 rounded-full opacity-10 blur-3xl"
-          style={{ backgroundColor: color }}
-        />
-        <div
-          className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full opacity-10 blur-3xl"
-          style={{ backgroundColor: color }}
-        />
+        {/* Decorative */}
+        <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-white/10" />
+        <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-white/10" />
       </section>
 
       {/* Benefits */}
       <section className="grid md:grid-cols-3 gap-6">
         {benefits.map((b, i) => (
-          <Card key={i} className="text-center border-0 shadow-md hover:shadow-lg transition-shadow bg-card">
+          <Card key={i} className="text-center border shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-8 pb-6 space-y-4">
               <div
-                className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center"
-                style={{ backgroundColor: `${color}15`, color: color }}
+                className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-white"
+                style={{ backgroundColor: color }}
               >
                 <b.icon className="w-7 h-7" />
               </div>
