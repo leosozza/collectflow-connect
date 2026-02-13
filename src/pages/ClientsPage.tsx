@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -29,6 +30,7 @@ import {
 
 const ClientsPage = () => {
   const { profile } = useAuth();
+  const { trackAction } = useActivityTracker();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     status: "todos",
@@ -51,6 +53,7 @@ const ClientsPage = () => {
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      trackAction("cadastrar_cliente");
       toast.success("Cliente cadastrado!");
       setFormOpen(false);
     },
@@ -62,6 +65,7 @@ const ClientsPage = () => {
       updateClient(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      trackAction("atualizar_cliente");
       toast.success("Cliente atualizado!");
       setFormOpen(false);
       setEditingClient(null);
@@ -83,6 +87,7 @@ const ClientsPage = () => {
       markAsPaid(client, valor),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      trackAction("registrar_pagamento");
       toast.success("Pagamento registrado e próxima parcela criada!");
       setPaymentClient(null);
     },
