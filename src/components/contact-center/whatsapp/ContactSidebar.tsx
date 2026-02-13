@@ -5,13 +5,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Link2, Unlink, Search, Tag } from "lucide-react";
-import { Conversation, linkClientToConversation } from "@/services/conversationService";
+import { Conversation, ChatMessage, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TagManager from "./TagManager";
+import AISummaryPanel from "./AISummaryPanel";
 
 interface ContactSidebarProps {
   conversation: Conversation | null;
+  messages: ChatMessage[];
   onClientLinked: () => void;
 }
 
@@ -34,7 +36,7 @@ interface ConversationTag {
   tenant_id: string;
 }
 
-const ContactSidebar = ({ conversation, onClientLinked }: ContactSidebarProps) => {
+const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSidebarProps) => {
   const [linkedClient, setLinkedClient] = useState<SimpleClient | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SimpleClient[]>([]);
@@ -243,6 +245,14 @@ const ContactSidebar = ({ conversation, onClientLinked }: ContactSidebarProps) =
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* AI Summary & Classification */}
+        {messages.length > 0 && (
+          <AISummaryPanel
+            messages={messages}
+            clientInfo={linkedClient}
+          />
         )}
       </ScrollArea>
     </div>
