@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, createAgreement, approveAgreement, rejectAgreement, cancelAgreement, Agreement, AgreementFormData } from "@/services/agreementService";
@@ -11,6 +12,7 @@ import { Handshake } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 
 const AcordosPage = () => {
+  const { trackAction } = useActivityTracker();
   const { user, profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
   const { toast } = useToast();
@@ -35,6 +37,7 @@ const AcordosPage = () => {
   const handleCreate = async (data: AgreementFormData) => {
     if (!user || !tenant) return;
     await createAgreement(data, user.id, tenant.id);
+    trackAction("criar_acordo", { cpf: data.client_cpf, valor: data.proposed_total });
     toast({ title: "Proposta criada com sucesso" });
     load();
   };
@@ -43,6 +46,7 @@ const AcordosPage = () => {
     if (!user || !profile) return;
     try {
       await approveAgreement(agreement, user.id, profile.id);
+      trackAction("aprovar_acordo", { acordo_id: agreement.id });
       toast({ title: "Acordo aprovado! Parcelas geradas." });
       load();
     } catch (err: any) {

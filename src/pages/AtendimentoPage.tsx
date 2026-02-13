@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ const AtendimentoPage = () => {
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
+  const { trackAction } = useActivityTracker();
   const [showNegotiation, setShowNegotiation] = useState(false);
 
   // Fetch client by ID
@@ -107,7 +109,8 @@ const AtendimentoPage = () => {
         scheduled_callback: scheduledCallback,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      trackAction("tabulacao", { tipo: variables.type, client_id: id });
       queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
     },
   });
@@ -141,6 +144,7 @@ const AtendimentoPage = () => {
       );
     },
     onSuccess: () => {
+      trackAction("criar_acordo_atendimento", { client_id: id });
       toast.success("Acordo criado com sucesso!");
       setShowNegotiation(false);
       queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
