@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, Loader2, ScanFace } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import FaceLandmarks from "./FaceLandmarks";
 
 interface SignatureFacialProps {
   onConfirm: (photos: string[]) => void;
@@ -31,18 +32,7 @@ const FaceOverlay = ({ primaryColor, instruction, countdown }: { primaryColor: s
       <path d="M240,320 L240,350 Q240,360 230,360 L200,360" fill="none" stroke={primaryColor} strokeWidth="2.5" strokeLinecap="round" />
     </svg>
     <div className="absolute left-[22%] right-[22%] animate-pulse" style={{ top: "30%", height: 2, background: `linear-gradient(90deg, transparent, ${primaryColor}, transparent)` }} />
-    <svg className="absolute inset-0 w-full h-full opacity-40" viewBox="0 0 300 400">
-      <circle cx="120" cy="170" r="3" fill={primaryColor} className="animate-pulse" />
-      <circle cx="180" cy="170" r="3" fill={primaryColor} className="animate-pulse" />
-      <circle cx="150" cy="210" r="2.5" fill={primaryColor} className="animate-pulse" />
-      <circle cx="125" cy="250" r="2" fill={primaryColor} className="animate-pulse" />
-      <circle cx="175" cy="250" r="2" fill={primaryColor} className="animate-pulse" />
-      <circle cx="90" cy="200" r="2" fill={primaryColor} className="animate-pulse" />
-      <circle cx="210" cy="200" r="2" fill={primaryColor} className="animate-pulse" />
-      <line x1="120" y1="170" x2="180" y2="170" stroke={primaryColor} strokeWidth="0.5" strokeDasharray="4 4" />
-      <line x1="120" y1="170" x2="150" y2="210" stroke={primaryColor} strokeWidth="0.5" strokeDasharray="4 4" />
-      <line x1="180" y1="170" x2="150" y2="210" stroke={primaryColor} strokeWidth="0.5" strokeDasharray="4 4" />
-    </svg>
+    <FaceLandmarks primaryColor={primaryColor} />
     <div className="absolute top-3 left-0 right-0 flex justify-center">
       <div className="bg-background/80 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-2 border border-border/50">
         <ScanFace className="w-4 h-4" style={{ color: primaryColor }} />
