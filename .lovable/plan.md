@@ -1,118 +1,127 @@
 
 
-# Suporte a Multiplas Instancias Baylers
+# Evolution API via Secrets Globais
 
 ## Resumo
 
-Atualmente o sistema suporta apenas **uma** instancia Baylers por tenant, armazenada no campo `settings` (jsonb) da tabela `tenants`. A mudanca consiste em criar uma tabela dedicada `whatsapp_instances` para armazenar N instancias por tenant, com uma UI que permite adicionar, editar, remover e definir qual e a instancia padrao.
+A URL e a API Key do servidor Evolution API serao armazenadas como **secrets globais** do projeto, nao mais por instancia. Quando o admin clicar "Nova Instancia", ele informa apenas o **nome** (ex: "Agente 01"). O sistema automaticamente:
+
+1. Gera o `instanceName` no formato **"{nome_empresa} - {nome_digitado}"**
+2. Chama a Evolution API para criar a instancia
+3. Exibe o QR Code para conexao
+4. Salva no banco com o token especifico retornado pela API
 
 ## O que muda
 
-### 1. Nova tabela: `whatsapp_instances`
+### 1. Dois novos secrets globais
 
-Campos:
-- `id` (uuid, PK)
-- `tenant_id` (uuid, NOT NULL, FK tenants)
-- `name` (text) - nome amigavel (ex: "Vendas", "Cobranca")
-- `instance_name` (text) - nome tecnico da instancia na API
-- `instance_url` (text, NOT NULL) - URL base da API
-- `api_key` (text, NOT NULL) - chave de autenticacao
-- `is_default` (boolean, default false) - instancia padrao do tenant
-- `status` (text, default 'active') - active/inactive
-- `created_at`, `updated_at`
+| Secret | Valor |
+|---|---|
+| `EVOLUTION_API_URL` | URL base do servidor Evolution (ex: `https://evolution.minhaempresa.com`) |
+| `EVOLUTION_API_KEY` | API Key global do servidor Evolution |
 
-RLS: mesmas regras de admin manage + users select do tenant.
+Esses secrets ficam disponiveis nas edge functions via `Deno.env.get()`.
 
-### 2. UI refatorada no WhatsAppIntegrationTab
+### 2. Nova edge function: `evolution-proxy`
 
-O card "Baylers" deixa de ter campos fixos e passa a ter:
+Centraliza todas as chamadas a Evolution API, evitando expor credenciais no frontend.
 
-- Lista das instancias cadastradas (cards compactos com nome, URL, status, badge "Padrao")
-- Botao "+ Nova Instancia" que abre um formulario (Dialog)
-- Formulario com campos: Nome, URL da Instancia, API Key, Nome da Instancia
-- Acoes por instancia: Editar, Remover, Definir como padrao
-- O card do Gupshup permanece inalterado
+Acoes suportadas (via query param `action`):
 
-### 3. Logica de envio atualizada
+- **create** - `POST /instance/create` - cria instancia e retorna QR code
+- **connect** - `GET /instance/connect/{instanceName}` - retorna QR code para reconexao
+- **status** - `GET /instance/connectionState/{instanceName}` - retorna estado (open/close/connecting)
+- **delete** - `DELETE /instance/delete/{instanceName}` - remove instancia do servidor
 
-Na edge function `send-bulk-whatsapp` e no `WhatsAppChat`:
-- Quando o provider e "baylers", buscar a instancia marcada como `is_default = true`
-- Futuramente o operador podera escolher qual instancia usar (nao nesta fase)
+### 3. Formulario simplificado (BaylersInstanceForm)
 
-### 4. Migracao de dados
+Campos atuais removidos: URL da Instancia, API Key, Nome da Instancia (API).
 
-Os campos `baylers_*` que ja existem no `tenant.settings` serao mantidos como fallback. A logica na edge function verificara primeiro a tabela `whatsapp_instances`, e se vazia usara o settings legado.
+Novo formulario:
+- **Nome da Instancia** (obrigatorio) - ex: "Agente 01", "Cobranca"
+- O `instanceName` na API sera gerado como: `"{tenant.name} - {nome}"`
+- Exibicao informativa do nome que sera criado na API
+
+### 4. Fluxo de criacao com QR Code
+
+```text
+1. Admin clica "+ Nova Instancia"
+2. Digita o nome (ex: "Agente 01")
+3. Clica "Criar"
+4. Frontend chama edge function evolution-proxy?action=create
+   - Edge function usa secrets EVOLUTION_API_URL + EVOLUTION_API_KEY
+   - Chama POST {url}/instance/create com instanceName = "Temis - Agente 01"
+5. Se sucesso:
+   - Salva no banco: instance_name, api_key (hash retornado), instance_url (do secret)
+   - Exibe QR Code em um Dialog para escanear
+6. Se erro: exibe mensagem
+```
+
+### 5. Botoes na lista de instancias
+
+Cada instancia tera:
+- **QR Code / Conectar** - chama connect para exibir QR code
+- **Status** - indicador visual (conectado/desconectado) consultando connectionState
+- **Definir padrao** (estrela)
+- **Remover** - remove do banco E chama delete na Evolution API
+
+### 6. Atualizacao do send-bulk-whatsapp
+
+A edge function de envio em lote passa a usar os secrets `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` como fallback caso a instancia no banco nao tenha URL/key proprios.
 
 ---
 
 ## Detalhes tecnicos
 
-### Migracao SQL
+### Edge function: `evolution-proxy/index.ts`
 
 ```text
-CREATE TABLE whatsapp_instances (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  name TEXT NOT NULL DEFAULT '',
-  instance_name TEXT NOT NULL DEFAULT 'default',
-  instance_url TEXT NOT NULL,
-  api_key TEXT NOT NULL,
-  is_default BOOLEAN NOT NULL DEFAULT false,
-  status TEXT NOT NULL DEFAULT 'active',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+POST /evolution-proxy?action=create
+Body: { instanceName: "Temis - Agente 01", tenantId: "uuid" }
+-> Chama POST {EVOLUTION_API_URL}/instance/create
+-> Retorna: { instance, hash, qrcode }
 
--- RLS
-ALTER TABLE whatsapp_instances ENABLE ROW LEVEL SECURITY;
+POST /evolution-proxy?action=connect
+Body: { instanceName: "Temis - Agente 01" }
+-> Chama GET {EVOLUTION_API_URL}/instance/connect/{instanceName}
+-> Retorna: { base64: "data:image/png;base64,..." }
 
--- Admins manage
-CREATE POLICY "Tenant admins can manage whatsapp instances"
-  ON whatsapp_instances FOR ALL
-  USING (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()))
-  WITH CHECK (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()));
+POST /evolution-proxy?action=status
+Body: { instanceName: "Temis - Agente 01" }
+-> Chama GET {EVOLUTION_API_URL}/instance/connectionState/{instanceName}
+-> Retorna: { state: "open" | "close" | "connecting" }
 
--- Users view
-CREATE POLICY "Tenant users can view whatsapp instances"
-  ON whatsapp_instances FOR SELECT
-  USING (tenant_id = get_my_tenant_id() OR is_super_admin(auth.uid()));
-
--- Trigger updated_at
-CREATE TRIGGER update_whatsapp_instances_updated_at
-  BEFORE UPDATE ON whatsapp_instances
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+POST /evolution-proxy?action=delete
+Body: { instanceName: "Temis - Agente 01" }
+-> Chama DELETE {EVOLUTION_API_URL}/instance/delete/{instanceName}
 ```
+
+Todas as acoes validam JWT do usuario autenticado.
 
 ### Arquivos a criar
 
 | Arquivo | Descricao |
 |---|---|
-| `src/services/whatsappInstanceService.ts` | CRUD para instancias (fetch, create, update, delete, setDefault) |
-| `src/components/integracao/BaylersInstanceForm.tsx` | Dialog de criar/editar instancia |
-| `src/components/integracao/BaylersInstancesList.tsx` | Lista de instancias com acoes |
+| `supabase/functions/evolution-proxy/index.ts` | Proxy para a Evolution API usando secrets globais |
 
 ### Arquivos a modificar
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Substituir card unico por lista de instancias |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Buscar instancia default da tabela, fallback para settings |
-| `src/components/carteira/WhatsAppBulkDialog.tsx` | Atualizar verificacao de credenciais para considerar instancias |
+| `src/components/integracao/BaylersInstanceForm.tsx` | Simplificar para apenas campo "Nome", receber tenantName como prop, mostrar preview do instanceName |
+| `src/components/integracao/BaylersInstancesList.tsx` | Chamar evolution-proxy para criar/conectar/deletar, exibir QR code em Dialog, mostrar status de conexao |
+| `src/services/whatsappInstanceService.ts` | Adicionar funcoes para chamar a edge function (createEvolutionInstance, connectInstance, getInstanceStatus, deleteEvolutionInstance) |
+| `supabase/functions/send-bulk-whatsapp/index.ts` | Usar EVOLUTION_API_URL e EVOLUTION_API_KEY dos secrets como fallback |
+| `supabase/config.toml` | Adicionar `[functions.evolution-proxy]` com verify_jwt = false |
 
-### Fluxo do usuario
+### Tabela whatsapp_instances
+
+Continua igual. Os campos `instance_url` e `api_key` serao preenchidos com os valores do secret global (URL) e do token especifico retornado pela API (hash.apikey). Isso garante que o envio de mensagens continue funcionando sem mudancas.
+
+### Config TOML
 
 ```text
-/integracao > WhatsApp > Card Baylers
-  -> Lista vazia: "Nenhuma instancia configurada"
-  -> Clica "+ Nova Instancia"
-  -> Dialog: Nome, URL, API Key, Nome da Instancia
-  -> Salva -> Aparece na lista com acoes
-  -> Pode adicionar mais instancias
-  -> Marca uma como "Padrao" (estrela)
-  -> Ao salvar, define whatsapp_provider = "baylers" no tenant
+[functions.evolution-proxy]
+verify_jwt = false
 ```
-
-### Sobre limites por plano
-
-A tabela ja fica preparada para que futuramente voce adicione um campo `max_whatsapp_instances` na tabela `plans.limits` (jsonb). A validacao podera ser feita no frontend (ao clicar "+ Nova Instancia") ou via trigger no banco. Nesta fase nao sera implementado o limite -- apenas a estrutura que permite N instancias.
 
