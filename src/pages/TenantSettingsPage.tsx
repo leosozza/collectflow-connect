@@ -7,9 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, MousePointerClick, Camera, PenTool } from "lucide-react";
 
 const TenantSettingsPage = () => {
   const { tenant, plan, isTenantAdmin, refetch } = useTenant();
@@ -17,9 +15,6 @@ const TenantSettingsPage = () => {
   const [name, setName] = useState(tenant?.name || "");
   const [primaryColor, setPrimaryColor] = useState(tenant?.primary_color || "#F97316");
   const [saving, setSaving] = useState(false);
-  const tenantSettings = (tenant?.settings || {}) as Record<string, any>;
-  const [signatureType, setSignatureType] = useState<string>(tenantSettings?.signature_type || "click");
-  const [savingSignature, setSavingSignature] = useState(false);
 
   if (!isTenantAdmin) {
     return (
@@ -127,81 +122,6 @@ const TenantSettingsPage = () => {
         </Card>
       </div>
 
-      {/* Digital Signature Settings */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary" />
-            <div>
-              <CardTitle>Assinatura Digital</CardTitle>
-              <CardDescription>Escolha o tipo de validação para assinatura de acordos no portal</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <RadioGroup value={signatureType} onValueChange={setSignatureType}>
-            <label className="flex items-start gap-3 p-4 rounded-lg border cursor-pointer hover:bg-muted/30 transition-colors">
-              <RadioGroupItem value="click" className="mt-0.5" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <MousePointerClick className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-foreground">Aceite por Click</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  O cliente marca uma caixa confirmando que leu e aceita os termos. Registra IP e navegador.
-                </p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 p-4 rounded-lg border cursor-pointer hover:bg-muted/30 transition-colors">
-              <RadioGroupItem value="facial" className="mt-0.5" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-foreground">Reconhecimento Facial</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Captura fotos do cliente seguindo instruções (olhar para frente, virar, sorrir). Armazena as imagens como prova.
-                </p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 p-4 rounded-lg border cursor-pointer hover:bg-muted/30 transition-colors">
-              <RadioGroupItem value="draw" className="mt-0.5" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <PenTool className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-foreground">Assinatura na Tela</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  O cliente desenha sua assinatura com o dedo ou caneta na tela do dispositivo. Gera imagem PNG como prova.
-                </p>
-              </div>
-            </label>
-          </RadioGroup>
-
-          <Button
-            disabled={savingSignature}
-            onClick={async () => {
-              if (!tenant) return;
-              setSavingSignature(true);
-              try {
-                await updateTenant(tenant.id, {
-                  settings: { ...tenantSettings, signature_type: signatureType },
-                });
-                await refetch();
-                toast({ title: "Tipo de assinatura salvo!" });
-              } catch (err: any) {
-                toast({ title: "Erro", description: err.message, variant: "destructive" });
-              } finally {
-                setSavingSignature(false);
-              }
-            }}
-          >
-            {savingSignature ? "Salvando..." : "Salvar tipo de assinatura"}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 };
