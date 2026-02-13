@@ -18,6 +18,12 @@ interface Agent {
   status_start_time?: number;
 }
 
+interface AgentMetrics {
+  contacts: number;
+  agreements: number;
+  payments: number;
+}
+
 interface AgentStatusTableProps {
   agents: Agent[];
   loading: boolean;
@@ -26,6 +32,7 @@ interface AgentStatusTableProps {
   domain?: string;
   apiToken?: string;
   onAgentClick?: (agent: Agent) => void;
+  agentMetrics?: Record<number, AgentMetrics>;
 }
 
 const statusConfig: Record<string, { label: string; dotClass: string; borderClass: string }> = {
@@ -104,7 +111,7 @@ const legendItems = [
   { label: "Offline", dotClass: "bg-muted-foreground/50" },
 ];
 
-const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken, onAgentClick }: AgentStatusTableProps) => {
+const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken, onAgentClick, agentMetrics = {} }: AgentStatusTableProps) => {
   if (loading && agents.length === 0) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -130,7 +137,7 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
             const initials = getInitials(agent.name);
             const colorClass = getAvatarColor(agent.id);
             const elapsed = formatElapsedTime(agent.status_start_time);
-
+            const metrics = agentMetrics[agent.id] || { contacts: 0, agreements: 0, payments: 0 };
             return (
               <Card
                 key={agent.id}
@@ -187,9 +194,9 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
 
                   {/* Metrics */}
                   <div className="w-full mt-3 pt-3 border-t border-border/60 space-y-0.5">
-                    <StatRow icon={Users} label="Contatos" value={0} iconColor="text-blue-500" />
-                    <StatRow icon={Handshake} label="Acordos" value={0} iconColor="text-emerald-500" />
-                    <StatRow icon={DollarSign} label="Pagamentos" value={0} iconColor="text-amber-500" />
+                    <StatRow icon={Users} label="Contatos" value={metrics.contacts} iconColor="text-blue-500" />
+                    <StatRow icon={Handshake} label="Acordos" value={metrics.agreements} iconColor="text-emerald-500" />
+                    <StatRow icon={DollarSign} label="Pagamentos" value={metrics.payments} iconColor="text-amber-500" />
                   </div>
                 </CardContent>
               </Card>
