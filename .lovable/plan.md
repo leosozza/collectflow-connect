@@ -1,131 +1,107 @@
 
+# Integração WhatsApp na página /integracao
 
-# Fase 3 - Disparo de WhatsApp em Lote + Fase 4 - Automacoes pos-tabulacao
+## Resumo
 
-## Fase 3: Disparo de WhatsApp em Lote
+Adicionar uma aba "WhatsApp" na página de Integrações com duas opções de conexão:
+1. **Oficial (Gupshup)** - credenciais API + webhook de retorno
+2. **Baylers** (Evolution API, sem mencionar o nome real) - chave API + URL da instância
 
-### O que sera feito
+As credenciais serão salvas no campo `settings` (jsonb) da tabela `tenants`, seguindo o padrão já usado para Gupshup e 3CPlus. O GupshupSettings existente será movido de Automação para Integrações e aprimorado com a URL do webhook.
 
-A pagina de Carteira ja possui selecao multipla (checkboxes) e um botao para o Discador. Vamos adicionar um botao similar "WhatsApp" que abre um dialog para disparo em lote.
+## O que muda
 
-### Componentes
+### 1. Nova aba "WhatsApp" na IntegracaoPage
 
-1. **Botao "WhatsApp (N)" na Carteira** - Aparece quando ha clientes selecionados, ao lado do botao "Discador"
+Adicionar uma quarta aba na página `/integracao` com ícone MessageCircle e o texto "WhatsApp".
 
-2. **WhatsAppBulkDialog** - Novo componente com:
-   - Quantidade de clientes selecionados
-   - Selecao de template (carrega regras do `collection_rules` do tenant)
-   - Opcao de digitar mensagem personalizada
-   - Preview da mensagem com dados do primeiro cliente
-   - Barra de progresso durante envio
-   - Resultado final (enviados / falhas)
+### 2. Novo componente: `WhatsAppIntegrationTab`
 
-3. **Edge function `send-bulk-whatsapp`** - Nova funcao que:
-   - Recebe lista de client_ids e template/mensagem
-   - Busca credenciais Gupshup do tenant
-   - Envia mensagens em sequencia (com throttling para nao exceder rate limit)
-   - Registra cada envio na tabela `message_logs`
-   - Retorna contagem de sucesso/falha
+Dentro da aba, exibir dois cards lado a lado (ou empilhados em mobile):
 
-### Fluxo do usuario
+**Card 1 - Oficial (Gupshup)**
+- Campo: API Key (com toggle mostrar/ocultar)
+- Campo: App Name
+- Campo: Número de Origem
+- Exibição (read-only): URL do Webhook de retorno
+  - Formato: `https://{SUPABASE_URL}/functions/v1/gupshup-webhook`
+  - Botão "Copiar" ao lado
+- Badge "Configurado" quando todos os campos estiverem preenchidos
+- Botão "Salvar credenciais"
+
+**Card 2 - Baylers**
+- Campo: URL da Instância (ex: `https://minha-instancia.com`)
+- Campo: API Key (com toggle mostrar/ocultar)
+- Campo: Nome da Instância
+- Badge "Configurado" quando URL + API Key estiverem preenchidos
+- Botão "Salvar credenciais"
+
+Ambos salvam em `tenant.settings` com prefixos distintos:
+- Gupshup: `gupshup_api_key`, `gupshup_app_name`, `gupshup_source_number`
+- Baylers: `baylers_api_key`, `baylers_instance_url`, `baylers_instance_name`
+
+### 3. Mover GupshupSettings de Automação para Integrações
+
+- Remover o `GupshupSettings` da aba "Configurações" do `AutomacaoPage`
+- A lógica já estará no novo `WhatsAppIntegrationTab`
+- Na aba "Configurações" de Automação, exibir apenas um aviso direcionando para Integrações
+
+### 4. Edge function: `gupshup-webhook`
+
+Nova edge function para receber callbacks do Gupshup (status de entrega, respostas). Registra eventos na tabela `message_logs`. Isso permite que o admin cole a URL no painel do Gupshup.
+
+### 5. Atualizar `send-bulk-whatsapp` para suportar Baylers
+
+A edge function de disparo em lote verificará qual provedor está configurado (`gupshup_api_key` ou `baylers_api_key`) e usará a API correspondente.
+
+## Arquivos
+
+### Criar
+| Arquivo | Descrição |
+|---|---|
+| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Componente com os dois cards (Gupshup + Baylers) |
+| `supabase/functions/gupshup-webhook/index.ts` | Webhook para callbacks do Gupshup |
+
+### Modificar
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/IntegracaoPage.tsx` | Adicionar aba "WhatsApp" |
+| `src/pages/AutomacaoPage.tsx` | Remover GupshupSettings, adicionar aviso redirecionando |
+| `supabase/functions/send-bulk-whatsapp/index.ts` | Adicionar suporte ao provedor Baylers |
+
+## Detalhes Técnicos
+
+### Campos no `tenant.settings` (jsonb)
 
 ```text
-Carteira -> Selecionar clientes -> Botao "WhatsApp (5)"
-  -> Dialog abre
-  -> Escolhe template ou digita mensagem
-  -> Preview
-  -> Clica "Enviar"
-  -> Progresso em tempo real
-  -> Resultado: "4 enviados, 1 falha (sem telefone)"
+Gupshup (existentes):
+  gupshup_api_key
+  gupshup_app_name
+  gupshup_source_number
+
+Baylers (novos):
+  baylers_api_key
+  baylers_instance_url
+  baylers_instance_name
+  whatsapp_provider: "gupshup" | "baylers"  (indica qual está ativo)
 ```
 
----
+### Webhook Gupshup
 
-## Fase 4: Automacoes pos-tabulacao
+- Rota: `POST /functions/v1/gupshup-webhook`
+- Sem JWT (verify_jwt = false)
+- Recebe payload do Gupshup com status de entrega
+- Atualiza `message_logs` com status atualizado
 
-### O que sera feito
+### API Baylers (Evolution API)
 
-Vincular tipos de tabulacao a acoes automaticas. Quando o operador tabula um atendimento, o sistema pode disparar acoes configuradas pelo admin.
-
-### Mudancas no banco de dados
-
-Nova tabela `disposition_automations`:
-- `id` (uuid, PK)
-- `tenant_id` (uuid, NOT NULL)
-- `disposition_type` (text, NOT NULL) -- ex: "negotiated", "promise", "callback"
-- `action_type` (text, NOT NULL) -- ex: "send_whatsapp", "send_payment_link", "schedule_reminder"
-- `action_config` (jsonb) -- configuracao da acao (template, delay, etc)
-- `is_active` (boolean, default true)
-- `created_at`, `updated_at`
-
-Com RLS:
-- Admins do tenant podem gerenciar (ALL)
-- Usuarios do tenant podem visualizar (SELECT)
-
-### Tipos de acao suportados
-
-| action_type | Descricao | action_config |
-|---|---|---|
-| `send_whatsapp` | Envia mensagem WhatsApp ao cliente | `{ template: "..." }` |
-| `send_payment_link` | Gera cobranca Negociarie e envia link | `{ tipo: "pix" }` |
-| `schedule_reminder` | Cria notificacao para o operador | `{ delay_hours: 24, message: "..." }` |
-
-### Componentes
-
-1. **Aba "Pos-Tabulacao" na pagina de Automacao** - Nova aba no `AutomacaoPage` com:
-   - Lista de automacoes configuradas (por tipo de tabulacao)
-   - Formulario para criar/editar automacao
-   - Toggle ativar/desativar
-
-2. **Execucao no DispositionPanel** - Apos salvar tabulacao com sucesso, busca automacoes vinculadas e executa:
-   - `send_whatsapp`: chama funcao de envio existente
-   - `schedule_reminder`: cria notificacao via `create_notification`
-   - `send_payment_link`: chama edge function Negociarie
-
-### Servico `dispositionAutomationService.ts`
-
-- `fetchAutomations(tenantId)` - lista automacoes
-- `createAutomation(data)` - cria nova
-- `updateAutomation(id, data)` - atualiza
-- `deleteAutomation(id)` - remove
-- `executeAutomations(tenantId, dispositionType, clientId)` - executa acoes vinculadas
-
----
-
-## Detalhes tecnicos
-
-### Arquivos a criar
-
-| Arquivo | Descricao |
-|---|---|
-| `src/components/carteira/WhatsAppBulkDialog.tsx` | Dialog de disparo em lote |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Edge function para envio em lote |
-| `src/services/dispositionAutomationService.ts` | CRUD + execucao de automacoes |
-| `src/components/automacao/DispositionAutomationsTab.tsx` | UI de gestao das automacoes |
-| `src/components/automacao/DispositionAutomationForm.tsx` | Formulario de criacao/edicao |
-
-### Arquivos a modificar
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/pages/CarteiraPage.tsx` | Adicionar botao WhatsApp e importar dialog |
-| `src/pages/AutomacaoPage.tsx` | Adicionar aba "Pos-Tabulacao" |
-| `src/pages/AtendimentoPage.tsx` | Executar automacoes apos tabulacao |
-| `supabase/config.toml` | Registrar nova edge function |
-
-### Migracao SQL
-
+O envio de mensagem usa:
 ```text
-1. Criar tabela disposition_automations com RLS
-2. Politicas: admin manage, users select
+POST {baylers_instance_url}/message/sendText/{instance_name}
+Headers: apikey: {baylers_api_key}
+Body: { number: "5511999999999", text: "mensagem" }
 ```
 
-### Ordem de implementacao
+### Nenhuma migração SQL necessária
 
-1. Migracao SQL (tabela disposition_automations)
-2. Edge function send-bulk-whatsapp
-3. WhatsAppBulkDialog + integracao na Carteira
-4. Servico dispositionAutomationService
-5. UI de automacoes na pagina de Automacao
-6. Execucao automatica no fluxo de tabulacao
-
+Todos os dados ficam no campo `settings` (jsonb) da tabela `tenants` que já existe.
