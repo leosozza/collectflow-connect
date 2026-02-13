@@ -73,7 +73,7 @@ const ThreeCPlusPanel = () => {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 h-8 text-xs">
           <Menu className="h-3.5 w-3.5" />
-          {activeLabel}
+          Menu
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48">
