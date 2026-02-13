@@ -22,7 +22,8 @@ import {
   DollarSign,
   FileText,
   ChevronDown,
-  Shield
+  Shield,
+  Headphones
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -50,6 +51,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Carteira", icon: Wallet, path: "/carteira" },
     ...(!isAdmin ? [{ label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" }] : []),
     ...(isAdmin ? [
+      { label: "Contact Center", icon: Headphones, path: "/contact-center" },
       { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
       { label: "Acordos", icon: Handshake, path: "/acordos" },
       { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
