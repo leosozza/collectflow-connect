@@ -1,119 +1,153 @@
 
 
-# Facial Fullscreen no Celular + Camera Fix + Mobile Responsivo
+# Convite por Link + Perfil do Operador + Avatar no Header
 
-## Problemas Identificados
+## Resumo
 
-### 1. Camera nao captura (BUG)
-O `startCamera` tenta definir `videoRef.current.srcObject` enquanto o video ainda nao existe no DOM. O fluxo atual:
-- Estado e `idle` -> video NAO esta renderizado
-- `startCamera` obtem o stream e tenta `videoRef.current.srcObject = mediaStream` -> **videoRef.current e NULL**
-- So depois muda para `capturing` -> video aparece, mas sem stream
-
-**Correcao:** Usar um `useEffect` que observa o `stream` e o `videoRef` para atribuir o srcObject quando ambos estiverem disponiveis.
-
-### 2. Facial deve ser fullscreen dentro do celular
-Atualmente o `PlaygroundAssinatura` envolve tudo em um `Card`. Para o modo facial (estado capturing), o conteudo deve preencher toda a tela do celular, sem Card, sem padding -- simulando a experiencia real de camera fullscreen.
-
-### 3. Mobile deve mostrar fullscreen sem frame de celular
-Quando o usuario esta em um dispositivo mobile real, nao faz sentido mostrar um celular dentro do celular. O conteudo deve aparecer direto em tela cheia.
+Tres funcionalidades interligadas: (1) convite de novos usuarios por link na pagina /usuarios, (2) pagina de perfil para cada operador com foto, dados, aniversario e gamificacao, (3) header mostrando avatar e nome do usuario logado, clicavel para abrir o perfil.
 
 ---
 
-## Mudancas por Arquivo
+## 1. Alteracoes no Banco de Dados
 
-### `src/components/portal/signatures/SignatureFacial.tsx`
+### Novos campos na tabela `profiles`
+- `avatar_url` (text, nullable) -- URL da foto do perfil
+- `birthday` (date, nullable) -- data de aniversario
+- `bio` (text, nullable) -- breve descricao
 
-**Fix da camera:**
-- Adicionar `useEffect` que observa `stream` e atribui `videoRef.current.srcObject = stream` quando o video element existir
-- Remover a atribuicao de `srcObject` de dentro do `startCamera` (que roda antes do video estar no DOM)
+### Nova tabela `invite_links`
+- `id` (uuid, PK)
+- `tenant_id` (uuid, NOT NULL)
+- `token` (text, UNIQUE, NOT NULL) -- token unico do convite
+- `role` (tenant_role, default 'operador')
+- `created_by` (uuid, NOT NULL)
+- `expires_at` (timestamptz, NOT NULL) -- expiracao do link
+- `used_by` (uuid, nullable) -- preenchido quando aceito
+- `used_at` (timestamptz, nullable)
+- `created_at` (timestamptz, default now())
 
-```text
-useEffect(() => {
-  if (stream && videoRef.current) {
-    videoRef.current.srcObject = stream;
-  }
-}, [stream, step]);
-```
+RLS: admins do tenant podem criar/ver, service_role acesso total para o fluxo de aceite.
 
-**Modo fullscreen (nova prop `fullscreen`):**
-- Adicionar prop opcional `fullscreen?: boolean`
-- Quando `fullscreen` e true e estado e `capturing`:
-  - Remover espacamento externo, o container do video ocupa `absolute inset-0` preenchendo o pai inteiro
-  - Progresso fica sobreposto na parte inferior
-- Quando `fullscreen` e true e estado e `idle`:
-  - Mostrar tela de inicio centralizada com fundo escuro, ocupando todo o espaco
+### Nova tabela `achievements` (conquistas/gamificacao)
+- `id` (uuid, PK)
+- `tenant_id` (uuid, NOT NULL)
+- `profile_id` (uuid, NOT NULL)
+- `title` (text, NOT NULL) -- ex: "Primeiro Acordo", "100 Acordos"
+- `description` (text)
+- `icon` (text) -- emoji ou nome de icone
+- `earned_at` (timestamptz, default now())
 
-### `src/pages/SignsPage.tsx`
+RLS: usuarios do tenant podem ver, admins podem gerenciar.
 
-**PlaygroundAssinatura - facial fullscreen:**
-- Quando `type === "facial"`, nao renderizar dentro de Card
-- Renderizar `SignatureFacial` diretamente com `fullscreen={true}`, ocupando toda a area de conteudo do celular
-- O container de conteudo do celular perde padding quando for facial
+---
 
-**Mobile responsivo:**
-- Importar `useIsMobile` 
-- Quando `isMobile` for true:
-  - Nao renderizar o frame do celular (bezel, status bar, home indicator)
-  - Renderizar o conteudo diretamente em tela cheia
-  - Badges ficam no topo como overlay ou barra fixa
+## 2. Convite por Link (`/usuarios`)
+
+### Fluxo
+1. Admin clica em "Convidar por Link"
+2. Dialog abre com opcao de selecionar role (operador/admin) e validade (24h, 7 dias, 30 dias)
+3. Sistema gera token unico, salva na tabela `invite_links`, e monta URL: `{origin}/auth?invite={token}`
+4. Admin copia o link e envia ao convidado
+5. Convidado acessa o link, tela de cadastro ja vem preenchida com contexto do convite
+6. Ao fazer signup, o sistema associa o novo usuario ao tenant correto via o token
+
+### Mudancas em arquivos
+- **`src/pages/UsersPage.tsx`**: Adicionar botao "Convidar por Link" + dialog de geracao
+- **`src/pages/AuthPage.tsx`**: Detectar query param `invite`, buscar dados do convite, apos signup vincular ao tenant
+- **Edge function ou trigger**: Ao criar conta com invite valido, inserir em `tenant_users` e atualizar `profiles.tenant_id`
+
+---
+
+## 3. Pagina de Perfil (`/perfil` e `/perfil/:id`)
+
+### Nova pagina `src/pages/PerfilPage.tsx`
+
+Layout com:
+- **Header do perfil**: Avatar grande (upload de foto), nome, role, bio editavel
+- **Dados pessoais**: Aniversario, email, data de entrada
+- **Estatisticas**: Total de acordos fechados, valor total negociado, taxa de conversao
+- **Conquistas/Gamificacao**: Grid de badges/conquistas com icones
+  - Exemplos: "Primeiro Acordo", "10 Acordos no Mes", "Top Negociador"
+- **Atividade recente**: Ultimas acoes do operador
+
+Operadores podem editar seu proprio perfil (nome, avatar, bio, aniversario).
+Admins podem ver o perfil de qualquer operador.
+
+### Rota
+- `/perfil` -- perfil do usuario logado
+- `/perfil/:userId` -- perfil de outro usuario (admin only)
+
+---
+
+## 4. Avatar e Nome no Header
+
+### Mudanca em `src/components/AppLayout.tsx`
+
+Substituir o texto "Super Admin" / "Administrador" / "Operador" no header por:
+- Avatar circular (componente Avatar com fallback de iniciais)
+- Nome do usuario
+- Badge do role (pequeno, sutil)
+- Ao clicar, navega para `/perfil`
+
+---
+
+## 5. Storage para Avatares
+
+Criar bucket `avatars` (publico) para armazenar fotos de perfil dos usuarios.
 
 ---
 
 ## Detalhes Tecnicos
 
-### SignatureFacial.tsx - Camera Fix
-
-O problema raiz e uma race condition: o elemento `<video>` so existe no DOM quando `step === "capturing"`, mas `startCamera` tenta acessar `videoRef.current` antes de mudar o step. A solucao e um effect que sincroniza o stream com o video element apos a renderizacao.
-
-### SignatureFacial.tsx - Modo Fullscreen
-
-Estado `idle` com fullscreen:
-- Fundo escuro (`bg-foreground/95`) ocupando todo o container
-- Icone, instrucoes e botao centralizados
-
-Estado `capturing` com fullscreen:
-- Video ocupa `absolute inset-0` com `object-cover`
-- FaceOverlay ja e absolute, funciona sem mudancas
-- Barra de progresso sobreposta no bottom com `absolute bottom-0`
-
-Estado `done` com fullscreen:
-- Grid de fotos com fundo semi-transparente
-
-### SignsPage.tsx - Conteudo condicional
+### Tabela invite_links - SQL
 
 ```text
-// No container de conteudo do celular:
-<div className={`flex-1 overflow-y-auto ${
-  playgroundStep === "assinatura" && playgroundType === "facial" ? "" : "p-3"
-}`}>
+CREATE TABLE public.invite_links (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  token text UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'),
+  role tenant_role NOT NULL DEFAULT 'operador',
+  created_by uuid NOT NULL,
+  expires_at timestamptz NOT NULL,
+  used_by uuid,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.invite_links ENABLE ROW LEVEL SECURITY;
 ```
 
-PlaygroundAssinatura para facial:
-- Sem Card wrapper
-- SignatureFacial recebe `fullscreen={true}` e `className="h-full"`
+### Fluxo de aceite do convite na AuthPage
 
-### SignsPage.tsx - Mobile
+1. Detectar `?invite=TOKEN` na URL
+2. Buscar invite_link pelo token (RLS permite leitura publica para tokens validos)
+3. Mostrar nome do tenant no formulario de cadastro
+4. Apos signup bem-sucedido, chamar edge function `accept-invite` que:
+   - Valida token (nao expirado, nao usado)
+   - Insere em `tenant_users`
+   - Atualiza `profiles.tenant_id`
+   - Marca invite como usado
 
-```text
-const isMobile = useIsMobile();
+### Upload de Avatar
 
-// Se mobile, renderizar conteudo direto sem phone frame
-{isMobile ? (
-  <div className="w-full min-h-[80vh] bg-background rounded-xl overflow-hidden border">
-    {/* conteudo direto */}
-  </div>
-) : (
-  <div className="relative w-[320px] bg-foreground/90 rounded-[3rem] ...">
-    {/* phone frame */}
-  </div>
-)}
-```
+Usar Supabase Storage com bucket `avatars`. O upload acontece no componente de perfil, salvando a URL publica em `profiles.avatar_url`.
 
-### Arquivos modificados
+### Gamificacao - Logica inicial
 
-| Arquivo | Mudanca |
+Conquistas serao inseridas por triggers ou chamadas manuais baseadas em marcos:
+- Acordo criado (1o, 10o, 50o, 100o)
+- Valor total negociado (R$10k, R$50k, R$100k)
+- Dias consecutivos de atividade
+
+### Arquivos criados/modificados
+
+| Arquivo | Acao |
 |---|---|
-| `src/components/portal/signatures/SignatureFacial.tsx` | Fix camera (useEffect para srcObject), prop fullscreen para modo tela cheia |
-| `src/pages/SignsPage.tsx` | Facial sem Card (fullscreen no celular), mobile sem phone frame, padding condicional |
+| Migration SQL | Criar campos em profiles, tabelas invite_links e achievements, bucket avatars |
+| `src/pages/PerfilPage.tsx` | **Novo** - Pagina de perfil completa |
+| `src/pages/UsersPage.tsx` | Adicionar botao e dialog de convite por link |
+| `src/pages/AuthPage.tsx` | Detectar invite token e fluxo de aceite |
+| `src/components/AppLayout.tsx` | Avatar + nome clicavel no header |
+| `src/App.tsx` | Adicionar rotas /perfil e /perfil/:userId |
+| `supabase/functions/accept-invite/index.ts` | **Novo** - Edge function para aceitar convite |
 
