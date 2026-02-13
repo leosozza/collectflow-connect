@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,21 @@ import { Loader2, Plus, RefreshCw, Edit, Trash2, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const DAY_ABBR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+interface HoursItem {
+  day_week: number;
+  start_time: string;
+  end_time: string;
+  id?: number;
+  office_hours_id?: number;
+}
+
+interface OfficeHour {
+  id: number;
+  name: string;
+  hours_items?: HoursItem[];
+}
 
 const OfficeHoursPanel = () => {
   const { tenant } = useTenant();
@@ -20,11 +36,16 @@ const OfficeHoursPanel = () => {
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
 
-  const [hours, setHours] = useState<any[]>([]);
+  const [hours, setHours] = useState<OfficeHour[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [formData, setFormData] = useState({ name: "", start_time: "08:00", end_time: "18:00" });
+  const [editing, setEditing] = useState<OfficeHour | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    start_time: "08:00",
+    end_time: "18:00",
+    selectedDays: [1, 2, 3, 4, 5] as number[],
+  });
   const [saving, setSaving] = useState(false);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
@@ -39,9 +60,27 @@ const OfficeHoursPanel = () => {
     if (!domain || !apiToken) return;
     setLoading(true);
     try {
-      const data = await invoke("list_office_hours");
-      if (data?.status === 404) { setHours([]); return; }
-      setHours(Array.isArray(data) ? data : data?.data || []);
+      const listData = await invoke("list_office_hours");
+      if (listData?.status === 404) { setHours([]); return; }
+      const list: any[] = Array.isArray(listData) ? listData : listData?.data || [];
+
+      // Fetch details for each office hour to get hours_items
+      const detailed = await Promise.all(
+        list.map(async (oh: any) => {
+          try {
+            const detail = await invoke("get_office_hours", { office_hours_id: oh.id });
+            const d = detail?.data || detail;
+            return {
+              id: oh.id,
+              name: d?.name || oh.name || "—",
+              hours_items: d?.hours_items || [],
+            };
+          } catch {
+            return { id: oh.id, name: oh.name || "—", hours_items: [] };
+          }
+        })
+      );
+      setHours(detailed);
     } catch {
       toast.error("Erro ao carregar horários");
     } finally {
@@ -53,21 +92,33 @@ const OfficeHoursPanel = () => {
 
   const handleSave = async () => {
     if (!formData.name.trim()) { toast.error("Informe o nome"); return; }
+    if (formData.selectedDays.length === 0) { toast.error("Selecione pelo menos um dia"); return; }
     setSaving(true);
     try {
+      const hoursItems = formData.selectedDays.map(day => ({
+        day_week: day,
+        start_time: formData.start_time,
+        end_time: formData.end_time,
+      }));
+
+      const payload = {
+        name: formData.name.trim(),
+        hours_items: hoursItems,
+      };
+
       if (editing) {
         await invoke("update_office_hours", {
           office_hours_id: editing.id,
-          office_hours_data: formData,
+          office_hours_data: payload,
         });
         toast.success("Horário atualizado");
       } else {
-        await invoke("create_office_hours", { office_hours_data: formData });
+        await invoke("create_office_hours", { office_hours_data: payload });
         toast.success("Horário criado");
       }
       setDialogOpen(false);
       setEditing(null);
-      setFormData({ name: "", start_time: "08:00", end_time: "18:00" });
+      setFormData({ name: "", start_time: "08:00", end_time: "18:00", selectedDays: [1, 2, 3, 4, 5] });
       fetchHours();
     } catch {
       toast.error("Erro ao salvar horário");
@@ -86,7 +137,34 @@ const OfficeHoursPanel = () => {
     }
   };
 
-  const formatTime = (t: string | undefined) => t || "—";
+  const toggleDay = (day: number) => {
+    setFormData(p => ({
+      ...p,
+      selectedDays: p.selectedDays.includes(day)
+        ? p.selectedDays.filter(d => d !== day)
+        : [...p.selectedDays, day].sort(),
+    }));
+  };
+
+  const getTimeRange = (items: HoursItem[]) => {
+    if (!items || items.length === 0) return "—";
+    const first = items[0];
+    return `${first.start_time} – ${first.end_time}`;
+  };
+
+  const getDayBadges = (items: HoursItem[]) => {
+    if (!items || items.length === 0) return <span className="text-sm text-muted-foreground">—</span>;
+    const activeDays = items.map(i => i.day_week).sort();
+    return (
+      <div className="flex flex-wrap gap-1">
+        {activeDays.map(d => (
+          <Badge key={d} variant="outline" className="text-[10px] px-1.5 py-0">
+            {DAY_ABBR[d] || d}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="mt-4 space-y-4">
@@ -105,7 +183,7 @@ const OfficeHoursPanel = () => {
           </Button>
           <Button size="sm" onClick={() => {
             setEditing(null);
-            setFormData({ name: "", start_time: "08:00", end_time: "18:00" });
+            setFormData({ name: "", start_time: "08:00", end_time: "18:00", selectedDays: [1, 2, 3, 4, 5] });
             setDialogOpen(true);
           }} className="gap-2">
             <Plus className="w-4 h-4" /> Novo Horário
@@ -127,44 +205,29 @@ const OfficeHoursPanel = () => {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Início</TableHead>
-                  <TableHead>Fim</TableHead>
+                  <TableHead>Horário</TableHead>
                   <TableHead>Dias</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {hours.map((h: any) => (
+                {hours.map((h) => (
                   <TableRow key={h.id}>
                     <TableCell className="text-sm text-muted-foreground">{h.id}</TableCell>
-                    <TableCell className="font-medium">{h.name || "—"}</TableCell>
-                    <TableCell className="text-sm">{formatTime(h.start_time || h.start)}</TableCell>
-                    <TableCell className="text-sm">{formatTime(h.end_time || h.end)}</TableCell>
-                    <TableCell>
-                      {h.days && Array.isArray(h.days) ? (
-                        <div className="flex flex-wrap gap-1">
-                          {h.days.map((d: number) => (
-                            <Badge key={d} variant="outline" className="text-[10px] px-1.5 py-0">
-                              {DAYS[d] || d}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          {h.monday !== undefined
-                            ? DAYS.filter((_, i) => h[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][i]])
-                                .join(", ") || "—"
-                            : "—"}
-                        </span>
-                      )}
-                    </TableCell>
+                    <TableCell className="font-medium">{h.name}</TableCell>
+                    <TableCell className="text-sm">{getTimeRange(h.hours_items || [])}</TableCell>
+                    <TableCell>{getDayBadges(h.hours_items || [])}</TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                        const items = h.hours_items || [];
+                        const days = items.map(i => i.day_week).sort();
+                        const first = items[0];
                         setEditing(h);
                         setFormData({
                           name: h.name || "",
-                          start_time: h.start_time || h.start || "08:00",
-                          end_time: h.end_time || h.end || "18:00",
+                          start_time: first?.start_time || "08:00",
+                          end_time: first?.end_time || "18:00",
+                          selectedDays: days.length > 0 ? days : [1, 2, 3, 4, 5],
                         });
                         setDialogOpen(true);
                       }}>
@@ -187,7 +250,7 @@ const OfficeHoursPanel = () => {
           <DialogHeader>
             <DialogTitle>{editing ? "Editar Horário" : "Novo Horário"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <Label>Nome</Label>
               <Input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Ex: Horário Comercial" />
@@ -200,6 +263,20 @@ const OfficeHoursPanel = () => {
               <div>
                 <Label>Fim</Label>
                 <Input type="time" value={formData.end_time} onChange={(e) => setFormData(p => ({ ...p, end_time: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label className="mb-2 block">Dias da semana</Label>
+              <div className="flex flex-wrap gap-3">
+                {DAYS.map((day, idx) => (
+                  <label key={idx} className="flex items-center gap-1.5 cursor-pointer">
+                    <Checkbox
+                      checked={formData.selectedDays.includes(idx)}
+                      onCheckedChange={() => toggleDay(idx)}
+                    />
+                    <span className="text-sm">{DAY_ABBR[idx]}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
