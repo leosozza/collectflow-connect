@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, domain, api_token, campaign_id, list_id, mailings } = await req.json();
+    const { action, domain, api_token, campaign_id, list_id, mailings, campaign_name } = await req.json();
 
     if (!domain || !api_token) {
       return new Response(
@@ -66,6 +66,18 @@ Deno.serve(async (req) => {
           header: ['identifier', 'areacodephone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
           mailing: mailings,
         });
+        break;
+
+      case 'create_campaign':
+        if (!campaign_name) {
+          return new Response(
+            JSON.stringify({ status: 400, detail: 'campaign_name is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        url = `${baseUrl}/campaigns?${authParam}`;
+        method = 'POST';
+        body = JSON.stringify({ name: campaign_name });
         break;
 
       default:

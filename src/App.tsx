@@ -25,6 +25,7 @@ import FinanceiroPage from "./pages/FinanceiroPage";
 import PortalPage from "./pages/PortalPage";
 import AuditoriaPage from "./pages/AuditoriaPage";
 import AtendimentoPage from "./pages/AtendimentoPage";
+import ContactCenterPage from "./pages/ContactCenterPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -103,6 +104,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <ConfiguracoesPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contact-center"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <ContactCenterPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
