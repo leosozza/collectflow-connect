@@ -24,6 +24,7 @@ interface AgentStatusTableProps {
   loggingOut: number | null;
   domain?: string;
   apiToken?: string;
+  onAgentClick?: (agent: Agent) => void;
 }
 
 const statusConfig: Record<string, { label: string; dotClass: string; badgeClass: string }> = {
@@ -81,7 +82,7 @@ const legendItems = [
   { label: "Pausa", dotClass: "bg-amber-500" },
 ];
 
-const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken }: AgentStatusTableProps) => {
+const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken, onAgentClick }: AgentStatusTableProps) => {
   if (loading && agents.length === 0) {
     return (
       <div className="space-y-2">
@@ -119,7 +120,7 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
               const colorClass = getAvatarColor(agent.id);
 
               return (
-                <TableRow key={agent.id}>
+                <TableRow key={agent.id} className={onAgentClick ? "cursor-pointer hover:bg-muted/50" : ""} onClick={() => onAgentClick?.(agent)}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
@@ -145,15 +146,7 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
                   <TableCell className="text-muted-foreground text-sm">
                     {agent.status_time || "—"}
                   </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {canSpy && (
-                      <SpyButton
-                        agentId={agent.id}
-                        agentName={agent.name || `Agente ${agent.id}`}
-                        domain={domain!}
-                        apiToken={apiToken!}
-                      />
-                    )}
+                  <TableCell className="text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
