@@ -68,41 +68,44 @@ const ThreeCPlusPanel = () => {
 
   const activeLabel = tabs.find((t) => t.value === activeTab)?.label ?? "Dashboard";
 
+  const menuButton = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2 h-8 text-xs">
+          <Menu className="h-3.5 w-3.5" />
+          {activeLabel}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuLabel>Operacional</DropdownMenuLabel>
+        {tabs.filter((t) => t.group === "operation").map((t) => (
+          <DropdownMenuItem
+            key={t.value}
+            onSelect={() => setActiveTab(t.value)}
+            className={activeTab === t.value ? "bg-accent font-medium" : ""}
+          >
+            {t.label}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Administrativo</DropdownMenuLabel>
+        {tabs.filter((t) => t.group === "admin").map((t) => (
+          <DropdownMenuItem
+            key={t.value}
+            onSelect={() => setActiveTab(t.value)}
+            className={activeTab === t.value ? "bg-accent font-medium" : ""}
+          >
+            {t.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Menu className="h-4 w-4" />
-            {activeLabel}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48">
-          <DropdownMenuLabel>Operacional</DropdownMenuLabel>
-          {tabs.filter((t) => t.group === "operation").map((t) => (
-            <DropdownMenuItem
-              key={t.value}
-              onSelect={() => setActiveTab(t.value)}
-              className={activeTab === t.value ? "bg-accent font-medium" : ""}
-            >
-              {t.label}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Administrativo</DropdownMenuLabel>
-          {tabs.filter((t) => t.group === "admin").map((t) => (
-            <DropdownMenuItem
-              key={t.value}
-              onSelect={() => setActiveTab(t.value)}
-              className={activeTab === t.value ? "bg-accent font-medium" : ""}
-            >
-              {t.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
 
-      <TabsContent value="dashboard"><TelefoniaDashboard /></TabsContent>
+      <TabsContent value="dashboard"><TelefoniaDashboard menuButton={menuButton} /></TabsContent>
       <TabsContent value="campaigns"><CampaignsPanel /></TabsContent>
       <TabsContent value="mailing"><MailingPanel /></TabsContent>
       <TabsContent value="history"><CallHistoryPanel /></TabsContent>
