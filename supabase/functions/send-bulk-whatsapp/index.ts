@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get tenant settings (Gupshup credentials)
+    // Get tenant settings
     const { data: tenant } = await supabase
       .from("tenants")
       .select("settings")
@@ -82,13 +82,37 @@ Deno.serve(async (req) => {
     const settings = (tenant?.settings || {}) as Record<string, any>;
     const provider = settings.whatsapp_provider || (settings.gupshup_api_key ? "gupshup" : settings.baylers_api_key ? "baylers" : "");
 
+    // For Baylers, try whatsapp_instances table first, fallback to settings
+    let baylersInstance: { instance_url: string; api_key: string; instance_name: string } | null = null;
+    if (provider === "baylers") {
+      const { data: instances } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_url, api_key, instance_name")
+        .eq("tenant_id", tenantUser.tenant_id)
+        .eq("is_default", true)
+        .eq("status", "active")
+        .limit(1)
+        .single();
+
+      if (instances) {
+        baylersInstance = instances as any;
+      } else if (settings.baylers_api_key && settings.baylers_instance_url) {
+        // Fallback to legacy settings
+        baylersInstance = {
+          instance_url: settings.baylers_instance_url,
+          api_key: settings.baylers_api_key,
+          instance_name: settings.baylers_instance_name || "default",
+        };
+      }
+    }
+
     if (provider === "gupshup" && (!settings.gupshup_api_key || !settings.gupshup_source_number)) {
       return new Response(JSON.stringify({ error: "Gupshup credentials not configured" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (provider === "baylers" && (!settings.baylers_api_key || !settings.baylers_instance_url)) {
+    if (provider === "baylers" && !baylersInstance) {
       return new Response(JSON.stringify({ error: "Baylers credentials not configured" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -147,12 +171,11 @@ Deno.serve(async (req) => {
         let resp: Response;
         let result: any;
 
-        if (provider === "baylers") {
-          const instanceName = settings.baylers_instance_name || "default";
-          resp = await fetch(`${settings.baylers_instance_url}/message/sendText/${instanceName}`, {
+        if (provider === "baylers" && baylersInstance) {
+          resp = await fetch(`${baylersInstance.instance_url}/message/sendText/${baylersInstance.instance_name}`, {
             method: "POST",
             headers: {
-              apikey: settings.baylers_api_key,
+              apikey: baylersInstance.api_key,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ number: phone, text: message }),

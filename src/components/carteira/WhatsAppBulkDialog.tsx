@@ -49,7 +49,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   });
 
   const settings = (tenant?.settings as Record<string, any>) || {};
-  const hasCredentials = !!settings.gupshup_api_key && !!settings.gupshup_source_number;
+  const provider = settings.whatsapp_provider || "";
+  const hasCredentials = provider === "baylers" || (!!settings.gupshup_api_key && !!settings.gupshup_source_number);
 
   useEffect(() => {
     if (!open) {
@@ -125,7 +126,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
         {!hasCredentials ? (
           <div className="py-4 text-center text-muted-foreground text-sm">
-            Configure as credenciais Gupshup na página de <strong>Automação &gt; Configurações</strong> primeiro.
+            Configure um provedor WhatsApp na página de <strong>Integrações &gt; WhatsApp</strong> primeiro.
           </div>
         ) : sendState === "done" && result ? (
           <div className="space-y-4 py-4">
