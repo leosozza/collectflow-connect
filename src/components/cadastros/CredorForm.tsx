@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,9 +40,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState({ acordo: false, recibo: false, quitacao: false });
 
   useEffect(() => {
     if (open) {
+      setEditingTemplate({ acordo: false, recibo: false, quitacao: false });
       if (editing) {
         setForm({ ...editing });
         setHonorarios(editing.honorarios_grade || []);
@@ -94,21 +96,36 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     set(field, (form[field] || "") + variable);
   };
 
-  const VariableButton = ({ field }: { field: string }) => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" type="button">
-          Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
-        <div className="space-y-1">
-          {VARIAVEIS.map(v => (
-            <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(field, v)}>{v}</button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+  const toggleTemplateEdit = (key: "acordo" | "recibo" | "quitacao") => {
+    setEditingTemplate(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const TemplateActions = ({ field, templateKey }: { field: string; templateKey: "acordo" | "recibo" | "quitacao" }) => (
+    <div className="flex items-center gap-1.5">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" type="button" disabled={!editingTemplate[templateKey]}>
+            Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
+          <div className="space-y-1">
+            {VARIAVEIS.map(v => (
+              <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(field, v)}>{v}</button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Button
+        variant={editingTemplate[templateKey] ? "default" : "outline"}
+        size="sm"
+        type="button"
+        onClick={() => toggleTemplateEdit(templateKey)}
+        className="gap-1"
+      >
+        {editingTemplate[templateKey] ? <><Check className="w-3 h-3" /> Concluir</> : <><Pencil className="w-3 h-3" /> Editar</>}
+      </Button>
+    </div>
   );
 
   return (
@@ -255,18 +272,18 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
 
               <div>
-                <div className="flex items-center justify-between mb-1"><Label>Carta de Acordo</Label><VariableButton field="template_acordo" /></div>
-                <Textarea rows={5} value={form.template_acordo || ""} onChange={e => set("template_acordo", e.target.value)} className="font-mono text-xs" />
+                <div className="flex items-center justify-between mb-1"><Label>Carta de Acordo</Label><TemplateActions field="template_acordo" templateKey="acordo" /></div>
+                <Textarea rows={5} value={form.template_acordo || ""} onChange={e => set("template_acordo", e.target.value)} className={`font-mono text-xs ${!editingTemplate.acordo ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.acordo} />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1"><Label>Recibo de Pagamento</Label><VariableButton field="template_recibo" /></div>
-                <Textarea rows={4} value={form.template_recibo || ""} onChange={e => set("template_recibo", e.target.value)} className="font-mono text-xs" />
+                <div className="flex items-center justify-between mb-1"><Label>Recibo de Pagamento</Label><TemplateActions field="template_recibo" templateKey="recibo" /></div>
+                <Textarea rows={4} value={form.template_recibo || ""} onChange={e => set("template_recibo", e.target.value)} className={`font-mono text-xs ${!editingTemplate.recibo ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.recibo} />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1"><Label>Carta de Quitação</Label><VariableButton field="template_quitacao" /></div>
-                <Textarea rows={4} value={form.template_quitacao || ""} onChange={e => set("template_quitacao", e.target.value)} className="font-mono text-xs" />
+                <div className="flex items-center justify-between mb-1"><Label>Carta de Quitação</Label><TemplateActions field="template_quitacao" templateKey="quitacao" /></div>
+                <Textarea rows={4} value={form.template_quitacao || ""} onChange={e => set("template_quitacao", e.target.value)} className={`font-mono text-xs ${!editingTemplate.quitacao ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.quitacao} />
               </div>
             </div>
           </TabsContent>

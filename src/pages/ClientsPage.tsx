@@ -38,6 +38,9 @@ const ClientsPage = () => {
     dateFrom: "",
     dateTo: "",
     search: "",
+    tipoDevedorId: "",
+    tipoDividaId: "",
+    semAcordo: false,
   });
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);

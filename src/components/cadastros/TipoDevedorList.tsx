@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchTiposDevedor, upsertTipoDevedor, deleteTipoDevedor } from "@/services/cadastrosService";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+
+const DEFAULT_TIPOS = ["Casual", "Recorrente", "Perda de Emprego", "Aposentado", "Estudante", "Empresarial"];
 
 const TipoDevedorList = () => {
   const { tenant } = useTenant();
@@ -20,6 +22,7 @@ const TipoDevedorList = () => {
   const [editing, setEditing] = useState<any>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [seeding, setSeeding] = useState(false);
 
   const { data: tipos = [], isLoading } = useQuery({
     queryKey: ["tipos_devedor", tenant?.id],
@@ -39,6 +42,22 @@ const TipoDevedorList = () => {
     onError: () => toast.error("Erro ao excluir"),
   });
 
+  const handleSeedDefaults = async () => {
+    if (!tenant?.id) return;
+    setSeeding(true);
+    try {
+      for (const nome of DEFAULT_TIPOS) {
+        await upsertTipoDevedor({ tenant_id: tenant.id, nome });
+      }
+      queryClient.invalidateQueries({ queryKey: ["tipos_devedor"] });
+      toast.success("Tipos padrão carregados!");
+    } catch {
+      toast.error("Erro ao carregar tipos padrão");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const openNew = () => { setEditing(null); setNome(""); setDescricao(""); setDialogOpen(true); };
   const openEdit = (t: any) => { setEditing(t); setNome(t.nome); setDescricao(t.descricao || ""); setDialogOpen(true); };
   const handleSave = () => {
@@ -55,7 +74,15 @@ const TipoDevedorList = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo Tipo</Button>
+        <div className="flex items-center gap-2">
+          {tipos.length === 0 && !isLoading && (
+            <Button variant="outline" onClick={handleSeedDefaults} disabled={seeding}>
+              <Download className="w-4 h-4 mr-1" />
+              {seeding ? "Carregando..." : "Carregar tipos padrão"}
+            </Button>
+          )}
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo Tipo</Button>
+        </div>
       </div>
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         {isLoading ? <div className="p-8 text-center text-muted-foreground">Carregando...</div> : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground text-sm">Nenhum tipo encontrado</div> : (

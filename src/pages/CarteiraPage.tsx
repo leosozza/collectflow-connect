@@ -53,6 +53,9 @@ const CarteiraPage = () => {
     dateFrom: "",
     dateTo: "",
     search: "",
+    tipoDevedorId: "",
+    tipoDividaId: "",
+    semAcordo: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -92,16 +95,25 @@ const CarteiraPage = () => {
     if (filters.search.trim()) {
       const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const term = normalize(filters.search.trim());
-      filtered = clients.filter(
+      filtered = filtered.filter(
         (c) =>
           normalize(c.nome_completo).includes(term) ||
           c.cpf.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
       );
     }
+    if (filters.semAcordo) {
+      filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
+    }
+    if (filters.tipoDevedorId) {
+      filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
+    }
+    if (filters.tipoDividaId) {
+      filtered = filtered.filter((c: any) => c.tipo_divida_id === filters.tipoDividaId);
+    }
     return [...filtered].sort(
       (a, b) => a.data_vencimento.localeCompare(b.data_vencimento)
     );
-  }, [clients, filters.search]);
+  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, agreementCpfs]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
@@ -284,20 +296,24 @@ const CarteiraPage = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+              <DropdownMenuItem onClick={downloadTemplate} className="gap-2 cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4" />
+                Planilha Modelo
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setImportOpen(true)} className="gap-2 cursor-pointer">
                 <FileSpreadsheet className="w-4 h-4" />
-                Importar Planilha
+                Importar Devedores
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={downloadTemplate} className="gap-2 cursor-pointer">
+              <DropdownMenuItem onClick={handleExportExcel} className="gap-2 cursor-pointer">
                 <Download className="w-4 h-4" />
-                Planilha Modelo
+                Exportar Devedores
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
+      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} />
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
