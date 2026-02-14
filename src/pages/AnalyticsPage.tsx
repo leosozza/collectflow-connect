@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { ArrowLeft, Download, Printer, Target, Award, TrendingUp, AlertTriangle, MessageCircle } from "lucide-react";
+import { ArrowLeft, Download, Target, Award, TrendingUp, AlertTriangle, MessageCircle } from "lucide-react";
 import { parseISO } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import {
@@ -60,7 +60,7 @@ const generateYearOptions = () => {
 const InfoTooltip = ({ text }: { text: string }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
+      <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-default transition-colors" />
     </TooltipTrigger>
     <TooltipContent side="top" className="max-w-[220px] text-xs">
       {text}
@@ -231,11 +231,8 @@ const AnalyticsPage = () => {
                 {credores.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleExport} title="Exportar Excel">
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.print()} title="Exportar PDF">
               <Download className="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.print()} title="Imprimir PDF">
-              <Printer className="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -348,7 +345,7 @@ const AnalyticsPage = () => {
           {/* Heatmap */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
             <div className="absolute top-3 right-3"><InfoTooltip text="Concentração de vencimentos por dia do mês. Quanto mais escuro, mais vencimentos naquele dia." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Heatmap de Vencimentos (dia do mês)</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-3">Heatmap de Vencimentos</h3>
             <div className="grid grid-cols-7 gap-1">
               {heatmapData.map((d) => (
                 <div
