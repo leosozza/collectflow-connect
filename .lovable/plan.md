@@ -1,114 +1,65 @@
 
-# Reorganizacao de Navegacao, Permissoes e Dashboards
+# Otimizacao da Pagina Analytics
 
-## Resumo
+## Mudancas nos KPIs
 
-Reestruturar a navegacao do sistema, remover paginas desnecessarias, e redesenhar os dashboards de Admin e Operador com separacao clara de permissoes. Criar uma nova pagina de Analytics estilo Power BI exclusiva para admins.
+### Substituicoes e reordenacao:
+1. **Remover** "Tempo Medio Cobranca"
+2. **Adicionar** "Total Inadimplencia" (soma de `valor_parcela` dos pendentes) -- sera o **primeiro card** da esquerda
+3. Ordem final dos 4 KPIs: **Total Inadimplencia** | **Taxa de Recuperacao** | **Ticket Medio** | **Total Recebido**
 
----
+## Taxa de Conversao da Carteira (nao mais por operador)
 
-## 1. Remocoes e Movimentacoes no Menu
+- O grafico de barras "Taxa de Conversao por Operador" sera substituido por um **indicador unico da carteira inteira**
+- Calculo: de todos os clientes que tiveram contato (status != pendente, ou com operator_id atribuido), quantos foram convertidos (status = pago)
+- Exibido como um card com barra de progresso ou gauge simples dentro do espaco do grafico atual
 
-### Remover do menu e das rotas:
-- **Financeiro** (`/financeiro`): remover completamente do menu lateral e da rota no App.tsx
-- **Acordos** do menu Admin: remover do `postContactItems` (admin)
+## Top 5 Maiores Credores (substituir Devedores)
 
-### Mover funcionalidades:
-- **Relatorios**: remover do menu lateral; adicionar como botao "Relatorios" no header do Dashboard Admin (ao lado dos filtros)
-- **Acordos**: adicionar ao menu lateral para **operadores** (nao mais para admin)
+- Agrupar por `credor` em vez de `cpf`
+- Somar `valor_parcela` dos pendentes por credor
+- Exibir nome do credor e valor total pendente
 
-### Arquivos afetados:
-- `src/components/AppLayout.tsx` - reestruturar `postContactItems` e adicionar item Acordos para operadores
-- `src/App.tsx` - remover rota `/financeiro`, manter `/acordos` e `/relatorios` (relatorios acessivel via botao)
+## Tooltips de explicacao em cada quadro
 
----
+- Adicionar um icone de comentario (MessageCircle) discreto no canto superior direito de cada card/quadro
+- Ao passar o mouse, exibir um `Tooltip` com explicacao simples da funcao daquele quadro
+- Usar o componente `Tooltip` ja existente no projeto (`@radix-ui/react-tooltip`)
 
-## 2. Dashboard Admin - Tela Principal (Simplificado)
+## Barra superior otimizada
 
-Redesenhar `AdminDashboardPage.tsx` para mostrar apenas:
-
-1. **Total Projetado** (hero card existente)
-2. **Vencimentos** (strip com navegacao por data - quantidade + valor)
-3. **3 cards**: Recebidos | Quebra | Pendentes
-4. **Tabela Desempenho por Operador** (resumida)
-5. **Botao "Analytics"** abaixo da tabela -> navega para `/analytics`
-
-Remover do dashboard principal:
-- Graficos de pizza e barras (movem para Analytics)
-- KPIs avancados (movem para Analytics)
-- Cards de percentuais
-- Cards de comissao
-
----
-
-## 3. Nova Pagina Analytics (`/analytics`)
-
-Criar `src/pages/AnalyticsPage.tsx` com painel estilo Power BI:
-
-- **Filtros**: Periodo (ano/mes), Operador, Credor
-- **Graficos**:
-  - Evolucao mensal (linha) - reutilizar logica do EvolutionChart
-  - Taxa de conversao por operador (barras horizontais)
-  - Distribuicao de status (pizza: Pago/Quebrado/Pendente)
-  - Top 5 maiores devedores (tabela)
-  - Heatmap de vencimentos por dia do mes (grid de celulas coloridas)
-- **Indicadores (KPIs)**:
-  - Taxa de recuperacao
-  - Ticket medio
-  - Tempo medio de cobranca
-- **Design**: Cards com graficos interativos, paleta cinza escuro/branco/laranja, grid responsivo
-- Botoes de exportar Excel e imprimir PDF (reutilizar logica de RelatoriosPage)
-
-### Arquivos:
-- `src/pages/AnalyticsPage.tsx` (novo)
-- `src/App.tsx` - adicionar rota `/analytics` protegida
-
----
-
-## 4. Dashboard Operador - Tela Principal
-
-Manter `DashboardPage.tsx` mostrando apenas dados proprios:
-
-1. **Total Projetado** (ja existe)
-2. **Vencimentos** com navegacao por data (ja existe)
-3. **3 cards**: Recebidos | Quebra | Pendentes (ja existem)
-4. **Tabela "Meus Clientes"** - renomear secao de vencimentos para "Meus Clientes"
-
-Remover (se existir):
-- Cards de percentuais e comissao (mover para perfil ou remover)
-- GoalProgress (mover ou remover conforme simplificacao)
-
----
-
-## 5. Regras de Exibicao
-
-- **Admin**: Dashboard simplificado + botao Analytics + acesso a `/analytics`
-- **Operador**: Dashboard apenas com seus dados, sem botao Analytics, sem desempenho de outros
-
----
+Baseado na referencia enviada, a barra esta quebrando em 2 linhas. Otimizacao:
+- Colocar titulo (seta + "Analytics") a esquerda
+- Filtros e botoes de acao todos em **uma unica linha** a direita, sem quebra
+- Botoes Excel e PDF como icones compactos (`size="icon"`) sem texto
+- Reduzir largura dos selects para ficarem mais compactos
 
 ## Detalhes Tecnicos
 
-### Arquivos a criar:
+### Arquivo modificado:
 - `src/pages/AnalyticsPage.tsx`
 
-### Arquivos a modificar:
-- `src/components/AppLayout.tsx` - reorganizar menu (remover Financeiro, mover Acordos para operador, remover Relatorios do menu)
-- `src/App.tsx` - remover rota `/financeiro`, adicionar rota `/analytics`
-- `src/pages/AdminDashboardPage.tsx` - simplificar para 4 cards + tabela + botao Analytics
-- `src/pages/DashboardPage.tsx` - simplificar, renomear secao para "Meus Clientes"
-- `src/pages/Index.tsx` - manter logica existente (admin vs operador)
+### Alteracoes especificas:
 
-### Componentes reutilizados na Analytics:
-- `EvolutionChart` (grafico de evolucao mensal)
-- `OperatorRanking` (ranking de operadores)
-- `ReportFilters` (filtros)
-- `KPICards` (indicadores)
-- Recharts: PieChart, BarChart, LineChart para os novos graficos
+**KPIs (linhas 108-118, 246-267):**
+- Calcular `totalInadimplencia = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0)`
+- Remover calculo de `tempoMedioLabel` / `paidOnTime`
+- Reordenar cards: Inadimplencia, Recuperacao, Ticket Medio, Total Recebido
+- Trocar icone Clock por AlertTriangle para Inadimplencia
 
-### Sequencia de implementacao:
-1. Modificar `AppLayout.tsx` (menu)
-2. Modificar `App.tsx` (rotas)
-3. Simplificar `AdminDashboardPage.tsx`
-4. Simplificar `DashboardPage.tsx`
-5. Criar `AnalyticsPage.tsx` com todos os graficos e indicadores
+**Taxa de Conversao (linhas 140-149, 288-303):**
+- Substituir `operatorConversion` por calculo global: clientes com operator_id atribuido = "contatados"; desses, quantos ficaram "pago" = taxa
+- Exibir como card grande com percentual e barra de progresso
+
+**Top 5 Credores (linhas 158-167, 326-347):**
+- Agrupar por `c.credor` em vez de `c.cpf`
+- Exibir nome do credor + valor total pendente
+
+**Tooltips (todos os cards/quadros):**
+- Importar `Tooltip, TooltipTrigger, TooltipContent, TooltipProvider` e `MessageCircle`
+- Adicionar icone + tooltip no header de cada secao com textos explicativos
+
+**Header (linhas 198-243):**
+- Layout em linha unica: titulo a esquerda, filtros + acoes a direita
+- Botoes Excel/PDF como `size="icon"` sem label
+- Selects com larguras reduzidas
