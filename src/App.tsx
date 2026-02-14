@@ -12,6 +12,7 @@ import AuthPage from "./pages/AuthPage";
 import CarteiraPage from "./pages/CarteiraPage";
 import ClientDetailPage from "./pages/ClientDetailPage";
 import CadastroPage from "./pages/CadastroPage";
+import CadastrosPage from "./pages/CadastrosPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
@@ -86,6 +87,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <CadastroPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cadastros"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <CadastrosPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
