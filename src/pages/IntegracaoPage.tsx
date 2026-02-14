@@ -5,7 +5,7 @@ import NegociarieTab from "@/components/integracao/NegociarieTab";
 import ThreeCPlusTab from "@/components/integracao/ThreeCPlusTab";
 import WhatsAppIntegrationTab from "@/components/integracao/WhatsAppIntegrationTab";
 import ProtestoTab from "@/components/integracao/ProtestoTab";
-import { Phone, MessageCircle, Scale } from "lucide-react";
+import { Phone, MessageCircle, ShieldAlert } from "lucide-react";
 
 const IntegracaoPage = () => {
   const { profile } = useAuth();
@@ -37,9 +37,9 @@ const IntegracaoPage = () => {
             <MessageCircle className="w-4 h-4" />
             WhatsApp
           </TabsTrigger>
-          <TabsTrigger value="protesto" className="gap-2">
-            <Scale className="w-4 h-4" />
-            Protesto
+          <TabsTrigger value="negativacao" className="gap-2">
+            <ShieldAlert className="w-4 h-4" />
+            Negativação
           </TabsTrigger>
         </TabsList>
         <TabsContent value="cobcloud">
@@ -54,7 +54,7 @@ const IntegracaoPage = () => {
         <TabsContent value="whatsapp">
           <WhatsAppIntegrationTab />
         </TabsContent>
-        <TabsContent value="protesto">
+        <TabsContent value="negativacao">
           <ProtestoTab />
         </TabsContent>
       </Tabs>
