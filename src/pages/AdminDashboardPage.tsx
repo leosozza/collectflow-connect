@@ -1,29 +1,19 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
-import { KPICards, type KPI } from "@/components/dashboard/KPICards";
-import { Award, Target, Clock } from "lucide-react";
 import StatCard from "@/components/StatCard";
-import PaymentDialog from "@/components/clients/PaymentDialog";
-import { markAsPaid, markAsBroken, Client } from "@/services/clientService";
 import { Button } from "@/components/ui/button";
 import {
-  CalendarClock, ChevronLeft, ChevronRight, TrendingUp, Users, Wallet,
-  BarChart3, PieChart as PieChartIcon,
+  CalendarClock, ChevronLeft, ChevronRight, Users, Wallet, BarChart3,
 } from "lucide-react";
-import { fetchAgreements } from "@/services/agreementService";
 import { format, parseISO } from "date-fns";
-import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, Legend,
-} from "recharts";
 
 interface Profile {
   id: string;
@@ -63,22 +53,15 @@ const monthNames = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-const STATUS_COLORS = {
-  pago: "hsl(142, 71%, 45%)",
-  pendente: "hsl(38, 92%, 50%)",
-  quebrado: "hsl(0, 84%, 60%)",
-};
-
 const AdminDashboardPage = () => {
   const { profile } = useAuth();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const now = new Date();
 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth().toString());
   const [selectedOperator, setSelectedOperator] = useState<string>("todos");
   const [browseDate, setBrowseDate] = useState(new Date());
-  const [paymentClient, setPaymentClient] = useState<Client | null>(null);
 
   const { data: allClients = [] } = useQuery({
     queryKey: ["admin-clients"],
@@ -110,25 +93,6 @@ const AdminDashboardPage = () => {
     enabled: profile?.role === "admin",
   });
 
-  const paymentMutation = useMutation({
-    mutationFn: ({ client, valor }: { client: Client; valor: number }) => markAsPaid(client, valor),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
-      toast.success("Pagamento registrado!");
-      setPaymentClient(null);
-    },
-    onError: () => toast.error("Erro ao registrar pagamento"),
-  });
-
-  const breakMutation = useMutation({
-    mutationFn: (client: Client) => markAsBroken(client),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
-      toast.success("Quebra registrada!");
-    },
-    onError: () => toast.error("Erro ao registrar quebra"),
-  });
-
   const yearOptions = useMemo(generateYearOptions, []);
 
   const monthFilteredClients = useMemo(() => {
@@ -154,11 +118,8 @@ const AdminDashboardPage = () => {
   const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
   const totalEmAberto = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
 
-  const totalPagosQuebrados = pagos.length + quebrados.length;
-  const pctRecebidos = totalPagosQuebrados > 0 ? ((pagos.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
-  const pctQuebras = totalPagosQuebrados > 0 ? ((quebrados.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
-
   const selectedOp = operators.find((op) => op.id === selectedOperator);
+
   const getOperatorCommission = (op: Profile, received: number) => {
     const grade = grades.find((g) => g.id === op.commission_grade_id);
     if (grade) return calculateTieredCommission(received, grade.tiers as CommissionTier[]);
@@ -188,65 +149,18 @@ const AdminDashboardPage = () => {
     const opPagos = opClients.filter((c) => c.status === "pago");
     const opRecebido = opPagos.reduce((s, c) => s + Number(c.valor_pago), 0);
     const opQuebra = opClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const opPendente = opClients.filter((c) => c.status === "pendente").reduce((s, c) => s + Number(c.valor_parcela), 0);
     const { rate, commission } = getOperatorCommission(op, opRecebido);
     return {
       ...op,
       totalRecebido: opRecebido,
       totalQuebra: opQuebra,
-      totalPendente: opPendente,
       comissao: commission,
       commissionRate: rate,
       totalClients: opClients.length,
     };
   });
 
-  // Total commission across all operators
   const totalComissoes = operatorStats.reduce((s, op) => s + op.comissao, 0);
-
-  // Pie chart data
-  const statusPieData = [
-    { name: "Pagos", value: pagos.length, color: STATUS_COLORS.pago },
-    { name: "Pendentes", value: pendentes.length, color: STATUS_COLORS.pendente },
-    { name: "Quebrados", value: quebrados.length, color: STATUS_COLORS.quebrado },
-  ].filter((d) => d.value > 0);
-
-  // Bar chart data - operator performance
-  const operatorBarData = operatorStats.map((op) => ({
-    name: (op.full_name || "").split(" ")[0],
-    recebido: op.totalRecebido,
-    quebra: op.totalQuebra,
-    pendente: op.totalPendente,
-  }));
-
-  // Agreements KPI
-  const { data: agreements = [] } = useQuery({
-    queryKey: ["agreements-kpi"],
-    queryFn: () => fetchAgreements(),
-    enabled: profile?.role === "admin",
-  });
-
-  const totalAgreements = agreements.length;
-  const approvedAgreements = agreements.filter((a) => a.status === "approved").length;
-  const conversionRate = totalAgreements > 0 ? ((approvedAgreements / totalAgreements) * 100).toFixed(1) : "0";
-
-  // SLA: % parcelas pagas antes ou no vencimento
-  const paidOnTime = pagos.filter((c) => {
-    const updated = new Date(c.updated_at || c.data_vencimento);
-    const due = new Date(c.data_vencimento);
-    return updated <= new Date(due.getTime() + 86400000); // +1 day tolerance
-  }).length;
-  const slaRate = pagos.length > 0 ? ((paidOnTime / pagos.length) * 100).toFixed(1) : "0";
-
-  // Ticket médio
-  const ticketMedio = pagos.length > 0 ? totalRecebido / pagos.length : 0;
-
-  const adminKPIs: KPI[] = [
-    { label: "Taxa Conversão Acordos", value: `${conversionRate}%`, icon: Target },
-    { label: "SLA de Cobrança", value: `${slaRate}%`, icon: Clock },
-    { label: "Ticket Médio", value: formatCurrency(ticketMedio), icon: Award },
-    { label: "Acordos Aprovados", value: `${approvedAgreements}/${totalAgreements}`, icon: BarChart3 },
-  ];
 
   if (profile?.role !== "admin") {
     return (
@@ -269,6 +183,10 @@ const AdminDashboardPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => navigate("/relatorios")}>
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Relatórios
+          </Button>
           <Select value={selectedOperator} onValueChange={setSelectedOperator}>
             <SelectTrigger className="w-[150px] h-9 text-sm">
               <SelectValue />
@@ -312,7 +230,7 @@ const AdminDashboardPage = () => {
         <p className="text-xs text-primary-foreground/70 mt-1">{filteredClients.length} parcelas no período</p>
       </div>
 
-      {/* Vencimentos strip - header only */}
+      {/* Vencimentos strip */}
       <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-primary" />
@@ -338,119 +256,10 @@ const AdminDashboardPage = () => {
       </div>
 
       {/* Stat cards row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard title="Recebido" value={formatCurrency(totalRecebido)} icon="received" />
         <StatCard title="Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
         <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
-        <StatCard title="Comissões a Pagar" value={formatCurrency(totalComissoes)} icon="commission" />
-      </div>
-
-      {/* Percentages row */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
-          <p className="text-xs text-muted-foreground mb-1">% Recebidos</p>
-          <p className="text-xl font-bold text-success">{pctRecebidos}%</p>
-        </div>
-        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
-          <p className="text-xs text-muted-foreground mb-1">% Quebras</p>
-          <p className="text-xl font-bold text-destructive">{pctQuebras}%</p>
-        </div>
-        <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm">
-          <p className="text-xs text-muted-foreground mb-1">Total Clientes</p>
-          <p className="text-xl font-bold text-foreground">{filteredClients.length}</p>
-        </div>
-      </div>
-
-      {/* Advanced KPIs */}
-      <KPICards kpis={adminKPIs} />
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Status Pie Chart */}
-        <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <PieChartIcon className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-semibold text-card-foreground">Distribuição por Status</h3>
-          </div>
-          {statusPieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={statusPieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={3}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {statusPieData.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string) => [`${value} parcelas`, name]}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: "12px" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
-              Sem dados no período
-            </div>
-          )}
-        </div>
-
-        {/* Operator Bar Chart */}
-        <div className="bg-card rounded-xl border border-border p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-semibold text-card-foreground">Recebimento por Operador</h3>
-          </div>
-          {operatorBarData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={operatorBarData} barGap={2}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  formatter={(value: number, name: string) => [
-                    formatCurrency(value),
-                    name === "recebido" ? "Recebido" : name === "quebra" ? "Quebra" : "Pendente",
-                  ]}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="recebido" fill={STATUS_COLORS.pago} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="quebra" fill={STATUS_COLORS.quebrado} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="pendente" fill={STATUS_COLORS.pendente} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
-              Sem operadores cadastrados
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Operators breakdown table */}
@@ -476,7 +285,6 @@ const AdminDashboardPage = () => {
                 <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
                   <th className="px-4 py-2.5 text-left font-medium">Operador</th>
                   <th className="px-4 py-2.5 text-right font-medium">Clientes</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Projetado</th>
                   <th className="px-4 py-2.5 text-right font-medium">Recebido</th>
                   <th className="px-4 py-2.5 text-right font-medium">Quebra</th>
                   <th className="px-4 py-2.5 text-right font-medium">Comissão (%)</th>
@@ -496,7 +304,6 @@ const AdminDashboardPage = () => {
                   >
                     <td className="px-4 py-2.5 text-sm font-medium text-card-foreground">{op.full_name || "Sem nome"}</td>
                     <td className="px-4 py-2.5 text-sm text-right">{op.totalClients}</td>
-                    <td className="px-4 py-2.5 text-sm text-right">{formatCurrency(op.totalPendente)}</td>
                     <td className="px-4 py-2.5 text-sm text-right text-success">{formatCurrency(op.totalRecebido)}</td>
                     <td className="px-4 py-2.5 text-sm text-right text-destructive">{formatCurrency(op.totalQuebra)}</td>
                     <td className="px-4 py-2.5 text-sm text-right">{op.commissionRate}%</td>
@@ -509,14 +316,16 @@ const AdminDashboardPage = () => {
         )}
       </div>
 
-      <PaymentDialog
-        client={paymentClient}
-        onClose={() => setPaymentClient(null)}
-        onConfirm={(valor) => {
-          if (paymentClient) paymentMutation.mutate({ client: paymentClient, valor });
-        }}
-        submitting={paymentMutation.isPending}
-      />
+      {/* Analytics button */}
+      <div className="flex justify-center">
+        <Button
+          onClick={() => navigate("/analytics")}
+          className="gradient-orange text-primary-foreground px-8 py-3 text-sm font-semibold rounded-xl shadow-lg hover:opacity-90 transition-opacity"
+        >
+          <BarChart3 className="w-4 h-4 mr-2" />
+          Abrir Analytics
+        </Button>
+      </div>
     </div>
   );
 };
