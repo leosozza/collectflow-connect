@@ -9,9 +9,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { ArrowLeft, Download, Target, Award, TrendingUp, AlertTriangle, MessageCircle } from "lucide-react";
 import { parseISO } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
@@ -73,10 +71,10 @@ const AnalyticsPage = () => {
   const navigate = useNavigate();
   const now = new Date();
 
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState("all");
-  const [selectedOperator, setSelectedOperator] = useState("todos");
-  const [selectedCredor, setSelectedCredor] = useState("todos");
+  const [selectedYears, setSelectedYears] = useState<string[]>([now.getFullYear().toString()]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
+  const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
 
   const { data: allClients = [] } = useQuery({
     queryKey: ["analytics-clients"],
@@ -98,20 +96,21 @@ const AnalyticsPage = () => {
     enabled: profile?.role === "admin",
   });
 
-  const yearOptions = useMemo(generateYearOptions, []);
-  const credores = useMemo(() => [...new Set(allClients.map((c) => c.credor))].sort(), [allClients]);
+  const yearOpts = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
+  const monthOpts = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);
+  const operatorOpts = useMemo(() => operators.map((o) => ({ value: o.id, label: o.full_name || "Sem nome" })), [operators]);
+  const credorOpts = useMemo(() => [...new Set(allClients.map((c) => c.credor))].sort().map((c) => ({ value: c, label: c })), [allClients]);
 
   const filteredClients = useMemo(() => {
-    const year = parseInt(selectedYear);
     return allClients.filter((c) => {
       const d = parseISO(c.data_vencimento);
-      if (d.getFullYear() !== year) return false;
-      if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
-      if (selectedOperator !== "todos" && c.operator_id !== selectedOperator) return false;
-      if (selectedCredor !== "todos" && c.credor !== selectedCredor) return false;
+      if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
+      if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
+      if (selectedOperators.length > 0 && !selectedOperators.includes(c.operator_id || "")) return false;
+      if (selectedCredores.length > 0 && !selectedCredores.includes(c.credor)) return false;
       return true;
     });
-  }, [allClients, selectedYear, selectedMonth, selectedOperator, selectedCredor]);
+  }, [allClients, selectedYears, selectedMonths, selectedOperators, selectedCredores]);
 
   const pagos = filteredClients.filter((c) => c.status === "pago");
   const quebrados = filteredClients.filter((c) => c.status === "quebrado");
@@ -131,13 +130,14 @@ const AnalyticsPage = () => {
 
   // Evolution chart data
   const evolutionData = useMemo(() => {
-    const year = parseInt(selectedYear);
+    const years = selectedYears.length > 0 ? selectedYears.map(Number) : generateYearOptions();
+    const primaryYear = years[0];
     return monthLabels.map((label, monthIdx) => {
       const mc = allClients.filter((c) => {
         const d = parseISO(c.data_vencimento);
-        if (d.getFullYear() !== year || d.getMonth() !== monthIdx) return false;
-        if (selectedOperator !== "todos" && c.operator_id !== selectedOperator) return false;
-        if (selectedCredor !== "todos" && c.credor !== selectedCredor) return false;
+        if (!years.includes(d.getFullYear()) || d.getMonth() !== monthIdx) return false;
+        if (selectedOperators.length > 0 && !selectedOperators.includes(c.operator_id || "")) return false;
+        if (selectedCredores.length > 0 && !selectedCredores.includes(c.credor)) return false;
         return true;
       });
       return {
@@ -147,7 +147,7 @@ const AnalyticsPage = () => {
         projetado: mc.reduce((s, c) => s + Number(c.valor_parcela), 0),
       };
     });
-  }, [allClients, selectedYear, selectedOperator, selectedCredor]);
+  }, [allClients, selectedYears, selectedOperators, selectedCredores]);
 
   // Status pie
   const statusPieData = [
@@ -185,7 +185,7 @@ const AnalyticsPage = () => {
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Analytics");
-    XLSX.writeFile(wb, `analytics-${selectedYear}.xlsx`);
+    XLSX.writeFile(wb, `analytics-${selectedYears.join("-") || "todos"}.xlsx`);
   };
 
   if (profile?.role !== "admin") {
@@ -204,33 +204,10 @@ const AnalyticsPage = () => {
             <h1 className="text-xl font-bold text-foreground">Analytics</h1>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-[75px] h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[100px] h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {monthNames.map((name, i) => <SelectItem key={i} value={i.toString()}>{name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-              <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Op.</SelectItem>
-                {operators.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name || "Sem nome"}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={selectedCredor} onValueChange={setSelectedCredor}>
-              <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Cred.</SelectItem>
-                {credores.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelect options={yearOpts} selected={selectedYears} onChange={setSelectedYears} allLabel="Todos Anos" className="w-[110px]" />
+            <MultiSelect options={monthOpts} selected={selectedMonths} onChange={setSelectedMonths} allLabel="Todos Meses" className="w-[120px]" />
+            <MultiSelect options={operatorOpts} selected={selectedOperators} onChange={setSelectedOperators} allLabel="Todos Op." className="w-[120px]" />
+            <MultiSelect options={credorOpts} selected={selectedCredores} onChange={setSelectedCredores} allLabel="Todos Cred." className="w-[120px]" />
             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.print()} title="Exportar PDF">
               <Download className="w-4 h-4" />
             </Button>
@@ -270,7 +247,7 @@ const AnalyticsPage = () => {
           {/* Evolution line chart */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
             <div className="absolute top-3 right-3"><InfoTooltip text="Evolução mês a mês do valor projetado, recebido e quebrado no ano selecionado." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Evolução Mensal ({selectedYear})</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-3">Evolução Mensal ({selectedYears.length > 0 ? selectedYears.join(", ") : "Todos"})</h3>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={evolutionData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />

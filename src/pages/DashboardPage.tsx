@@ -14,9 +14,7 @@ import PaymentDialog from "@/components/clients/PaymentDialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -35,8 +33,8 @@ const DashboardPage = () => {
   const queryClient = useQueryClient();
   const now = new Date();
 
-  const [selectedYear, setSelectedYear] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [browseDate, setBrowseDate] = useState(new Date());
 
@@ -65,16 +63,19 @@ const DashboardPage = () => {
     onError: () => toast.error("Erro ao registrar quebra"),
   });
 
-  const yearOptions = useMemo(generateYearOptions, []);
+  
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
       const d = parseISO(c.data_vencimento);
-      if (selectedYear !== "all" && d.getFullYear() !== parseInt(selectedYear)) return false;
-      if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
+      if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
+      if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
       return true;
     });
-  }, [clients, selectedYear, selectedMonth]);
+  }, [clients, selectedYears, selectedMonths]);
+
+  const yearOptions = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
+  const monthOptions = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);
 
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const browseClients = useMemo(() => {
@@ -109,28 +110,20 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[90px] h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {yearOptions.map((y) => (
-                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[120px] h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {monthNames.map((name, i) => (
-                <SelectItem key={i} value={i.toString()}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={yearOptions}
+            selected={selectedYears}
+            onChange={setSelectedYears}
+            allLabel="Todos Anos"
+            className="w-[120px]"
+          />
+          <MultiSelect
+            options={monthOptions}
+            selected={selectedMonths}
+            onChange={setSelectedMonths}
+            allLabel="Todos Meses"
+            className="w-[130px]"
+          />
         </div>
       </div>
 
