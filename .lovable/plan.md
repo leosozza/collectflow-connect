@@ -1,115 +1,143 @@
-# Melhorias em Cadastros, Carteira e Filtros
 
-## 1. Navegacao - Mover /Cadastros para baixo de /Carteira
+# Reorganizacao do Modulo Cadastros e Empresa
 
-No `AppLayout.tsx`, mover o item "Cadastros" do grupo "Avancado" para o array `preContactItems`, logo apos "Carteira". Assim ele aparece diretamente no menu lateral, nao escondido dentro do collapsible.
+## Resumo
 
-## 2. Tipos pre-definidos (Devedor e Divida)
+Consolidar toda a administracao dentro de `/cadastros`, movendo Signs (para dentro do Credor), Usuarios, e Integracao para la. Transformar `/tenant/configuracoes` (Empresa) em uma pagina com 5 abas: Dados, Financeiro, Contrato, Servicos e Cancelamento.
 
-Adicionar seed de dados pre-definidos diretamente na UI dos componentes `TipoDevedorList` e `TipoDividaList`. Quando a lista estiver vazia, oferecer um botao "Carregar tipos padrao" que insere automaticamente:
+---
 
-**Tipos de Devedor:** Casual, Recorrente, Perda de Emprego, Aposentado, Estudante, Empresarial
+## 1. Novo menu lateral do Cadastros
 
-**Tipos de Divida:** Boleto, Cartao de Credito, Promissoria, Cheque, Financiamento, Emprestimo, Mensalidade
+A pagina `/cadastros` passara a ter as seguintes secoes na sub-navegacao lateral:
 
-## 3. Credor - Template de documentos com modo edicao protegido
+```text
++---------------------+
+| Cadastros           |
++---------------------+
+| Credores            |
+| Usuarios            |  (novo - conteudo atual de /usuarios)
+| Equipes             |
+| Tipo de Devedor     |
+| Tipo de Divida      |
+| Integracao          |  (novo - conteudo atual de /integracao)
++---------------------+
+```
 
-Na aba "Negociacao" do `CredorForm.tsx`, os textareas de template atualmente sao editaveis livremente (basta clicar e digitar). A mudanca sera:
+## 2. Signs dentro do Credor
 
-- Os textareas ficarao **desabilitados por padrao** (read-only, com fundo cinza)
-- Ao lado do botao "Inserir Variavel", adicionar um botao "Editar" (icone de lapis)
-- Ao clicar em "Editar", o textarea fica habilitado para edicao
-- Ao clicar novamente (agora "Salvar"), volta ao modo read-only
-- Isso garante que o template fique "fixo" e so seja editado intencionalmente
+No `CredorForm.tsx`, adicionar uma 4a aba "Assinatura" ao lado de "Negociacao". Nessa aba:
 
-## 4. Carteira - Reorganizar dropdown dos 3 pontinhos
+- Toggle "Assinatura Digital Ativa" (sim/nao) para esse credor
+- Se ativo, opcao para escolher tipo: Click, Reconhecimento Facial ou Assinatura na Tela
+- Armazenado no registro do credor (novas colunas `signature_enabled` boolean e `signature_type` text na tabela `credores`)
 
-No `CarteiraPage.tsx`, mover "Exportar Excel" para dentro do dropdown `MoreVertical` e reordenar:
+Isso substitui a pagina `/signs` global. O tipo de assinatura passa a ser definido **por credor**.
 
-1. Planilha Modelo
-2. Importar Devedores
-3. Exportar Devedores
+## 3. Usuarios dentro de Cadastros
 
-Remover o botao "Exportar Excel" do componente `ClientFilters` (prop `onExportExcel`).
+O conteudo atual de `UsersPage.tsx` sera importado como componente dentro de `CadastrosPage.tsx` na secao "usuarios". A rota `/usuarios` sera mantida como redirect ou removida do sidebar.
 
-## 5. Carteira - Filtros avancados colapsaveis
+## 4. Integracao dentro de Cadastros
 
-Redesenhar o `ClientFilters.tsx` com dois niveis:
+O conteudo de `IntegracaoPage.tsx` sera importado como componente na secao "integracao" do Cadastros.
 
-**Nivel visivel (sempre aparece):**
+## 5. Empresa - Pagina com 5 abas
 
-- Campo "Nome ou CPF" + Botao "Pesquisar"
+A pagina `/tenant/configuracoes` sera redesenhada com abas horizontais:
 
-**Nivel oculto (expande com setinha):**
+### Aba 1 - Dados da Empresa
+- Conteudo atual: nome, slug, cor primaria (sem mudancas)
 
-- Tipo de Divida (dropdown, dados vem da tabela `tipos_divida`)
-- Tipo de Devedor (dropdown, dados vem da tabela `tipos_devedor`)
-- Data de Vencimento (De / Ate)
-- Credor (dropdown, dados vem da tabela `credores`)
-- Status (dropdown: Todos, Pendente, Pago, Quebrado)
-- Sem Acordo (checkbox - filtra clientes que nunca tiveram acordo)
+### Aba 2 - Financeiro
+- Exibicao do plano contratado (nome, valor, limites)
+- Status do pagamento
 
-A setinha sera um botao com icone `ChevronDown`/`ChevronUp` que expande/recolhe os filtros avancados usando o componente `Collapsible`.
+### Aba 3 - Contrato
+- Texto do contrato padrao de contratacao do sistema (pre-definido, nao editavel)
+- Checkbox/indicador visual: verde (assinado) ou vermelho (pendente)
+- O contrato inclui clausulas de uso do sistema, privacidade, SLA, etc.
 
-O filtro "Sem Acordo" cruzara dados com a tabela `agreements` para identificar clientes cujo CPF nunca apareceu em nenhum acordo.
+### Aba 4 - Servicos
+- Lista de funcionalidades do sistema com toggle on/off e valor ao lado:
+  - Discador (R$ X/mes)
+  - WhatsApp (R$ X/mes)
+  - Assinatura Digital (R$ X/mes)
+  - Negativacao (R$ X/mes)
+- Armazenado em `tenants.settings` como JSON
+
+### Aba 5 - Cancelamento
+- Texto informativo: "O cancelamento pode ser solicitado a qualquer momento, com aviso previo de 30 dias."
+- Botao "Solicitar Cancelamento" com confirmacao via AlertDialog
+- Ao confirmar, grava data da solicitacao e altera status
+
+## 6. Limpeza do Sidebar
+
+Remover do menu lateral (grupo "Avancado"):
+- "Signs" (agora dentro do Credor)
+- "Usuarios" (agora dentro de Cadastros)
+- "Integracao" (agora dentro de Cadastros, e tambem remover de `postContactItems`)
+
+O menu lateral ficara mais enxuto:
+
+```text
+Dashboard
+Carteira
+Cadastros
+Contact Center >
+  Telefonia
+  WhatsApp
+Acordos (operador)
+Avancado >
+  Configuracoes
+  Automacao
+  Log de Importacoes
+  Empresa
+  Auditoria
+```
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivos modificados:
-
-`**src/components/AppLayout.tsx**`
-
-- Mover `{ label: "Cadastros", icon: Database, path: "/cadastros" }` de `advancedNavItems` para `preContactItems` (apos Carteira)
-
-`**src/components/cadastros/TipoDevedorList.tsx**`
-
-- Adicionar botao "Carregar tipos padrao" quando lista vazia
-- Inserir array de tipos pre-definidos via `upsertTipoDevedor`
-
-`**src/components/cadastros/TipoDividaList.tsx**`
-
-- Mesmo padrao acima com tipos de divida pre-definidos
-
-`**src/components/cadastros/CredorForm.tsx**`
-
-- Adicionar estado `editingTemplate` (objeto com 3 booleans: acordo, recibo, quitacao)
-- Textareas com `disabled={!editingTemplate.acordo}` etc.
-- Botao "Editar"/"Concluir" ao lado de "Inserir Variavel" para cada template
-
-`**src/pages/CarteiraPage.tsx**`
-
-- Mover `handleExportExcel` para dentro do DropdownMenu
-- Reordenar itens: Planilha Modelo, Importar Devedores, Exportar Devedores
-- Remover prop `onExportExcel` do `ClientFilters`
-- Passar dados de credores, tipos_devedor e tipos_divida para `ClientFilters`
-- Adicionar query para buscar `agreementCpfs` (ja existe) e nova logica de filtro "sem acordo"
-
-`**src/components/clients/ClientFilters.tsx**`
-
-- Redesenhar com layout colapsavel
-- Nivel 1: campo busca + botao pesquisar
-- Nivel 2 (oculto): grid de filtros avancados com setinha para expandir
-- Novos props: `credores`, `tiposDevedor`, `tiposDivida`
-- Novo filtro `semAcordo` (boolean)
-- Usar `Collapsible` do Radix UI para o toggle
-
-**Nota sobre filtros de tipo_devedor e tipo_divida na carteira:**
-Como a tabela `clients` atualmente nao tem colunas `tipo_devedor_id` e `tipo_divida_id`, esses filtros ficarao preparados na interface mas so funcionarao plenamente apos vincular essas colunas aos clientes (previsto para campanhas futuras). Por ora, os dropdowns serao renderizados mas o filtro nao sera aplicado no backend ate que as colunas existam.
-
-Alternativa: Criar uma migracao SQL adicionando `tipo_devedor_id` e `tipo_divida_id` (nullable, UUID, FK) a tabela `clients` para que os filtros ja funcionem. Essa e a abordagem recomendada.
-
-### Migracao SQL (adicionar colunas a clients):
-
+### Migracao SQL
+Adicionar colunas a tabela `credores`:
 ```sql
-ALTER TABLE clients ADD COLUMN tipo_devedor_id uuid REFERENCES tipos_devedor(id) ON DELETE SET NULL;
-ALTER TABLE clients ADD COLUMN tipo_divida_id uuid REFERENCES tipos_divida(id) ON DELETE SET NULL;
+ALTER TABLE credores ADD COLUMN signature_enabled boolean DEFAULT false;
+ALTER TABLE credores ADD COLUMN signature_type text DEFAULT 'click';
 ```
 
-Isso permitira que ao importar ou cadastrar um cliente, ele possa ser classificado por tipo de devedor e tipo de divida, e os filtros da carteira funcionarao imediatamente.   
-  
-O opção /assinatura deve ser incluida dentro de cadastros/Devedor como uma aba.   
-Assim o administrador pode vincular um tipo de assinatura ao credor.   
-  
-Ele pode escolher se quer deixar essa função de assinatura ativa ou nao, dentro do credor.  
+### Arquivos modificados
+
+**`src/pages/CadastrosPage.tsx`**
+- Adicionar secoes "usuarios" e "integracao" a lista de secoes
+- Importar `UsersPage` como componente inline (ou extrair o conteudo para um componente reutilizavel)
+- Importar `IntegracaoPage` como componente inline
+- Reordenar: Credores, Usuarios, Equipes, Tipo de Devedor, Tipo de Divida, Integracao
+
+**`src/components/cadastros/CredorForm.tsx`**
+- Adicionar 4a aba "Assinatura" no TabsList
+- Toggle para ativar/desativar assinatura digital nesse credor
+- RadioGroup para escolher tipo (click, facial, draw)
+- Incluir `signature_enabled` e `signature_type` no objeto salvo
+
+**`src/pages/TenantSettingsPage.tsx`**
+- Redesenhar com 5 abas usando componente Tabs
+- Aba Dados: conteudo atual
+- Aba Financeiro: exibicao do plano e limites (movido do card atual)
+- Aba Contrato: texto padrao + indicador assinado/pendente
+- Aba Servicos: lista de servicos com switch + valores
+- Aba Cancelamento: botao de solicitacao com AlertDialog
+
+**`src/components/AppLayout.tsx`**
+- Remover "Signs", "Usuarios" e "Integracao" do sidebar
+- Manter "Empresa" no grupo Avancado
+
+**`src/App.tsx`**
+- Remover rota `/signs` (ou manter como redirect para `/cadastros`)
+- Manter rota `/usuarios` como redirect ou remover
+- Remover rota `/integracao` standalone (ou redirect)
+
+### Arquivos nao alterados
+- `UsersPage.tsx` e `IntegracaoPage.tsx` continuam existindo como componentes, mas sao renderizados dentro de `CadastrosPage` em vez de diretamente no router
+- Todos os services existentes permanecem inalterados
