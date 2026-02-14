@@ -59,9 +59,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     ...(isAdmin ? [{ label: "Cadastros", icon: Database, path: "/cadastros" }] : []),
   ];
 
-  const postContactItems = isAdmin ? [
-    { label: "Integração", icon: Cloud, path: "/integracao" },
-  ] : [
+  const postContactItems = isAdmin ? [] : [
     { label: "Acordos", icon: Handshake, path: "/acordos" },
   ];
 
@@ -73,8 +71,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const advancedNavItems = isAdmin ? [
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
     { label: "Automação", icon: Bot, path: "/automacao" },
-    { label: "Signs", icon: PenTool, path: "/signs" },
-    { label: "Usuários", icon: UserCog, path: "/usuarios" },
     { label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" },
     { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
     { label: "Auditoria", icon: FileText, path: "/auditoria" },

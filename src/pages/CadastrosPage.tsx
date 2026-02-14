@@ -1,20 +1,26 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
+import UsersPage from "@/pages/UsersPage";
+import IntegracaoPage from "@/pages/IntegracaoPage";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const sections = [
   { key: "credores", label: "Credores", icon: Building2 },
+  { key: "usuarios", label: "Usuários", icon: UserCog },
   { key: "equipes", label: "Equipes", icon: Users },
   { key: "tipo_devedor", label: "Tipo de Devedor", icon: UserCheck },
   { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
+  { key: "integracao", label: "Integração", icon: Cloud },
 ];
 
 const CadastrosPage = () => {
   const [active, setActive] = useState("credores");
+  const { profile } = useAuth();
 
   return (
     <div className="flex gap-6 animate-fade-in">
@@ -51,9 +57,11 @@ const CadastrosPage = () => {
           </h2>
         </div>
         {active === "credores" && <CredorList />}
+        {active === "usuarios" && <UsersPage />}
         {active === "equipes" && <EquipeList />}
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_divida" && <TipoDividaList />}
+        {active === "integracao" && <IntegracaoPage />}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const BANCOS = ["Banco do Brasil", "Itaú", "Bradesco", "Santander", "Caixa Econômica", "Nubank", "Inter", "Sicoob", "Sicredi", "Safra", "BTG Pactual", "Outro"];
 const GATEWAYS = ["Negociarie", "Asaas", "Mercado Pago", "PagSeguro", "Outro"];
@@ -137,9 +138,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
         <Tabs defaultValue="dados" className="mt-4">
           <TabsList className="w-full">
-            <TabsTrigger value="dados" className="flex-1">Dados Cadastrais</TabsTrigger>
-            <TabsTrigger value="bancario" className="flex-1">Bancário / Gateway</TabsTrigger>
+            <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
+            <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
+            <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
           </TabsList>
 
           {/* ABA 1 - DADOS CADASTRAIS */}
@@ -285,6 +287,59 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div className="flex items-center justify-between mb-1"><Label>Carta de Quitação</Label><TemplateActions field="template_quitacao" templateKey="quitacao" /></div>
                 <Textarea rows={4} value={form.template_quitacao || ""} onChange={e => set("template_quitacao", e.target.value)} className={`font-mono text-xs ${!editingTemplate.quitacao ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.quitacao} />
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ABA 4 - ASSINATURA DIGITAL */}
+          <TabsContent value="assinatura" className="space-y-6 mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Assinatura Digital</p>
+                  <p className="text-xs text-muted-foreground">Exigir assinatura digital nos acordos deste credor</p>
+                </div>
+                <Switch
+                  checked={form.signature_enabled || false}
+                  onCheckedChange={c => set("signature_enabled", c)}
+                />
+              </div>
+
+              {form.signature_enabled && (
+                <div className="space-y-3 p-4 rounded-lg border border-border">
+                  <Label className="text-sm font-medium">Tipo de Assinatura</Label>
+                  <RadioGroup
+                    value={form.signature_type || "click"}
+                    onValueChange={v => set("signature_type", v)}
+                    className="space-y-3"
+                  >
+                    <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                      <RadioGroupItem value="click" id="sig-click" className="mt-0.5" />
+                      <div>
+                        <Label htmlFor="sig-click" className="text-sm font-medium cursor-pointer">Aceite por Click</Label>
+                        <p className="text-xs text-muted-foreground">O devedor confirma com um clique simples. Rápido e prático.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                      <RadioGroupItem value="facial" id="sig-facial" className="mt-0.5" />
+                      <div>
+                        <Label htmlFor="sig-facial" className="text-sm font-medium cursor-pointer">Reconhecimento Facial</Label>
+                        <p className="text-xs text-muted-foreground">Captura de fotos via webcam com detecção facial em tempo real.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                      <RadioGroupItem value="draw" id="sig-draw" className="mt-0.5" />
+                      <div>
+                        <Label htmlFor="sig-draw" className="text-sm font-medium cursor-pointer">Assinatura na Tela</Label>
+                        <p className="text-xs text-muted-foreground">O devedor desenha a assinatura manualmente na tela do dispositivo.</p>
+                      </div>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                ℹ️ Quando ativa, a assinatura digital será obrigatória no portal do devedor antes de liberar o checkout para acordos deste credor.
+              </p>
             </div>
           </TabsContent>
         </Tabs>

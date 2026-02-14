@@ -746,6 +746,8 @@ export type Database = {
           parcelas_min: number | null
           pix_chave: string | null
           razao_social: string
+          signature_enabled: boolean | null
+          signature_type: string | null
           status: string
           telefone: string | null
           template_acordo: string | null
@@ -787,6 +789,8 @@ export type Database = {
           parcelas_min?: number | null
           pix_chave?: string | null
           razao_social: string
+          signature_enabled?: boolean | null
+          signature_type?: string | null
           status?: string
           telefone?: string | null
           template_acordo?: string | null
@@ -828,6 +832,8 @@ export type Database = {
           parcelas_min?: number | null
           pix_chave?: string | null
           razao_social?: string
+          signature_enabled?: boolean | null
+          signature_type?: string | null
           status?: string
           telefone?: string | null
           template_acordo?: string | null
