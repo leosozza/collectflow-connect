@@ -183,7 +183,11 @@ const AdminDashboardPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => navigate("/relatorios")}>
+          <Button size="sm" onClick={() => navigate("/analytics")} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Analytics
+          </Button>
+          <Button size="sm" onClick={() => navigate("/relatorios")} className="bg-primary text-primary-foreground hover:bg-primary/90">
             <BarChart3 className="w-4 h-4 mr-1" />
             Relatórios
           </Button>
@@ -316,16 +320,6 @@ const AdminDashboardPage = () => {
         )}
       </div>
 
-      {/* Analytics button */}
-      <div className="flex justify-center">
-        <Button
-          onClick={() => navigate("/analytics")}
-          className="gradient-orange text-primary-foreground px-8 py-3 text-sm font-semibold rounded-xl shadow-lg hover:opacity-90 transition-opacity"
-        >
-          <BarChart3 className="w-4 h-4 mr-2" />
-          Abrir Analytics
-        </Button>
-      </div>
     </div>
   );
 };
