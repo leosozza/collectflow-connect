@@ -56,6 +56,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
+    ...(isAdmin ? [{ label: "Cadastros", icon: Database, path: "/cadastros" }] : []),
   ];
 
   const postContactItems = isAdmin ? [
@@ -70,7 +71,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const advancedNavItems = isAdmin ? [
-    { label: "Cadastros", icon: Database, path: "/cadastros" },
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
     { label: "Automação", icon: Bot, path: "/automacao" },
     { label: "Signs", icon: PenTool, path: "/signs" },

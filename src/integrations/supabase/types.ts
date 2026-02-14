@@ -394,6 +394,8 @@ export type Database = {
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
           tenant_id: string | null
+          tipo_devedor_id: string | null
+          tipo_divida_id: string | null
           total_parcelas: number
           uf: string | null
           updated_at: string
@@ -420,6 +422,8 @@ export type Database = {
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
+          tipo_devedor_id?: string | null
+          tipo_divida_id?: string | null
           total_parcelas?: number
           uf?: string | null
           updated_at?: string
@@ -446,6 +450,8 @@ export type Database = {
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
+          tipo_devedor_id?: string | null
+          tipo_divida_id?: string | null
           total_parcelas?: number
           uf?: string | null
           updated_at?: string
@@ -466,6 +472,20 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_tipo_devedor_id_fkey"
+            columns: ["tipo_devedor_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_devedor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_tipo_divida_id_fkey"
+            columns: ["tipo_divida_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_divida"
             referencedColumns: ["id"]
           },
         ]
