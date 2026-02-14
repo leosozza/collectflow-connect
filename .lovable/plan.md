@@ -1,112 +1,115 @@
-# Cadastros - Novo Modulo Administrativo
+# Melhorias em Cadastros, Carteira e Filtros
 
-## Resumo
+## 1. Navegacao - Mover /Cadastros para baixo de /Carteira
 
-Criar um novo modulo "Cadastros" no menu lateral do admin, com uma pagina dedicada contendo navegacao lateral interna para: **Credores**, **Equipes**, **Tipo de Devedor** e **Tipo de Divida**. Esses cadastros serao a base para futuras campanhas de cobranca com filtros avancados.
+No `AppLayout.tsx`, mover o item "Cadastros" do grupo "Avancado" para o array `preContactItems`, logo apos "Carteira". Assim ele aparece diretamente no menu lateral, nao escondido dentro do collapsible.
 
-## Estrutura do Menu
+## 2. Tipos pre-definidos (Devedor e Divida)
 
-O item "Cadastros" sera adicionado ao grupo "Avancado" no sidebar, com icone `Database`. Ao acessar `/cadastros`, o usuario vera um layout com menu lateral esquerdo (sub-navegacao) e conteudo a direita, similar a um padrao master-detail.
+Adicionar seed de dados pre-definidos diretamente na UI dos componentes `TipoDevedorList` e `TipoDividaList`. Quando a lista estiver vazia, oferecer um botao "Carregar tipos padrao" que insere automaticamente:
 
-## Tabelas no Banco de Dados
+**Tipos de Devedor:** Casual, Recorrente, Perda de Emprego, Aposentado, Estudante, Empresarial
 
-### 1. `credores`
+**Tipos de Divida:** Boleto, Cartao de Credito, Promissoria, Cheque, Financiamento, Emprestimo, Mensalidade
 
-Armazena dados completos de cada credor (razao social, CNPJ, dados bancarios, gateway, parametros de negociacao, templates de documentos).
+## 3. Credor - Template de documentos com modo edicao protegido
 
-Colunas principais:
+Na aba "Negociacao" do `CredorForm.tsx`, os textareas de template atualmente sao editaveis livremente (basta clicar e digitar). A mudanca sera:
 
-- `id`, `tenant_id`, `razao_social`, `nome_fantasia`, `cnpj`, `inscricao_estadual`
-- `contato_responsavel`, `email`, `telefone`
-- `cep`, `endereco`, `numero`, `complemento`, `bairro`, `cidade`, `uf`
-- `banco`, `agencia`, `conta`, `tipo_conta`, `pix_chave`
-- `gateway_ativo`, `gateway_token`, `gateway_ambiente`, `gateway_status`
-- `parcelas_min`, `parcelas_max`, `entrada_minima_valor`, `entrada_minima_tipo` (percent/fixed), `desconto_maximo`, `juros_mes`, `multa`
-- `honorarios_grade` (JSONB - array de faixas)
-- `template_acordo`, `template_recibo`, `template_quitacao` (text)
-- `status` (ativo/inativo), `created_at`, `updated_at`
+- Os textareas ficarao **desabilitados por padrao** (read-only, com fundo cinza)
+- Ao lado do botao "Inserir Variavel", adicionar um botao "Editar" (icone de lapis)
+- Ao clicar em "Editar", o textarea fica habilitado para edicao
+- Ao clicar novamente (agora "Salvar"), volta ao modo read-only
+- Isso garante que o template fique "fixo" e so seja editado intencionalmente
 
-### 2. `equipes`
+## 4. Carteira - Reorganizar dropdown dos 3 pontinhos
 
-- `id`, `tenant_id`, `nome`, `lider_id` (ref profiles), `meta_mensal`, `status`, `created_at`, `updated_at`
+No `CarteiraPage.tsx`, mover "Exportar Excel" para dentro do dropdown `MoreVertical` e reordenar:
 
-### 3. `equipe_membros`
+1. Planilha Modelo
+2. Importar Devedores
+3. Exportar Devedores
 
-Tabela de juncao N:N entre equipes e profiles.
+Remover o botao "Exportar Excel" do componente `ClientFilters` (prop `onExportExcel`).
 
-- `id`, `equipe_id`, `profile_id`, `tenant_id`, `created_at`
+## 5. Carteira - Filtros avancados colapsaveis
 
-### 4. `tipos_devedor`
+Redesenhar o `ClientFilters.tsx` com dois niveis:
 
-- `id`, `tenant_id`, `nome` (ex: casual, recorrente, perda de emprego), `descricao`, `created_at`
+**Nivel visivel (sempre aparece):**
 
-### 5. `tipos_divida`
+- Campo "Nome ou CPF" + Botao "Pesquisar"
 
-- `id`, `tenant_id`, `nome` (ex: boleto, cartao, promissoria), `descricao`, `created_at`
+**Nivel oculto (expande com setinha):**
 
-Todas as tabelas terao RLS com isolamento por `tenant_id`, acesso total para admins e visualizacao para operadores.
+- Tipo de Divida (dropdown, dados vem da tabela `tipos_divida`)
+- Tipo de Devedor (dropdown, dados vem da tabela `tipos_devedor`)
+- Data de Vencimento (De / Ate)
+- Credor (dropdown, dados vem da tabela `credores`)
+- Status (dropdown: Todos, Pendente, Pago, Quebrado)
+- Sem Acordo (checkbox - filtra clientes que nunca tiveram acordo)
 
-## Componentes e Arquivos
+A setinha sera um botao com icone `ChevronDown`/`ChevronUp` que expande/recolhe os filtros avancados usando o componente `Collapsible`.
 
-### Pagina principal
+O filtro "Sem Acordo" cruzara dados com a tabela `agreements` para identificar clientes cujo CPF nunca apareceu em nenhum acordo.
 
-- `src/pages/CadastrosPage.tsx` - Layout com tabs laterais (Credores, Equipes, Tipo Devedor, Tipo Divida)
+---
 
-### Componentes de Credores
+## Detalhes Tecnicos
 
-- `src/components/cadastros/CredorList.tsx` - Tabela com busca, paginacao, acoes editar/excluir
-- `src/components/cadastros/CredorForm.tsx` - Dialog/Sheet com 3 abas internas:
-  - Aba 1: Dados Cadastrais (razao social, CNPJ com mascara, contato, endereco)
-  - Aba 2: Dados Bancarios e Gateway (banco, agencia, conta, PIX, gateway config)
-  - Aba 3: Parametros de Negociacao (regras de acordo, grade de honorarios editavel, 3 editores de template com insercao de variaveis)
+### Arquivos modificados:
 
-### Componentes de Equipes
+`**src/components/AppLayout.tsx**`
 
-- `src/components/cadastros/EquipeList.tsx` - Tabela com busca
-- `src/components/cadastros/EquipeForm.tsx` - Formulario com multi-select de operadores, lider, meta
+- Mover `{ label: "Cadastros", icon: Database, path: "/cadastros" }` de `advancedNavItems` para `preContactItems` (apos Carteira)
 
-### Componentes de Tipos
+`**src/components/cadastros/TipoDevedorList.tsx**`
 
-- `src/components/cadastros/TipoDevedorList.tsx` - CRUD simples (nome + descricao)
-- `src/components/cadastros/TipoDividaList.tsx` - CRUD simples (nome + descricao)
+- Adicionar botao "Carregar tipos padrao" quando lista vazia
+- Inserir array de tipos pre-definidos via `upsertTipoDevedor`
 
-### Service
+`**src/components/cadastros/TipoDividaList.tsx**`
 
-- `src/services/cadastrosService.ts` - Funcoes de CRUD para todas as 5 tabelas
+- Mesmo padrao acima com tipos de divida pre-definidos
 
-## Credores - Detalhes das 3 Abas
+`**src/components/cadastros/CredorForm.tsx**`
 
-### Aba 1 - Dados Cadastrais
+- Adicionar estado `editingTemplate` (objeto com 3 booleans: acordo, recibo, quitacao)
+- Textareas com `disabled={!editingTemplate.acordo}` etc.
+- Botao "Editar"/"Concluir" ao lado de "Inserir Variavel" para cada template
 
-Formulario com campos validados via Zod. CNPJ com mascara `00.000.000/0000-00`, telefone com mascara.
+`**src/pages/CarteiraPage.tsx**`
 
-### Aba 2 - Dados Bancarios e Gateway
+- Mover `handleExportExcel` para dentro do DropdownMenu
+- Reordenar itens: Planilha Modelo, Importar Devedores, Exportar Devedores
+- Remover prop `onExportExcel` do `ClientFilters`
+- Passar dados de credores, tipos_devedor e tipos_divida para `ClientFilters`
+- Adicionar query para buscar `agreementCpfs` (ja existe) e nova logica de filtro "sem acordo"
 
-- Dropdown de bancos principais (Banco do Brasil, Itau, Bradesco, Santander, Caixa, etc.)
-- Tipo conta: Corrente / Poupanca
-- Gateway: dropdown com opcoes (Negociarie, Assas, Mercado Pago, PagSeguro, Outro)
-- Ambiente: Producao / Homologacao
-- Nota informativa sobre uso automatico do gateway
+`**src/components/clients/ClientFilters.tsx**`
 
-### Aba 3 - Parametros de Negociacao
+- Redesenhar com layout colapsavel
+- Nivel 1: campo busca + botao pesquisar
+- Nivel 2 (oculto): grid de filtros avancados com setinha para expandir
+- Novos props: `credores`, `tiposDevedor`, `tiposDivida`
+- Novo filtro `semAcordo` (boolean)
+- Usar `Collapsible` do Radix UI para o toggle
 
-- **Regras de Acordo**: campos numericos para parcelas min/max, entrada minima (toggle % ou R$), desconto maximo, juros, multa
-- **Grade de Honorarios**: tabela editavel com botao "+ Adicionar Faixa". Cada linha tem: faixa de recuperacao (%) e honorarios (%). Armazenado como JSONB
-- **Modelos de Documentos**: 3 textareas (Carta de Acordo, Recibo, Quitacao) com botao "Inserir Variavel" que abre dropdown com as variaveis disponiveis. Templates padrao pre-carregados
+**Nota sobre filtros de tipo_devedor e tipo_divida na carteira:**
+Como a tabela `clients` atualmente nao tem colunas `tipo_devedor_id` e `tipo_divida_id`, esses filtros ficarao preparados na interface mas so funcionarao plenamente apos vincular essas colunas aos clientes (previsto para campanhas futuras). Por ora, os dropdowns serao renderizados mas o filtro nao sera aplicado no backend ate que as colunas existam.
 
-## Roteamento e Navegacao
+Alternativa: Criar uma migracao SQL adicionando `tipo_devedor_id` e `tipo_divida_id` (nullable, UUID, FK) a tabela `clients` para que os filtros ja funcionem. Essa e a abordagem recomendada.
 
-- Nova rota `/cadastros` em `App.tsx`
-- Novo item "Cadastros" com icone `Database` no `advancedNavItems` do `AppLayout.tsx`
-- Pagina com sub-navegacao lateral (botoes verticais) para alternar entre as 4 secoes
+### Migracao SQL (adicionar colunas a clients):
 
-## Sequencia de Implementacao
+```sql
+ALTER TABLE clients ADD COLUMN tipo_devedor_id uuid REFERENCES tipos_devedor(id) ON DELETE SET NULL;
+ALTER TABLE clients ADD COLUMN tipo_divida_id uuid REFERENCES tipos_divida(id) ON DELETE SET NULL;
+```
 
-1. Migracoes SQL (5 tabelas + RLS)
-2. Service layer (`cadastrosService.ts`)
-3. Componentes de Tipos (mais simples, servem de base)
-4. Componentes de Equipes
-5. Componentes de Credores (mais complexo - 3 abas)
-6. Pagina principal com sub-navegacao
-7. Rota e item no menu lateral   
+Isso permitira que ao importar ou cadastrar um cliente, ele possa ser classificado por tipo de devedor e tipo de divida, e os filtros da carteira funcionarao imediatamente.   
   
+O opção /assinatura deve ser incluida dentro de cadastros/Devedor como uma aba.   
+Assim o administrador pode vincular um tipo de assinatura ao credor.   
+  
+Ele pode escolher se quer deixar essa função de assinatura ativa ou nao, dentro do credor.  
