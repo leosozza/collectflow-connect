@@ -17,7 +17,7 @@ const INSTRUCTIONS = [
   { text: "Sorria", icon: "😊", duration: 3000 },
 ];
 
-const FaceOverlay = ({ primaryColor, instruction, countdown }: { primaryColor: string; instruction: typeof INSTRUCTIONS[0]; countdown: number }) => (
+const FaceOverlay = ({ primaryColor, instruction, countdown, videoRef }: { primaryColor: string; instruction: typeof INSTRUCTIONS[0]; countdown: number; videoRef: React.RefObject<HTMLVideoElement> }) => (
   <div className="absolute inset-0 pointer-events-none">
     <div className="absolute inset-0 flex items-center justify-center">
       <div
@@ -32,7 +32,7 @@ const FaceOverlay = ({ primaryColor, instruction, countdown }: { primaryColor: s
       <path d="M240,320 L240,350 Q240,360 230,360 L200,360" fill="none" stroke={primaryColor} strokeWidth="2.5" strokeLinecap="round" />
     </svg>
     <div className="absolute left-[22%] right-[22%] animate-pulse" style={{ top: "30%", height: 2, background: `linear-gradient(90deg, transparent, ${primaryColor}, transparent)` }} />
-    <FaceLandmarks primaryColor={primaryColor} />
+    <FaceLandmarks primaryColor={primaryColor} videoRef={videoRef} />
     <div className="absolute top-3 left-0 right-0 flex justify-center">
       <div className="bg-background/80 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-2 border border-border/50">
         <ScanFace className="w-4 h-4" style={{ color: primaryColor }} />
@@ -242,6 +242,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
           primaryColor={primaryColor}
           instruction={INSTRUCTIONS[currentInstruction]}
           countdown={countdown}
+          videoRef={videoRef}
         />
 
         {/* Progress overlaid at bottom */}
@@ -279,6 +280,7 @@ const SignatureFacial = ({ onConfirm, loading, primaryColor = "#F97316", fullscr
           primaryColor={primaryColor}
           instruction={INSTRUCTIONS[currentInstruction]}
           countdown={countdown}
+          videoRef={videoRef}
         />
       </div>
       <div className="space-y-1.5">
