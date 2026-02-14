@@ -22,7 +22,7 @@ import SignsPage from "./pages/SignsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
 import AcordosPage from "./pages/AcordosPage";
-import FinanceiroPage from "./pages/FinanceiroPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import PortalPage from "./pages/PortalPage";
 import AuditoriaPage from "./pages/AuditoriaPage";
 import AtendimentoPage from "./pages/AtendimentoPage";
@@ -201,11 +201,11 @@ const App = () => (
               }
             />
             <Route
-              path="/financeiro"
+              path="/analytics"
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <FinanceiroPage />
+                    <AnalyticsPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

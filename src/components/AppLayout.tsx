@@ -58,11 +58,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const postContactItems = isAdmin ? [
-    { label: "Acordos", icon: Handshake, path: "/acordos" },
-    { label: "Financeiro", icon: DollarSign, path: "/financeiro" },
-    { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
     { label: "Integração", icon: Cloud, path: "/integracao" },
-  ] : [];
+  ] : [
+    { label: "Acordos", icon: Handshake, path: "/acordos" },
+  ];
 
   const contactCenterItems = [
     ...(isAdmin ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
@@ -320,8 +319,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/contact-center/telefonia": "Telefonia",
                 "/contact-center/whatsapp": "WhatsApp",
                 "/acordos": "Acordos",
-                "/financeiro": "Financeiro",
                 "/relatorios": "Relatórios",
+                "/analytics": "Analytics",
                 "/integracao": "Integração",
                 "/configuracoes": "Configurações",
                 "/automacao": "Automação",

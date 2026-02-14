@@ -1,39 +1,27 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchClients, Client, markAsPaid, markAsBroken } from "@/services/clientService";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { fetchClients, Client } from "@/services/clientService";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency, formatDate } from "@/lib/formatters";
-import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
+import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
-import GoalProgress from "@/components/dashboard/GoalProgress";
-import PaymentDialog from "@/components/clients/PaymentDialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { markAsPaid, markAsBroken } from "@/services/clientService";
+import PaymentDialog from "@/components/clients/PaymentDialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
 const generateYearOptions = () => {
   const now = new Date();
   const years: number[] = [];
-  for (let i = 0; i < 3; i++) {
-    years.push(now.getFullYear() - i);
-  }
+  for (let i = 0; i < 3; i++) years.push(now.getFullYear() - i);
   return years;
 };
 
@@ -50,25 +38,11 @@ const DashboardPage = () => {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth().toString());
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
+  const [browseDate, setBrowseDate] = useState(new Date());
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
     queryFn: () => fetchClients(),
-  });
-
-  const { data: myGrade } = useQuery({
-    queryKey: ["my-commission-grade", profile?.commission_grade_id],
-    queryFn: async () => {
-      if (!profile?.commission_grade_id) return null;
-      const { data, error } = await supabase
-        .from("commission_grades")
-        .select("*")
-        .eq("id", profile.commission_grade_id)
-        .single();
-      if (error) return null;
-      return { ...data, tiers: data.tiers as unknown as CommissionTier[] } as CommissionGrade;
-    },
-    enabled: !!profile?.commission_grade_id,
   });
 
   const paymentMutation = useMutation({
@@ -102,8 +76,6 @@ const DashboardPage = () => {
     });
   }, [clients, selectedYear, selectedMonth]);
 
-  // Date navigator for due clients
-  const [browseDate, setBrowseDate] = useState(new Date());
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const browseClients = useMemo(() => {
     return clients.filter((c) => c.data_vencimento === browseDateStr);
@@ -125,16 +97,6 @@ const DashboardPage = () => {
   const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
   const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
   const totalEmAberto = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
-
-  const totalPagosQuebrados = pagos.length + quebrados.length;
-  const pctRecebidos = totalPagosQuebrados > 0 ? ((pagos.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
-  const pctQuebras = totalPagosQuebrados > 0 ? ((quebrados.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
-
-  // Commission
-  const tiers = myGrade?.tiers;
-  const { rate: commissionRate, commission: comissao } = tiers
-    ? calculateTieredCommission(totalRecebido, tiers)
-    : { rate: profile?.commission_rate || 0, commission: totalRecebido * ((profile?.commission_rate || 0) / 100) };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -170,50 +132,45 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stat: Total Projetado - value only, no card */}
+      {/* Main stat: Total Projetado */}
       <div className="text-center py-2">
         <p className="text-sm text-muted-foreground font-medium mb-1">Total Projetado no Mês</p>
         <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
       </div>
 
-      {/* Row 2: Recebido, Quebra, Em Aberto */}
+      {/* Vencimentos strip */}
+      <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-primary" />
+          <span className="text-sm font-semibold text-card-foreground">Vencimentos</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
+            {format(browseDate, "dd/MM/yyyy")}
+          </span>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
+        </span>
+      </div>
+
+      {/* Stat cards row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
         <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
         <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
       </div>
 
-      {/* Row 3: % Recebidos, % Quebras, Comissão */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="% de Recebidos" value={`${pctRecebidos}%`} icon="received" />
-        <StatCard title="% de Quebras" value={`${pctQuebras}%`} icon="percent" />
-        <StatCard title={`Comissão a Receber (${commissionRate}%)`} value={formatCurrency(comissao)} icon="commission" />
-      </div>
-
-      {/* Goal progress */}
-      <GoalProgress year={parseInt(selectedYear)} month={parseInt(selectedMonth)} totalRecebido={totalRecebido} />
-
-      {/* Date-navigable clients table */}
+      {/* Meus Clientes table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Vencimentos</h2>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
-              {format(browseDate, "dd/MM/yyyy")}
-            </span>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
-          </span>
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-card-foreground">Meus Clientes</h2>
         </div>
 
         {browseClients.length === 0 ? (
@@ -289,7 +246,7 @@ const DashboardPage = () => {
       <PaymentDialog
         client={paymentClient}
         onClose={() => setPaymentClient(null)}
-        onConfirm={(valor, dataRecebimento) => {
+        onConfirm={(valor) => {
           if (paymentClient) {
             paymentMutation.mutate({ client: paymentClient, valor });
           }
