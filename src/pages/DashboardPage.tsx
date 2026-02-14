@@ -35,8 +35,8 @@ const DashboardPage = () => {
   const queryClient = useQueryClient();
   const now = new Date();
 
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth().toString());
+  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("all");
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [browseDate, setBrowseDate] = useState(new Date());
 
@@ -68,11 +68,11 @@ const DashboardPage = () => {
   const yearOptions = useMemo(generateYearOptions, []);
 
   const filteredClients = useMemo(() => {
-    const year = parseInt(selectedYear);
-    const month = parseInt(selectedMonth);
     return clients.filter((c) => {
       const d = parseISO(c.data_vencimento);
-      return d.getFullYear() === year && d.getMonth() === month;
+      if (selectedYear !== "all" && d.getFullYear() !== parseInt(selectedYear)) return false;
+      if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
+      return true;
     });
   }, [clients, selectedYear, selectedMonth]);
 
@@ -114,6 +114,7 @@ const DashboardPage = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
               {yearOptions.map((y) => (
                 <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
               ))}
@@ -124,6 +125,7 @@ const DashboardPage = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
               {monthNames.map((name, i) => (
                 <SelectItem key={i} value={i.toString()}>{name}</SelectItem>
               ))}
