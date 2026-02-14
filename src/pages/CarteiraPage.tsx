@@ -23,33 +23,22 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
@@ -251,51 +240,60 @@ const CarteiraPage = () => {
             Gerencie as parcelas, pagamentos e clientes
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
           <div className="flex items-center border border-border rounded-lg overflow-hidden">
             <Button
               variant={viewMode === "list" ? "default" : "ghost"}
-              size="sm"
-              className="rounded-none gap-1.5"
+              size="icon"
+              className="rounded-none h-8 w-8"
               onClick={() => setViewMode("list")}
+              title="Lista"
             >
               <LayoutList className="w-4 h-4" />
-              Lista
             </Button>
             <Button
               variant={viewMode === "kanban" ? "default" : "ghost"}
-              size="sm"
-              className="rounded-none gap-1.5"
+              size="icon"
+              className="rounded-none h-8 w-8"
               onClick={() => setViewMode("kanban")}
+              title="Kanban"
             >
               <Kanban className="w-4 h-4" />
-              Kanban
             </Button>
           </div>
           {selectedIds.size > 0 && (
             <>
-              <Button variant="outline" onClick={() => setWhatsappOpen(true)} className="gap-2 border-green-600 text-green-600">
+              <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
                 <MessageSquare className="w-4 h-4" />
-                WhatsApp ({selectedIds.size})
+                <span className="hidden sm:inline">WhatsApp</span> ({selectedIds.size})
               </Button>
-              <Button variant="outline" onClick={() => setDialerOpen(true)} className="gap-2 border-primary text-primary">
+              <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
                 <Phone className="w-4 h-4" />
-                Discador ({selectedIds.size})
+                <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
             </>
           )}
-          <Button variant="ghost" onClick={downloadTemplate} className="gap-2 text-muted-foreground" size="sm">
-            <Download className="w-4 h-4" />
-            Planilha Modelo
-          </Button>
-          <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
-            <FileSpreadsheet className="w-4 h-4" />
-            Importar
-          </Button>
-          <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} className="gap-2">
+          <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} size="sm" className="gap-1.5">
             <Plus className="w-4 h-4" />
-            Novo Cliente
+            <span className="hidden sm:inline">Novo Cliente</span>
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+              <DropdownMenuItem onClick={() => setImportOpen(true)} className="gap-2 cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4" />
+                Importar Planilha
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={downloadTemplate} className="gap-2 cursor-pointer">
+                <Download className="w-4 h-4" />
+                Planilha Modelo
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
