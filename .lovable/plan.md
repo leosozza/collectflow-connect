@@ -1,95 +1,114 @@
 
+# Reorganizacao de Navegacao, Permissoes e Dashboards
 
-# Detecção Facial Real com MediaPipe Face Landmarker
+## Resumo
 
-## Problema Atual
+Reestruturar a navegacao do sistema, remover paginas desnecessarias, e redesenhar os dashboards de Admin e Operador com separacao clara de permissoes. Criar uma nova pagina de Analytics estilo Power BI exclusiva para admins.
 
-O componente `FaceLandmarks` exibe pontos fixos em coordenadas hardcoded (ex: olho esquerdo sempre em cx=120, cy=170). Eles nao se movem e nao acompanham o rosto real da camera. E apenas uma animacao decorativa.
+---
 
-## Solucao
+## 1. Remocoes e Movimentacoes no Menu
 
-Integrar a biblioteca **@mediapipe/tasks-vision** (Google MediaPipe) para detectar landmarks faciais reais em tempo real a partir do video da camera. Os pontos de olhos, nariz, boca e mandibula vao acompanhar o rosto real do usuario.
+### Remover do menu e das rotas:
+- **Financeiro** (`/financeiro`): remover completamente do menu lateral e da rota no App.tsx
+- **Acordos** do menu Admin: remover do `postContactItems` (admin)
 
-## Como funciona
+### Mover funcionalidades:
+- **Relatorios**: remover do menu lateral; adicionar como botao "Relatorios" no header do Dashboard Admin (ao lado dos filtros)
+- **Acordos**: adicionar ao menu lateral para **operadores** (nao mais para admin)
 
-1. Ao iniciar a camera, o MediaPipe FaceLandmarker e carregado (modelo ~4MB baixado via CDN)
-2. A cada frame do video, o modelo detecta 468+ pontos 3D no rosto
-3. Os pontos relevantes (olhos, nariz, boca, mandibula) sao extraidos e mapeados para coordenadas SVG
-4. O overlay SVG renderiza os pontos e conexoes nas posicoes reais do rosto
-5. Se nenhum rosto for detectado, exibe mensagem "Posicione seu rosto"
+### Arquivos afetados:
+- `src/components/AppLayout.tsx` - reestruturar `postContactItems` e adicionar item Acordos para operadores
+- `src/App.tsx` - remover rota `/financeiro`, manter `/acordos` e `/relatorios` (relatorios acessivel via botao)
 
-## Alteracoes
+---
 
-### 1. Instalar dependencia
+## 2. Dashboard Admin - Tela Principal (Simplificado)
 
-- `@mediapipe/tasks-vision` - biblioteca oficial do Google para deteccao facial no browser
+Redesenhar `AdminDashboardPage.tsx` para mostrar apenas:
 
-### 2. Reescrever `FaceLandmarks.tsx`
+1. **Total Projetado** (hero card existente)
+2. **Vencimentos** (strip com navegacao por data - quantidade + valor)
+3. **3 cards**: Recebidos | Quebra | Pendentes
+4. **Tabela Desempenho por Operador** (resumida)
+5. **Botao "Analytics"** abaixo da tabela -> navega para `/analytics`
 
-Transformar de componente estatico para componente que recebe uma ref do video e faz deteccao em tempo real:
+Remover do dashboard principal:
+- Graficos de pizza e barras (movem para Analytics)
+- KPIs avancados (movem para Analytics)
+- Cards de percentuais
+- Cards de comissao
 
-- Receber `videoRef` como prop (referencia ao elemento video da camera)
-- Inicializar `FaceLandmarker` com modelo `face_landmarker.task` (float16, ~4MB, carregado via CDN do Google Storage)
-- Usar `requestAnimationFrame` para processar cada frame
-- Extrair landmarks relevantes dos 468 pontos (indices especificos para olho esquerdo, olho direito, ponta do nariz, cantos da boca, mandibula)
-- Converter coordenadas normalizadas (0-1) para coordenadas SVG (0-300 x 0-400)
-- Considerar o espelhamento horizontal da camera (scaleX(-1))
-- Manter as animacoes de glow e conexoes entre pontos
-- Exibir status: "Detectando...", "Rosto detectado" ou "Posicione seu rosto"
+---
 
-### 3. Atualizar `SignatureFacial.tsx`
+## 3. Nova Pagina Analytics (`/analytics`)
 
-- Passar `videoRef` para o `FaceLandmarks` dentro do `FaceOverlay`
-- Nenhuma outra alteracao necessaria no fluxo de captura
+Criar `src/pages/AnalyticsPage.tsx` com painel estilo Power BI:
+
+- **Filtros**: Periodo (ano/mes), Operador, Credor
+- **Graficos**:
+  - Evolucao mensal (linha) - reutilizar logica do EvolutionChart
+  - Taxa de conversao por operador (barras horizontais)
+  - Distribuicao de status (pizza: Pago/Quebrado/Pendente)
+  - Top 5 maiores devedores (tabela)
+  - Heatmap de vencimentos por dia do mes (grid de celulas coloridas)
+- **Indicadores (KPIs)**:
+  - Taxa de recuperacao
+  - Ticket medio
+  - Tempo medio de cobranca
+- **Design**: Cards com graficos interativos, paleta cinza escuro/branco/laranja, grid responsivo
+- Botoes de exportar Excel e imprimir PDF (reutilizar logica de RelatoriosPage)
+
+### Arquivos:
+- `src/pages/AnalyticsPage.tsx` (novo)
+- `src/App.tsx` - adicionar rota `/analytics` protegida
+
+---
+
+## 4. Dashboard Operador - Tela Principal
+
+Manter `DashboardPage.tsx` mostrando apenas dados proprios:
+
+1. **Total Projetado** (ja existe)
+2. **Vencimentos** com navegacao por data (ja existe)
+3. **3 cards**: Recebidos | Quebra | Pendentes (ja existem)
+4. **Tabela "Meus Clientes"** - renomear secao de vencimentos para "Meus Clientes"
+
+Remover (se existir):
+- Cards de percentuais e comissao (mover para perfil ou remover)
+- GoalProgress (mover ou remover conforme simplificacao)
+
+---
+
+## 5. Regras de Exibicao
+
+- **Admin**: Dashboard simplificado + botao Analytics + acesso a `/analytics`
+- **Operador**: Dashboard apenas com seus dados, sem botao Analytics, sem desempenho de outros
+
+---
 
 ## Detalhes Tecnicos
 
-### Indices dos landmarks MediaPipe usados
+### Arquivos a criar:
+- `src/pages/AnalyticsPage.tsx`
 
-| Ponto | Indice MediaPipe | Descricao |
-|---|---|---|
-| Olho esquerdo | 468 (iris) ou 159 (palpebra superior) | Centro do olho esquerdo |
-| Olho direito | 473 (iris) ou 386 (palpebra superior) | Centro do olho direito |
-| Nariz | 1 (ponta) | Ponta do nariz |
-| Boca esquerda | 61 | Canto esquerdo da boca |
-| Boca centro | 13 (labio superior) | Centro da boca |
-| Boca direita | 291 | Canto direito da boca |
-| Mandibula esquerda | 234 | Lateral esquerda |
-| Mandibula direita | 454 | Lateral direita |
+### Arquivos a modificar:
+- `src/components/AppLayout.tsx` - reorganizar menu (remover Financeiro, mover Acordos para operador, remover Relatorios do menu)
+- `src/App.tsx` - remover rota `/financeiro`, adicionar rota `/analytics`
+- `src/pages/AdminDashboardPage.tsx` - simplificar para 4 cards + tabela + botao Analytics
+- `src/pages/DashboardPage.tsx` - simplificar, renomear secao para "Meus Clientes"
+- `src/pages/Index.tsx` - manter logica existente (admin vs operador)
 
-### Inicializacao do modelo
+### Componentes reutilizados na Analytics:
+- `EvolutionChart` (grafico de evolucao mensal)
+- `OperatorRanking` (ranking de operadores)
+- `ReportFilters` (filtros)
+- `KPICards` (indicadores)
+- Recharts: PieChart, BarChart, LineChart para os novos graficos
 
-```text
-FilesetResolver.forVisionTasks(CDN_WASM_URL)
-  -> FaceLandmarker.createFromOptions(resolver, {
-       modelAssetPath: face_landmarker.task (float16),
-       runningMode: "VIDEO",
-       numFaces: 1
-     })
-```
-
-### Loop de deteccao
-
-```text
-requestAnimationFrame -> 
-  faceLandmarker.detectForVideo(video, timestamp) ->
-  extrair landmarks[indices] ->
-  converter (x * 300, y * 400) com espelhamento ->
-  atualizar estado React (throttled ~30fps)
-```
-
-### Arquivos modificados
-
-| Arquivo | Acao |
-|---|---|
-| `package.json` | Adicionar `@mediapipe/tasks-vision` |
-| `src/components/portal/signatures/FaceLandmarks.tsx` | Reescrever com deteccao real via MediaPipe |
-| `src/components/portal/signatures/SignatureFacial.tsx` | Passar `videoRef` para `FaceLandmarks` via `FaceOverlay` |
-
-### Performance
-
-- O modelo roda inteiramente no dispositivo (sem servidor)
-- Usa WebAssembly + GPU delegate para velocidade
-- Float16 e o modelo mais leve (~4MB)
-- Throttle para ~30fps para nao sobrecarregar dispositivos moveis
-
+### Sequencia de implementacao:
+1. Modificar `AppLayout.tsx` (menu)
+2. Modificar `App.tsx` (rotas)
+3. Simplificar `AdminDashboardPage.tsx`
+4. Simplificar `DashboardPage.tsx`
+5. Criar `AnalyticsPage.tsx` com todos os graficos e indicadores
