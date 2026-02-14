@@ -694,6 +694,140 @@ export type Database = {
           },
         ]
       }
+      credores: {
+        Row: {
+          agencia: string | null
+          bairro: string | null
+          banco: string | null
+          cep: string | null
+          cidade: string | null
+          cnpj: string
+          complemento: string | null
+          conta: string | null
+          contato_responsavel: string | null
+          created_at: string
+          desconto_maximo: number | null
+          email: string | null
+          endereco: string | null
+          entrada_minima_tipo: string | null
+          entrada_minima_valor: number | null
+          gateway_ambiente: string | null
+          gateway_ativo: string | null
+          gateway_status: string | null
+          gateway_token: string | null
+          honorarios_grade: Json | null
+          id: string
+          inscricao_estadual: string | null
+          juros_mes: number | null
+          multa: number | null
+          nome_fantasia: string | null
+          numero: string | null
+          parcelas_max: number | null
+          parcelas_min: number | null
+          pix_chave: string | null
+          razao_social: string
+          status: string
+          telefone: string | null
+          template_acordo: string | null
+          template_quitacao: string | null
+          template_recibo: string | null
+          tenant_id: string
+          tipo_conta: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          agencia?: string | null
+          bairro?: string | null
+          banco?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj: string
+          complemento?: string | null
+          conta?: string | null
+          contato_responsavel?: string | null
+          created_at?: string
+          desconto_maximo?: number | null
+          email?: string | null
+          endereco?: string | null
+          entrada_minima_tipo?: string | null
+          entrada_minima_valor?: number | null
+          gateway_ambiente?: string | null
+          gateway_ativo?: string | null
+          gateway_status?: string | null
+          gateway_token?: string | null
+          honorarios_grade?: Json | null
+          id?: string
+          inscricao_estadual?: string | null
+          juros_mes?: number | null
+          multa?: number | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          parcelas_max?: number | null
+          parcelas_min?: number | null
+          pix_chave?: string | null
+          razao_social: string
+          status?: string
+          telefone?: string | null
+          template_acordo?: string | null
+          template_quitacao?: string | null
+          template_recibo?: string | null
+          tenant_id: string
+          tipo_conta?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agencia?: string | null
+          bairro?: string | null
+          banco?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string
+          complemento?: string | null
+          conta?: string | null
+          contato_responsavel?: string | null
+          created_at?: string
+          desconto_maximo?: number | null
+          email?: string | null
+          endereco?: string | null
+          entrada_minima_tipo?: string | null
+          entrada_minima_valor?: number | null
+          gateway_ambiente?: string | null
+          gateway_ativo?: string | null
+          gateway_status?: string | null
+          gateway_token?: string | null
+          honorarios_grade?: Json | null
+          id?: string
+          inscricao_estadual?: string | null
+          juros_mes?: number | null
+          multa?: number | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          parcelas_max?: number | null
+          parcelas_min?: number | null
+          pix_chave?: string | null
+          razao_social?: string
+          status?: string
+          telefone?: string | null
+          template_acordo?: string | null
+          template_quitacao?: string | null
+          template_recibo?: string | null
+          tenant_id?: string
+          tipo_conta?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credores_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disposition_automations: {
         Row: {
           action_config: Json | null
@@ -728,6 +862,100 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "disposition_automations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipe_membros: {
+        Row: {
+          created_at: string
+          equipe_id: string
+          id: string
+          profile_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          equipe_id: string
+          id?: string
+          profile_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          equipe_id?: string
+          id?: string
+          profile_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipe_membros_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_membros_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_membros_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipes: {
+        Row: {
+          created_at: string
+          id: string
+          lider_id: string | null
+          meta_mensal: number | null
+          nome: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lider_id?: string | null
+          meta_mensal?: number | null
+          nome: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lider_id?: string | null
+          meta_mensal?: number | null
+          nome?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipes_lider_id_fkey"
+            columns: ["lider_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipes_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1616,6 +1844,70 @@ export type Database = {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_devedor: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_devedor_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_divida: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_divida_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]

@@ -19,6 +19,7 @@ import {
     PenTool,
   PanelLeftClose,
   PanelLeftOpen,
+  Database,
   BarChart3,
   Handshake,
   DollarSign,
@@ -69,6 +70,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const advancedNavItems = isAdmin ? [
+    { label: "Cadastros", icon: Database, path: "/cadastros" },
     { label: "Configurações", icon: Settings, path: "/configuracoes" },
     { label: "Automação", icon: Bot, path: "/automacao" },
     { label: "Signs", icon: PenTool, path: "/signs" },
@@ -326,6 +328,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/automacao": "Automação",
                 "/usuarios": "Usuários",
                 "/cadastro": "Log de Importações",
+                "/cadastros": "Cadastros",
                 "/tenant/configuracoes": "Empresa",
                 "/auditoria": "Auditoria",
                 "/signs": "Assinatura Digital",
