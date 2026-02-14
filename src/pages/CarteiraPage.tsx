@@ -20,10 +20,12 @@ import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import DialerExportDialog from "@/components/carteira/DialerExportDialog";
 import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
+import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -70,6 +72,7 @@ const CarteiraPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
 
   const filtersWithOperator = {
     ...filters,
@@ -79,6 +82,20 @@ const CarteiraPage = () => {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filtersWithOperator],
     queryFn: () => fetchClients(filtersWithOperator),
+  });
+
+  const { data: agreementCpfs = new Set<string>() } = useQuery({
+    queryKey: ["agreement-cpfs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agreements")
+        .select("client_cpf")
+        .in("status", ["pending", "approved"]);
+      if (error) throw error;
+      const cpfSet = new Set<string>();
+      (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
+      return cpfSet;
+    },
   });
 
   const displayClients = useMemo(() => {
@@ -262,98 +279,130 @@ const CarteiraPage = () => {
         </div>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
-
-      {/* Client table */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-        ) : displayClients.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">Nenhum cliente encontrado</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-              <TableRow className="bg-muted/50">
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={selectedIds.size === displayClients.length && displayClients.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>CPF</TableHead>
-                  <TableHead>Credor</TableHead>
-                  <TableHead className="text-center">Parcela</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Valor da Parcela</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayClients.map((client) => (
-                  <TableRow key={client.id} className={`transition-colors ${selectedIds.has(client.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(client.id)}
-                        onCheckedChange={() => toggleSelect(client.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        className="font-medium text-primary hover:underline cursor-pointer text-left"
-                        onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
-                      >
-                        {client.nome_completo}
-                      </button>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
-                    <TableCell className="text-muted-foreground">{client.credor}</TableCell>
-                    <TableCell className="text-center">{client.numero_parcela}</TableCell>
-                    <TableCell>{formatDate(client.data_vencimento)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
-                    <TableCell className="text-center">
-                      {getStatusIcon(client)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-primary hover:text-primary"
-                          onClick={() => navigate(`/atendimento/${client.id}`)}
-                          title="Atender"
-                        >
-                          <Headset className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => handleEdit(client)}
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeletingClient(client)}
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
+        </div>
+        <div className="flex items-center border border-border rounded-lg overflow-hidden shrink-0">
+          <Button
+            variant={viewMode === "list" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none gap-1.5"
+            onClick={() => setViewMode("list")}
+          >
+            <LayoutList className="w-4 h-4" />
+            Lista
+          </Button>
+          <Button
+            variant={viewMode === "kanban" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none gap-1.5"
+            onClick={() => setViewMode("kanban")}
+          >
+            <Kanban className="w-4 h-4" />
+            Kanban
+          </Button>
+        </div>
       </div>
+
+      {viewMode === "kanban" ? (
+        <CarteiraKanban
+          clients={displayClients}
+          loading={isLoading}
+          agreementCpfs={agreementCpfs}
+        />
+      ) : (
+        /* Client table */
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Carregando...</div>
+          ) : displayClients.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">Nenhum cliente encontrado</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                <TableRow className="bg-muted/50">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={selectedIds.size === displayClients.length && displayClients.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CPF</TableHead>
+                    <TableHead>Credor</TableHead>
+                    <TableHead className="text-center">Parcela</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead className="text-right">Valor da Parcela</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayClients.map((client) => (
+                    <TableRow key={client.id} className={`transition-colors ${selectedIds.has(client.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(client.id)}
+                          onCheckedChange={() => toggleSelect(client.id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          className="font-medium text-primary hover:underline cursor-pointer text-left"
+                          onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                        >
+                          {client.nome_completo}
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
+                      <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                      <TableCell className="text-center">{client.numero_parcela}</TableCell>
+                      <TableCell>{formatDate(client.data_vencimento)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
+                      <TableCell className="text-center">
+                        {getStatusIcon(client)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-primary hover:text-primary"
+                            onClick={() => navigate(`/atendimento/${client.id}`)}
+                            title="Atender"
+                          >
+                            <Headset className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(client)}
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeletingClient(client)}
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={handleCloseForm}>
