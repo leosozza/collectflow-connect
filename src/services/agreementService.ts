@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { addMonths } from "date-fns";
 import { logAction } from "@/services/auditService";
+import { autoCancelProtestsForCpf } from "@/services/protestoService";
 
 export interface Agreement {
   id: string;
@@ -120,6 +121,13 @@ export const approveAgreement = async (
     .insert(records as any);
 
   if (insertError) throw insertError;
+
+  // Auto-cancel active protest titles for this CPF
+  try {
+    await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
+  } catch (e) {
+    console.error("Erro ao cancelar protestos automaticamente:", e);
+  }
 };
 
 export const rejectAgreement = async (

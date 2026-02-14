@@ -1239,6 +1239,141 @@ export type Database = {
           },
         ]
       }
+      protest_logs: {
+        Row: {
+          action: string
+          created_at: string
+          created_by: string | null
+          details: Json | null
+          id: string
+          message: string | null
+          protest_title_id: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json | null
+          id?: string
+          message?: string | null
+          protest_title_id?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json | null
+          id?: string
+          message?: string | null
+          protest_title_id?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protest_logs_protest_title_id_fkey"
+            columns: ["protest_title_id"]
+            isOneToOne: false
+            referencedRelation: "protest_titles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protest_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      protest_titles: {
+        Row: {
+          cancelled_at: string | null
+          cartorio: string | null
+          cenprot_protocol: string | null
+          client_id: string | null
+          cpf: string
+          created_at: string
+          created_by: string | null
+          credor: string
+          data_vencimento: string
+          especie: string | null
+          id: string
+          nome_devedor: string
+          numero_titulo: string | null
+          protested_at: string | null
+          rejection_reason: string | null
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cartorio?: string | null
+          cenprot_protocol?: string | null
+          client_id?: string | null
+          cpf: string
+          created_at?: string
+          created_by?: string | null
+          credor: string
+          data_vencimento: string
+          especie?: string | null
+          id?: string
+          nome_devedor: string
+          numero_titulo?: string | null
+          protested_at?: string | null
+          rejection_reason?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          cancelled_at?: string | null
+          cartorio?: string | null
+          cenprot_protocol?: string | null
+          client_id?: string | null
+          cpf?: string
+          created_at?: string
+          created_by?: string | null
+          credor?: string
+          data_vencimento?: string
+          especie?: string | null
+          id?: string
+          nome_devedor?: string
+          numero_titulo?: string | null
+          protested_at?: string | null
+          rejection_reason?: string | null
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "protest_titles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "protest_titles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quick_replies: {
         Row: {
           category: string
