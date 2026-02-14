@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { addMonths } from "date-fns";
 import { logAction } from "@/services/auditService";
 import { autoCancelProtestsForCpf } from "@/services/protestoService";
+import { autoCancelSerasaForCpf } from "@/services/serasaService";
 
 export interface Agreement {
   id: string;
@@ -127,6 +128,13 @@ export const approveAgreement = async (
     await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
   } catch (e) {
     console.error("Erro ao cancelar protestos automaticamente:", e);
+  }
+
+  // Auto-remove Serasa negativations for this CPF
+  try {
+    await autoCancelSerasaForCpf(agreement.client_cpf, agreement.tenant_id, userId);
+  } catch (e) {
+    console.error("Erro ao remover negativações Serasa automaticamente:", e);
   }
 };
 
