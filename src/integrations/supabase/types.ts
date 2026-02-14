@@ -1412,6 +1412,135 @@ export type Database = {
           },
         ]
       }
+      serasa_logs: {
+        Row: {
+          action: string
+          created_at: string
+          created_by: string | null
+          details: Json | null
+          id: string
+          message: string | null
+          serasa_record_id: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json | null
+          id?: string
+          message?: string | null
+          serasa_record_id?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json | null
+          id?: string
+          message?: string | null
+          serasa_record_id?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "serasa_logs_serasa_record_id_fkey"
+            columns: ["serasa_record_id"]
+            isOneToOne: false
+            referencedRelation: "serasa_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "serasa_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      serasa_records: {
+        Row: {
+          client_id: string | null
+          cpf: string
+          created_at: string
+          created_by: string | null
+          credor: string
+          data_vencimento: string
+          id: string
+          natureza_operacao: string | null
+          negativated_at: string | null
+          nome_devedor: string
+          numero_contrato: string | null
+          rejection_reason: string | null
+          removed_at: string | null
+          serasa_protocol: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          client_id?: string | null
+          cpf: string
+          created_at?: string
+          created_by?: string | null
+          credor: string
+          data_vencimento: string
+          id?: string
+          natureza_operacao?: string | null
+          negativated_at?: string | null
+          nome_devedor: string
+          numero_contrato?: string | null
+          rejection_reason?: string | null
+          removed_at?: string | null
+          serasa_protocol?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          client_id?: string | null
+          cpf?: string
+          created_at?: string
+          created_by?: string | null
+          credor?: string
+          data_vencimento?: string
+          id?: string
+          natureza_operacao?: string | null
+          negativated_at?: string | null
+          nome_devedor?: string
+          numero_contrato?: string | null
+          rejection_reason?: string | null
+          removed_at?: string | null
+          serasa_protocol?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "serasa_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "serasa_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_users: {
         Row: {
           created_at: string | null
