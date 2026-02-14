@@ -251,7 +251,27 @@ const CarteiraPage = () => {
             Gerencie as parcelas, pagamentos e clientes
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center border border-border rounded-lg overflow-hidden">
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-none gap-1.5"
+              onClick={() => setViewMode("list")}
+            >
+              <LayoutList className="w-4 h-4" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === "kanban" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-none gap-1.5"
+              onClick={() => setViewMode("kanban")}
+            >
+              <Kanban className="w-4 h-4" />
+              Kanban
+            </Button>
+          </div>
           {selectedIds.size > 0 && (
             <>
               <Button variant="outline" onClick={() => setWhatsappOpen(true)} className="gap-2 border-green-600 text-green-600">
@@ -279,31 +299,7 @@ const CarteiraPage = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex-1">
-          <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
-        </div>
-        <div className="flex items-center border border-border rounded-lg overflow-hidden shrink-0">
-          <Button
-            variant={viewMode === "list" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none gap-1.5"
-            onClick={() => setViewMode("list")}
-          >
-            <LayoutList className="w-4 h-4" />
-            Lista
-          </Button>
-          <Button
-            variant={viewMode === "kanban" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none gap-1.5"
-            onClick={() => setViewMode("kanban")}
-          >
-            <Kanban className="w-4 h-4" />
-            Kanban
-          </Button>
-        </div>
-      </div>
+      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} onExportExcel={handleExportExcel} />
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
