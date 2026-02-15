@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, Pencil, Check } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Pencil, Check, Copy, Upload, ImageIcon } from "lucide-react";
 import CredorReguaTab from "./CredorReguaTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
   const [editingTemplate, setEditingTemplate] = useState({ acordo: false, recibo: false, quitacao: false });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -364,6 +367,108 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
               {form.portal_enabled && (
                 <div className="space-y-4 animate-fade-in">
+                  {/* Link copiável do Portal */}
+                  {tenant?.slug && (
+                    <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+                      <Label className="text-sm font-medium">Link do Portal</Label>
+                      <p className="text-xs text-muted-foreground mb-2">Copie e envie este link aos devedores para que acessem o portal de negociação.</p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          readOnly
+                          value={`${window.location.origin}/portal/${tenant.slug}`}
+                          className="flex-1 bg-background font-mono text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 shrink-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/portal/${tenant.slug}`);
+                            toast.success("Link copiado!");
+                          }}
+                        >
+                          <Copy className="w-3.5 h-3.5" /> Copiar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload de Logo */}
+                  <div>
+                    <Label className="text-sm font-medium">Logo do Credor</Label>
+                    <p className="text-xs text-muted-foreground mb-2">Faça upload da imagem ou cole uma URL externa.</p>
+                    <div className="flex items-start gap-4">
+                      <div
+                        className="w-24 h-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors overflow-hidden shrink-0"
+                        onClick={() => logoInputRef.current?.click()}
+                      >
+                        {form.portal_logo_url ? (
+                          <img src={form.portal_logo_url} alt="Logo preview" className="w-full h-full object-contain" />
+                        ) : (
+                          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                            <ImageIcon className="w-6 h-6" />
+                            <span className="text-[10px]">Upload</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.svg,.webp"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast.error("Imagem deve ter no máximo 2MB");
+                              return;
+                            }
+                            setUploadingLogo(true);
+                            try {
+                              const credorId = editing?.id || "new";
+                              const ext = file.name.split(".").pop();
+                              const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
+                              const { error: uploadError } = await supabase.storage
+                                .from("avatars")
+                                .upload(path, file, { upsert: true });
+                              if (uploadError) throw uploadError;
+                              const { data: urlData } = supabase.storage
+                                .from("avatars")
+                                .getPublicUrl(path);
+                              set("portal_logo_url", urlData.publicUrl);
+                              toast.success("Logo enviado com sucesso!");
+                            } catch (err) {
+                              console.error(err);
+                              toast.error("Erro ao enviar logo");
+                            } finally {
+                              setUploadingLogo(false);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={uploadingLogo}
+                          onClick={() => logoInputRef.current?.click()}
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          {uploadingLogo ? "Enviando..." : "Fazer Upload"}
+                        </Button>
+                        <Input
+                          value={form.portal_logo_url || ""}
+                          onChange={e => set("portal_logo_url", e.target.value)}
+                          placeholder="Ou cole a URL do logo aqui..."
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
                       <Label>Título do Hero</Label>
@@ -379,10 +484,6 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                         <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-12 h-10 p-1 cursor-pointer" />
                         <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1" />
                       </div>
-                    </div>
-                    <div>
-                      <Label>URL do Logo</Label>
-                      <Input value={form.portal_logo_url || ""} onChange={e => set("portal_logo_url", e.target.value)} placeholder="https://..." />
                     </div>
                   </div>
 
