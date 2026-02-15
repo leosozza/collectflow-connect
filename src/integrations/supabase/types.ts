@@ -494,6 +494,7 @@ export type Database = {
         Row: {
           channel: string
           created_at: string | null
+          credor_id: string | null
           days_offset: number
           id: string
           is_active: boolean | null
@@ -505,6 +506,7 @@ export type Database = {
         Insert: {
           channel?: string
           created_at?: string | null
+          credor_id?: string | null
           days_offset?: number
           id?: string
           is_active?: boolean | null
@@ -516,6 +518,7 @@ export type Database = {
         Update: {
           channel?: string
           created_at?: string | null
+          credor_id?: string | null
           days_offset?: number
           id?: string
           is_active?: boolean | null
@@ -525,6 +528,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "collection_rules_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "collection_rules_tenant_id_fkey"
             columns: ["tenant_id"]

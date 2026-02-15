@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface CollectionRule {
   id: string;
   tenant_id: string;
+  credor_id: string | null;
   name: string;
   channel: "whatsapp" | "email" | "both";
   days_offset: number;
@@ -27,12 +28,14 @@ export interface MessageLog {
   created_at: string;
 }
 
-export const fetchCollectionRules = async (tenantId: string): Promise<CollectionRule[]> => {
-  const { data, error } = await supabase
+export const fetchCollectionRules = async (tenantId: string, credorId?: string): Promise<CollectionRule[]> => {
+  let query = supabase
     .from("collection_rules")
     .select("*")
     .eq("tenant_id", tenantId)
     .order("days_offset", { ascending: true });
+  if (credorId) query = query.eq("credor_id", credorId);
+  const { data, error } = await query;
   if (error) throw error;
   return (data as unknown as CollectionRule[]) || [];
 };
