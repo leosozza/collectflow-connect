@@ -4,7 +4,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, Pencil, Copy, Upload, ImageIcon, FileText } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
 import CredorReguaTab from "./CredorReguaTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const BANCOS = ["Banco do Brasil", "Itaú", "Bradesco", "Santander", "Caixa Econômica", "Nubank", "Inter", "Sicoob", "Sicredi", "Safra", "BTG Pactual", "Outro"];
 const GATEWAYS = ["Negociarie", "Asaas", "Mercado Pago", "PagSeguro", "Outro"];
@@ -45,6 +46,13 @@ Colocamo-nos à disposição para negociação e regularização do débito.
 {razao_social_credor}
 CNPJ: {cnpj_credor}`;
 
+const TEMPLATE_DEFAULTS: Record<string, string> = {
+  template_acordo: TEMPLATE_ACORDO_DEFAULT,
+  template_recibo: TEMPLATE_RECIBO_DEFAULT,
+  template_quitacao: TEMPLATE_QUITACAO_DEFAULT,
+  template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT,
+};
+
 const VARIAVEIS = [
   "{nome_devedor}", "{cpf_devedor}", "{valor_divida}", "{valor_acordo}", "{quantidade_parcelas}",
   "{valor_parcela}", "{data_vencimento}", "{desconto_concedido}", "{razao_social_credor}", "{cnpj_credor}",
@@ -57,6 +65,16 @@ interface CredorFormProps {
   editing: any;
 }
 
+const FORMATTING_TOOLS = [
+  { icon: Bold, label: "Negrito", prefix: "**", suffix: "**" },
+  { icon: Italic, label: "Itálico", prefix: "_", suffix: "_" },
+  { icon: Underline, label: "Sublinhado", prefix: "__", suffix: "__" },
+  { icon: Heading1, label: "Título 1", prefix: "# ", suffix: "" },
+  { icon: Heading2, label: "Título 2", prefix: "## ", suffix: "" },
+  { icon: List, label: "Lista", prefix: "• ", suffix: "" },
+  { icon: Type, label: "Texto Grande", prefix: "### ", suffix: "" },
+];
+
 const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
@@ -66,12 +84,18 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [openTemplateDialog, setOpenTemplateDialog] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   useEffect(() => {
     if (open) {
       setOpenTemplateDialog(null);
       if (editing) {
-        setForm({ ...editing });
+        const editData = { ...editing };
+        // Item 1: fallback to defaults for empty templates
+        Object.entries(TEMPLATE_DEFAULTS).forEach(([key, defaultVal]) => {
+          if (!editData[key]) editData[key] = defaultVal;
+        });
+        setForm(editData);
         setHonorarios(editing.honorarios_grade || []);
       } else {
         setForm({
@@ -113,12 +137,42 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     });
   };
 
-  const addHonorario = () => setHonorarios(prev => [...prev, { faixa: "", honorario: 0 }]);
+  const addHonorario = () => setHonorarios(prev => [...prev, { faixa: "", honorario: 0, valor_fixo: 0 }]);
   const removeHonorario = (i: number) => setHonorarios(prev => prev.filter((_, idx) => idx !== i));
   const updateHonorario = (i: number, key: string, val: any) => setHonorarios(prev => prev.map((h, idx) => idx === i ? { ...h, [key]: val } : h));
 
   const insertVariable = (field: string, variable: string) => {
-    set(field, (form[field] || "") + variable);
+    const ta = textareaRefs.current[field];
+    if (ta) {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const text = form[field] || "";
+      const newText = text.substring(0, start) + variable + text.substring(end);
+      set(field, newText);
+      setTimeout(() => {
+        ta.focus();
+        ta.setSelectionRange(start + variable.length, start + variable.length);
+      }, 0);
+    } else {
+      set(field, (form[field] || "") + variable);
+    }
+  };
+
+  const applyFormatting = (field: string, prefix: string, suffix: string) => {
+    const ta = textareaRefs.current[field];
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const text = form[field] || "";
+    const selected = text.substring(start, end);
+    const replacement = selected ? `${prefix}${selected}${suffix}` : `${prefix}texto${suffix}`;
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+    set(field, newText);
+    setTimeout(() => {
+      ta.focus();
+      const cursorPos = start + replacement.length;
+      ta.setSelectionRange(cursorPos, cursorPos);
+    }, 0);
   };
 
   const TEMPLATES = [
@@ -170,7 +224,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             </div>
           </TabsContent>
 
-          {/* ABA 2 - BANCÁRIO / GATEWAY */}
+          {/* ABA 2 - BANCÁRIO / GATEWAY - Item 9: removed footer message */}
           <TabsContent value="bancario" className="space-y-4 mt-4">
             <p className="text-sm font-medium text-foreground">Dados Bancários</p>
             <div className="grid grid-cols-2 gap-4">
@@ -219,7 +273,6 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                   </Select>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 bg-muted/50 p-2 rounded">ℹ️ Este gateway será usado automaticamente ao gerar acordos deste credor.</p>
             </div>
           </TabsContent>
 
@@ -230,16 +283,24 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Parcelas Mínimas</Label><Input type="number" value={form.parcelas_min ?? 1} onChange={e => set("parcelas_min", parseInt(e.target.value) || 1)} /></div>
                 <div><Label>Parcelas Máximas</Label><Input type="number" value={form.parcelas_max ?? 12} onChange={e => set("parcelas_max", parseInt(e.target.value) || 12)} /></div>
-                <div>
-                  <Label className="flex items-center justify-between">
-                    Entrada Mínima
-                    <div className="flex items-center gap-2 text-xs">
-                      <span>R$</span>
-                      <Switch checked={form.entrada_minima_tipo === "percent"} onCheckedChange={c => set("entrada_minima_tipo", c ? "percent" : "fixed")} />
-                      <span>%</span>
-                    </div>
-                  </Label>
-                  <Input type="number" value={form.entrada_minima_valor ?? 0} onChange={e => set("entrada_minima_valor", parseFloat(e.target.value) || 0)} />
+                {/* Item 3: Replaced Switch with Select for entrada minima */}
+                <div className="col-span-2">
+                  <Label>Entrada Mínima</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    <Input
+                      type="number"
+                      value={form.entrada_minima_valor ?? 0}
+                      onChange={e => set("entrada_minima_valor", parseFloat(e.target.value) || 0)}
+                      className="flex-1"
+                    />
+                    <Select value={form.entrada_minima_tipo || "percent"} onValueChange={v => set("entrada_minima_tipo", v)}>
+                      <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                        <SelectItem value="percent">Percentual (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div><Label>Desconto Máximo (%)</Label><Input type="number" value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", parseFloat(e.target.value) || 0)} /></div>
                 <div><Label>Juros ao Mês (%)</Label><Input type="number" value={form.juros_mes ?? 0} onChange={e => set("juros_mes", parseFloat(e.target.value) || 0)} /></div>
@@ -247,22 +308,31 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </div>
             </div>
 
+            {/* Item 4: Added Valor Fixo column to honorarios */}
             <div className="border-t border-border pt-4">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <p className="text-sm font-medium text-foreground">Grade de Honorários</p>
-                  <p className="text-xs text-muted-foreground">Defina os honorários baseado no percentual de recuperação da carteira.</p>
+                  <p className="text-xs text-muted-foreground">Defina os honorários por percentual ou valor fixo.</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={addHonorario}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
               </div>
               {honorarios.length > 0 && (
                 <Table>
-                  <TableHeader><TableRow><TableHead>Percentual Recuperado (%)</TableHead><TableHead>Honorários (%)</TableHead><TableHead className="w-16">Ações</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Faixa Recuperada</TableHead>
+                      <TableHead>Honorários (%)</TableHead>
+                      <TableHead>Valor Fixo (R$)</TableHead>
+                      <TableHead className="w-12">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {honorarios.map((h, i) => (
                       <TableRow key={i}>
                         <TableCell><Input value={h.faixa} onChange={e => updateHonorario(i, "faixa", e.target.value)} placeholder="Ex: Até 50%" className="h-8" /></TableCell>
-                        <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" /></TableCell>
+                        <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                        <TableCell><Input type="number" value={h.valor_fixo || 0} onChange={e => updateHonorario(i, "valor_fixo", parseFloat(e.target.value) || 0)} className="h-8" placeholder="R$" /></TableCell>
                         <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeHonorario(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
                       </TableRow>
                     ))}
@@ -271,6 +341,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               )}
             </div>
 
+            {/* Item 2: Enlarged dialog with formatting toolbar */}
             <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
               {TEMPLATES.map(t => (
@@ -287,26 +358,56 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
               {TEMPLATES.map(t => (
                 <Dialog key={t.key} open={openTemplateDialog === t.key} onOpenChange={open => setOpenTemplateDialog(open ? t.key : null)}>
-                  <DialogContent className="sm:max-w-lg">
+                  <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                       <DialogTitle>Editar: {t.label}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" type="button">
-                            Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
-                          <div className="space-y-1">
-                            {VARIAVEIS.map(v => (
-                              <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
-                            ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <Textarea rows={8} value={form[t.key] || ""} onChange={e => set(t.key, e.target.value)} className="font-mono text-xs" />
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" type="button">
+                              Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
+                            <div className="space-y-1">
+                              {VARIAVEIS.map(v => (
+                                <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        <div className="h-6 w-px bg-border mx-1" />
+
+                        <TooltipProvider delayDuration={300}>
+                          {FORMATTING_TOOLS.map(tool => (
+                            <Tooltip key={tool.label}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  type="button"
+                                  className="h-8 w-8"
+                                  onClick={() => applyFormatting(t.key, tool.prefix, tool.suffix)}
+                                >
+                                  <tool.icon className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom"><p className="text-xs">{tool.label}</p></TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </TooltipProvider>
+                      </div>
+
+                      <Textarea
+                        rows={12}
+                        value={form[t.key] || ""}
+                        onChange={e => set(t.key, e.target.value)}
+                        className="font-mono text-xs"
+                        ref={el => { textareaRefs.current[t.key] = el; }}
+                      />
                     </div>
                     <DialogFooter>
                       <Button type="button" onClick={() => setOpenTemplateDialog(null)}>Concluir</Button>
@@ -375,7 +476,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             </div>
           </TabsContent>
 
-          {/* ABA 6 - PORTAL WHITE-LABEL */}
+          {/* ABA 6 - PORTAL WHITE-LABEL - Items 6, 7, 8 */}
           <TabsContent value="portal" className="space-y-4 mt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg border border-border">
@@ -388,22 +489,25 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
               {form.portal_enabled && (
                 <div className="space-y-4 animate-fade-in">
-                  {/* Link copiável do Portal */}
+                  {/* Item 7: Redesigned Portal Link */}
                   {tenant?.slug && (
-                    <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
-                      <Label className="text-sm font-medium">Link do Portal</Label>
-                      <p className="text-xs text-muted-foreground mb-2">Copie e envie este link aos devedores para que acessem o portal de negociação.</p>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          readOnly
-                          value={`${window.location.origin}/portal/${tenant.slug}`}
-                          className="flex-1 bg-background font-mono text-xs"
-                        />
+                    <Card className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <Link className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground">Link do Portal</p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {`${window.location.origin}/portal/${tenant.slug}`}
+                            </p>
+                          </div>
+                        </div>
                         <Button
                           type="button"
-                          variant="outline"
                           size="sm"
-                          className="gap-1.5 shrink-0"
+                          className="gap-1.5 shrink-0 ml-3"
                           onClick={() => {
                             navigator.clipboard.writeText(`${window.location.origin}/portal/${tenant.slug}`);
                             toast.success("Link copiado!");
@@ -412,63 +516,62 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                           <Copy className="w-3.5 h-3.5" /> Copiar
                         </Button>
                       </div>
-                    </div>
+                    </Card>
                   )}
 
-                  {/* Upload de Logo */}
-                  <div>
-                    <Label className="text-sm font-medium">Logo do Credor</Label>
-                    <p className="text-xs text-muted-foreground mb-2">Faça upload da imagem ou cole uma URL externa.</p>
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="w-24 h-24 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors overflow-hidden shrink-0"
-                        onClick={() => logoInputRef.current?.click()}
-                      >
-                        {form.portal_logo_url ? (
-                          <img src={form.portal_logo_url} alt="Logo preview" className="w-full h-full object-contain" />
-                        ) : (
-                          <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                            <ImageIcon className="w-6 h-6" />
-                            <span className="text-[10px]">Upload</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        <input
-                          ref={logoInputRef}
-                          type="file"
-                          accept=".png,.jpg,.jpeg,.svg,.webp"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (file.size > 2 * 1024 * 1024) {
-                              toast.error("Imagem deve ter no máximo 2MB");
-                              return;
-                            }
-                            setUploadingLogo(true);
-                            try {
-                              const credorId = editing?.id || "new";
-                              const ext = file.name.split(".").pop();
-                              const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
-                              const { error: uploadError } = await supabase.storage
-                                .from("avatars")
-                                .upload(path, file, { upsert: true });
-                              if (uploadError) throw uploadError;
-                              const { data: urlData } = supabase.storage
-                                .from("avatars")
-                                .getPublicUrl(path);
-                              set("portal_logo_url", urlData.publicUrl);
-                              toast.success("Logo enviado com sucesso!");
-                            } catch (err) {
-                              console.error(err);
-                              toast.error("Erro ao enviar logo");
-                            } finally {
-                              setUploadingLogo(false);
-                              e.target.value = "";
-                            }
-                          }}
-                        />
+                  {/* Item 8: Optimized layout - Logo + Color grouped */}
+                  <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
+                    {/* Logo Upload */}
+                    <div
+                      className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors overflow-hidden shrink-0"
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      {form.portal_logo_url ? (
+                        <img src={form.portal_logo_url} alt="Logo preview" className="w-full h-full object-contain" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                          <ImageIcon className="w-5 h-5" />
+                          <span className="text-[9px]">Logo</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.svg,.webp"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.error("Imagem deve ter no máximo 2MB");
+                            return;
+                          }
+                          setUploadingLogo(true);
+                          try {
+                            const credorId = editing?.id || "new";
+                            const ext = file.name.split(".").pop();
+                            const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
+                            const { error: uploadError } = await supabase.storage
+                              .from("avatars")
+                              .upload(path, file, { upsert: true });
+                            if (uploadError) throw uploadError;
+                            const { data: urlData } = supabase.storage
+                              .from("avatars")
+                              .getPublicUrl(path);
+                            set("portal_logo_url", urlData.publicUrl);
+                            toast.success("Logo enviado com sucesso!");
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Erro ao enviar logo");
+                          } finally {
+                            setUploadingLogo(false);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -478,52 +581,33 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                           onClick={() => logoInputRef.current?.click()}
                         >
                           <Upload className="w-3.5 h-3.5" />
-                          {uploadingLogo ? "Enviando..." : "Fazer Upload"}
+                          {uploadingLogo ? "Enviando..." : "Upload"}
                         </Button>
                         <Input
                           value={form.portal_logo_url || ""}
                           onChange={e => set("portal_logo_url", e.target.value)}
-                          placeholder="Ou cole a URL do logo aqui..."
-                          className="text-xs"
+                          placeholder="Ou cole a URL do logo..."
+                          className="text-xs flex-1"
                         />
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs shrink-0">Cor Primária</Label>
+                        <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-10 h-8 p-0.5 cursor-pointer" />
+                        <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1 text-xs" />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <Label>Título do Hero</Label>
-                      <Input value={form.portal_hero_title || ""} onChange={e => set("portal_hero_title", e.target.value)} placeholder="Ex: Negocie suas dívidas com até 90% de desconto" />
-                    </div>
-                    <div className="col-span-2">
-                      <Label>Subtítulo do Hero</Label>
-                      <Input value={form.portal_hero_subtitle || ""} onChange={e => set("portal_hero_subtitle", e.target.value)} placeholder="Consulte suas pendências e encontre as melhores condições" />
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <Label className="text-xs">Título do Hero</Label>
+                      <Input value={form.portal_hero_title || ""} onChange={e => set("portal_hero_title", e.target.value)} placeholder="Ex: Negocie suas dívidas com até 90% de desconto" className="text-xs" />
                     </div>
                     <div>
-                      <Label>Cor Primária</Label>
-                      <div className="flex items-center gap-2">
-                        <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-12 h-10 p-1 cursor-pointer" />
-                        <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1" />
-                      </div>
+                      <Label className="text-xs">Subtítulo do Hero</Label>
+                      <Input value={form.portal_hero_subtitle || ""} onChange={e => set("portal_hero_subtitle", e.target.value)} placeholder="Consulte suas pendências e encontre as melhores condições" className="text-xs" />
                     </div>
                   </div>
-
-                  {form.portal_primary_color && (
-                    <div className="border border-border rounded-lg p-4">
-                      <p className="text-xs text-muted-foreground mb-2">Preview</p>
-                      <div className="flex items-center gap-3">
-                        {form.portal_logo_url && <img src={form.portal_logo_url} alt="Logo" className="h-8 w-auto" />}
-                        <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: form.portal_primary_color }}>
-                          {(form.nome_fantasia || form.razao_social || "C")?.[0]?.toUpperCase()}
-                        </div>
-                        <span className="font-semibold" style={{ color: form.portal_primary_color }}>{form.nome_fantasia || form.razao_social || "Credor"}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                    ℹ️ Quando ativo, os devedores deste credor verão a identidade visual personalizada no portal de negociação.
-                  </p>
                 </div>
               )}
             </div>
