@@ -276,9 +276,6 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         </Table>
       )}
 
-      <p className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg">
-        ℹ️ Mensagens serão disparadas automaticamente com base no vencimento das parcelas dos clientes vinculados a este credor. D-3 = 3 dias antes, D+5 = 5 dias após.
-      </p>
     </div>
   );
 };
