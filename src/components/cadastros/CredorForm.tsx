@@ -26,6 +26,24 @@ const GATEWAYS = ["Negociarie", "Asaas", "Mercado Pago", "PagSeguro", "Outro"];
 const TEMPLATE_ACORDO_DEFAULT = "Pelo presente instrumento, {razao_social_credor}, CNPJ {cnpj_credor}, e {nome_devedor}, CPF {cpf_devedor}, acordam o pagamento da dívida no valor de R$ {valor_divida}, com desconto de {desconto_concedido}%, totalizando R$ {valor_acordo}, em {quantidade_parcelas} parcelas de R$ {valor_parcela}, vencendo a primeira em {data_vencimento}.";
 const TEMPLATE_RECIBO_DEFAULT = "Recebi de {nome_devedor}, CPF {cpf_devedor}, a quantia de R$ {valor_pago}, referente à parcela {numero_parcela}/{total_parcelas} do acordo firmado em {data_acordo}. {razao_social_credor} - CNPJ {cnpj_credor}. Data: {data_pagamento}";
 const TEMPLATE_QUITACAO_DEFAULT = "{razao_social_credor}, CNPJ {cnpj_credor}, declara para os devidos fins que {nome_devedor}, CPF {cpf_devedor}, quitou integralmente o débito no valor original de R$ {valor_divida}, mediante acordo de {quantidade_parcelas} parcelas. Nada mais há a reclamar. Data: {data_atual}";
+const TEMPLATE_DESCRICAO_DIVIDA_DEFAULT = `DESCRIÇÃO DE DÍVIDA
+
+Credor: {razao_social_credor} - CNPJ: {cnpj_credor}
+Devedor: {nome_devedor} - CPF: {cpf_devedor}
+
+Informamos que consta em nossos registros o seguinte débito em nome do devedor acima qualificado:
+
+Valor Original: R$ {valor_divida}
+Data de Vencimento: {data_vencimento}
+Parcela: {numero_parcela}/{total_parcelas}
+Valor da Parcela: R$ {valor_parcela}
+
+O débito acima descrito encontra-se vencido e não quitado até a presente data ({data_atual}), estando sujeito à incidência de juros, multa e correção monetária conforme previsto contratualmente.
+
+Colocamo-nos à disposição para negociação e regularização do débito.
+
+{razao_social_credor}
+CNPJ: {cnpj_credor}`;
 
 const VARIAVEIS = [
   "{nome_devedor}", "{cpf_devedor}", "{valor_divida}", "{valor_acordo}", "{quantidade_parcelas}",
@@ -60,7 +78,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
           parcelas_min: 1, parcelas_max: 12, entrada_minima_valor: 0, entrada_minima_tipo: "percent",
           desconto_maximo: 0, juros_mes: 0, multa: 0,
-          template_acordo: TEMPLATE_ACORDO_DEFAULT, template_recibo: TEMPLATE_RECIBO_DEFAULT, template_quitacao: TEMPLATE_QUITACAO_DEFAULT,
+          template_acordo: TEMPLATE_ACORDO_DEFAULT, template_recibo: TEMPLATE_RECIBO_DEFAULT, template_quitacao: TEMPLATE_QUITACAO_DEFAULT, template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT,
         });
         setHonorarios([]);
       }
@@ -107,6 +125,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     { key: "template_acordo", label: "Carta de Acordo" },
     { key: "template_recibo", label: "Recibo de Pagamento" },
     { key: "template_quitacao", label: "Carta de Quitação" },
+    { key: "template_descricao_divida", label: "Descrição de Dívida" },
   ];
 
   return (
