@@ -1,50 +1,43 @@
 
 
-## Otimizar seção "Modelos de Documentos" na aba Negociação
+## Adicionar template "Descricao de Divida" aos Modelos de Documentos
 
-### Problema atual
-Os três modelos de documentos (Carta de Acordo, Recibo de Pagamento, Carta de Quitação) aparecem todos expandidos com seus Textareas visíveis, ocupando muito espaço vertical e poluindo a interface.
+### O que sera feito
+Adicionar um quarto modelo de documento chamado **"Descricao de Divida"** na secao de Modelos de Documentos da aba Negociacao. Este documento serve para detalhar formalmente a divida do devedor, com informacoes como credor, valor, vencimento e composicao do debito. O template seguira o padrao de mercado utilizado por assessorias de cobranca.
 
-### Solução
-Transformar cada modelo em um **Card compacto** que mostra apenas o título e um botão "Editar". Ao clicar em "Editar", abre um **Dialog/Popover** com o Textarea e o botão de inserir variáveis. Isso deixa a seção limpa e organizada.
-
-### Layout proposto
+### Template padrao (modelo de mercado)
 
 ```text
-┌─────────────────────────────────────┐
-│  📄 Carta de Acordo        [Editar] │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│  📄 Recibo de Pagamento    [Editar] │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│  📄 Carta de Quitação      [Editar] │
-└─────────────────────────────────────┘
+DESCRICAO DE DIVIDA
 
-Ao clicar "Editar" abre:
-┌──────────────────────────────────────────┐
-│  Editar: Carta de Acordo                 │
-│  [Inserir Variável v]                    │
-│  ┌────────────────────────────────────┐  │
-│  │ Textarea com o template...         │  │
-│  │                                    │  │
-│  └────────────────────────────────────┘  │
-│                           [Concluir]     │
-└──────────────────────────────────────────┘
+Credor: {razao_social_credor} - CNPJ: {cnpj_credor}
+Devedor: {nome_devedor} - CPF: {cpf_devedor}
+
+Informamos que consta em nossos registros o seguinte debito em nome do devedor acima qualificado:
+
+Valor Original: R$ {valor_divida}
+Data de Vencimento: {data_vencimento}
+Parcela: {numero_parcela}/{total_parcelas}
+Valor da Parcela: R$ {valor_parcela}
+
+O debito acima descrito encontra-se vencido e nao quitado ate a presente data ({data_atual}), estando sujeito a incidencia de juros, multa e correcao monetaria conforme previsto contratualmente.
+
+Colocamo-nos a disposicao para negociacao e regularizacao do debito.
+
+{razao_social_credor}
+CNPJ: {cnpj_credor}
 ```
 
-### Detalhes Técnicos
+### Detalhes Tecnicos
 
-**Arquivo:** `src/components/cadastros/CredorForm.tsx`
+**1. Migracao de banco de dados** - Adicionar coluna `template_descricao_divida` na tabela `credores`:
+```sql
+ALTER TABLE credores ADD COLUMN template_descricao_divida text DEFAULT '';
+```
 
-1. Refatorar a seção "Modelos de Documentos" (linhas 279-296) para renderizar 3 Cards compactos com borda, titulo e botao "Editar"
-2. Ao clicar "Editar", abrir um `Dialog` contendo:
-   - Titulo do template
-   - Botao "Inserir Variavel" (reutilizando o Popover de variaveis existente)
-   - O Textarea editavel
-   - Botao "Concluir" para fechar
-3. Remover o estado `editingTemplate` - o Textarea dentro do Dialog sera sempre editavel
-4. Manter o componente `TemplateActions` simplificado (apenas o Popover de variaveis, sem toggle de editar/concluir)
-5. Usar os componentes `Card` e `Dialog` ja existentes no projeto
+**2. Arquivo:** `src/components/cadastros/CredorForm.tsx`
+- Adicionar constante `TEMPLATE_DESCRICAO_DIVIDA_DEFAULT` com o texto padrao acima
+- Adicionar entrada no array `TEMPLATES`: `{ key: "template_descricao_divida", label: "Descricao de Divida" }`
+- Incluir `template_descricao_divida` no estado inicial do formulario (quando nao ha edicao)
 
-Nenhuma alteracao de banco de dados necessaria.
+Nenhuma outra alteracao necessaria -- o card compacto e o Dialog de edicao ja sao renderizados dinamicamente pelo array `TEMPLATES`.
