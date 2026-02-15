@@ -1,8 +1,9 @@
+import { useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCPF, formatCurrency, formatDate, formatPhone } from "@/lib/formatters";
-import { ArrowLeft, User, Phone, Mail, Building, UserCheck, DollarSign, AlertTriangle, Headset } from "lucide-react";
+import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,17 +12,19 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import ClientAttachments from "@/components/clients/ClientAttachments";
+import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
+import ClientCollapsibleDetails from "@/components/client-detail/ClientCollapsibleDetails";
+import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
+  const acordoTabRef = useRef<HTMLButtonElement>(null);
 
-  // Fetch all client records for this CPF (handle both raw and formatted)
-  const { data: clients = [], isLoading } = useQuery({
+  const { data: clients = [], isLoading, refetch } = useQuery({
     queryKey: ["client-detail", cpf],
     queryFn: async () => {
       const rawCpf = (cpf || "").replace(/\D/g, "");
-      // Try both raw digits and formatted CPF
       const { data, error } = await supabase
         .from("clients")
         .select("*")
@@ -33,7 +36,6 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
-  // Fetch agreements for this CPF
   const { data: agreements = [] } = useQuery({
     queryKey: ["client-agreements", cpf],
     queryFn: async () => {
@@ -49,7 +51,6 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
-  // Fetch audit logs related to this CPF
   const { data: auditLogs = [] } = useQuery({
     queryKey: ["client-audit", cpf],
     queryFn: async () => {
@@ -60,7 +61,6 @@ const ClientDetailPage = () => {
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      // Filter by CPF in details
       return (data || []).filter((log: any) => {
         const details = log.details as any;
         return details?.cpf === cpf || details?.cpf === formatCPF(cpf || "");
@@ -85,77 +85,34 @@ const ClientDetailPage = () => {
   }
 
   const first = clients[0];
-  const formattedCpf = formatCPF(cpf || "");
   const totalAberto = clients
     .filter((c) => c.status === "pendente")
     .reduce((sum, c) => sum + Number(c.valor_parcela), 0);
-  const totalPago = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
   const pendentes = clients.filter((c) => c.status === "pendente");
 
+  const scrollToAcordo = () => {
+    acordoTabRef.current?.click();
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/carteira")}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{first.nome_completo}</h1>
-          <p className="text-muted-foreground text-sm">Detalhes do cliente</p>
-        </div>
-        <Button onClick={() => navigate(`/atendimento/${first.id}`)} className="gap-2 ml-auto">
-          <Headset className="w-4 h-4" />
-          Atender
-        </Button>
-      </div>
+    <div className="space-y-4 animate-fade-in">
+      <ClientDetailHeader
+        client={first}
+        cpf={cpf || ""}
+        totalAberto={totalAberto}
+        onScrollToAcordo={scrollToAcordo}
+      />
 
-      {/* Client Info - Clean list style */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">CPF</p>
-            <p className="text-sm font-semibold text-foreground">{formattedCpf}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Telefone</p>
-            <p className="text-sm font-semibold text-foreground">{first.phone ? formatPhone(first.phone) : "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Email</p>
-            <p className="text-sm font-semibold text-foreground truncate">{first.email || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
-            <p className="text-sm font-semibold text-foreground">{first.credor}</p>
-          </div>
-        </div>
-        <div className="border-t border-border mt-4 pt-4 grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Total em Aberto</p>
-            <p className="text-lg font-bold text-destructive">{formatCurrency(totalAberto)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Total Pago</p>
-            <p className="text-lg font-bold text-success">{formatCurrency(totalPago)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Parcelas</p>
-            <p className="text-lg font-bold text-foreground">
-              {clients.filter((c) => c.status === "pago").length}/{clients.length}
-            </p>
-          </div>
-        </div>
-      </div>
+      <ClientCollapsibleDetails clients={clients} first={first} />
 
-      {/* Tabs */}
       <Tabs defaultValue="titulos" className="space-y-4">
         <TabsList>
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
+          <TabsTrigger value="acordo" ref={acordoTabRef}>Acordo</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
         </TabsList>
 
-        {/* Tab: Titulos */}
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
@@ -193,14 +150,22 @@ const ClientDetailPage = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="acordo">
+          <AgreementCalculator
+            clients={clients}
+            cpf={cpf || ""}
+            clientName={first.nome_completo}
+            credor={first.credor}
+            onAgreementCreated={() => refetch()}
+          />
+        </TabsContent>
+
         <TabsContent value="historico">
           <Card>
             <CardContent className="p-4">
               <h3 className="font-semibold text-foreground mb-3">Histórico</h3>
               {(() => {
-                // Merge agreements and audit logs into a single chronological list
-                const items: { id: string; date: string; type: "acordo" | "ocorrencia"; content: React.ReactNode }[] = [];
-
+                const items: { id: string; date: string; type: string; content: React.ReactNode }[] = [];
                 agreements.forEach((a) => {
                   items.push({
                     id: `a-${a.id}`,
@@ -223,7 +188,6 @@ const ClientDetailPage = () => {
                     ),
                   });
                 });
-
                 auditLogs.forEach((log: any) => {
                   items.push({
                     id: `l-${log.id}`,
@@ -237,13 +201,10 @@ const ClientDetailPage = () => {
                     ),
                   });
                 });
-
                 items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
                 if (items.length === 0) {
                   return <p className="text-sm text-muted-foreground">Nenhum registro encontrado</p>;
                 }
-
                 return (
                   <div className="space-y-3">
                     {items.map((item) => (
@@ -259,6 +220,10 @@ const ClientDetailPage = () => {
               })()}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="anexos">
+          <ClientAttachments cpf={cpf || ""} />
         </TabsContent>
       </Tabs>
     </div>
