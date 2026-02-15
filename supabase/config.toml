@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.portal-checkout]
 verify_jwt = false
+
+[functions.calculate-propensity]
+verify_jwt = false

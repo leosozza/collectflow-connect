@@ -169,7 +169,24 @@ Deno.serve(async (req) => {
     const { data: debts, error } = await query;
     if (error) throw error;
 
-    return new Response(JSON.stringify({ debts: debts || [] }), {
+    // Fetch creditor portal settings for branding
+    let credorSettings: Record<string, any> = {};
+    if (tenantId && debts && debts.length > 0) {
+      const uniqueCredors = [...new Set(debts.map((d: any) => d.credor))];
+      const { data: credores } = await supabase
+        .from("credores")
+        .select("razao_social, nome_fantasia, portal_hero_title, portal_hero_subtitle, portal_logo_url, portal_primary_color, portal_enabled, desconto_maximo, parcelas_max, parcelas_min, juros_mes, multa, signature_enabled, signature_type")
+        .eq("tenant_id", tenantId)
+        .in("razao_social", uniqueCredors);
+
+      if (credores) {
+        for (const c of credores) {
+          credorSettings[c.razao_social] = c;
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ debts: debts || [], credorSettings }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

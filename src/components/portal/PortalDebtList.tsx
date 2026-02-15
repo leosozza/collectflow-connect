@@ -21,9 +21,10 @@ interface PortalDebtListProps {
   clientName: string;
   onBack: () => void;
   onNegotiate: (credor: string, debts: DebtItem[]) => void;
+  credorSettings?: Record<string, any>;
 }
 
-const PortalDebtList = ({ debts, clientName, onBack, onNegotiate }: PortalDebtListProps) => {
+const PortalDebtList = ({ debts, clientName, onBack, onNegotiate, credorSettings = {} }: PortalDebtListProps) => {
   const pendingDebts = debts.filter((d) => d.status === "pendente");
   const totalDebt = pendingDebts.reduce((s, d) => s + Number(d.valor_parcela), 0);
 
@@ -76,10 +77,19 @@ const PortalDebtList = ({ debts, clientName, onBack, onNegotiate }: PortalDebtLi
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: idx * 0.1 }}
             >
-              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow rounded-2xl">
+              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow rounded-2xl overflow-hidden">
+                {/* Creditor color bar */}
+                {credorSettings[credor]?.portal_primary_color && (
+                  <div className="h-1" style={{ backgroundColor: credorSettings[credor].portal_primary_color }} />
+                )}
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{credor}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {credorSettings[credor]?.portal_logo_url && (
+                        <img src={credorSettings[credor].portal_logo_url} alt={credor} className="h-6 w-auto" />
+                      )}
+                      <CardTitle className="text-lg">{credorSettings[credor]?.nome_fantasia || credor}</CardTitle>
+                    </div>
                     <span className="text-sm font-semibold text-foreground">{formatCurrency(credorTotal)}</span>
                   </div>
                   {overdue.length > 0 && (

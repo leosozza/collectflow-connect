@@ -33,6 +33,7 @@ const PortalPage = () => {
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [cpf, setCpf] = useState("");
   const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [credorSettings, setCredorSettings] = useState<Record<string, any>>({});
 
   // Negotiation state
   const [negotiateCredor, setNegotiateCredor] = useState("");
@@ -74,6 +75,7 @@ const PortalPage = () => {
       if (error) throw error;
       const results = data?.debts || [];
       setDebts(results);
+      if (data?.credorSettings) setCredorSettings(data.credorSettings);
       if (results.length > 0) {
         setView("debts");
       } else {
@@ -121,8 +123,12 @@ const PortalPage = () => {
     }
   };
 
-  const maxDiscount = (tenantInfo?.settings?.portal_max_discount as number) || 30;
-  const maxInstallments = (tenantInfo?.settings?.portal_max_installments as number) || 12;
+  // Use creditor-specific settings if available, fallback to tenant settings
+  const activeCredorConfig = credorSettings[negotiateCredor] || {};
+  const maxDiscount = activeCredorConfig.desconto_maximo || (tenantInfo?.settings?.portal_max_discount as number) || 30;
+  const maxInstallments = activeCredorConfig.parcelas_max || (tenantInfo?.settings?.portal_max_installments as number) || 12;
+  const credorColor = activeCredorConfig.portal_primary_color || tenantInfo?.primary_color;
+  const credorLogo = activeCredorConfig.portal_logo_url || tenantInfo?.logo_url;
   const clientName = debts[0]?.nome_completo || "";
 
   // Checkout / Term views
@@ -161,6 +167,7 @@ const PortalPage = () => {
             clientName={clientName}
             onBack={() => setView("hero")}
             onNegotiate={handleNegotiate}
+            credorSettings={credorSettings}
           />
         )}
 
@@ -172,6 +179,7 @@ const PortalPage = () => {
             clientCpf={cpf}
             maxDiscount={maxDiscount}
             maxInstallments={maxInstallments}
+            primaryColor={credorColor}
             onBack={() => setView("debts")}
             onSubmit={handleSubmitProposal}
             submitting={submitting}

@@ -5,6 +5,7 @@ import { Headset, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import PropensityBadge from "./PropensityBadge";
 
 interface CarteiraKanbanProps {
   clients: Client[];
@@ -160,9 +161,12 @@ const CarteiraKanban = ({ clients, loading, agreementCpfs }: CarteiraKanbanProps
                         <span className="text-xs text-muted-foreground">
                           Parcela {client.numero_parcela}/{client.total_parcelas}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(client.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <PropensityBadge score={(client as any).propensity_score} />
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(client.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))

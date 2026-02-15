@@ -23,9 +23,10 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import PropensityBadge from "@/components/carteira/PropensityBadge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -65,6 +66,23 @@ const CarteiraPage = () => {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [calculatingScore, setCalculatingScore] = useState(false);
+
+  const handleCalculateScore = async () => {
+    setCalculatingScore(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("calculate-propensity", {
+        body: {},
+      });
+      if (error) throw error;
+      toast.success(`Scores calculados com sucesso! (${data.scores?.length || 0} devedores, fonte: ${data.source || "ai"})`);
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao calcular scores");
+    } finally {
+      setCalculatingScore(false);
+    }
+  };
 
   const filtersWithOperator = {
     ...filters,
@@ -308,6 +326,10 @@ const CarteiraPage = () => {
                 <Download className="w-4 h-4" />
                 Exportar Devedores
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCalculateScore} disabled={calculatingScore} className="gap-2 cursor-pointer">
+                {calculatingScore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+                Calcular Score IA
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -345,6 +367,7 @@ const CarteiraPage = () => {
                     <TableHead className="text-center">Parcela</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-right">Valor da Parcela</TableHead>
+                    <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -371,6 +394,9 @@ const CarteiraPage = () => {
                       <TableCell className="text-center">{client.numero_parcela}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
+                      <TableCell className="text-center">
+                        <PropensityBadge score={(client as any).propensity_score} />
+                      </TableCell>
                       <TableCell className="text-center">
                         {getStatusIcon(client)}
                       </TableCell>
