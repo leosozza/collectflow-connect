@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import ClientAttachments from "@/components/clients/ClientAttachments";
 import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
 import ClientCollapsibleDetails from "@/components/client-detail/ClientCollapsibleDetails";
@@ -19,7 +22,7 @@ import AgreementCalculator from "@/components/client-detail/AgreementCalculator"
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
-  const acordoTabRef = useRef<HTMLButtonElement>(null);
+  const [showAcordoDialog, setShowAcordoDialog] = useState(false);
 
   const { data: clients = [], isLoading, refetch } = useQuery({
     queryKey: ["client-detail", cpf],
@@ -36,7 +39,7 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
-  const { data: agreements = [] } = useQuery({
+  const { data: agreements = [], refetch: refetchAgreements } = useQuery({
     queryKey: ["client-agreements", cpf],
     queryFn: async () => {
       const rawCpf = (cpf || "").replace(/\D/g, "");
@@ -89,9 +92,12 @@ const ClientDetailPage = () => {
     .filter((c) => c.status === "pendente")
     .reduce((sum, c) => sum + Number(c.valor_parcela), 0);
   const pendentes = clients.filter((c) => c.status === "pendente");
+  const lastAgreement = agreements[0] || null;
 
-  const scrollToAcordo = () => {
-    acordoTabRef.current?.click();
+  const handleAgreementCreated = () => {
+    setShowAcordoDialog(false);
+    refetch();
+    refetchAgreements();
   };
 
   return (
@@ -100,7 +106,7 @@ const ClientDetailPage = () => {
         client={first}
         cpf={cpf || ""}
         totalAberto={totalAberto}
-        onScrollToAcordo={scrollToAcordo}
+        onFormalizarAcordo={() => setShowAcordoDialog(true)}
       />
 
       <ClientCollapsibleDetails clients={clients} first={first} />
@@ -108,7 +114,7 @@ const ClientDetailPage = () => {
       <Tabs defaultValue="titulos" className="space-y-4">
         <TabsList>
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
-          <TabsTrigger value="acordo" ref={acordoTabRef}>Acordo</TabsTrigger>
+          <TabsTrigger value="acordo">Acordo</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
         </TabsList>
@@ -151,13 +157,56 @@ const ClientDetailPage = () => {
         </TabsContent>
 
         <TabsContent value="acordo">
-          <AgreementCalculator
-            clients={clients}
-            cpf={cpf || ""}
-            clientName={first.nome_completo}
-            credor={first.credor}
-            onAgreementCreated={() => refetch()}
-          />
+          <Card>
+            <CardContent className="p-6">
+              {lastAgreement ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">Último Acordo</h3>
+                    <Badge variant={lastAgreement.status === "approved" ? "default" : "secondary"}>
+                      {lastAgreement.status === "approved" ? "Aprovado" : lastAgreement.status === "pending" ? "Pendente" : lastAgreement.status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
+                      <p className="text-sm font-semibold">{formatCurrency(Number(lastAgreement.original_total))}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
+                      <p className="text-sm font-semibold">{formatCurrency(Number(lastAgreement.proposed_total))}</p>
+                    </div>
+                    {lastAgreement.discount_percent > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Desconto</p>
+                        <p className="text-sm font-semibold text-green-600">{lastAgreement.discount_percent}%</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
+                      <p className="text-sm font-semibold">{lastAgreement.new_installments}x de {formatCurrency(Number(lastAgreement.new_installment_value))}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
+                      <p className="text-sm font-semibold">{formatDate(lastAgreement.first_due_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Criado em</p>
+                      <p className="text-sm font-semibold">{new Date(lastAgreement.created_at).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                  </div>
+                  {lastAgreement.notes && (
+                    <div className="pt-3 border-t border-border">
+                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
+                      <p className="text-sm text-foreground">{lastAgreement.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground">Nenhum acordo registrado</p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="historico">
@@ -226,6 +275,22 @@ const ClientDetailPage = () => {
           <ClientAttachments cpf={cpf || ""} />
         </TabsContent>
       </Tabs>
+
+      {/* Dialog da calculadora de acordo */}
+      <Dialog open={showAcordoDialog} onOpenChange={setShowAcordoDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Formalizar Acordo</DialogTitle>
+          </DialogHeader>
+          <AgreementCalculator
+            clients={clients}
+            cpf={cpf || ""}
+            clientName={first.nome_completo}
+            credor={first.credor}
+            onAgreementCreated={handleAgreementCreated}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { formatCurrency } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
 
 interface ClientCollapsibleDetailsProps {
   clients: any[];
@@ -18,12 +19,12 @@ const ClientCollapsibleDetails = ({ clients, first }: ClientCollapsibleDetailsPr
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full pl-12">
-        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+      <CollapsibleTrigger className="flex items-center justify-between w-full px-5 py-3 bg-card border border-border rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
         <span>Mais informações do devedor</span>
+        <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", !open && "-rotate-90")} />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="bg-card rounded-xl border border-border p-5 mt-3 ml-12">
+        <div className="bg-card rounded-xl border border-border p-5 mt-2">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
             <div>
               <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Total Pago</p>
