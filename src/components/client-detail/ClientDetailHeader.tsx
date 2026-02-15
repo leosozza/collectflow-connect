@@ -2,20 +2,24 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, MessageCircle, Phone, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
+import { toast } from "sonner";
 
 interface ClientDetailHeaderProps {
   client: any;
   cpf: string;
   totalAberto: number;
-  onScrollToAcordo: () => void;
+  onFormalizarAcordo: () => void;
 }
 
-const ClientDetailHeader = ({ client, cpf, totalAberto, onScrollToAcordo }: ClientDetailHeaderProps) => {
+const ClientDetailHeader = ({ client, cpf, totalAberto, onFormalizarAcordo }: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
   const formattedCpf = formatCPF(cpf || "");
 
   const openWhatsApp = () => {
-    if (!client.phone) return;
+    if (!client.phone) {
+      toast.error("Nenhum telefone cadastrado para este devedor");
+      return;
+    }
     const phone = client.phone.replace(/\D/g, "");
     const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
     window.open(`https://wa.me/${intlPhone}`, "_blank");
@@ -34,7 +38,6 @@ const ClientDetailHeader = ({ client, cpf, totalAberto, onScrollToAcordo }: Clie
             size="icon"
             className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
             onClick={openWhatsApp}
-            disabled={!client.phone}
             title="WhatsApp"
           >
             <MessageCircle className="w-5 h-5" />
@@ -48,7 +51,7 @@ const ClientDetailHeader = ({ client, cpf, totalAberto, onScrollToAcordo }: Clie
           >
             <Phone className="w-5 h-5" />
           </Button>
-          <Button onClick={onScrollToAcordo} className="gap-2">
+          <Button onClick={onFormalizarAcordo} className="gap-2">
             <FileText className="w-4 h-4" />
             Formalizar Acordo
           </Button>
