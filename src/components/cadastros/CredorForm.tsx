@@ -4,7 +4,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, Pencil, Check, Copy, Upload, ImageIcon } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Pencil, Copy, Upload, ImageIcon, FileText } from "lucide-react";
 import CredorReguaTab from "./CredorReguaTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -43,13 +45,13 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
-  const [editingTemplate, setEditingTemplate] = useState({ acordo: false, recibo: false, quitacao: false });
+  const [openTemplateDialog, setOpenTemplateDialog] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
-      setEditingTemplate({ acordo: false, recibo: false, quitacao: false });
+      setOpenTemplateDialog(null);
       if (editing) {
         setForm({ ...editing });
         setHonorarios(editing.honorarios_grade || []);
@@ -101,37 +103,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     set(field, (form[field] || "") + variable);
   };
 
-  const toggleTemplateEdit = (key: "acordo" | "recibo" | "quitacao") => {
-    setEditingTemplate(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const TemplateActions = ({ field, templateKey }: { field: string; templateKey: "acordo" | "recibo" | "quitacao" }) => (
-    <div className="flex items-center gap-1.5">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" type="button" disabled={!editingTemplate[templateKey]}>
-            Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
-          <div className="space-y-1">
-            {VARIAVEIS.map(v => (
-              <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(field, v)}>{v}</button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
-      <Button
-        variant={editingTemplate[templateKey] ? "default" : "outline"}
-        size="sm"
-        type="button"
-        onClick={() => toggleTemplateEdit(templateKey)}
-        className="gap-1"
-      >
-        {editingTemplate[templateKey] ? <><Check className="w-3 h-3" /> Concluir</> : <><Pencil className="w-3 h-3" /> Editar</>}
-      </Button>
-    </div>
-  );
+  const TEMPLATES = [
+    { key: "template_acordo", label: "Carta de Acordo" },
+    { key: "template_recibo", label: "Recibo de Pagamento" },
+    { key: "template_quitacao", label: "Carta de Quitação" },
+  ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -276,23 +252,49 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               )}
             </div>
 
-            <div className="border-t border-border pt-4 space-y-4">
+            <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
+              {TEMPLATES.map(t => (
+                <Card key={t.key} className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">{t.label}</span>
+                  </div>
+                  <Button variant="outline" size="sm" type="button" onClick={() => setOpenTemplateDialog(t.key)} className="gap-1">
+                    <Pencil className="w-3 h-3" /> Editar
+                  </Button>
+                </Card>
+              ))}
 
-              <div>
-                <div className="flex items-center justify-between mb-1"><Label>Carta de Acordo</Label><TemplateActions field="template_acordo" templateKey="acordo" /></div>
-                <Textarea rows={5} value={form.template_acordo || ""} onChange={e => set("template_acordo", e.target.value)} className={`font-mono text-xs ${!editingTemplate.acordo ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.acordo} />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1"><Label>Recibo de Pagamento</Label><TemplateActions field="template_recibo" templateKey="recibo" /></div>
-                <Textarea rows={4} value={form.template_recibo || ""} onChange={e => set("template_recibo", e.target.value)} className={`font-mono text-xs ${!editingTemplate.recibo ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.recibo} />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1"><Label>Carta de Quitação</Label><TemplateActions field="template_quitacao" templateKey="quitacao" /></div>
-                <Textarea rows={4} value={form.template_quitacao || ""} onChange={e => set("template_quitacao", e.target.value)} className={`font-mono text-xs ${!editingTemplate.quitacao ? "bg-muted/50 cursor-not-allowed" : ""}`} disabled={!editingTemplate.quitacao} />
-              </div>
+              {TEMPLATES.map(t => (
+                <Dialog key={t.key} open={openTemplateDialog === t.key} onOpenChange={open => setOpenTemplateDialog(open ? t.key : null)}>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Editar: {t.label}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" type="button">
+                            Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
+                          <div className="space-y-1">
+                            {VARIAVEIS.map(v => (
+                              <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <Textarea rows={8} value={form[t.key] || ""} onChange={e => set(t.key, e.target.value)} className="font-mono text-xs" />
+                    </div>
+                    <DialogFooter>
+                      <Button type="button" onClick={() => setOpenTemplateDialog(null)}>Concluir</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              ))}
             </div>
           </TabsContent>
 
