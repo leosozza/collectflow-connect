@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Action: tenant-info - return tenant public data
+    // Action: tenant-info - return tenant public data + first active creditor branding
     if (action === "tenant-info") {
       if (!tenant_slug) {
         return new Response(JSON.stringify({ error: "Slug obrigatório" }), {
@@ -28,11 +28,26 @@ Deno.serve(async (req) => {
       }
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("name, slug, logo_url, primary_color, settings")
+        .select("id, name, slug, logo_url, primary_color, settings")
         .eq("slug", tenant_slug)
         .single();
 
-      return new Response(JSON.stringify({ tenant: tenant || null }), {
+      // Fetch first creditor with portal enabled for branding
+      let credorBranding = null;
+      if (tenant?.id) {
+        const { data: credor } = await supabase
+          .from("credores")
+          .select("portal_logo_url, portal_primary_color, portal_hero_title, portal_hero_subtitle, portal_enabled, nome_fantasia, razao_social")
+          .eq("tenant_id", tenant.id)
+          .eq("portal_enabled", true)
+          .limit(1)
+          .single();
+        if (credor) {
+          credorBranding = credor;
+        }
+      }
+
+      return new Response(JSON.stringify({ tenant: tenant || null, credorBranding }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

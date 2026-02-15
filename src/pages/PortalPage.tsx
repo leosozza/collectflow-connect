@@ -33,6 +33,7 @@ const PortalPage = () => {
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [cpf, setCpf] = useState("");
   const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [credorBranding, setCredorBranding] = useState<any>(null);
   const [credorSettings, setCredorSettings] = useState<Record<string, any>>({});
 
   // Negotiation state
@@ -58,6 +59,7 @@ const PortalPage = () => {
           body: { action: "tenant-info", tenant_slug: tenantSlug },
         });
         if (!error && data?.tenant) setTenantInfo(data.tenant);
+        if (!error && data?.credorBranding) setCredorBranding(data.credorBranding);
       } catch {
         // ignore
       }
@@ -131,10 +133,20 @@ const PortalPage = () => {
   const credorLogo = activeCredorConfig.portal_logo_url || tenantInfo?.logo_url;
   const clientName = debts[0]?.nome_completo || "";
 
+  // Portal-wide branding: prefer creditor branding over tenant defaults
+  const portalColor = credorBranding?.portal_primary_color || tenantInfo?.primary_color;
+  const portalLogo = credorBranding?.portal_logo_url || tenantInfo?.logo_url;
+  const portalName = credorBranding?.nome_fantasia || credorBranding?.razao_social || tenantInfo?.name;
+  const portalSettings = credorBranding ? {
+    ...tenantInfo?.settings,
+    portal_hero_title: credorBranding.portal_hero_title,
+    portal_hero_subtitle: credorBranding.portal_hero_subtitle,
+  } : tenantInfo?.settings;
+
   // Checkout / Term views
   if (view === "checkout" && token) {
     return (
-      <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+      <PortalLayout tenantName={portalName} tenantLogo={portalLogo} primaryColor={portalColor}>
         <PortalCheckout checkoutToken={token} />
       </PortalLayout>
     );
@@ -142,20 +154,20 @@ const PortalPage = () => {
 
   if (view === "term" && token) {
     return (
-      <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+      <PortalLayout tenantName={portalName} tenantLogo={portalLogo} primaryColor={portalColor}>
         <PortalAgreementTerm checkoutToken={token} />
       </PortalLayout>
     );
   }
 
   return (
-    <PortalLayout tenantName={tenantInfo?.name} tenantLogo={tenantInfo?.logo_url} primaryColor={tenantInfo?.primary_color}>
+    <PortalLayout tenantName={portalName} tenantLogo={portalLogo} primaryColor={portalColor}>
       <div className="max-w-5xl mx-auto p-4 md:p-8">
         {view === "hero" && (
           <PortalHero
-            tenantName={tenantInfo?.name}
-            primaryColor={tenantInfo?.primary_color}
-            settings={tenantInfo?.settings}
+            tenantName={portalName}
+            primaryColor={portalColor}
+            settings={portalSettings}
             onSearch={handleSearch}
             loading={loading}
           />
