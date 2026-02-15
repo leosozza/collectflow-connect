@@ -769,6 +769,7 @@ export type Database = {
           status: string
           telefone: string | null
           template_acordo: string | null
+          template_descricao_divida: string | null
           template_quitacao: string | null
           template_recibo: string | null
           tenant_id: string
@@ -817,6 +818,7 @@ export type Database = {
           status?: string
           telefone?: string | null
           template_acordo?: string | null
+          template_descricao_divida?: string | null
           template_quitacao?: string | null
           template_recibo?: string | null
           tenant_id: string
@@ -865,6 +867,7 @@ export type Database = {
           status?: string
           telefone?: string | null
           template_acordo?: string | null
+          template_descricao_divida?: string | null
           template_quitacao?: string | null
           template_recibo?: string | null
           tenant_id?: string

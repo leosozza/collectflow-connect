@@ -1,0 +1,1 @@
+ALTER TABLE credores ADD COLUMN template_descricao_divida text DEFAULT '';
