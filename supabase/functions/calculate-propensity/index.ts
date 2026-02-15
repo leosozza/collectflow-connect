@@ -85,7 +85,12 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const cpfsToScore = Object.entries(byCpf).slice(0, 50); // limit batch size
+    const allCpfs = Object.entries(byCpf);
+    const BATCH_SIZE = 50;
+    const allScores: Array<{ cpf: string; score: number }> = [];
+
+    for (let batchStart = 0; batchStart < allCpfs.length; batchStart += BATCH_SIZE) {
+    const cpfsToScore = allCpfs.slice(batchStart, batchStart + BATCH_SIZE);
 
     const summaries = cpfsToScore.map(([cpfKey, records]) => {
       const paid = records.filter(r => r.status === "pago").length;
@@ -163,36 +168,23 @@ Deno.serve(async (req) => {
         const score = Math.max(0, Math.min(100, Math.round(rate * 60 + (1 - broken / Math.max(total, 1)) * 25 - overdue * 5 + 15)));
         return { cpf: cpfKey, score };
       });
-
-      // Update scores in DB
-      for (const s of fallbackScores) {
-        const formatted = s.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-        await supabase.from("clients").update({ propensity_score: s.score })
-          .eq("tenant_id", tenantId)
-          .or(`cpf.eq.${s.cpf},cpf.eq.${formatted}`);
-      }
-
-      return new Response(JSON.stringify({ scores: fallbackScores, source: "heuristic" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    let scores: Array<{ cpf: string; score: number }> = [];
-
-    // Parse tool call response
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        scores = parsed.scores || [];
-      } catch {
-        console.error("Failed to parse AI response");
+      allScores.push(...fallbackScores);
+    } else {
+      const aiData = await aiResponse.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall?.function?.arguments) {
+        try {
+          const parsed = JSON.parse(toolCall.function.arguments);
+          allScores.push(...(parsed.scores || []));
+        } catch {
+          console.error("Failed to parse AI response for batch");
+        }
       }
     }
+    } // end batch loop
 
-    // Update scores in DB
-    for (const s of scores) {
+    // Update all scores in DB
+    for (const s of allScores) {
       const cleanCpf = s.cpf.replace(/\D/g, "");
       const formatted = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
       await supabase.from("clients").update({ propensity_score: Math.max(0, Math.min(100, s.score)) })
@@ -200,7 +192,7 @@ Deno.serve(async (req) => {
         .or(`cpf.eq.${cleanCpf},cpf.eq.${formatted}`);
     }
 
-    return new Response(JSON.stringify({ scores, source: "ai" }), {
+    return new Response(JSON.stringify({ scores: allScores, source: "ai" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

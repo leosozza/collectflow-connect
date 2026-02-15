@@ -162,7 +162,7 @@ const CarteiraKanban = ({ clients, loading, agreementCpfs }: CarteiraKanbanProps
                           Parcela {client.numero_parcela}/{client.total_parcelas}
                         </span>
                         <div className="flex items-center gap-2">
-                          <PropensityBadge score={(client as any).propensity_score} />
+                          <PropensityBadge score={client.propensity_score} />
                           <span className="text-xs text-muted-foreground">
                             {new Date(client.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
                           </span>

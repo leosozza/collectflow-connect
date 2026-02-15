@@ -20,6 +20,7 @@ export interface Client {
   quebra: number;
   data_vencimento: string;
   status: "pendente" | "pago" | "quebrado";
+  propensity_score: number | null;
   created_at: string;
   updated_at: string;
   tenant_id: string | null;
