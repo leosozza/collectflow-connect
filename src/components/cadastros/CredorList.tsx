@@ -61,9 +61,6 @@ const CredorList = () => {
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead>Razão Social</TableHead>
-                <TableHead>CNPJ</TableHead>
-                <TableHead>Contato</TableHead>
-                <TableHead>Gateway</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -80,12 +77,6 @@ const CredorList = () => {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{formatCnpj(c.cnpj)}</TableCell>
-                  <TableCell>
-                    <div className="text-sm">{c.email || "—"}</div>
-                    <div className="text-xs text-muted-foreground">{c.telefone || ""}</div>
-                  </TableCell>
-                  <TableCell>{c.gateway_ativo || "—"}</TableCell>
                   <TableCell><Badge variant={c.status === "ativo" ? "default" : "secondary"}>{c.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button size="icon" variant="ghost" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></Button>
