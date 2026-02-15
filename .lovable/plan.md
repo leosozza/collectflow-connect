@@ -1,102 +1,50 @@
-## Reformulacao da Pagina de Detalhes do Cliente (/carteira/:cpf)
 
-### Visao Geral
 
-Reestruturar completamente a pagina de detalhes do devedor para incluir: header compacto com botoes de contato, informacoes colapsaveis, e uma calculadora de acordo completa integrada na pagina.
+## Correcoes na Pagina de Detalhes do Cliente
+
+### Problemas Identificados e Solucoes
+
+### 1. Botao WhatsApp nao funcional
+**Causa**: Os clientes no banco de dados nao possuem telefone cadastrado (`phone` esta vazio/null). O botao usa `disabled={!client.phone}`, entao fica desabilitado quando nao ha telefone.
+**Solucao**: A logica do botao esta correta (`window.open(https://wa.me/...)`) -- ele funciona quando ha telefone. Vamos manter o botao funcional e adicionar um `tooltip` ou feedback visual claro quando nao houver telefone, em vez de apenas desabilitar silenciosamente. Tambem remover o `disabled` e mostrar um toast informando que nao ha telefone cadastrado.
+
+### 2. Aparencia das informacoes do devedor -- restaurar visual anterior
+**Solucao**: Redesenhar o `ClientCollapsibleDetails` para ter aparencia de Card com borda, fundo `bg-card`, e layout em grid organizado similar ao que existia antes. Manter o conteudo colapsavel mas com visual mais polido.
+
+### 3. Seta apontando para baixo na lateral direita
+**Causa**: Atualmente o chevron esta no lado esquerdo e alterna entre `ChevronRight` e `ChevronDown`.
+**Solucao**: Mover o icone para o lado direito do trigger usando `justify-between` e `w-full`. Usar `ChevronDown` com rotacao (rotacionar -90deg quando fechado, 0deg quando aberto) para que sempre aponte para baixo quando expandido.
+
+### 4. Aba "Acordo" -- mostrar ultimo acordo, nao a calculadora
+**Causa**: Atualmente a aba "Acordo" renderiza o `AgreementCalculator` completo.
+**Solucao**: Na aba "Acordo", exibir apenas o ultimo acordo realizado (da query `agreements` ja existente). Mostrar um Card com as informacoes: status, valor original, valor proposto, desconto, parcelas, data. Se nao houver acordo, exibir mensagem "Nenhum acordo registrado".
+
+### 5. Botao "Formalizar Acordo" nao funciona
+**Causa**: O botao chama `scrollToAcordo()` que faz `acordoTabRef.current?.click()` para mudar para a aba "Acordo". Porem como a aba "Acordo" agora deve mostrar apenas o ultimo acordo, o botao precisa de comportamento diferente.
+**Solucao**: O botao "Formalizar Acordo" deve abrir um `Dialog` (modal) contendo o `AgreementCalculator`. Assim o usuario pode formalizar o acordo sem sair da tela atual, e a aba "Acordo" fica reservada para visualizar acordos existentes.
 
 ---
 
-### 1. Header Compacto com Botoes de Contato
-
-**Layout proposto:**
-
-```text
-[<-]  NOME DO DEVEDOR                    [WhatsApp] [Telefone] [Formalizar Acordo]
-      CPF: xxx | Tel: xxx | Email: xxx | Credor: xxx | Em Aberto: R$ xxx
-```
-
-- Linha principal: nome + 3 botoes a direita
-- Linha secundaria: CPF, Telefone, Email, Credor e Total em Aberto em uma unica linha compacta
-- **Botao WhatsApp**: icone verde do WhatsApp (MessageCircle com cor verde), abre `https://wa.me/{phone}` em nova aba
-- **Botao Telefone**: icone Phone, ao clicar navega para `/atendimento/:id` (mesma acao do botao "Atender" atual)
-- **Botao "Formalizar Acordo"**: substitui o botao laranja "Atender", com cor primaria e icone de documento
-
-### 2. Informacoes Detalhadas Colapsaveis
-
-Apos o header, um bloco colapsavel (usando Collapsible ja existente) com seta para expandir, contendo:
-
-- Total Pago, Parcelas pagas/total
-- Endereco completo (endereco, cidade, UF, CEP)
-- Telefones adicionais (se existirem)
-- Observacoes
-- External ID / Cod. Devedor / Cod. Contrato
-
-Por padrao ficara **fechado**.
-
-### 3. Calculadora de Acordo (nova aba ou secao principal)
-
-Adicionar uma nova aba **"Acordo"** ao TabsList, contendo uma calculadora completa:
-
-**Funcionalidades:**
-
-- **Selecao de parcelas**: checkboxes na lista de titulos em aberto para selecionar quais parcelas entram no acordo
-- **Resumo automatico**: total original calculado das parcelas selecionadas
-- **Desconto em porcentagem**: campo numerico com calculo em tempo real
-- **Desconto em valor fixo (R$)**: campo para informar desconto absoluto, atualizando automaticamente o percentual
-- **Valor de entrada**: campo para valor + data da entrada
-- **Parcelas restantes**: numero de parcelas e calculo automatico do valor de cada
-- **Data do 1o vencimento**: date picker para a primeira parcela apos a entrada
-- **Resumo visual**: card com Valor Original, Desconto, Valor Proposto, Entrada, Demais Parcelas (Nx de R$xx)
-- **Observacoes**: textarea para notas
-- **Botao "Gerar Acordo"**: cria o acordo usando o `agreementService.createAgreement`
-
-### 4. Atualizacao do Import Service
-
-Atualizar `src/services/importService.ts` para mapear corretamente as colunas da planilha "Pagamentos (2).xlsx":
-
-
-| Coluna Planilha        | Campo DB                                                 |
-| ---------------------- | -------------------------------------------------------- |
-| CREDOR (col 0)         | credor                                                   |
-| COD_DEVEDOR (col 1)    | external_id                                              |
-| COD_CONTRATO (col 2)   | observacoes (concatenar)                                 |
-| NOME_DEVEDOR (col 3)   | nome_completo                                            |
-| TITULO (col 4)         | (referencia interna)                                     |
-| CNPJ_CPF (col 5)       | cpf                                                      |
-| FONE_1 (col 6)         | phone                                                    |
-| FONE_2 (col 7)         | observacoes (concatenar)                                 |
-| FONE_3 (col 8)         | observacoes (concatenar)                                 |
-| EMAIL (col 9)          | email                                                    |
-| ENDERECO (col 10)      | endereco (concatenar com numero, complemento, bairro)    |
-| NUMERO (col 11)        | endereco                                                 |
-| COMPLEMENTO (col 12)   | endereco                                                 |
-| BAIRRO (col 13)        | endereco                                                 |
-| CIDADE (col 14)        | cidade                                                   |
-| ESTADO (col 15)        | uf                                                       |
-| CEP (col 16)           | cep                                                      |
-| PARCELA (col 21)       | numero_parcela                                           |
-| DT_VENCIMENTO (col 23) | data_vencimento                                          |
-| VL_TITULO (col 25)     | valor_parcela                                            |
-| VL_SALDO (col 26)      | (pode usar como referencia)                              |
-| VL_ATUALIZADO (col 27) | valor_parcela (se disponivel, priorizar sobre VL_TITULO) |
-| STATUS (col 29)        | status (ATIVO=pendente, CANCELADO=quebrado)              |
-
-
-### 5. Detalhes Tecnicos
+### Detalhes Tecnicos
 
 **Arquivos a modificar:**
 
-- `src/pages/ClientDetailPage.tsx` - Reestruturacao completa (header, colapsavel, aba de acordo)
-- `src/services/importService.ts` - Novo mapeamento de colunas para a planilha
+1. **`src/components/client-detail/ClientDetailHeader.tsx`**
+   - Remover `disabled` do botao WhatsApp; adicionar toast de aviso quando nao ha telefone
+   - Alterar `onScrollToAcordo` para `onFormalizarAcordo` que abre um Dialog
 
-**Componentes reutilizados:**
+2. **`src/components/client-detail/ClientCollapsibleDetails.tsx`**
+   - Mover o chevron para a lateral direita com `flex justify-between`
+   - Usar `ChevronDown` com classe de rotacao CSS (`transition-transform rotate-0` / `-rotate-90`)
+   - Estilizar o trigger como um Card/barra completa com fundo e borda
 
-- `Collapsible` / `CollapsibleTrigger` / `CollapsibleContent` para dados ocultos
-- `Checkbox` para selecao de parcelas
-- `Card`, `Input`, `Button`, `Tabs` ja existentes
-- `agreementService.createAgreement` para persistir o acordo
+3. **`src/pages/ClientDetailPage.tsx`**
+   - Adicionar estado `showAcordoDialog` para controlar o Dialog da calculadora
+   - Na aba "Acordo", renderizar Card com ultimo acordo (usando `agreements[0]`) em vez do `AgreementCalculator`
+   - Envolver `AgreementCalculator` em um `Dialog` que abre ao clicar "Formalizar Acordo"
+   - Remover a ref `acordoTabRef` (nao mais necessaria)
 
-**Nenhuma migracao de banco de dados necessaria** - todos os campos ja existem na tabela `clients`.   
-  
-O campo Codigo do devedor e Codigo do contrato, nosso sistema pode criar quando o credor não tiver essas funções.    
-  
+4. **`src/components/client-detail/AgreementCalculator.tsx`** -- sem alteracoes, sera reutilizado dentro do Dialog
+
+**Nenhuma migracao de banco de dados necessaria.**
+
