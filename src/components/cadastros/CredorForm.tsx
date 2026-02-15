@@ -4,6 +4,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, Pencil, Check } from "lucide-react";
+import CredorReguaTab from "./CredorReguaTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,6 +142,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
+            <TabsTrigger value="regua" className="flex-1">Régua</TabsTrigger>
             <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
           </TabsList>
 
@@ -290,7 +292,12 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             </div>
           </TabsContent>
 
-          {/* ABA 4 - ASSINATURA DIGITAL */}
+          {/* ABA 4 - RÉGUA DE COBRANÇA */}
+          <TabsContent value="regua" className="mt-4">
+            <CredorReguaTab credorId={editing?.id} />
+          </TabsContent>
+
+          {/* ABA 5 - ASSINATURA DIGITAL */}
           <TabsContent value="assinatura" className="space-y-6 mt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
