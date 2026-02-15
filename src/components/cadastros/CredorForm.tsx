@@ -138,12 +138,13 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         </SheetHeader>
 
         <Tabs defaultValue="dados" className="mt-4">
-          <TabsList className="w-full">
+          <TabsList className="w-full flex-wrap">
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
             <TabsTrigger value="regua" className="flex-1">Régua</TabsTrigger>
             <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
+            <TabsTrigger value="portal" className="flex-1">Portal</TabsTrigger>
           </TabsList>
 
           {/* ABA 1 - DADOS CADASTRAIS */}
@@ -347,6 +348,62 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                 ℹ️ Quando ativa, a assinatura digital será obrigatória no portal do devedor antes de liberar o checkout para acordos deste credor.
               </p>
+            </div>
+          </TabsContent>
+
+          {/* ABA 6 - PORTAL WHITE-LABEL */}
+          <TabsContent value="portal" className="space-y-4 mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                <div>
+                  <p className="font-medium text-foreground text-sm">Portal Personalizado</p>
+                  <p className="text-xs text-muted-foreground">Ativar branding personalizado deste credor no Portal do Devedor</p>
+                </div>
+                <Switch checked={form.portal_enabled || false} onCheckedChange={v => set("portal_enabled", v)} />
+              </div>
+
+              {form.portal_enabled && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Título do Hero</Label>
+                      <Input value={form.portal_hero_title || ""} onChange={e => set("portal_hero_title", e.target.value)} placeholder="Ex: Negocie suas dívidas com até 90% de desconto" />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Subtítulo do Hero</Label>
+                      <Input value={form.portal_hero_subtitle || ""} onChange={e => set("portal_hero_subtitle", e.target.value)} placeholder="Consulte suas pendências e encontre as melhores condições" />
+                    </div>
+                    <div>
+                      <Label>Cor Primária</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-12 h-10 p-1 cursor-pointer" />
+                        <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1" />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>URL do Logo</Label>
+                      <Input value={form.portal_logo_url || ""} onChange={e => set("portal_logo_url", e.target.value)} placeholder="https://..." />
+                    </div>
+                  </div>
+
+                  {form.portal_primary_color && (
+                    <div className="border border-border rounded-lg p-4">
+                      <p className="text-xs text-muted-foreground mb-2">Preview</p>
+                      <div className="flex items-center gap-3">
+                        {form.portal_logo_url && <img src={form.portal_logo_url} alt="Logo" className="h-8 w-auto" />}
+                        <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: form.portal_primary_color }}>
+                          {(form.nome_fantasia || form.razao_social || "C")?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="font-semibold" style={{ color: form.portal_primary_color }}>{form.nome_fantasia || form.razao_social || "Credor"}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                    ℹ️ Quando ativo, os devedores deste credor verão a identidade visual personalizada no portal de negociação.
+                  </p>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

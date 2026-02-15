@@ -24,6 +24,7 @@ interface PortalNegotiationProps {
   clientCpf: string;
   maxDiscount?: number;
   maxInstallments?: number;
+  primaryColor?: string;
   onBack: () => void;
   onSubmit: (option: { type: string; total: number; installments: number; installmentValue: number; notes: string }) => void;
   submitting?: boolean;
@@ -31,7 +32,7 @@ interface PortalNegotiationProps {
 
 const PortalNegotiation = ({
   credor, originalTotal, clientName, clientCpf,
-  maxDiscount = 30, maxInstallments = 12,
+  maxDiscount = 30, maxInstallments = 12, primaryColor,
   onBack, onSubmit, submitting,
 }: PortalNegotiationProps) => {
   const [selected, setSelected] = useState<string | null>(null);
@@ -203,7 +204,7 @@ const PortalNegotiation = ({
               placeholder="Alguma observação sobre sua proposta..."
             />
           </div>
-          <Button className="w-full text-white" size="lg" disabled={submitting} onClick={handleSubmit}>
+          <Button className="w-full text-white" size="lg" disabled={submitting} onClick={handleSubmit} style={primaryColor ? { backgroundColor: primaryColor } : undefined}>
             {submitting ? "Enviando..." : "Enviar Proposta"}
           </Button>
           <p className="text-xs text-center text-muted-foreground">

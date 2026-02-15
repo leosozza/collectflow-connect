@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { startOfDay, parseISO, isEqual } from "date-fns";
+import PropensityBadge from "./PropensityBadge";
 
 interface CarteiraTableProps {
   clients: Client[];
@@ -59,6 +60,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                 <TableHead className="text-center">Parcela</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead>Vencimento</TableHead>
+                <TableHead className="text-center">Score</TableHead>
                 <TableHead className="text-center">Ação</TableHead>
               </TableRow>
             </TableHeader>
@@ -93,6 +95,9 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                         {formatDate(client.data_vencimento)}
                         {isToday && " (Hoje)"}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <PropensityBadge score={(client as any).propensity_score} />
                     </TableCell>
                     <TableCell className="text-center">
                       <Button

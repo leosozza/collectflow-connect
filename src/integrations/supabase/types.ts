@@ -391,6 +391,7 @@ export type Database = {
           observacoes: string | null
           operator_id: string | null
           phone: string | null
+          propensity_score: number | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
           tenant_id: string | null
@@ -419,6 +420,7 @@ export type Database = {
           observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
+          propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
@@ -447,6 +449,7 @@ export type Database = {
           observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
+          propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
           tenant_id?: string | null
@@ -755,6 +758,11 @@ export type Database = {
           parcelas_max: number | null
           parcelas_min: number | null
           pix_chave: string | null
+          portal_enabled: boolean | null
+          portal_hero_subtitle: string | null
+          portal_hero_title: string | null
+          portal_logo_url: string | null
+          portal_primary_color: string | null
           razao_social: string
           signature_enabled: boolean | null
           signature_type: string | null
@@ -798,6 +806,11 @@ export type Database = {
           parcelas_max?: number | null
           parcelas_min?: number | null
           pix_chave?: string | null
+          portal_enabled?: boolean | null
+          portal_hero_subtitle?: string | null
+          portal_hero_title?: string | null
+          portal_logo_url?: string | null
+          portal_primary_color?: string | null
           razao_social: string
           signature_enabled?: boolean | null
           signature_type?: string | null
@@ -841,6 +854,11 @@ export type Database = {
           parcelas_max?: number | null
           parcelas_min?: number | null
           pix_chave?: string | null
+          portal_enabled?: boolean | null
+          portal_hero_subtitle?: string | null
+          portal_hero_title?: string | null
+          portal_logo_url?: string | null
+          portal_primary_color?: string | null
           razao_social?: string
           signature_enabled?: boolean | null
           signature_type?: string | null
