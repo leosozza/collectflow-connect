@@ -1,58 +1,102 @@
+## Reformulacao da Pagina de Detalhes do Cliente (/carteira/:cpf)
 
+### Visao Geral
 
-## Otimizacoes no Formulario de Credor
-
-### 1. Descricao de Divida - Template padrao nao aparece ao editar credor existente
-**Problema**: Quando o credor ja existe no banco e o campo `template_descricao_divida` esta vazio/null, o template padrao nao e carregado.
-**Solucao**: No `useEffect` que carrega os dados do credor em edicao, aplicar fallback para o template padrao quando o valor estiver vazio.
-
-### 2. Dialog de edicao dos templates - Aumentar tamanho e adicionar formatacao
-**Problema**: O Dialog e pequeno (`sm:max-w-lg`) e o Textarea nao tem opcoes de formatacao.
-**Solucao**:
-- Aumentar o Dialog para `sm:max-w-2xl`
-- Adicionar barra de ferramentas acima do Textarea com botoes de formatacao: **Negrito**, *Italico*, Sublinhado, Titulo (H1/H2), Lista
-- As formatacoes inserem marcadores simples no texto (ex: `**texto**` para negrito, `_texto_` para italico)
-- Aumentar o Textarea de 8 para 12 rows
-
-### 3. Entrada Minima - Melhorar organizacao do switch R$/% 
-**Problema**: O Switch entre R$ e % nao e intuitivo.
-**Solucao**: Substituir o Switch por um `Select` com opcoes claras "Valor fixo (R$)" e "Percentual (%)", posicionado ao lado do campo de valor em layout mais limpo.
-
-### 4. Grade de Honorarios - Adicionar opcao por valores
-**Problema**: Atualmente so existe a opcao por porcentagem.
-**Solucao**: Adicionar uma coluna "Valor Fixo (R$)" na tabela de honorarios, ao lado da coluna de percentual existente. O usuario pode preencher um ou outro.
-
-### 5. Regua - Excluir mensagem informativa do rodape
-**Problema**: A mensagem `"Mensagens serao disparadas automaticamente..."` na parte de baixo polui a tela.
-**Solucao**: Remover o paragrafo informativo (linha 279-281 do CredorReguaTab.tsx).
-
-### 6. Portal - Excluir Preview e mensagem inferior
-**Problema**: O bloco de Preview e a mensagem informativa ocupam espaco desnecessario.
-**Solucao**: 
-- Remover o bloco de Preview (linhas 511-522 do CredorForm.tsx)
-- Remover a mensagem informativa (linhas 524-526)
-
-### 7. Portal - Melhorar visual do Link do Portal
-**Problema**: O campo de link esta com visual amador.
-**Solucao**: Redesenhar o bloco do link com um Card mais profissional: icone de link, typography melhorada, botao "Copiar" com destaque, sem a descricao desnecessaria.
-
-### 8. Portal - Otimizar o quadro geral
-**Solucao**: Reorganizar campos com spacing mais limpo, agrupando logo + cor primaria de forma mais compacta.
-
-### 9. Bancario - Excluir mensagem do final
-**Problema**: A mensagem `"Este gateway sera usado automaticamente..."` polui a tela.
-**Solucao**: Remover o paragrafo informativo (linha 222 do CredorForm.tsx).
+Reestruturar completamente a pagina de detalhes do devedor para incluir: header compacto com botoes de contato, informacoes colapsaveis, e uma calculadora de acordo completa integrada na pagina.
 
 ---
 
-### Detalhes Tecnicos
+### 1. Header Compacto com Botoes de Contato
+
+**Layout proposto:**
+
+```text
+[<-]  NOME DO DEVEDOR                    [WhatsApp] [Telefone] [Formalizar Acordo]
+      CPF: xxx | Tel: xxx | Email: xxx | Credor: xxx | Em Aberto: R$ xxx
+```
+
+- Linha principal: nome + 3 botoes a direita
+- Linha secundaria: CPF, Telefone, Email, Credor e Total em Aberto em uma unica linha compacta
+- **Botao WhatsApp**: icone verde do WhatsApp (MessageCircle com cor verde), abre `https://wa.me/{phone}` em nova aba
+- **Botao Telefone**: icone Phone, ao clicar navega para `/atendimento/:id` (mesma acao do botao "Atender" atual)
+- **Botao "Formalizar Acordo"**: substitui o botao laranja "Atender", com cor primaria e icone de documento
+
+### 2. Informacoes Detalhadas Colapsaveis
+
+Apos o header, um bloco colapsavel (usando Collapsible ja existente) com seta para expandir, contendo:
+
+- Total Pago, Parcelas pagas/total
+- Endereco completo (endereco, cidade, UF, CEP)
+- Telefones adicionais (se existirem)
+- Observacoes
+- External ID / Cod. Devedor / Cod. Contrato
+
+Por padrao ficara **fechado**.
+
+### 3. Calculadora de Acordo (nova aba ou secao principal)
+
+Adicionar uma nova aba **"Acordo"** ao TabsList, contendo uma calculadora completa:
+
+**Funcionalidades:**
+
+- **Selecao de parcelas**: checkboxes na lista de titulos em aberto para selecionar quais parcelas entram no acordo
+- **Resumo automatico**: total original calculado das parcelas selecionadas
+- **Desconto em porcentagem**: campo numerico com calculo em tempo real
+- **Desconto em valor fixo (R$)**: campo para informar desconto absoluto, atualizando automaticamente o percentual
+- **Valor de entrada**: campo para valor + data da entrada
+- **Parcelas restantes**: numero de parcelas e calculo automatico do valor de cada
+- **Data do 1o vencimento**: date picker para a primeira parcela apos a entrada
+- **Resumo visual**: card com Valor Original, Desconto, Valor Proposto, Entrada, Demais Parcelas (Nx de R$xx)
+- **Observacoes**: textarea para notas
+- **Botao "Gerar Acordo"**: cria o acordo usando o `agreementService.createAgreement`
+
+### 4. Atualizacao do Import Service
+
+Atualizar `src/services/importService.ts` para mapear corretamente as colunas da planilha "Pagamentos (2).xlsx":
+
+
+| Coluna Planilha        | Campo DB                                                 |
+| ---------------------- | -------------------------------------------------------- |
+| CREDOR (col 0)         | credor                                                   |
+| COD_DEVEDOR (col 1)    | external_id                                              |
+| COD_CONTRATO (col 2)   | observacoes (concatenar)                                 |
+| NOME_DEVEDOR (col 3)   | nome_completo                                            |
+| TITULO (col 4)         | (referencia interna)                                     |
+| CNPJ_CPF (col 5)       | cpf                                                      |
+| FONE_1 (col 6)         | phone                                                    |
+| FONE_2 (col 7)         | observacoes (concatenar)                                 |
+| FONE_3 (col 8)         | observacoes (concatenar)                                 |
+| EMAIL (col 9)          | email                                                    |
+| ENDERECO (col 10)      | endereco (concatenar com numero, complemento, bairro)    |
+| NUMERO (col 11)        | endereco                                                 |
+| COMPLEMENTO (col 12)   | endereco                                                 |
+| BAIRRO (col 13)        | endereco                                                 |
+| CIDADE (col 14)        | cidade                                                   |
+| ESTADO (col 15)        | uf                                                       |
+| CEP (col 16)           | cep                                                      |
+| PARCELA (col 21)       | numero_parcela                                           |
+| DT_VENCIMENTO (col 23) | data_vencimento                                          |
+| VL_TITULO (col 25)     | valor_parcela                                            |
+| VL_SALDO (col 26)      | (pode usar como referencia)                              |
+| VL_ATUALIZADO (col 27) | valor_parcela (se disponivel, priorizar sobre VL_TITULO) |
+| STATUS (col 29)        | status (ATIVO=pendente, CANCELADO=quebrado)              |
+
+
+### 5. Detalhes Tecnicos
 
 **Arquivos a modificar:**
-- `src/components/cadastros/CredorForm.tsx` - Itens 1, 2, 3, 4, 6, 7, 8, 9
-- `src/components/cadastros/CredorReguaTab.tsx` - Item 5
 
-**Nenhuma alteracao de banco de dados necessaria.**
+- `src/pages/ClientDetailPage.tsx` - Reestruturacao completa (header, colapsavel, aba de acordo)
+- `src/services/importService.ts` - Novo mapeamento de colunas para a planilha
 
-**Componentes a utilizar:** `Card`, `Dialog`, `Button`, `Select`, `Popover` - todos ja existentes no projeto.
+**Componentes reutilizados:**
 
-**Formatacao de templates (item 2):** Sera implementada com botoes que inserem marcadores de texto (markdown-like) na posicao do cursor do Textarea. Botoes: Negrito (`**texto**`), Italico (`_texto_`), Titulo, Lista, Aumento de fonte.
+- `Collapsible` / `CollapsibleTrigger` / `CollapsibleContent` para dados ocultos
+- `Checkbox` para selecao de parcelas
+- `Card`, `Input`, `Button`, `Tabs` ja existentes
+- `agreementService.createAgreement` para persistir o acordo
+
+**Nenhuma migracao de banco de dados necessaria** - todos os campos ja existem na tabela `clients`.   
+  
+O campo Codigo do devedor e Codigo do contrato, nosso sistema pode criar quando o credor não tiver essas funções.    
+  
