@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
@@ -18,6 +19,17 @@ interface QuickReply {
   tenant_id: string;
 }
 
+const AVAILABLE_VARIABLES = [
+  { tag: "{{nome_cliente}}", label: "Nome Cliente" },
+  { tag: "{{nome_operador}}", label: "Nome Operador" },
+  { tag: "{{valor_parcela}}", label: "Valor Parcela" },
+  { tag: "{{parcelas_abertas}}", label: "Parcelas Abertas" },
+  { tag: "{{total_parcelas}}", label: "Total Parcelas" },
+  { tag: "{{credor}}", label: "Credor" },
+  { tag: "{{cpf}}", label: "CPF" },
+  { tag: "{{vencimento}}", label: "Vencimento" },
+];
+
 const QuickRepliesTab = () => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
@@ -25,6 +37,7 @@ const QuickRepliesTab = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ shortcut: "", content: "", category: "geral" });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const loadReplies = async () => {
     if (!tenantId) return;
@@ -42,6 +55,22 @@ const QuickRepliesTab = () => {
     setForm({ shortcut: "", content: "", category: "geral" });
     setShowForm(false);
     setEditingId(null);
+  };
+
+  const insertVariable = (tag: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setForm({ ...form, content: form.content + tag });
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newContent = form.content.substring(0, start) + tag + form.content.substring(end);
+    setForm({ ...form, content: newContent });
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
   };
 
   const handleSave = async () => {
@@ -124,11 +153,27 @@ const QuickRepliesTab = () => {
             <div>
               <Label>Conteúdo da mensagem</Label>
               <Textarea
+                ref={textareaRef}
                 value={form.content}
                 onChange={(e) => setForm({ ...form, content: e.target.value })}
-                placeholder="Olá! Como posso ajudá-lo hoje?"
+                placeholder="Olá, {{nome_cliente}}! Como posso ajudá-lo hoje?"
                 className="min-h-[100px]"
               />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Variáveis disponíveis (clique para inserir)</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {AVAILABLE_VARIABLES.map((v) => (
+                  <Badge
+                    key={v.tag}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary/10 transition-colors text-xs px-2 py-1"
+                    onClick={() => insertVariable(v.tag)}
+                  >
+                    {v.label}
+                  </Badge>
+                ))}
+              </div>
             </div>
             <div className="flex gap-2">
               <Button onClick={handleSave} disabled={!form.shortcut.trim() || !form.content.trim()}>

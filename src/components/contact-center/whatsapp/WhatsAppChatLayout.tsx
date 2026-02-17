@@ -66,6 +66,21 @@ const WhatsAppChatLayout = () => {
     markConversationRead(selectedConv.id).catch(console.error);
   }, [selectedConv?.id]);
 
+  // Load client info for selected conversation
+  const [clientInfo, setClientInfo] = useState<any>(null);
+  useEffect(() => {
+    if (!selectedConv?.client_id) {
+      setClientInfo(null);
+      return;
+    }
+    supabase
+      .from("clients")
+      .select("nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento")
+      .eq("id", selectedConv.client_id)
+      .single()
+      .then(({ data }) => setClientInfo(data));
+  }, [selectedConv?.client_id]);
+
   // Realtime subscriptions
   useEffect(() => {
     if (!tenantId) return;
@@ -270,9 +285,10 @@ const WhatsAppChatLayout = () => {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           instanceName={selectedInstanceName}
-          clientInfo={null}
+          clientInfo={clientInfo}
           quickReplies={quickReplies}
           slaDeadline={(selectedConv as any)?.sla_deadline_at}
+          operatorName={profile?.full_name}
         />
         {sidebarOpen && (
           <ContactSidebar
