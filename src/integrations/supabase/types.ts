@@ -184,6 +184,76 @@ export type Database = {
           },
         ]
       }
+      ai_agents: {
+        Row: {
+          context: string
+          created_at: string
+          credor_id: string | null
+          gender: string
+          id: string
+          identifier: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          personality: Json
+          profile_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          context?: string
+          created_at?: string
+          credor_id?: string | null
+          gender?: string
+          id?: string
+          identifier: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          personality?: Json
+          profile_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          context?: string
+          created_at?: string
+          credor_id?: string | null
+          gender?: string
+          id?: string
+          identifier?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          personality?: Json
+          profile_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agents_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agents_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string

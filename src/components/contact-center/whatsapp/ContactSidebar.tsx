@@ -240,8 +240,14 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
             </CardContent>
           </Card>
         ) : (
-          <Card className="mb-3">
-            <CardContent className="p-3">
+          <Card className="mb-3 border-dashed">
+            <CardHeader className="p-3 pb-1">
+              <CardTitle className="text-xs text-muted-foreground">Nenhum cliente vinculado</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 pt-1">
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Vincule um cliente para formalizar acordos e ver informações detalhadas.
+              </p>
               {showSearch ? (
                 <div className="space-y-2">
                   <div className="flex gap-1">
