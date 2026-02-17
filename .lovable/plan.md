@@ -1,77 +1,105 @@
 
-## Reestruturacao Completa da Pagina de Detalhes do Cliente
+## Reestruturacao de Cadastros: Perfil do Devedor, Tipo de Status e Regras de Negocio
 
-### 1. Card Principal Unificado (Header + Colapsavel)
+### 1. Renomear "Tipo de Devedor" para "Perfil do Devedor"
 
-Unificar o `ClientDetailHeader` e `ClientCollapsibleDetails` em um unico Card. O Card tera:
+**O que muda:**
+- No menu lateral de /cadastros, "Tipo de Devedor" vira "Perfil do Devedor"
+- Os perfis padrao mudam para: Negligente, Cronico, Ocasional, Imprevisivel, Mau Pagador
+- Cada perfil tera descricao pre-definida ao carregar os padrao
 
-**Parte visivel (sempre aparece):**
-- Linha 1: Botao Voltar + Nome do Devedor + Botoes de acao (WhatsApp, Telefone, Formalizar Acordo)
-- Linha 2: CPF, Tel, Email, Credor, Em Aberto
-- Linha 3: Trigger colapsavel com texto "Mais informacoes" e seta apontando para BAIXO na direita
+**Arquivos:** `CadastrosPage.tsx`, `TipoDevedorList.tsx`
 
-**Icones melhorados:**
-- WhatsApp: trocar `MessageCircle` por um icone SVG inline do logo oficial do WhatsApp (circulo verde com telefone branco), ou usar um icone mais reconhecivel com fundo circular verde
-- Telefone/Atendimento: usar `Headset` (fone de atendimento) em vez de `Phone` simples, com fundo circular azul
+---
 
-**Parte colapsavel (ao clicar na seta):**
-- Grid com todas as informacoes da planilha importada:
-  - Cod. Devedor (external_id)
-  - Cod. Contrato (extraido das observacoes)
-  - Endereco completo (endereco, cidade, UF, CEP)
-  - Telefone 2 e Telefone 3 (extraidos das observacoes, pois foram concatenados no import)
-  - Total Pago e Parcelas pagas/total
-  - Observacoes
+### 2. Criar nova secao "Tipo de Status" em /Cadastros
 
-### 2. Abas Reorganizadas
+**Nova tabela no banco:** `tipos_status`
+- `id` (uuid, PK)
+- `tenant_id` (uuid, NOT NULL)
+- `nome` (text, NOT NULL)
+- `descricao` (text)
+- `cor` (text) -- cor para badge visual
+- `regras` (jsonb) -- regras configuradas pelo admin (bloqueio de edicao, tempo de expiracao, auto-transicao)
+- `created_at` (timestamp)
 
-Nova ordem das abas:
-```
-Titulos em Aberto | Acordos | Historico | Documentos | Assinatura | Anexos
-```
+Os 6 status padrao serao:
+1. Aguardando acionamento
+2. Acordo Vigente
+3. Quebra de Acordo
+4. Quitado
+5. Em negociacao
+6. Risco de Processo
 
-### 3. Nova Aba "Documentos"
+**Novo campo na tabela `clients`:**
+- `status_cobranca_id` (uuid, FK para `tipos_status`, nullable)
+- `status_cobranca_locked_by` (uuid, nullable) -- operador que travou
+- `status_cobranca_locked_at` (timestamp, nullable) -- quando foi travado
 
-Card com 4 botoes/cards para download dos documentos pre-definidos pelo admin no cadastro do credor:
-- Carta de Acordo (`template_acordo`)
-- Recibo de Pagamento (`template_recibo`)
-- Carta de Quitacao (`template_quitacao`)
-- Descricao de Divida (`template_descricao_divida`)
+**Componente novo:** `TipoStatusList.tsx` -- lista CRUD igual ao TipoDevedorList, com campos adicionais para configurar regras de cada status
 
-**Logica:**
-1. Buscar o credor do devedor na tabela `credores` (pelo campo `razao_social` ou `nome_fantasia` que corresponda a `client.credor`)
-2. Carregar os templates do credor
-3. Substituir as variaveis do template pelos dados reais do devedor (nome, CPF, valores, datas, etc.)
-4. Gerar arquivo TXT ou abrir em nova aba para impressao/download
+**Menu lateral:** nova entrada "Tipo de Status" abaixo de "Tipo de Divida"
 
-Templates usam variaveis como `{nome_devedor}`, `{cpf_devedor}`, `{valor_divida}`, `{razao_social_credor}`, etc. Ja definidos no `CredorForm.tsx`.
+---
 
-### 4. Nova Aba "Assinatura"
+### 3. Regras de Negocio dos Status
 
-Permite ao operador enviar a carta de acordo para o devedor assinar digitalmente. Opcoes de envio:
-- **Por E-mail**: Envia um link do portal de assinatura para o email do devedor
-- **Por WhatsApp**: Abre o WhatsApp com o link pre-preenchido na mensagem
-- **Copiar Link**: Copia o link de assinatura para a area de transferencia
+As regras serao aplicadas no frontend e validadas no backend:
 
-**Logica:**
-1. Verificar se existe um acordo aprovado com `checkout_token`
-2. Se existir, gerar o link do portal: `{URL_BASE}/portal?token={checkout_token}`
-3. Mostrar status da assinatura (assinado/pendente) consultando `agreement_signatures`
-4. Se nao houver acordo aprovado, exibir mensagem informando que e necessario formalizar e aprovar um acordo primeiro
+**Em Negociacao:**
+- Ao marcar um cliente como "Em Negociacao", registra `status_cobranca_locked_by` e `status_cobranca_locked_at`
+- Outros operadores nao podem editar esse cliente por 10 dias
+- Apos 10 dias sem atualizacao, o status volta automaticamente para "Aguardando acionamento" (via edge function cron ou verificacao no frontend)
 
-### 5. Detalhes Tecnicos
+**Acordo Vigente:**
+- Apenas o operador responsavel ou admin podem editar
+- Demais operadores veem como somente leitura
+
+**Quebra de Acordo:**
+- Se a parcela nao for baixada em 3 dias, status muda automaticamente para "Quebra de Acordo"
+- O cliente pode ser cobrado novamente mas o status permanece ate novo acordo
+
+**Risco de Processo:**
+- Exibe um alerta visual (badge vermelha) na carteira
+- Ao criar filas/campanhas, clientes com esse status sao sinalizados para analise
+
+**Aguardando acionamento:**
+- Status padrao, cliente pode ser cobrado normalmente
+
+**Quitado:**
+- Somente leitura, nenhuma acao de cobranca disponivel
+
+---
+
+### 4. Perfil do Devedor no Card de Detalhes (/carteira/:cpf)
+
+Dentro de "Mais informacoes do devedor" (secao colapsavel), adicionar um Select para escolher o Perfil do Devedor. Ao mudar, salva automaticamente no campo `tipo_devedor_id` do cliente.
+
+---
+
+### 5. Filtro de Status na Carteira (/carteira)
+
+Adicionar filtro "Status de Cobranca" nos filtros avancados da Carteira (`ClientFilters.tsx`), carregando os tipos de status cadastrados. Util para criar campanhas de discador e WhatsApp filtrando por status especifico.
+
+---
+
+### Detalhes Tecnicos
+
+**Migracao de banco de dados:**
+1. Criar tabela `tipos_status` com RLS (mesmos padroes das demais tabelas: admin manage, tenant view)
+2. Adicionar colunas `status_cobranca_id`, `status_cobranca_locked_by`, `status_cobranca_locked_at` na tabela `clients`
 
 **Arquivos a criar:**
-- `src/components/client-detail/ClientDocuments.tsx` - Aba de documentos com download dos 4 templates
-- `src/components/client-detail/ClientSignature.tsx` - Aba de envio de assinatura digital
+- `src/components/cadastros/TipoStatusList.tsx` -- CRUD de Tipos de Status com regras configuraveis
 
 **Arquivos a modificar:**
-- `src/components/client-detail/ClientDetailHeader.tsx` - Melhorar icones de WhatsApp e Telefone; integrar a area colapsavel dentro do mesmo Card
-- `src/components/client-detail/ClientCollapsibleDetails.tsx` - Sera removido como componente separado e integrado dentro do Header
-- `src/pages/ClientDetailPage.tsx` - Reorganizar abas, adicionar as novas abas Documentos e Assinatura, remover import do `ClientCollapsibleDetails`
+- `src/pages/CadastrosPage.tsx` -- adicionar secao "Tipo de Status" no menu e renomear "Tipo de Devedor"
+- `src/components/cadastros/TipoDevedorList.tsx` -- renomear labels e atualizar perfis padrao com descricoes
+- `src/services/cadastrosService.ts` -- adicionar funcoes CRUD para `tipos_status`
+- `src/components/client-detail/ClientDetailHeader.tsx` -- adicionar Select de Perfil do Devedor na area colapsavel
+- `src/components/clients/ClientFilters.tsx` -- adicionar filtro por Status de Cobranca
+- `src/pages/CarteiraPage.tsx` -- adicionar `statusCobrancaId` nos filtros e exibir badge de status na tabela
+- `src/services/clientService.ts` -- atualizar interface Client com novos campos
 
-**Queries adicionais no ClientDetailPage:**
-- Query para buscar o credor na tabela `credores` (para os templates de documentos)
-- Query para buscar assinaturas em `agreement_signatures` (para aba Assinatura)
-
-**Nenhuma migracao de banco necessaria** - todos os campos e tabelas ja existem.
+**Edge function (futura):**
+- `auto-status-update` -- rotina para verificar clientes "Em negociacao" com mais de 10 dias e "Quebra de acordo" com parcelas vencidas ha 3 dias. Pode ser implementada como cron ou verificacao no carregamento da pagina.
