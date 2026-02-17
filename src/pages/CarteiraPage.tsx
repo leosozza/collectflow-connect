@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchTiposStatus } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
 import {
   fetchClients,
@@ -15,6 +16,7 @@ import {
 import type { ImportedRow } from "@/services/importService";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import * as XLSX from "xlsx";
+import { Badge } from "@/components/ui/badge";
 import ClientFilters from "@/components/clients/ClientFilters";
 import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
@@ -43,7 +45,7 @@ import {
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
-  const { isTenantAdmin, isSuperAdmin } = useTenant();
+  const { tenant, isTenantAdmin, isSuperAdmin } = useTenant();
   const isAdmin = isTenantAdmin || isSuperAdmin;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -108,6 +110,18 @@ const CarteiraPage = () => {
       return cpfSet;
     },
   });
+
+  const { data: tiposStatus = [] } = useQuery({
+    queryKey: ["tipos_status", tenant?.id],
+    queryFn: () => fetchTiposStatus(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  const statusMap = useMemo(() => {
+    const map = new Map<string, { nome: string; cor: string }>();
+    tiposStatus.forEach((t: any) => map.set(t.id, { nome: t.nome, cor: t.cor || "#6b7280" }));
+    return map;
+  }, [tiposStatus]);
 
   const displayClients = useMemo(() => {
     let filtered = clients;
@@ -372,7 +386,8 @@ const CarteiraPage = () => {
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-right">Valor da Parcela</TableHead>
                     <TableHead className="text-center">Score</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-center">Pagamento</TableHead>
+                    <TableHead className="text-center">Status Cobrança</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -403,6 +418,23 @@ const CarteiraPage = () => {
                       </TableCell>
                       <TableCell className="text-center">
                         {getStatusIcon(client)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {client.status_cobranca_id && statusMap.has(client.status_cobranca_id) ? (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border"
+                            style={{
+                              backgroundColor: `${statusMap.get(client.status_cobranca_id)!.cor}15`,
+                              color: statusMap.get(client.status_cobranca_id)!.cor,
+                              borderColor: `${statusMap.get(client.status_cobranca_id)!.cor}40`,
+                            }}
+                          >
+                            {statusMap.get(client.status_cobranca_id)!.nome}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
