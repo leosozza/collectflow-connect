@@ -137,6 +137,8 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
             onChange={handleFileChange}
           />
 
+          <AudioRecorder onRecorded={onSendAudio} disabled={disabled} />
+
           {/* Quick Replies shortcut button */}
           {quickReplies.length > 0 && (
             <Popover open={qrPopoverOpen} onOpenChange={setQrPopoverOpen}>
@@ -173,8 +175,6 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
               </PopoverContent>
             </Popover>
           )}
-
-          <AudioRecorder onRecorded={onSendAudio} disabled={disabled} />
           {onSendInternalNote && (
             <Button
               size="icon"

@@ -42,29 +42,31 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   ].filter((tab) => !tab.adminOnly || isTenantAdmin);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Lateral tab navigation */}
-      <div className="w-[52px] shrink-0 flex flex-col items-center gap-1 py-3 bg-secondary border-r border-sidebar-border">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              title={tab.label}
-              className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5" />
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Horizontal tab navigation */}
+      {tabs.length > 1 && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-card">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
