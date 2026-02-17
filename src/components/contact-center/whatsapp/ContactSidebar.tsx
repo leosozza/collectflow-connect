@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Link2, Unlink, Search, Tag } from "lucide-react";
+import { User, Link2, Unlink, Search, Tag, FileText } from "lucide-react";
 import { Conversation, ChatMessage, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useTenant } from "@/hooks/useTenant";
 import TagManager from "./TagManager";
 import AISummaryPanel from "./AISummaryPanel";
 
@@ -27,6 +29,7 @@ interface SimpleClient {
   valor_parcela: number;
   numero_parcela: number;
   total_parcelas: number;
+  status_cobranca_id: string | null;
 }
 
 interface ConversationTag {
@@ -37,12 +40,15 @@ interface ConversationTag {
 }
 
 const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSidebarProps) => {
+  const navigate = useNavigate();
+  const { isTenantAdmin } = useTenant();
   const [linkedClient, setLinkedClient] = useState<SimpleClient | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SimpleClient[]>([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [assignedTags, setAssignedTags] = useState<ConversationTag[]>([]);
+  const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
 
   // Fetch linked client
   useEffect(() => {
@@ -52,11 +58,25 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     }
     supabase
       .from("clients")
-      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas")
+      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id")
       .eq("id", conversation.client_id)
       .maybeSingle()
       .then(({ data }) => {
-        setLinkedClient(data as SimpleClient | null);
+        const client = data as SimpleClient | null;
+        setLinkedClient(client);
+        // Fetch status cobrança name/color
+        if (client?.status_cobranca_id) {
+          supabase
+            .from("tipos_status")
+            .select("nome, cor")
+            .eq("id", client.status_cobranca_id)
+            .maybeSingle()
+            .then(({ data: statusData }) => {
+              setStatusCobranca(statusData as { nome: string; cor: string } | null);
+            });
+        } else {
+          setStatusCobranca(null);
+        }
       });
   }, [conversation?.client_id]);
 
@@ -94,7 +114,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     setSearching(true);
     const { data } = await supabase
       .from("clients")
-      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas")
+      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id")
       .or(`nome_completo.ilike.%${searchTerm}%,cpf.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
       .limit(5);
     setSearchResults((data as SimpleClient[] | null) || []);
@@ -169,6 +189,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               conversationId={conversation.id}
               assignedTags={assignedTags}
               onTagsChanged={loadTags}
+              isAdmin={isTenantAdmin}
             />
           </CardContent>
         </Card>
@@ -188,10 +209,18 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               <div className="text-sm font-medium">{linkedClient.nome_completo}</div>
               <div className="text-xs text-muted-foreground">CPF: {linkedClient.cpf}</div>
               <div className="text-xs text-muted-foreground">Credor: {linkedClient.credor}</div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-[10px]">
                   {statusLabels[linkedClient.status] || linkedClient.status}
                 </Badge>
+                {statusCobranca && (
+                  <Badge
+                    className="text-[10px]"
+                    style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
+                  >
+                    {statusCobranca.nome}
+                  </Badge>
+                )}
                 <span className="text-xs text-muted-foreground">
                   Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas}
                 </span>
@@ -199,6 +228,15 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               <div className="text-xs">
                 Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs mt-2"
+                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?tab=acordo`)}
+              >
+                <FileText className="w-3 h-3 mr-1" />
+                Formalizar Acordo
+              </Button>
             </CardContent>
           </Card>
         ) : (

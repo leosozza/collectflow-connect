@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
@@ -23,7 +23,18 @@ import ClientSignature from "@/components/client-detail/ClientSignature";
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState("titulos");
+
+  // Support ?tab=acordo deep link
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "acordo") {
+      setActiveTab("acordo");
+      setShowAcordoDialog(true);
+    }
+  }, [searchParams]);
 
   const { data: clients = [], isLoading, refetch } = useQuery({
     queryKey: ["client-detail", cpf],
@@ -111,7 +122,7 @@ const ClientDetailPage = () => {
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
       />
 
-      <Tabs defaultValue="titulos" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
           <TabsTrigger value="acordo">Acordos</TabsTrigger>

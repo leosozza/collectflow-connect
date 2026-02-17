@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote } from "lucide-react";
+import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote, Handshake } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ClientHeaderProps {
   client: {
@@ -26,6 +29,7 @@ interface ClientHeaderProps {
     uf?: string | null;
     cep?: string | null;
     observacoes?: string | null;
+    status_cobranca_id?: string | null;
   };
   totalAberto: number;
   totalPago: number;
@@ -43,14 +47,39 @@ const InfoItem = ({ icon: Icon, label, value, className }: { icon?: any; label: 
 
 const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas }: ClientHeaderProps) => {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
+
+  useEffect(() => {
+    if (!client.status_cobranca_id) {
+      setStatusCobranca(null);
+      return;
+    }
+    supabase
+      .from("tipos_status")
+      .select("nome, cor")
+      .eq("id", client.status_cobranca_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setStatusCobranca(data as { nome: string; cor: string } | null);
+      });
+  }, [client.status_cobranca_id]);
 
   return (
     <div className="bg-card rounded-xl border border-border p-5">
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl font-bold text-foreground">{client.nome_completo}</h2>
+              {statusCobranca && (
+                <Badge
+                  className="text-xs"
+                  style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
+                >
+                  {statusCobranca.nome}
+                </Badge>
+              )}
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7">
                   {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -65,6 +94,16 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
                 <Building className="w-3.5 h-3.5" /> {client.credor}
               </span>
             </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/carteira/${client.cpf.replace(/\D/g, "")}?tab=acordo`)}
+            >
+              <Handshake className="w-4 h-4 mr-1" />
+              Formalizar Acordo
+            </Button>
           </div>
           <div className="flex gap-4 text-center">
             <div>
