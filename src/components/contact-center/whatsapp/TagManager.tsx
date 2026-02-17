@@ -19,11 +19,12 @@ interface TagManagerProps {
   conversationId: string;
   assignedTags: ConversationTag[];
   onTagsChanged: () => void;
+  isAdmin?: boolean;
 }
 
 const TAG_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
 
-const TagManager = ({ conversationId, assignedTags, onTagsChanged }: TagManagerProps) => {
+const TagManager = ({ conversationId, assignedTags, onTagsChanged, isAdmin = false }: TagManagerProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const [allTags, setAllTags] = useState<ConversationTag[]>([]);
@@ -122,30 +123,32 @@ const TagManager = ({ conversationId, assignedTags, onTagsChanged }: TagManagerP
                 ))}
               </div>
             )}
-            {/* Create new tag */}
-            <div className="border-t border-border pt-2 space-y-1.5">
-              <div className="text-[10px] font-medium text-muted-foreground">Nova etiqueta</div>
-              <Input
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="Nome..."
-                className="h-7 text-xs"
-                onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
-              />
-              <div className="flex items-center gap-1">
-                {TAG_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setNewTagColor(c)}
-                    className={`w-4 h-4 rounded-full border-2 transition-all ${newTagColor === c ? "border-foreground scale-110" : "border-transparent"}`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
+            {/* Create new tag - admin only */}
+            {isAdmin && (
+              <div className="border-t border-border pt-2 space-y-1.5">
+                <div className="text-[10px] font-medium text-muted-foreground">Nova etiqueta</div>
+                <Input
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  placeholder="Nome..."
+                  className="h-7 text-xs"
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
+                />
+                <div className="flex items-center gap-1">
+                  {TAG_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setNewTagColor(c)}
+                      className={`w-4 h-4 rounded-full border-2 transition-all ${newTagColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+                <Button size="sm" className="w-full h-7 text-xs" onClick={handleCreateTag} disabled={!newTagName.trim()}>
+                  Criar
+                </Button>
               </div>
-              <Button size="sm" className="w-full h-7 text-xs" onClick={handleCreateTag} disabled={!newTagName.trim()}>
-                Criar
-              </Button>
-            </div>
+            )}
           </PopoverContent>
         </Popover>
       </div>
