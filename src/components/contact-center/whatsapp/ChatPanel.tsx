@@ -24,6 +24,7 @@ interface ChatPanelProps {
   clientInfo?: any;
   quickReplies?: any[];
   slaDeadline?: string | null;
+  operatorName?: string;
 }
 
 const ChatPanel = ({
@@ -41,6 +42,7 @@ const ChatPanel = ({
   clientInfo,
   quickReplies,
   slaDeadline,
+  operatorName,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -136,7 +138,7 @@ const ChatPanel = ({
       )}
 
       {/* Input - WhatsApp style */}
-      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} onSendInternalNote={onSendInternalNote} quickReplies={quickReplies} disabled={sending} />
+      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} onSendInternalNote={onSendInternalNote} quickReplies={quickReplies} disabled={sending} clientInfo={clientInfo} operatorName={operatorName} />
     </div>
   );
 };

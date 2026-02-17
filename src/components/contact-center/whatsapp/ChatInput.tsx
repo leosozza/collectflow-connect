@@ -8,6 +8,16 @@ import { QuickReply } from "@/services/conversationService";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+interface ClientInfo {
+  nome_completo?: string;
+  valor_parcela?: number;
+  total_parcelas?: number;
+  numero_parcela?: number;
+  credor?: string;
+  cpf?: string;
+  data_vencimento?: string;
+}
+
 interface ChatInputProps {
   onSend: (text: string) => void;
   onSendMedia: (file: File) => void;
@@ -15,9 +25,11 @@ interface ChatInputProps {
   onSendInternalNote?: (text: string) => void;
   quickReplies?: QuickReply[];
   disabled?: boolean;
+  clientInfo?: ClientInfo | null;
+  operatorName?: string;
 }
 
-const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled }: ChatInputProps) => {
+const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled, clientInfo, operatorName }: ChatInputProps) => {
   const [text, setText] = useState("");
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [filteredReplies, setFilteredReplies] = useState<QuickReply[]>([]);
@@ -67,8 +79,29 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
     }
   };
 
+  const resolveVariables = (content: string): string => {
+    const parcelas_abertas = clientInfo
+      ? Math.max(0, (clientInfo.total_parcelas || 0) - (clientInfo.numero_parcela || 0) + 1)
+      : 0;
+    const replacements: Record<string, string> = {
+      "{{nome_cliente}}": clientInfo?.nome_completo || "{{nome_cliente}}",
+      "{{nome_operador}}": operatorName || "{{nome_operador}}",
+      "{{valor_parcela}}": clientInfo?.valor_parcela != null ? clientInfo.valor_parcela.toFixed(2) : "{{valor_parcela}}",
+      "{{parcelas_abertas}}": clientInfo ? String(parcelas_abertas) : "{{parcelas_abertas}}",
+      "{{total_parcelas}}": clientInfo?.total_parcelas != null ? String(clientInfo.total_parcelas) : "{{total_parcelas}}",
+      "{{credor}}": clientInfo?.credor || "{{credor}}",
+      "{{cpf}}": clientInfo?.cpf || "{{cpf}}",
+      "{{vencimento}}": clientInfo?.data_vencimento || "{{vencimento}}",
+    };
+    let resolved = content;
+    for (const [key, value] of Object.entries(replacements)) {
+      resolved = resolved.split(key).join(value);
+    }
+    return resolved;
+  };
+
   const selectQuickReply = (qr: QuickReply) => {
-    setText(qr.content);
+    setText(resolveVariables(qr.content));
     setShowQuickReplies(false);
     setQrPopoverOpen(false);
   };
