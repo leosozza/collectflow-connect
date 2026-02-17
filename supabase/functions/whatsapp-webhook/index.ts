@@ -44,6 +44,36 @@ Deno.serve(async (req) => {
     const tenantId = instance.tenant_id;
     const instanceId = instance.id;
 
+    // Helper: find client by phone number (auto-link)
+    const findClientByPhone = async (phone: string): Promise<string | null> => {
+      const digits = phone.replace(/\D/g, "");
+      if (!digits) return null;
+
+      // Build phone variants to search
+      const variants: string[] = [digits];
+      // Without country code (55)
+      if (digits.startsWith("55") && digits.length >= 12) {
+        variants.push(digits.slice(2));
+      }
+      // With country code
+      if (!digits.startsWith("55") && digits.length >= 10) {
+        variants.push("55" + digits);
+      }
+
+      for (const variant of variants) {
+        const { data: client } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .like("phone", `%${variant.slice(-10)}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (client) return client.id;
+      }
+      return null;
+    };
+
     // Helper: get SLA minutes from tenant settings
     const getSlaMinutes = async (): Promise<number> => {
       const { data: tenant } = await supabase
@@ -154,7 +184,7 @@ Deno.serve(async (req) => {
       // Find or create conversation
       const { data: existingConv } = await supabase
         .from("conversations")
-        .select("id, unread_count, assigned_to")
+        .select("id, unread_count, assigned_to, client_id")
         .eq("tenant_id", tenantId)
         .eq("instance_id", instanceId)
         .eq("remote_phone", remotePhone)
@@ -166,7 +196,6 @@ Deno.serve(async (req) => {
         conversationId = existingConv.id;
         const newUnread = direction === "inbound" ? (existingConv.unread_count || 0) + 1 : existingConv.unread_count;
 
-        // Set SLA deadline on inbound messages
         const updateData: any = {
           last_message_at: new Date().toISOString(),
           unread_count: newUnread,
@@ -178,8 +207,16 @@ Deno.serve(async (req) => {
           const slaMinutes = await getSlaMinutes();
           updateData.sla_deadline_at = new Date(Date.now() + slaMinutes * 60 * 1000).toISOString();
         } else {
-          // Outbound resets SLA
           updateData.sla_deadline_at = null;
+        }
+
+        // Auto-link client if not yet linked
+        if (!existingConv.client_id) {
+          const clientId = await findClientByPhone(remotePhone);
+          if (clientId) {
+            updateData.client_id = clientId;
+            console.log("Auto-linked client", clientId, "to existing conversation", conversationId);
+          }
         }
 
         await supabase
@@ -187,7 +224,12 @@ Deno.serve(async (req) => {
           .update(updateData)
           .eq("id", conversationId);
       } else {
-        // Round-robin assignment for new conversations
+        // Auto-link client for new conversation
+        const clientId = await findClientByPhone(remotePhone);
+        if (clientId) {
+          console.log("Auto-linking client", clientId, "to new conversation for phone", remotePhone);
+        }
+
         const assignedTo = direction === "inbound" ? await assignRoundRobin() : null;
         const slaMinutes = await getSlaMinutes();
 
@@ -202,6 +244,7 @@ Deno.serve(async (req) => {
             unread_count: direction === "inbound" ? 1 : 0,
             last_message_at: new Date().toISOString(),
             assigned_to: assignedTo,
+            client_id: clientId,
             sla_deadline_at: direction === "inbound"
               ? new Date(Date.now() + slaMinutes * 60 * 1000).toISOString()
               : null,
