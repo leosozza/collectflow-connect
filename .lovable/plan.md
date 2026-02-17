@@ -1,60 +1,59 @@
 
 
-## Variaveis Dinamicas em Respostas Rapidas + Mensagens Pre-configuradas
+## Melhorias na Tela de Telefonia
 
-### Conceito
+### 1. Remover "Pagamentos" dos cards de agentes
 
-As respostas rapidas passarao a suportar **variaveis dinamicas** que sao substituidas automaticamente pelos dados reais do cliente vinculado a conversa no momento do envio. O admin vera os atalhos de variaveis no formulario de criacao, e o operador vera a mensagem ja preenchida ao selecionar.
+**Arquivo: `AgentStatusTable.tsx`**
+- Remover a linha `StatRow` de "Pagamentos" (linha 199)
+- Manter apenas "Contatos" e "Acordos" nas metricas do card
+- Atualizar a interface `AgentMetrics` para remover o campo `payments`
 
-### Variaveis Disponiveis
+**Arquivo: `TelefoniaDashboard.tsx`**
+- Remover a query `todayPayments` (linhas 98-111) que busca pagamentos no banco
+- Simplificar o `agentMetrics` useMemo removendo a contagem de payments
+- Tipo das metricas passa a ser `{ contacts: number; agreements: number }`
 
-| Variavel | Descricao | Fonte |
-|---|---|---|
-| `{{nome_cliente}}` | Nome completo do devedor | `clients.nome_completo` |
-| `{{nome_operador}}` | Nome do operador logado | `profiles.full_name` |
-| `{{valor_parcela}}` | Valor da parcela (R$) | `clients.valor_parcela` |
-| `{{parcelas_abertas}}` | Qtd parcelas em aberto | `clients.total_parcelas - clients.numero_parcela + 1` |
-| `{{total_parcelas}}` | Total de parcelas | `clients.total_parcelas` |
-| `{{credor}}` | Nome do credor | `clients.credor` |
-| `{{cpf}}` | CPF do cliente | `clients.cpf` |
-| `{{vencimento}}` | Data de vencimento | `clients.data_vencimento` |
+### 2. Otimizar KPI Cards - layout mais compacto e fluido
 
-### Mensagens Pre-configuradas (seed via migracao)
+**Arquivo: `TelefoniaDashboard.tsx`**
+- Redesenhar os 6 KPI cards em formato horizontal inline (icone + valor + label lado a lado) em vez de empilhados verticalmente
+- Usar layout mais compacto: icone a esquerda, valor grande + label pequeno a direita
+- Reduzir padding dos cards para `p-3`
+- Mover o badge de conexao e controles de refresh para dentro da mesma barra dos KPIs, eliminando o card de toolbar separado
 
-Serrao inseridas automaticamente para cada tenant (ou como templates padrao):
+### 3. Melhorar cards dos agentes
 
-1. `/saudacao` - "Ola, {{nome_cliente}}! Aqui e {{nome_operador}}. Como posso ajuda-lo hoje?"
-2. `/debito` - "{{nome_cliente}}, seu debito atual com {{credor}} e de {{valor_parcela}} por parcela, com {{parcelas_abertas}} parcela(s) em aberto."
-3. `/vencimento` - "Sua proxima parcela vence em {{vencimento}}, no valor de {{valor_parcela}}."
-4. `/negociacao` - "{{nome_cliente}}, temos condicoes especiais para regularizar sua situacao com {{credor}}. Posso apresentar uma proposta?"
-5. `/encerramento` - "Obrigado pelo contato, {{nome_cliente}}! Qualquer duvida, estamos a disposicao. Um abraco, {{nome_operador}}."
+**Arquivo: `AgentStatusTable.tsx`**
+- Tornar os cards mais compactos: reduzir avatar para `h-12 w-12`, menos padding
+- Mover o nome e status para layout mais horizontal e condensado
+- Campanha do agente aparece como texto pequeno abaixo do status
+- Grid mais denso: `xl:grid-cols-6` em vez de `xl:grid-cols-5`
+
+### 4. Melhorar card de Campanhas
+
+**Arquivo: `CampaignOverview.tsx`**
+- Redesenhar com layout mais limpo:
+  - Header da campanha: nome + badge de status + horario em uma linha
+  - Metricas (Agentes, Completadas, Abandonadas) em badges/chips inline em vez de grid 3 colunas com bg-muted
+  - Slider de agressividade mais compacto, inline com o label e valor
+  - Botao Pausar/Retomar menor, posicionado ao lado do slider
+- Separar visualmente campanhas ativas (running) das pausadas/paradas com secoes ou opacidade reduzida nas inativas
+
+### 5. Barra superior unificada
+
+**Arquivo: `TelefoniaDashboard.tsx`**
+- Unificar toolbar: Menu dropdown + titulo "Dashboard" + badge de conexao ficam numa unica linha compacta sem card separado
+- Isso libera espaco vertical e torna o layout mais fluido
 
 ---
 
 ### Detalhes Tecnicos
 
-**1. QuickRepliesTab.tsx - Atalhos de variaveis no formulario**
-
-Adicionar abaixo do Textarea de conteudo uma barra com botoes/chips clicaveis para cada variavel. Ao clicar, a variavel e inserida na posicao do cursor no textarea. Exemplo visual: chips como `{nome_cliente}`, `{valor_parcela}`, etc.
-
-**2. WhatsAppChatLayout.tsx - Passar dados do cliente para ChatInput**
-
-Atualmente `clientInfo={null}` esta hardcoded. Precisamos:
-- Carregar o cliente vinculado a conversa (via `selectedConv.client_id`)
-- Passar `clientInfo` real para o ChatPanel/ChatInput
-
-**3. ChatInput.tsx - Resolver variaveis ao selecionar quick reply**
-
-Na funcao `selectQuickReply`, antes de setar o texto, substituir todas as variaveis `{{...}}` pelos dados reais do cliente e do operador. Se o cliente nao estiver vinculado, manter a variavel como texto literal (ou mostrar aviso).
-
-**4. Migracao SQL - Inserir respostas rapidas padrao**
-
-Criar funcao SQL ou usar a migracao para inserir as 5 respostas padrao. Como sao por tenant, sera necessario inserir para todos os tenants existentes. Usar `INSERT ... ON CONFLICT DO NOTHING` baseado em tenant_id + shortcut para nao duplicar.
-
 **Arquivos a modificar:**
-- `src/components/contact-center/whatsapp/QuickRepliesTab.tsx` - adicionar barra de variaveis clicaveis
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` - carregar clientInfo real e passar ao ChatPanel
-- `src/components/contact-center/whatsapp/ChatInput.tsx` - receber clientInfo + profile, resolver variaveis na selecao
-- `src/components/contact-center/whatsapp/ChatPanel.tsx` - repassar clientInfo ao ChatInput
-- Nova migracao SQL para inserir respostas rapidas padrao
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` - toolbar unificada, remover query payments, KPIs compactos
+- `src/components/contact-center/threecplus/AgentStatusTable.tsx` - remover Pagamentos, cards mais compactos
+- `src/components/contact-center/threecplus/CampaignOverview.tsx` - redesign dos cards de campanha
+
+**Nenhuma migracao de banco necessaria.**
 
