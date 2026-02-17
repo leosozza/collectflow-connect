@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LogOut, Loader2, Users, Handshake } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,15 +33,15 @@ interface AgentStatusTableProps {
   agentMetrics?: Record<number, AgentMetrics>;
 }
 
-const statusConfig: Record<string, { label: string; dotClass: string; borderClass: string }> = {
-  idle: { label: "Ocioso", dotClass: "bg-emerald-500", borderClass: "border-emerald-500/40" },
-  available: { label: "Disponível", dotClass: "bg-emerald-500", borderClass: "border-emerald-500/40" },
-  on_call: { label: "Em Ligação", dotClass: "bg-destructive animate-pulse", borderClass: "border-destructive/40" },
-  ringing: { label: "Tocando", dotClass: "bg-orange-500 animate-pulse", borderClass: "border-orange-500/40" },
-  paused: { label: "Em Pausa", dotClass: "bg-amber-500", borderClass: "border-amber-500/40" },
-  acw: { label: "ACW", dotClass: "bg-blue-500", borderClass: "border-blue-500/40" },
-  manual: { label: "Manual", dotClass: "bg-purple-500", borderClass: "border-purple-500/40" },
-  offline: { label: "Offline", dotClass: "bg-muted-foreground/50", borderClass: "border-border" },
+const statusConfig: Record<string, { label: string; dotClass: string; cardAccent: string }> = {
+  idle: { label: "Ocioso", dotClass: "bg-primary", cardAccent: "border-l-primary" },
+  available: { label: "Disponível", dotClass: "bg-primary", cardAccent: "border-l-primary" },
+  on_call: { label: "Em Ligação", dotClass: "bg-destructive animate-pulse", cardAccent: "border-l-destructive" },
+  ringing: { label: "Tocando", dotClass: "bg-accent-foreground animate-pulse", cardAccent: "border-l-accent-foreground" },
+  paused: { label: "Em Pausa", dotClass: "bg-muted-foreground", cardAccent: "border-l-muted-foreground" },
+  acw: { label: "ACW", dotClass: "bg-secondary-foreground", cardAccent: "border-l-secondary-foreground" },
+  manual: { label: "Manual", dotClass: "bg-secondary-foreground", cardAccent: "border-l-secondary-foreground" },
+  offline: { label: "Offline", dotClass: "bg-muted-foreground/40", cardAccent: "border-l-muted-foreground/40" },
 };
 
 const numericStatusMap: Record<number, string> = {
@@ -53,27 +52,10 @@ function getStatusInfo(status: string | number) {
   const normalized = typeof status === "number"
     ? (numericStatusMap[status] || "offline")
     : (status?.toLowerCase().replace(/[\s-]/g, "_") || "offline");
-  return { key: normalized, ...(statusConfig[normalized] || { label: String(status) || "—", dotClass: "bg-muted-foreground/50", borderClass: "border-border" }) };
-}
-
-function getInitials(name: string): string {
-  if (!name) return "??";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const avatarColors = [
-  "bg-primary/15 text-primary",
-  "bg-blue-500/15 text-blue-700",
-  "bg-emerald-500/15 text-emerald-700",
-  "bg-purple-500/15 text-purple-700",
-  "bg-amber-500/15 text-amber-700",
-  "bg-pink-500/15 text-pink-700",
-];
-
-function getAvatarColor(id: number): string {
-  return avatarColors[id % avatarColors.length];
+  return {
+    key: normalized,
+    ...(statusConfig[normalized] || { label: String(status) || "—", dotClass: "bg-muted-foreground/40", cardAccent: "border-l-muted-foreground/40" }),
+  };
 }
 
 function formatElapsedTime(startTimestamp?: number): string {
@@ -87,18 +69,18 @@ function formatElapsedTime(startTimestamp?: number): string {
 }
 
 const legendItems = [
-  { label: "Online", dotClass: "bg-emerald-500" },
+  { label: "Online", dotClass: "bg-primary" },
   { label: "Ligação", dotClass: "bg-destructive" },
-  { label: "Pausa", dotClass: "bg-amber-500" },
-  { label: "Offline", dotClass: "bg-muted-foreground/50" },
+  { label: "Pausa", dotClass: "bg-muted-foreground" },
+  { label: "Offline", dotClass: "bg-muted-foreground/40" },
 ];
 
 const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick, agentMetrics = {} }: AgentStatusTableProps) => {
   if (loading && agents.length === 0) {
     return (
-      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
         {[...Array(6)].map((_, i) => (
-          <Skeleton key={i} className="h-40 w-full rounded-xl" />
+          <Skeleton key={i} className="h-28 w-full rounded-xl" />
         ))}
       </div>
     );
@@ -113,27 +95,27 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick,
   return (
     <TooltipProvider>
       <div className="space-y-3">
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
           {agents.map((agent) => {
             const info = getStatusInfo(agent.status);
-            const initials = getInitials(agent.name);
-            const colorClass = getAvatarColor(agent.id);
             const elapsed = formatElapsedTime(agent.status_start_time);
             const metrics = agentMetrics[agent.id] || { contacts: 0, agreements: 0 };
+            const firstName = agent.name ? agent.name.trim().split(/\s+/)[0] : `Ag. ${agent.id}`;
+
             return (
               <Card
                 key={agent.id}
-                className={`relative border ${info.borderClass} shadow-none transition-all hover:shadow-md ${onAgentClick ? "cursor-pointer" : ""}`}
+                className={`relative border-l-[3px] ${info.cardAccent} border-t-0 border-r-0 border-b-0 shadow-none bg-card transition-all hover:shadow-md hover:bg-accent/30 ${onAgentClick ? "cursor-pointer" : ""}`}
                 onClick={() => onAgentClick?.(agent)}
               >
                 {/* Logout button */}
-                <div className="absolute top-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute top-1 right-1 z-10" onClick={(e) => e.stopPropagation()}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        className="h-5 w-5 text-muted-foreground hover:text-destructive"
                         onClick={() => onLogout(agent.id)}
                         disabled={loggingOut === agent.id}
                       >
@@ -148,38 +130,32 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick,
                   </Tooltip>
                 </div>
 
-                <CardContent className="p-3 flex flex-col items-center">
-                  {/* Avatar with status indicator */}
-                  <div className="relative mb-2">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className={`text-sm font-bold ${colorClass}`}>
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background ${info.dotClass}`} />
+                <CardContent className="p-2.5 flex flex-col gap-1.5">
+                  {/* Name + status dot */}
+                  <div className="flex items-center gap-1.5 pr-5">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${info.dotClass}`} />
+                    <p className="text-xs font-semibold text-foreground truncate leading-tight">
+                      {firstName}
+                    </p>
                   </div>
 
-                  {/* Name */}
-                  <p className="text-xs font-semibold text-foreground text-center truncate w-full leading-tight">
-                    {agent.name || `Agente ${agent.id}`}
-                  </p>
-
                   {/* Status badge */}
-                  <Badge variant="outline" className={`mt-1 text-[9px] gap-1 px-1.5 py-0 ${info.borderClass}`}>
-                    {info.label}
-                    {elapsed && <span className="text-muted-foreground">· {elapsed}</span>}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground">{info.label}</span>
+                    {elapsed && <span className="text-[10px] text-muted-foreground/70">· {elapsed}</span>}
+                  </div>
+
                   {agent.pause_name && (
-                    <span className="text-[9px] text-muted-foreground mt-0.5 truncate w-full text-center">({agent.pause_name})</span>
+                    <span className="text-[9px] text-muted-foreground truncate">({agent.pause_name})</span>
                   )}
 
-                  {/* Metrics - compact */}
-                  <div className="w-full mt-2 pt-2 border-t border-border/60 flex items-center justify-around">
+                  {/* Metrics */}
+                  <div className="flex items-center gap-3 pt-1.5 border-t border-border/50">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="flex items-center gap-1">
-                          <Users className="w-3 h-3 text-blue-500" />
-                          <span className="text-xs font-semibold">{metrics.contacts}</span>
+                          <Users className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-xs font-semibold text-foreground">{metrics.contacts}</span>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>Contatos hoje</TooltipContent>
@@ -187,8 +163,8 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick,
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="flex items-center gap-1">
-                          <Handshake className="w-3 h-3 text-emerald-500" />
-                          <span className="text-xs font-semibold">{metrics.agreements}</span>
+                          <Handshake className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-xs font-semibold text-foreground">{metrics.agreements}</span>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>Acordos hoje</TooltipContent>
