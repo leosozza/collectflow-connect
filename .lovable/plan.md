@@ -1,59 +1,34 @@
 
-## Correcoes e Melhorias: Auto-vinculacao de Clientes e Verificacao das Abas
 
-### Diagnostico
+## Voltar Abas para o Topo e Reposicionar Botao de Respostas Rapidas
 
-**1. Abas (Agente Inteligente, Etiquetas, Respostas Rapidas):**
-As abas JA estao funcionando no codigo atual. Ao verificar diretamente no navegador, todas as 4 abas aparecem corretamente para o usuario admin. Pode ter sido um problema de cache do navegador. Recomendo forcar um reload (Ctrl+Shift+R) para confirmar.
+### 1. Navegacao: Voltar abas para formato horizontal no topo
 
-**2. Vinculacao automatica de clientes:**
-O webhook `whatsapp-webhook` cria conversas novas sem tentar vincular o cliente. A tabela `clients` tem o campo `phone` que deveria ser usado para fazer o match automaticamente. Quando uma mensagem chega de um numero que ja existe na base de clientes, o sistema deveria vincular automaticamente.
+**Arquivo: `src/pages/ContactCenterPage.tsx`**
 
----
+Substituir a barra lateral vertical por abas horizontais no topo da pagina, no estilo de cards/pills:
+- Layout volta a ser `flex-col` (vertical) em vez de `flex` (horizontal)
+- Barra de abas no topo com botoes estilizados como pills/cards horizontais com icone + label
+- Operador ve apenas "Conversas"; admin ve todas as 4 abas
+- Conteudo ocupa o restante da altura abaixo
 
-### Plano de Implementacao
+### 2. Botao de Respostas Rapidas: mover para ao lado do microfone
 
-**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+**Arquivo: `src/components/contact-center/whatsapp/ChatInput.tsx`**
 
-Na criacao de uma nova conversa (linhas 194-216), adicionar logica de auto-vinculacao:
+O botao de respostas rapidas (Zap/raio) atualmente esta posicionado entre o botao de anexo e o AudioRecorder. O usuario quer que fique **ao lado do microfone**, ou seja, apos o AudioRecorder.
 
-1. Antes de criar a conversa, buscar na tabela `clients` um registro com `phone` igual ao `remotePhone` (ou variantes com/sem prefixo 55)
-2. Se encontrar, incluir o `client_id` no insert da conversa
-3. Se nao encontrar, manter `client_id` como `null` (comportamento atual)
-
-Logica de matching de telefone:
-- Buscar por match exato no campo `phone`
-- Tambem tentar variantes: remover o "55" do inicio, adicionar "55", buscar com formatos diferentes
-- Filtrar por `tenant_id` para respeitar a separacao multi-tenant
-
-**Tambem aplicar auto-vinculacao para conversas ja existentes sem client_id:**
-Quando uma conversa existente nao tem `client_id` vinculado, tentar o match novamente (caso o cliente tenha sido importado depois da conversa ser criada).
-
----
+Mudanca:
+- Mover o bloco do Popover de quick replies (linhas 140-175) para **depois** do `<AudioRecorder>` (linha 177)
+- Ordem final dos icones: Emoji, Anexo, Microfone, **Raio (Respostas Rapidas)**, Nota Interna
 
 ### Detalhes Tecnicos
 
-**Modificacao no webhook (`supabase/functions/whatsapp-webhook/index.ts`):**
+**`src/pages/ContactCenterPage.tsx`:**
+- Remover layout `flex` horizontal com sidebar de 52px
+- Adicionar barra horizontal no topo com `flex gap-2 px-4 py-2 border-b`
+- Botoes como pills: icone + texto, com destaque na aba ativa
+- Conteudo em `flex-1 overflow-hidden` abaixo
 
-```text
-Adicionar funcao auxiliar:
-
-async function findClientByPhone(supabase, tenantId, phone):
-  - Normalizar o telefone (remover caracteres nao-numericos)
-  - Buscar em clients WHERE tenant_id = tenantId AND phone contém o numero
-  - Tentar match com variantes: phone completo, sem DDI, com DDI
-  - Retornar client_id se encontrado, null caso contrario
-
-Na criacao de nova conversa:
-  - Chamar findClientByPhone antes do insert
-  - Incluir client_id no objeto de insert
-
-Na atualizacao de conversa existente:
-  - Se existingConv nao tem client_id (verificar com select adicional)
-  - Chamar findClientByPhone e atualizar se encontrar match
-```
-
-**Nenhuma migracao de banco necessaria** - o campo `client_id` ja existe na tabela `conversations`.
-
-**Arquivo a modificar:**
-- `supabase/functions/whatsapp-webhook/index.ts` - adicionar auto-vinculacao por telefone
+**`src/components/contact-center/whatsapp/ChatInput.tsx`:**
+- Reordenar: mover o bloco Quick Replies Popover para depois do AudioRecorder
