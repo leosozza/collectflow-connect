@@ -248,14 +248,9 @@ const WhatsAppChatLayout = () => {
   const selectedInstanceName = instances.find((i) => i.id === selectedConv?.instance_id)?.name;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      {/* Top bar with global search */}
-      <div className="flex items-center justify-end px-3 py-1.5 border-b border-border bg-card rounded-t-lg">
-        <GlobalSearch onNavigate={handleGlobalSearchNavigate} />
-      </div>
-
-      <div className="flex flex-1 overflow-hidden rounded-b-lg border border-border bg-card">
-        <div className="w-[300px] shrink-0">
+    <div className="flex flex-col h-full">
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-[320px] shrink-0">
           <ConversationList
             conversations={conversations}
             selectedId={selectedConv?.id || null}

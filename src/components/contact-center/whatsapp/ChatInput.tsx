@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, StickyNote } from "lucide-react";
+import { Send, Paperclip, StickyNote, Zap } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
 import AudioRecorder from "./AudioRecorder";
 import { QuickReply } from "@/services/conversationService";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -21,6 +22,7 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [filteredReplies, setFilteredReplies] = useState<QuickReply[]>([]);
   const [isInternalMode, setIsInternalMode] = useState(false);
+  const [qrPopoverOpen, setQrPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Quick replies: detect "/" at start
@@ -68,6 +70,7 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const selectQuickReply = (qr: QuickReply) => {
     setText(qr.content);
     setShowQuickReplies(false);
+    setQrPopoverOpen(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,8 +86,8 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   };
 
   return (
-    <div className="border-t border-border bg-card p-3 relative">
-      {/* Quick replies dropdown */}
+    <div className="border-t border-border bg-[#f0f2f5] dark:bg-[#202c33] px-3 py-2 relative">
+      {/* Quick replies dropdown (typing /) */}
       {showQuickReplies && (
         <div className="absolute bottom-full left-0 right-0 mx-3 mb-1 bg-popover border border-border rounded-lg shadow-lg z-10">
           <ScrollArea className="max-h-[200px]">
@@ -113,7 +116,7 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-1.5">
         <div className="flex items-center gap-0.5">
           <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
           <Button
@@ -133,6 +136,44 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
             className="hidden"
             onChange={handleFileChange}
           />
+
+          {/* Quick Replies shortcut button */}
+          {quickReplies.length > 0 && (
+            <Popover open={qrPopoverOpen} onOpenChange={setQrPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  disabled={disabled}
+                  title="Respostas rápidas"
+                >
+                  <Zap className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-[300px] p-0">
+                <div className="p-2 border-b border-border">
+                  <span className="text-xs font-semibold text-foreground">Respostas Rápidas</span>
+                </div>
+                <ScrollArea className="max-h-[250px]">
+                  {quickReplies.map((qr) => (
+                    <button
+                      key={qr.id}
+                      onClick={() => selectQuickReply(qr)}
+                      className="w-full text-left px-3 py-2 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-primary">/{qr.shortcut}</span>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 rounded">{qr.category}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{qr.content}</p>
+                    </button>
+                  ))}
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
+          )}
+
           <AudioRecorder onRecorded={onSendAudio} disabled={disabled} />
           {onSendInternalNote && (
             <Button
@@ -151,8 +192,8 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem... (/ para respostas rápidas)"}
-          className={`resize-none min-h-[40px] max-h-[120px] text-sm ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : ""}`}
+          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
+          className={`resize-none min-h-[40px] max-h-[120px] text-sm rounded-lg ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
           disabled={disabled}
         />
@@ -160,7 +201,7 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           size="icon"
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className={`shrink-0 ${isInternalMode ? "bg-yellow-500 hover:bg-yellow-600" : ""}`}
+          className={`shrink-0 rounded-full h-10 w-10 ${isInternalMode ? "bg-yellow-500 hover:bg-yellow-600" : "bg-primary hover:bg-primary/90"}`}
         >
           <Send className="w-4 h-4" />
         </Button>
