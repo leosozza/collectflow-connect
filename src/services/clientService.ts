@@ -29,6 +29,11 @@ export interface Client {
   uf: string | null;
   cep: string | null;
   observacoes: string | null;
+  tipo_devedor_id: string | null;
+  tipo_divida_id: string | null;
+  status_cobranca_id: string | null;
+  status_cobranca_locked_by: string | null;
+  status_cobranca_locked_at: string | null;
 }
 
 export interface ClientFormData {

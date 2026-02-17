@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTenant } from "@/hooks/useTenant";
-import { fetchCredores, fetchTiposDevedor, fetchTiposDivida } from "@/services/cadastrosService";
+import { fetchCredores, fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 
 interface Filters {
   status: string;
@@ -24,6 +24,7 @@ interface Filters {
   search: string;
   tipoDevedorId: string;
   tipoDividaId: string;
+  statusCobrancaId: string;
   semAcordo: boolean;
 }
 
@@ -52,6 +53,12 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
   const { data: tiposDivida = [] } = useQuery({
     queryKey: ["tipos_divida", tenant?.id],
     queryFn: () => fetchTiposDivida(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  const { data: tiposStatus = [] } = useQuery({
+    queryKey: ["tipos_status", tenant?.id],
+    queryFn: () => fetchTiposStatus(tenant!.id),
     enabled: !!tenant?.id,
   });
 
@@ -118,7 +125,25 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Tipo de Devedor</Label>
+              <Label className="text-xs text-muted-foreground">Status de Cobrança</Label>
+              <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {tiposStatus.map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.cor || "#6b7280" }} />
+                        {t.nome}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Perfil do Devedor</Label>
               <Select value={filters.tipoDevedorId || "todos"} onValueChange={(v) => update("tipoDevedorId", v === "todos" ? "" : v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>

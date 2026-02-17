@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
+import TipoStatusList from "@/components/cadastros/TipoStatusList";
 import UsersPage from "@/pages/UsersPage";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import { cn } from "@/lib/utils";
@@ -13,8 +14,9 @@ const sections = [
   { key: "credores", label: "Credores", icon: Building2 },
   { key: "usuarios", label: "Usuários", icon: UserCog },
   { key: "equipes", label: "Equipes", icon: Users },
-  { key: "tipo_devedor", label: "Tipo de Devedor", icon: UserCheck },
+  { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
   { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
+  { key: "tipo_status", label: "Tipo de Status", icon: Tags },
   { key: "integracao", label: "Integração", icon: Cloud },
 ];
 
@@ -61,6 +63,7 @@ const CadastrosPage = () => {
         {active === "equipes" && <EquipeList />}
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_divida" && <TipoDividaList />}
+        {active === "tipo_status" && <TipoStatusList />}
         {active === "integracao" && <IntegracaoPage />}
       </div>
     </div>

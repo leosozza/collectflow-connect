@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, Headset, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/hooks/useTenant";
+import { fetchTiposDevedor } from "@/services/cadastrosService";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -24,8 +29,31 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 
 const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAcordo }: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { tenant } = useTenant();
   const [open, setOpen] = useState(false);
   const formattedCpf = formatCPF(cpf || "");
+
+  const { data: tiposDevedor = [] } = useQuery({
+    queryKey: ["tipos_devedor", tenant?.id],
+    queryFn: () => fetchTiposDevedor(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  const updatePerfilMutation = useMutation({
+    mutationFn: async (tipoDevedorId: string | null) => {
+      const clientIds = clients.map(c => c.id);
+      for (const id of clientIds) {
+        const { error } = await supabase.from("clients").update({ tipo_devedor_id: tipoDevedorId } as any).eq("id", id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Perfil do devedor atualizado!");
+    },
+    onError: () => toast.error("Erro ao atualizar perfil"),
+  });
 
   const openWhatsApp = () => {
     if (!client.phone) {
@@ -112,6 +140,25 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
               <div>
                 <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Endereço</p>
                 <p className="text-sm text-foreground">{endereco || "—"}</p>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-border">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
+                <Select
+                  value={client.tipo_devedor_id || "none"}
+                  onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm w-48">
+                    <SelectValue placeholder="Selecionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {tiposDevedor.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {client.observacoes && (

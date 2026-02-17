@@ -394,6 +394,9 @@ export type Database = {
           propensity_score: number | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
+          status_cobranca_id: string | null
+          status_cobranca_locked_at: string | null
+          status_cobranca_locked_by: string | null
           tenant_id: string | null
           tipo_devedor_id: string | null
           tipo_divida_id: string | null
@@ -423,6 +426,9 @@ export type Database = {
           propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          status_cobranca_id?: string | null
+          status_cobranca_locked_at?: string | null
+          status_cobranca_locked_by?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
@@ -452,6 +458,9 @@ export type Database = {
           propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
+          status_cobranca_id?: string | null
+          status_cobranca_locked_at?: string | null
+          status_cobranca_locked_by?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
@@ -468,6 +477,13 @@ export type Database = {
             columns: ["operator_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_status_cobranca_id_fkey"
+            columns: ["status_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_status"
             referencedColumns: ["id"]
           },
           {
@@ -1962,6 +1978,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tipos_divida_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_status: {
+        Row: {
+          cor: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          regras: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          cor?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          regras?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          cor?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          regras?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_status_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

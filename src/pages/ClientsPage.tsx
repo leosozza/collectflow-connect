@@ -40,6 +40,7 @@ const ClientsPage = () => {
     search: "",
     tipoDevedorId: "",
     tipoDividaId: "",
+    statusCobrancaId: "",
     semAcordo: false,
   });
   const [formOpen, setFormOpen] = useState(false);
