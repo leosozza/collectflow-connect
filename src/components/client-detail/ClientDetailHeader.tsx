@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, MessageCircle, Phone, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
 import { toast } from "sonner";
 
@@ -26,7 +27,7 @@ const ClientDetailHeader = ({ client, cpf, totalAberto, onFormalizarAcordo }: Cl
   };
 
   return (
-    <div className="space-y-2">
+    <Card className="p-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/carteira")}>
           <ArrowLeft className="w-5 h-5" />
@@ -57,7 +58,7 @@ const ClientDetailHeader = ({ client, cpf, totalAberto, onFormalizarAcordo }: Cl
           </Button>
         </div>
       </div>
-      <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
         <span><strong>CPF:</strong> {formattedCpf}</span>
         <span className="text-border">|</span>
         <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
@@ -68,7 +69,7 @@ const ClientDetailHeader = ({ client, cpf, totalAberto, onFormalizarAcordo }: Cl
         <span className="text-border">|</span>
         <span><strong>Em Aberto:</strong> <span className="text-destructive font-semibold">{formatCurrency(totalAberto)}</span></span>
       </div>
-    </div>
+    </Card>
   );
 };
 
