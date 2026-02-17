@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { LogOut, Loader2, Users, Handshake, DollarSign } from "lucide-react";
+import { LogOut, Loader2, Users, Handshake } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Agent {
@@ -21,7 +21,6 @@ interface Agent {
 interface AgentMetrics {
   contacts: number;
   agreements: number;
-  payments: number;
 }
 
 interface AgentStatusTableProps {
@@ -83,40 +82,23 @@ function formatElapsedTime(startTimestamp?: number): string {
   if (elapsed < 0) return "";
   const hours = Math.floor(elapsed / 3600);
   const minutes = Math.floor((elapsed % 3600) / 60);
-  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h${minutes}m`;
   return `${minutes}m`;
 }
 
-interface StatRowProps {
-  icon: React.ElementType;
-  label: string;
-  value: number;
-  iconColor: string;
-}
-
-const StatRow = ({ icon: Icon, label, value, iconColor }: StatRowProps) => (
-  <div className="flex items-center justify-between py-1">
-    <div className="flex items-center gap-2">
-      <Icon className={`w-3.5 h-3.5 ${iconColor}`} />
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
-    <span className="text-sm font-semibold text-foreground">{value}</span>
-  </div>
-);
-
 const legendItems = [
   { label: "Online", dotClass: "bg-emerald-500" },
-  { label: "Em Ligação", dotClass: "bg-destructive" },
+  { label: "Ligação", dotClass: "bg-destructive" },
   { label: "Pausa", dotClass: "bg-amber-500" },
   { label: "Offline", dotClass: "bg-muted-foreground/50" },
 ];
 
-const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiToken, onAgentClick, agentMetrics = {} }: AgentStatusTableProps) => {
+const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick, agentMetrics = {} }: AgentStatusTableProps) => {
   if (loading && agents.length === 0) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-56 w-full rounded-xl" />
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {[...Array(6)].map((_, i) => (
+          <Skeleton key={i} className="h-40 w-full rounded-xl" />
         ))}
       </div>
     );
@@ -130,35 +112,35 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
 
   return (
     <TooltipProvider>
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {agents.map((agent) => {
             const info = getStatusInfo(agent.status);
             const initials = getInitials(agent.name);
             const colorClass = getAvatarColor(agent.id);
             const elapsed = formatElapsedTime(agent.status_start_time);
-            const metrics = agentMetrics[agent.id] || { contacts: 0, agreements: 0, payments: 0 };
+            const metrics = agentMetrics[agent.id] || { contacts: 0, agreements: 0 };
             return (
               <Card
                 key={agent.id}
-                className={`relative border-2 ${info.borderClass} shadow-none transition-all hover:shadow-md ${onAgentClick ? "cursor-pointer" : ""}`}
+                className={`relative border ${info.borderClass} shadow-none transition-all hover:shadow-md ${onAgentClick ? "cursor-pointer" : ""}`}
                 onClick={() => onAgentClick?.(agent)}
               >
                 {/* Logout button */}
-                <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute top-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
                         onClick={() => onLogout(agent.id)}
                         disabled={loggingOut === agent.id}
                       >
                         {loggingOut === agent.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <LogOut className="w-3.5 h-3.5" />
+                          <LogOut className="w-3 h-3" />
                         )}
                       </Button>
                     </TooltipTrigger>
@@ -166,37 +148,51 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
                   </Tooltip>
                 </div>
 
-                <CardContent className="p-4 flex flex-col items-center">
+                <CardContent className="p-3 flex flex-col items-center">
                   {/* Avatar with status indicator */}
-                  <div className="relative mb-3">
-                    <Avatar className="h-16 w-16">
-                      <AvatarFallback className={`text-xl font-bold ${colorClass}`}>
+                  <div className="relative mb-2">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className={`text-sm font-bold ${colorClass}`}>
                         {initials}
                       </AvatarFallback>
                     </Avatar>
-                    {/* Status dot */}
-                    <span className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-background ${info.dotClass}`} />
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background ${info.dotClass}`} />
                   </div>
 
                   {/* Name */}
-                  <p className="text-sm font-semibold text-foreground text-center truncate w-full">
+                  <p className="text-xs font-semibold text-foreground text-center truncate w-full leading-tight">
                     {agent.name || `Agente ${agent.id}`}
                   </p>
 
                   {/* Status badge */}
-                  <Badge variant="outline" className={`mt-1 text-[10px] gap-1 px-2 py-0 ${info.borderClass}`}>
+                  <Badge variant="outline" className={`mt-1 text-[9px] gap-1 px-1.5 py-0 ${info.borderClass}`}>
                     {info.label}
                     {elapsed && <span className="text-muted-foreground">· {elapsed}</span>}
                   </Badge>
                   {agent.pause_name && (
-                    <span className="text-[10px] text-muted-foreground mt-0.5">({agent.pause_name})</span>
+                    <span className="text-[9px] text-muted-foreground mt-0.5 truncate w-full text-center">({agent.pause_name})</span>
                   )}
 
-                  {/* Metrics */}
-                  <div className="w-full mt-3 pt-3 border-t border-border/60 space-y-0.5">
-                    <StatRow icon={Users} label="Contatos" value={metrics.contacts} iconColor="text-blue-500" />
-                    <StatRow icon={Handshake} label="Acordos" value={metrics.agreements} iconColor="text-emerald-500" />
-                    <StatRow icon={DollarSign} label="Pagamentos" value={metrics.payments} iconColor="text-amber-500" />
+                  {/* Metrics - compact */}
+                  <div className="w-full mt-2 pt-2 border-t border-border/60 flex items-center justify-around">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1">
+                          <Users className="w-3 h-3 text-blue-500" />
+                          <span className="text-xs font-semibold">{metrics.contacts}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Contatos hoje</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1">
+                          <Handshake className="w-3 h-3 text-emerald-500" />
+                          <span className="text-xs font-semibold">{metrics.agreements}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Acordos hoje</TooltipContent>
+                    </Tooltip>
                   </div>
                 </CardContent>
               </Card>
@@ -205,17 +201,17 @@ const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, domain, apiTo
         </div>
 
         {/* Footer: legend + counter */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-3">
             {legendItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-1.5">
+              <div key={item.label} className="flex items-center gap-1">
                 <span className={`w-2 h-2 rounded-full ${item.dotClass}`} />
-                <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                <span className="text-[10px] text-muted-foreground">{item.label}</span>
               </div>
             ))}
           </div>
-          <span className="text-[11px] text-muted-foreground">
-            Mostrando {agents.length} agente{agents.length !== 1 ? "s" : ""}
+          <span className="text-[10px] text-muted-foreground">
+            {agents.length} agente{agents.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>

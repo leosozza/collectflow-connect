@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -17,14 +16,6 @@ import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
-
-interface KpiItem {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  bgClass: string;
-  iconClass: string;
-}
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
@@ -47,14 +38,12 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Today's date for filtering
   const todayStart = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d.toISOString();
   }, []);
 
-  // Fetch profiles with threecplus_agent_id mapping
   const { data: profileMappings = [] } = useQuery({
     queryKey: ["agent-profile-mappings"],
     queryFn: async () => {
@@ -67,7 +56,6 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
     },
   });
 
-  // Fetch today's call dispositions (contacts count per operator)
   const { data: todayDispositions = [] } = useQuery({
     queryKey: ["agent-dispositions-today", todayStart],
     queryFn: async () => {
@@ -81,7 +69,6 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
     refetchInterval: 60000,
   });
 
-  // Fetch today's agreements (by created_by)
   const { data: todayAgreements = [] } = useQuery({
     queryKey: ["agent-agreements-today", todayStart],
     queryFn: async () => {
@@ -95,26 +82,10 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
     refetchInterval: 60000,
   });
 
-  // Fetch today's payments (clients updated to 'pago' today)
-  const { data: todayPayments = [] } = useQuery({
-    queryKey: ["agent-payments-today", todayStart],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("operator_id")
-        .eq("status", "pago")
-        .gte("updated_at", todayStart);
-      if (error) throw error;
-      return data || [];
-    },
-    refetchInterval: 60000,
-  });
-
-  // Build metrics map: threecplus_agent_id -> { contacts, agreements, payments }
+  // Build metrics map: threecplus_agent_id -> { contacts, agreements }
   const agentMetrics = useMemo(() => {
-    const metrics: Record<number, { contacts: number; agreements: number; payments: number }> = {};
+    const metrics: Record<number, { contacts: number; agreements: number }> = {};
 
-    // Create lookup: profile_id -> threecplus_agent_id, user_id -> threecplus_agent_id
     const profileIdToAgent = new Map<string, number>();
     const userIdToAgent = new Map<string, number>();
     for (const p of profileMappings) {
@@ -122,36 +93,24 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
       userIdToAgent.set(p.user_id, p.threecplus_agent_id);
     }
 
-    // Count contacts (operator_id = profile.id)
     for (const d of todayDispositions) {
       const agentId = profileIdToAgent.get(d.operator_id);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
         metrics[agentId].contacts++;
       }
     }
 
-    // Count agreements (created_by = user_id)
     for (const a of todayAgreements) {
       const agentId = userIdToAgent.get(a.created_by);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
         metrics[agentId].agreements++;
       }
     }
 
-    // Count payments (operator_id = profile.id)
-    for (const p of todayPayments) {
-      if (!p.operator_id) continue;
-      const agentId = profileIdToAgent.get(p.operator_id);
-      if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, payments: 0 };
-        metrics[agentId].payments++;
-      }
-    }
-
     return metrics;
-  }, [profileMappings, todayDispositions, todayAgreements, todayPayments]);
+  }, [profileMappings, todayDispositions, todayAgreements]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -235,101 +194,98 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
   const activeCalls = companyCalls?.active ?? companyCalls?.data?.active ?? "—";
   const completedCalls = companyCalls?.completed ?? companyCalls?.data?.completed ?? "—";
 
-  const kpis: KpiItem[] = [
-    { label: "Agentes Online", value: onlineCount, icon: Users, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600" },
+  const kpis = [
+    { label: "Online", value: onlineCount, icon: Users, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600" },
     { label: "Em Ligação", value: onCallCount, icon: Headphones, bgClass: "bg-destructive/10", iconClass: "text-destructive" },
     { label: "Em Pausa", value: pausedCount, icon: Coffee, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
     { label: "Ociosos", value: idleCount, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-    { label: "Chamadas Ativas", value: activeCalls, icon: PhoneCall, bgClass: "bg-primary/10", iconClass: "text-primary" },
-    { label: "Completadas Hoje", value: completedCalls, icon: PhoneOff, bgClass: "bg-muted", iconClass: "text-muted-foreground" },
+    { label: "Ativas", value: activeCalls, icon: PhoneCall, bgClass: "bg-primary/10", iconClass: "text-primary" },
+    { label: "Completadas", value: completedCalls, icon: PhoneOff, bgClass: "bg-muted", iconClass: "text-muted-foreground" },
   ];
 
   return (
-    <div className="space-y-5">
-      {/* Toolbar */}
-      <Card className="shadow-none border-border/60">
-        <CardContent className="flex items-center justify-between gap-3 py-3 px-4">
-          <div className="flex items-center gap-2 min-w-0">
-            {menuButton}
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 cursor-pointer">
-                <Badge
-                  variant="outline"
-                  className={`cursor-pointer transition-colors hover:bg-accent ${
-                    lastUpdate
-                      ? "border-emerald-500/40 text-emerald-700 gap-1.5"
-                      : "border-destructive/40 text-destructive gap-1.5"
-                  }`}
-                >
-                  {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                  {lastUpdate ? "Conectado" : "Desconectado"}
-                  {lastUpdate && (
-                    <span className="text-muted-foreground font-normal ml-1">
-                      {lastUpdate.toLocaleTimeString("pt-BR")}
-                    </span>
-                  )}
-                </Badge>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-3 space-y-3" align="center">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="auto-refresh-pop" className="text-xs">Atualização automática</Label>
-                <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id="auto-refresh-pop" />
+    <div className="space-y-4">
+      {/* Unified header bar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {menuButton}
+          <h2 className="text-lg font-semibold text-foreground truncate">Dashboard</h2>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="inline-flex items-center gap-1.5 cursor-pointer">
+              <Badge
+                variant="outline"
+                className={`cursor-pointer transition-colors hover:bg-accent ${
+                  lastUpdate
+                    ? "border-emerald-500/40 text-emerald-700 gap-1.5"
+                    : "border-destructive/40 text-destructive gap-1.5"
+                }`}
+              >
+                {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                {lastUpdate ? "Conectado" : "Desconectado"}
+                {lastUpdate && (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    {lastUpdate.toLocaleTimeString("pt-BR")}
+                  </span>
+                )}
+              </Badge>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-3 space-y-3" align="end">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="auto-refresh-pop" className="text-xs">Atualização automática</Label>
+              <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id="auto-refresh-pop" />
+            </div>
+            {autoRefresh && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Intervalo</Label>
+                <Select value={String(interval)} onValueChange={(v) => setRefreshInterval(Number(v))}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 segundos</SelectItem>
+                    <SelectItem value="30">30 segundos</SelectItem>
+                    <SelectItem value="60">60 segundos</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              {autoRefresh && (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Intervalo</Label>
-                  <Select value={String(interval)} onValueChange={(v) => setRefreshInterval(Number(v))}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">15 segundos</SelectItem>
-                      <SelectItem value="30">30 segundos</SelectItem>
-                      <SelectItem value="60">60 segundos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} className="w-full gap-1.5 h-8 text-xs">
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-                Atualizar agora
-              </Button>
-            </PopoverContent>
-          </Popover>
-        </CardContent>
-      </Card>
+            )}
+            <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} className="w-full gap-1.5 h-8 text-xs">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              Atualizar agora
+            </Button>
+          </PopoverContent>
+        </Popover>
+      </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Compact KPI row */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
         {kpis.map((kpi) => (
-          <Card key={kpi.label} className="shadow-none border-border/60">
-            <CardContent className="p-4 flex flex-col items-center gap-2">
-              {loading && !lastUpdate ? (
-                <Skeleton className="h-16 w-full" />
-              ) : (
-                <>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${kpi.bgClass}`}>
-                    <kpi.icon className={`w-5 h-5 ${kpi.iconClass}`} />
-                  </div>
-                  <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
-                  <p className="text-[11px] text-muted-foreground leading-tight text-center">{kpi.label}</p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <div key={kpi.label} className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card p-2.5">
+            {loading && !lastUpdate ? (
+              <Skeleton className="h-9 w-full" />
+            ) : (
+              <>
+                <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${kpi.bgClass}`}>
+                  <kpi.icon className={`w-4 h-4 ${kpi.iconClass}`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg font-bold text-foreground leading-none">{kpi.value}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight truncate">{kpi.label}</p>
+                </div>
+              </>
+            )}
+          </div>
         ))}
       </div>
 
       {/* Agent Status */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-base font-semibold">Agentes de Relacionamento ({agents.length})</h3>
-            <p className="text-xs text-muted-foreground">Clique em um agente para detalhes</p>
-          </div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Agentes ({agents.length})</h3>
+          <p className="text-[11px] text-muted-foreground">Clique para detalhes</p>
         </div>
         <AgentStatusTable
           agents={agents}
@@ -356,7 +312,7 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
 
       {/* Campaigns */}
       <div>
-        <h3 className="text-base font-semibold mb-3">Campanhas</h3>
+        <h3 className="text-sm font-semibold mb-2">Campanhas</h3>
         <CampaignOverview
           campaigns={campaigns}
           loading={loading}
