@@ -1,12 +1,13 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MessageSquare, Bot, Tag, Zap } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
 import AIAgentTab from "@/components/contact-center/whatsapp/AIAgentTab";
 import TagsManagementTab from "@/components/contact-center/whatsapp/TagsManagementTab";
 import QuickRepliesTab from "@/components/contact-center/whatsapp/QuickRepliesTab";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface ContactCenterPageProps {
   channel: "telefonia" | "whatsapp";
@@ -15,6 +16,7 @@ interface ContactCenterPageProps {
 const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const [activeTab, setActiveTab] = useState("conversas");
 
   if (channel === "telefonia" && profile?.role !== "admin") {
     return (
@@ -32,46 +34,58 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
     );
   }
 
-  // WhatsApp channel with sub-tabs
+  const tabs = [
+    { id: "conversas", label: "Conversas", icon: MessageSquare, adminOnly: false },
+    { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true },
+    { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true },
+    { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true },
+  ].filter((tab) => !tab.adminOnly || isTenantAdmin);
+
   return (
-    <Tabs defaultValue="conversas" className="h-full flex flex-col">
-      <TabsList className="mx-4 mt-2 w-fit">
-        <TabsTrigger value="conversas" className="gap-1.5">
-          <MessageSquare className="w-4 h-4" /> Conversas
-        </TabsTrigger>
-        {isTenantAdmin && (
-          <>
-            <TabsTrigger value="agente" className="gap-1.5">
-              <Bot className="w-4 h-4" /> Agente Inteligente
-            </TabsTrigger>
-            <TabsTrigger value="etiquetas" className="gap-1.5">
-              <Tag className="w-4 h-4" /> Etiquetas
-            </TabsTrigger>
-            <TabsTrigger value="respostas" className="gap-1.5">
-              <Zap className="w-4 h-4" /> Respostas Rápidas
-            </TabsTrigger>
-          </>
-        )}
-      </TabsList>
+    <div className="flex h-[calc(100vh-4rem)]">
+      {/* Lateral tab navigation */}
+      <div className="w-[52px] shrink-0 flex flex-col items-center gap-1 py-3 bg-secondary border-r border-sidebar-border">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              title={tab.label}
+              className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              <Icon className="w-5 h-5" />
+            </button>
+          );
+        })}
+      </div>
 
-      <TabsContent value="conversas" className="flex-1 mt-0">
-        <WhatsAppChatLayout />
-      </TabsContent>
-
-      {isTenantAdmin && (
-        <>
-          <TabsContent value="agente" className="flex-1 mt-0 overflow-auto">
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === "conversas" && <WhatsAppChatLayout />}
+        {activeTab === "agente" && isTenantAdmin && (
+          <div className="h-full overflow-auto">
             <AIAgentTab />
-          </TabsContent>
-          <TabsContent value="etiquetas" className="flex-1 mt-0 overflow-auto">
+          </div>
+        )}
+        {activeTab === "etiquetas" && isTenantAdmin && (
+          <div className="h-full overflow-auto">
             <TagsManagementTab />
-          </TabsContent>
-          <TabsContent value="respostas" className="flex-1 mt-0 overflow-auto">
+          </div>
+        )}
+        {activeTab === "respostas" && isTenantAdmin && (
+          <div className="h-full overflow-auto">
             <QuickRepliesTab />
-          </TabsContent>
-        </>
-      )}
-    </Tabs>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
