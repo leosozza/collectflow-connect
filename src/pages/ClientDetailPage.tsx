@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import ClientAttachments from "@/components/clients/ClientAttachments";
 import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
-import ClientCollapsibleDetails from "@/components/client-detail/ClientCollapsibleDetails";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
+import ClientDocuments from "@/components/client-detail/ClientDocuments";
+import ClientSignature from "@/components/client-detail/ClientSignature";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
@@ -104,18 +105,19 @@ const ClientDetailPage = () => {
     <div className="space-y-4 animate-fade-in">
       <ClientDetailHeader
         client={first}
+        clients={clients}
         cpf={cpf || ""}
         totalAberto={totalAberto}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
       />
 
-      <ClientCollapsibleDetails clients={clients} first={first} />
-
       <Tabs defaultValue="titulos" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
-          <TabsTrigger value="acordo">Acordo</TabsTrigger>
+          <TabsTrigger value="acordo">Acordos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+          <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
         </TabsList>
 
@@ -271,12 +273,25 @@ const ClientDetailPage = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="documentos">
+          <ClientDocuments
+            client={first}
+            clients={clients}
+            cpf={cpf || ""}
+            totalAberto={totalAberto}
+            lastAgreement={lastAgreement}
+          />
+        </TabsContent>
+
+        <TabsContent value="assinatura">
+          <ClientSignature client={first} lastAgreement={lastAgreement} />
+        </TabsContent>
+
         <TabsContent value="anexos">
           <ClientAttachments cpf={cpf || ""} />
         </TabsContent>
       </Tabs>
 
-      {/* Dialog da calculadora de acordo */}
       <Dialog open={showAcordoDialog} onOpenChange={setShowAcordoDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
