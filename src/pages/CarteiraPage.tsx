@@ -56,6 +56,7 @@ const CarteiraPage = () => {
     search: "",
     tipoDevedorId: "",
     tipoDividaId: "",
+    statusCobrancaId: "",
     semAcordo: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -128,10 +129,13 @@ const CarteiraPage = () => {
     if (filters.tipoDividaId) {
       filtered = filtered.filter((c: any) => c.tipo_divida_id === filters.tipoDividaId);
     }
+    if (filters.statusCobrancaId) {
+      filtered = filtered.filter((c: any) => c.status_cobranca_id === filters.statusCobrancaId);
+    }
     return [...filtered].sort(
       (a, b) => a.data_vencimento.localeCompare(b.data_vencimento)
     );
-  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, agreementCpfs]);
+  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, agreementCpfs]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),

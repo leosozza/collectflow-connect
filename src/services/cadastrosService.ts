@@ -124,3 +124,29 @@ export const deleteTipoDivida = async (id: string) => {
   const { error } = await supabase.from("tipos_divida" as any).delete().eq("id", id);
   if (error) throw error;
 };
+
+// ====== TIPOS STATUS ======
+export const fetchTiposStatus = async (tenantId: string) => {
+  const { data, error } = await supabase
+    .from("tipos_status" as any)
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("nome");
+  if (error) throw error;
+  return data || [];
+};
+
+export const upsertTipoStatus = async (tipo: any) => {
+  const { data, error } = await supabase
+    .from("tipos_status" as any)
+    .upsert(tipo)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+export const deleteTipoStatus = async (id: string) => {
+  const { error } = await supabase.from("tipos_status" as any).delete().eq("id", id);
+  if (error) throw error;
+};

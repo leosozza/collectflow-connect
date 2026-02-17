@@ -12,7 +12,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-const DEFAULT_TIPOS = ["Casual", "Recorrente", "Perda de Emprego", "Aposentado", "Estudante", "Empresarial"];
+const DEFAULT_TIPOS = [
+  { nome: "Negligente", descricao: "Cobrança agressiva, negativação rápida" },
+  { nome: "Crônico", descricao: "Lembretes frequentes, oferecer parcelamento" },
+  { nome: "Ocasional", descricao: "Abordagem empática, descontos" },
+  { nome: "Imprevisível", descricao: "Lembretes discretos" },
+  { nome: "Mau Pagador", descricao: "Processo jurídico, sem negociação" },
+];
 
 const TipoDevedorList = () => {
   const { tenant } = useTenant();
@@ -46,13 +52,13 @@ const TipoDevedorList = () => {
     if (!tenant?.id) return;
     setSeeding(true);
     try {
-      for (const nome of DEFAULT_TIPOS) {
-        await upsertTipoDevedor({ tenant_id: tenant.id, nome });
+      for (const t of DEFAULT_TIPOS) {
+        await upsertTipoDevedor({ tenant_id: tenant.id, nome: t.nome, descricao: t.descricao });
       }
       queryClient.invalidateQueries({ queryKey: ["tipos_devedor"] });
-      toast.success("Tipos padrão carregados!");
+      toast.success("Perfis padrão carregados!");
     } catch {
-      toast.error("Erro ao carregar tipos padrão");
+      toast.error("Erro ao carregar perfis padrão");
     } finally {
       setSeeding(false);
     }
@@ -78,10 +84,10 @@ const TipoDevedorList = () => {
           {tipos.length === 0 && !isLoading && (
             <Button variant="outline" onClick={handleSeedDefaults} disabled={seeding}>
               <Download className="w-4 h-4 mr-1" />
-              {seeding ? "Carregando..." : "Carregar tipos padrão"}
+              {seeding ? "Carregando..." : "Carregar perfis padrão"}
             </Button>
           )}
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo Tipo</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo Perfil</Button>
         </div>
       </div>
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -111,7 +117,7 @@ const TipoDevedorList = () => {
       </div>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "Editar Tipo de Devedor" : "Novo Tipo de Devedor"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Editar Perfil do Devedor" : "Novo Perfil do Devedor"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>Nome *</Label><Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Casual, Recorrente..." /></div>
             <div><Label>Descrição</Label><Textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Descrição opcional" /></div>
