@@ -25,6 +25,7 @@ const AtendimentoPage = () => {
   const queryClient = useQueryClient();
   const { trackAction } = useActivityTracker();
   const [showNegotiation, setShowNegotiation] = useState(false);
+  const [callingPhone, setCallingPhone] = useState(false);
 
   // Fetch client by ID
   const { data: client, isLoading: clientLoading } = useQuery({
@@ -195,6 +196,47 @@ const AtendimentoPage = () => {
     await dispositionMutation.mutateAsync({ type, notes, scheduledCallback });
   };
 
+  const handleCall = async (phone: string) => {
+    if (!profile?.threecplus_agent_id) {
+      toast.error("Seu perfil não possui um agente 3CPlus vinculado");
+      return;
+    }
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("settings")
+      .eq("id", tenant!.id)
+      .single();
+    const settings = (tenantData?.settings as any) || {};
+    const domain = settings.threecplus_domain;
+    const apiToken = settings.threecplus_api_token;
+    if (!domain || !apiToken) {
+      toast.error("Telefonia 3CPlus não configurada neste tenant");
+      return;
+    }
+    setCallingPhone(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+        body: {
+          action: "click2call",
+          domain,
+          api_token: apiToken,
+          agent_id: profile.threecplus_agent_id,
+          phone_number: phone.replace(/\D/g, ""),
+        },
+      });
+      if (error) throw error;
+      if (data?.status && data.status >= 400) {
+        toast.error(data.detail || data.message || "Erro ao discar");
+      } else {
+        toast.success("Ligação iniciada");
+      }
+    } catch {
+      toast.error("Erro ao iniciar ligação");
+    } finally {
+      setCallingPhone(false);
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Back button */}
@@ -215,6 +257,8 @@ const AtendimentoPage = () => {
         totalPago={totalPago}
         totalParcelas={clientRecords.length}
         parcelasPagas={clientRecords.filter((c) => c.status === "pago").length}
+        onCall={handleCall}
+        callingPhone={callingPhone}
       />
 
       {/* Main content - two columns */}

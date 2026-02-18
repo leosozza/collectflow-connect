@@ -11,6 +11,7 @@ interface Profile {
   commission_grade_id: string | null;
   tenant_id: string | null;
   avatar_url: string | null;
+  threecplus_agent_id: number | null;
 }
 
 interface AuthContextType {
