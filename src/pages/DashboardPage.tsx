@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { useNavigate } from "react-router-dom";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -31,6 +32,7 @@ const monthNames = [
 const DashboardPage = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const now = new Date();
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
@@ -110,6 +112,24 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-primary text-primary hover:bg-primary/10"
+            onClick={() => navigate("/analytics")}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span className="hidden sm:inline">Analytics</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-primary text-primary hover:bg-primary/10"
+            onClick={() => navigate("/relatorios")}
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">Relatórios</span>
+          </Button>
           <MultiSelect
             options={yearOptions}
             selected={selectedYears}
@@ -128,9 +148,9 @@ const DashboardPage = () => {
       </div>
 
       {/* Main stat: Total Projetado */}
-      <div className="text-center py-2">
-        <p className="text-sm text-muted-foreground font-medium mb-1">Total Projetado no Mês</p>
-        <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+      <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
+        <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Projetado no Mês</p>
+        <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
       </div>
 
       {/* Vencimentos strip */}
@@ -189,7 +209,14 @@ const DashboardPage = () => {
               <TableBody>
                 {browseClients.map((client) => (
                   <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="text-xs font-medium text-card-foreground">{client.nome_completo}</TableCell>
+                    <TableCell className="text-xs font-medium">
+                      <button
+                        onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                        className="text-primary hover:underline cursor-pointer text-left"
+                      >
+                        {client.nome_completo}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{client.cpf}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{client.credor}</TableCell>
                     <TableCell className="text-xs text-center">{client.numero_parcela}</TableCell>
