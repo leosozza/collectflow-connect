@@ -32,6 +32,7 @@ import PerfilPage from "./pages/PerfilPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
+import ApiDocsPage from "./pages/ApiDocsPage";
 
 const queryClient = new QueryClient();
 
@@ -282,6 +283,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <GamificacaoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-docs"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <ApiDocsPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
