@@ -1,159 +1,206 @@
 
+# Sistema Completo de API REST para Gerenciamento de Clientes (Leads)
 
-## Campanhas de Gamificacao e Gestao Administrativa
+## Visão Geral
 
-### Visao Geral
+Criar uma Edge Function dedicada `clients-api` que expõe uma API REST pública (autenticada via API Key) para que sistemas externos possam enviar, atualizar e deletar clientes em massa — com suporte a 10.000+ registros via importação em lote com paginação, validação completa e documentação inline.
 
-Criar um sistema completo de **campanhas competitivas** dentro do modulo de gamificacao, com CRUD completo para admins e paineis de visualizacao para operadores. Tambem adicionar gestao de conquistas e metas por equipe/operador/credor.
+Junto com isso, criar uma página de documentação da API acessível dentro do sistema (`/api-docs`) onde o admin pode visualizar os endpoints, gerar e revogar a API Key do tenant.
 
 ---
 
-### 1. Nova Tabela: `gamification_campaigns`
+## Arquitetura
 
-Armazena campanhas criadas pelo admin com diferentes periodicidades e metricas.
+```text
+Sistema Externo (10k+ clientes)
+         |
+         | POST /functions/v1/clients-api (com X-API-Key: <chave>)
+         v
+  Edge Function: clients-api
+         |
+         |-- Autentica via api_keys (tenant_id isolado)
+         |-- Valida payload com Zod
+         |-- Processa em batches de 500
+         |-- Upsert/Delete no banco (service_role)
+         v
+  Tabela: clients (com tenant_id)
+```
+
+---
+
+## 1. Nova Tabela: `api_keys`
+
+Armazena as API Keys geradas por tenant para autenticação externa.
 
 ```sql
-CREATE TABLE public.gamification_campaigns (
+CREATE TABLE public.api_keys (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT,
-  metric TEXT NOT NULL,          -- 'menor_taxa_quebra', 'menor_valor_quebra', 'maior_valor_recebido', 'maior_valor_promessas', 'maior_qtd_acordos'
-  period TEXT NOT NULL,           -- 'diaria', 'semanal', 'mensal', 'trimestral', 'semestral', 'anual'
-  start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
-  prize_description TEXT,
-  status TEXT NOT NULL DEFAULT 'ativa',  -- 'ativa', 'encerrada', 'rascunho'
+  key_hash TEXT NOT NULL UNIQUE,        -- SHA-256 do token real
+  key_prefix TEXT NOT NULL,             -- Primeiros 8 chars para identificação visual
+  label TEXT NOT NULL DEFAULT 'Chave Padrão',
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  last_used_at TIMESTAMPTZ,
   created_by UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  revoked_at TIMESTAMPTZ
 );
 
-ALTER TABLE public.gamification_campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
 
--- Admin gerencia
-CREATE POLICY "Tenant admins can manage campaigns"
-  ON public.gamification_campaigns FOR ALL
+-- Somente admins do tenant gerenciam suas chaves
+CREATE POLICY "Tenant admins can manage api_keys"
+  ON public.api_keys FOR ALL
   USING (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()))
   WITH CHECK (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()));
-
--- Operadores visualizam
-CREATE POLICY "Tenant users can view campaigns"
-  ON public.gamification_campaigns FOR SELECT
-  USING (tenant_id = get_my_tenant_id() OR is_super_admin(auth.uid()));
 ```
 
-### 2. Nova Tabela: `campaign_participants`
+**Segurança:** O token real (gerado com `crypto.randomUUID()`) é exibido SOMENTE uma vez ao criar a chave. O banco armazena apenas o hash SHA-256 — nunca o token em texto plano.
 
-Registra os participantes e seus resultados em cada campanha.
+---
 
-```sql
-CREATE TABLE public.campaign_participants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id UUID NOT NULL REFERENCES public.gamification_campaigns(id) ON DELETE CASCADE,
-  tenant_id UUID NOT NULL,
-  operator_id UUID NOT NULL,
-  score NUMERIC NOT NULL DEFAULT 0,
-  rank INTEGER,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+## 2. Edge Function: `clients-api`
 
-ALTER TABLE public.campaign_participants ENABLE ROW LEVEL SECURITY;
+Arquivo: `supabase/functions/clients-api/index.ts`
 
-CREATE POLICY "Tenant admins can manage participants"
-  ON public.campaign_participants FOR ALL
-  USING (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()))
-  WITH CHECK (is_tenant_admin(auth.uid(), tenant_id) OR is_super_admin(auth.uid()));
+### Endpoints
 
-CREATE POLICY "Tenant users can view participants"
-  ON public.campaign_participants FOR SELECT
-  USING (tenant_id = get_my_tenant_id() OR is_super_admin(auth.uid()));
+| Método | Path | Descrição |
+|---|---|---|
+| `POST` | `/functions/v1/clients-api/clients` | Criar ou upsert de 1 cliente |
+| `POST` | `/functions/v1/clients-api/clients/bulk` | Inserção em massa (até 500 por chamada) |
+| `PUT` | `/functions/v1/clients-api/clients/:id` | Atualizar cliente por ID |
+| `PUT` | `/functions/v1/clients-api/clients/by-external/:external_id` | Atualizar por external_id |
+| `DELETE` | `/functions/v1/clients-api/clients/:id` | Deletar cliente por ID |
+| `DELETE` | `/functions/v1/clients-api/clients/by-cpf/:cpf` | Deletar todos os registros de um CPF |
+| `GET` | `/functions/v1/clients-api/clients` | Listar clientes (paginado) |
+| `GET` | `/functions/v1/clients-api/clients/:id` | Buscar cliente por ID |
+| `GET` | `/functions/v1/clients-api/health` | Status da API |
+
+### Autenticação
+
+Todas as requisições devem incluir o header:
+```
+X-API-Key: cf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 3. Pagina de Gamificacao — Diferenciacao por Role
+A edge function:
+1. Extrai o header `X-API-Key`
+2. Calcula SHA-256 do valor recebido
+3. Busca na tabela `api_keys` onde `key_hash = hash AND is_active = true`
+4. Obtém o `tenant_id` vinculado — todas as operações ficam isoladas ao tenant
 
-A pagina `/gamificacao` tera comportamento diferente baseado no role:
+### Formato do Payload — Upsert Único
 
-**Admin ve 5 abas:**
-| Aba | Conteudo |
+```json
+{
+  "credor": "EMPRESA XYZ",
+  "nome_completo": "João da Silva",
+  "cpf": "123.456.789-00",
+  "phone": "11999999999",
+  "email": "joao@email.com",
+  "external_id": "EXT-001",
+  "endereco": "Rua das Flores, 123",
+  "cidade": "São Paulo",
+  "uf": "SP",
+  "cep": "01310-100",
+  "observacoes": "Cliente VIP",
+  "numero_parcela": 1,
+  "total_parcelas": 3,
+  "valor_entrada": 500.00,
+  "valor_parcela": 300.00,
+  "valor_pago": 0,
+  "data_vencimento": "2026-03-01",
+  "status": "pendente"
+}
+```
+
+### Formato do Payload — Bulk (até 500 registros)
+
+```json
+{
+  "records": [ {...}, {...}, ... ],
+  "upsert": true,
+  "upsert_key": "external_id"
+}
+```
+
+**Chave de upsert:** `external_id` (padrão) ou `cpf + numero_parcela`.
+
+### Resposta Padrão
+
+```json
+{
+  "success": true,
+  "inserted": 450,
+  "updated": 30,
+  "skipped": 20,
+  "errors": [
+    { "index": 5, "external_id": "EXT-005", "error": "CPF inválido" }
+  ],
+  "total": 500
+}
+```
+
+### Processamento de 10.000+ Registros
+
+O sistema externo deve paginar as chamadas:
+- Máximo 500 registros por requisição `POST /bulk`
+- Recomendação: 20 chamadas de 500 = 10.000 clientes
+- Suporte a `upsert: true` para reenvio sem duplicatas (idempotente)
+
+---
+
+## 3. Página de Documentação: `/api-docs` (somente admin)
+
+Nova página `src/pages/ApiDocsPage.tsx` com:
+
+### Seção 1: Gerenciamento de API Keys
+- Botão "Gerar Nova Chave" → exibe modal com o token (exibido UMA VEZ)
+- Lista de chaves ativas com prefixo e data de criação
+- Botão "Revogar" por chave
+- Badge de status: Ativa / Revogada
+
+### Seção 2: Documentação dos Endpoints (formato Swagger-like)
+- URL base do sistema
+- Descrição de cada endpoint com exemplos de request/response em blocos de código
+- Seção especial "Importação em Massa" com exemplo de loop de 10k registros
+- Tabela de campos aceitos com tipo, obrigatoriedade e descrição
+
+### Seção 3: Exemplos de Código
+Snippets prontos para copiar em:
+- **Python** (requests)
+- **Node.js / JavaScript** (fetch)
+- **cURL**
+
+---
+
+## 4. Rota e Navegação
+
+Adicionar rota `/api-docs` em `App.tsx` (somente admin).
+Adicionar item no menu de navegação dentro de `AppLayout.tsx` (visível somente para admins).
+
+---
+
+## 5. Arquivos a Criar/Modificar
+
+| Arquivo | Ação |
 |---|---|
-| Ranking | Ranking atual (ja existe) |
-| Conquistas | Visualizar + editar/criar conquistas personalizadas |
-| Campanhas | CRUD de campanhas com formulario completo |
-| Metas | Definir metas por operador (ja existe parcialmente via `operator_goals`) |
-| Historico | Historico de pontos (ja existe) |
+| `supabase/migrations/..._api_keys.sql` | Nova tabela `api_keys` com RLS |
+| `supabase/functions/clients-api/index.ts` | **Nova** Edge Function REST completa |
+| `supabase/config.toml` | Adicionar `[functions.clients-api] verify_jwt = false` |
+| `src/pages/ApiDocsPage.tsx` | **Nova** página de documentação e gerenciamento de chaves |
+| `src/services/apiKeyService.ts` | **Novo** service para CRUD de api_keys |
+| `src/App.tsx` | Adicionar rota `/api-docs` |
+| `src/components/AppLayout.tsx` | Link no menu (somente admin) |
 
-**Operador ve 4 abas (somente leitura):**
-| Aba | Conteudo |
-|---|---|
-| Ranking | Ranking atual |
-| Conquistas | Suas conquistas desbloqueadas |
-| Campanhas | Campanhas ativas com ranking dos participantes |
-| Historico | Seu historico de pontos |
+---
 
-### 4. Componentes Novos
+## 6. Segurança
 
-| Arquivo | Descricao |
-|---|---|
-| `src/components/gamificacao/CampaignsTab.tsx` | Lista campanhas ativas/encerradas. Admin ve botao "Nova Campanha" e pode editar/excluir. Operador ve apenas cards com ranking. |
-| `src/components/gamificacao/CampaignForm.tsx` | Dialog/sheet para criar/editar campanha. Campos: titulo, descricao, metrica (select), periodo (select), data inicio/fim, premio. |
-| `src/components/gamificacao/CampaignCard.tsx` | Card visual de uma campanha mostrando metrica, periodo, participantes e ranking parcial. |
-| `src/components/gamificacao/GoalsManagementTab.tsx` | Tabela para admin definir meta (R$) por operador para o mes selecionado. Usa `upsertGoal` existente. |
-| `src/components/gamificacao/AchievementsManagementTab.tsx` | Admin pode criar conquistas customizadas (titulo, descricao, icone) e conceder manualmente a operadores. |
-
-### 5. Service Layer
-
-| Arquivo | Funcoes |
-|---|---|
-| `src/services/campaignService.ts` | `fetchCampaigns`, `createCampaign`, `updateCampaign`, `deleteCampaign`, `fetchCampaignParticipants`, `upsertParticipantScore` |
-
-### 6. Formulario de Campanha — Campos
-
-- **Titulo** (texto livre)
-- **Descricao** (textarea)
-- **Metrica** (select):
-  - Menor taxa de quebra
-  - Menor valor de quebra
-  - Maior valor negociado/recebido
-  - Maior valor de promessas de acordos
-  - Maior quantidade de acordos
-- **Periodo** (select): Diaria, Semanal, Mensal, Trimestral, Semestral, Anual
-- **Data inicio / Data fim** (date pickers)
-- **Premio** (texto descritivo do premio)
-- **Status**: Ativa, Rascunho, Encerrada
-
-### 7. Visualizacao do Operador nas Campanhas
-
-Cada campanha ativa aparece como um card com:
-- Titulo, descricao e premio
-- Badge com periodo e metrica
-- Ranking dos participantes (posicao, nome, avatar, score)
-- Destaque visual para a posicao do operador logado
-- Countdown para fim da campanha
-
-### 8. Aba de Metas (Admin)
-
-Tabela com todos os operadores do tenant, permitindo definir `target_amount` individual para o mes/ano selecionado. Reutiliza a funcao `upsertGoal` ja existente.
-
-### 9. Arquivos a Modificar/Criar
-
-| Arquivo | Acao |
-|---|---|
-| `supabase/migrations/` | Migration com as 2 tabelas novas + RLS |
-| `src/services/campaignService.ts` | **Novo** — CRUD de campanhas |
-| `src/components/gamificacao/CampaignsTab.tsx` | **Novo** — Aba de campanhas |
-| `src/components/gamificacao/CampaignForm.tsx` | **Novo** — Formulario de campanha |
-| `src/components/gamificacao/CampaignCard.tsx` | **Novo** — Card visual de campanha |
-| `src/components/gamificacao/GoalsManagementTab.tsx` | **Novo** — Gestao de metas pelo admin |
-| `src/components/gamificacao/AchievementsManagementTab.tsx` | **Novo** — Gestao de conquistas pelo admin |
-| `src/pages/GamificacaoPage.tsx` | **Modificar** — Adicionar abas condicionais por role |
-| `src/services/gamificationService.ts` | **Modificar** — Tornar conquistas editaveis (nao mais hardcoded) |
-
-### Resumo
-
-- 2 tabelas novas no banco (`gamification_campaigns`, `campaign_participants`)
-- 5 componentes novos
-- 1 service novo
-- 2 arquivos modificados
-- Admin: CRUD completo de campanhas, metas e conquistas
-- Operador: visualizacao do ranking e campanhas ativas para engajamento
+- API Keys nunca armazenadas em texto plano (somente hash SHA-256)
+- Todas as operações da edge function são isoladas por `tenant_id`
+- Rate limiting implícito pelo tamanho dos lotes (500/req)
+- Logs de uso em `last_used_at` da chave
+- Revogação instantânea ao marcar `is_active = false`
+- Validação Zod em todos os campos antes de qualquer operação no banco
