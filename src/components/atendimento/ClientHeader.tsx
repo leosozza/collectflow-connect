@@ -98,13 +98,14 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {client.phone && onCall && (
+            {onCall && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onCall(client.phone!)}
-                disabled={callingPhone}
-                className="gap-1.5 border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                onClick={() => client.phone && onCall(client.phone)}
+                disabled={callingPhone || !client.phone}
+                title={client.phone ? `Ligar para ${client.phone}` : "Sem telefone cadastrado"}
+                className={`gap-1.5 ${client.phone ? "border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950" : "opacity-50 cursor-not-allowed"}`}
               >
                 <Phone className="w-4 h-4" />
                 {callingPhone ? "Discando..." : "Ligar"}
