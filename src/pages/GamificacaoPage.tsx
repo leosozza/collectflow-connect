@@ -1,24 +1,26 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { fetchMyPoints, fetchRanking, ACHIEVEMENT_DEFINITIONS, fetchAllAchievements } from "@/services/gamificationService";
+import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/formatters";
-import { Trophy, Star, BarChart3, Target } from "lucide-react";
+import { Trophy, Star, BarChart3, Target, Flame, Settings } from "lucide-react";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
 import PointsHistoryTab from "@/components/gamificacao/PointsHistoryTab";
+import CampaignsTab from "@/components/gamificacao/CampaignsTab";
+import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
+import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
 
 const GamificacaoPage = () => {
   const { profile } = useAuth();
-  const { tenantUser } = useTenant();
+  const { isTenantAdmin } = useTenant();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -119,34 +121,60 @@ const GamificacaoPage = () => {
         </Card>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — role-based */}
       <Tabs defaultValue="ranking">
-        <TabsList className="w-full sm:w-auto">
+        <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
-            <Trophy className="w-3.5 h-3.5" />
-            Ranking
+            <Trophy className="w-3.5 h-3.5" /> Ranking
+          </TabsTrigger>
+          <TabsTrigger value="campaigns" className="flex-1 sm:flex-none gap-1.5">
+            <Flame className="w-3.5 h-3.5" /> Campanhas
           </TabsTrigger>
           <TabsTrigger value="achievements" className="flex-1 sm:flex-none gap-1.5">
-            <Star className="w-3.5 h-3.5" />
-            Conquistas
+            <Star className="w-3.5 h-3.5" /> Conquistas
           </TabsTrigger>
+          {isTenantAdmin && (
+            <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
+              <Target className="w-3.5 h-3.5" /> Metas
+            </TabsTrigger>
+          )}
           <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-            <BarChart3 className="w-3.5 h-3.5" />
-            Histórico
+            <BarChart3 className="w-3.5 h-3.5" /> Histórico
           </TabsTrigger>
+          {isTenantAdmin && (
+            <TabsTrigger value="manage-achievements" className="flex-1 sm:flex-none gap-1.5">
+              <Settings className="w-3.5 h-3.5" /> Gerenciar
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
           <RankingTab />
         </TabsContent>
 
+        <TabsContent value="campaigns" className="mt-4">
+          <CampaignsTab />
+        </TabsContent>
+
         <TabsContent value="achievements" className="mt-4">
           <AchievementsTab />
         </TabsContent>
 
+        {isTenantAdmin && (
+          <TabsContent value="goals" className="mt-4">
+            <GoalsManagementTab />
+          </TabsContent>
+        )}
+
         <TabsContent value="history" className="mt-4">
           <PointsHistoryTab />
         </TabsContent>
+
+        {isTenantAdmin && (
+          <TabsContent value="manage-achievements" className="mt-4">
+            <AchievementsManagementTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
