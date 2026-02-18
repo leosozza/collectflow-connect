@@ -1,152 +1,103 @@
 
-## Sistema de Gamificação para Operadores
 
-### Objetivo
-Criar um sistema completo de gamificação que incentive os operadores a maximizar o recebimento de parcelas e minimizar quebras, com ranking em tempo real, medalhas, conquistas automáticas, metas mensais e um painel de desempenho individual visível a todos.
+## Testar e Finalizar o Fluxo de Campanha do Operador na Telefonia 3CPlus
 
----
+### Problema Identificado
 
-### O que será construído
+Ao analisar o codigo, identifiquei um problema critico na arquitetura atual:
 
-**1. Ranking em Tempo Real (Dashboard)**
-- Painel de ranking gamificado no Dashboard de cada operador, mostrando posição atual no mês
-- Medalhas visuais: 🥇 ouro, 🥈 prata, 🥉 bronze para top 3
-- Métricas do ranking: valor recebido, % de recebimento vs quebra, pontuação calculada
+A API 3CPlus v1 diferencia **endpoints de empresa** (company-level) e **endpoints de agente** (agent-level). Atualmente, todos os endpoints usam o mesmo `api_token` da empresa, mas os endpoints de agente (`agent/login`, `agent/logout`, `agent/campaigns`, `manual_call/*`) requerem autenticacao **do proprio agente**.
 
-**2. Painel de Gamificação Dedicado — `GamificacaoPage`**
-- Acessível pela rota `/gamificacao` (visível a todos no sidebar)
-- Aba de ranking completo dos operadores no mês
-- Aba de conquistas do operador logado
-- Aba de histórico de metas mensais
-- Barra de progresso da meta do mês
-- Leaderboard com animação de posição
+Existem duas abordagens possiveis:
 
-**3. Conquistas Automáticas (Achievements)**
-A tabela `achievements` já existe. O sistema irá criar conquistas automaticamente ao detectar marcos ao registrar um pagamento:
+**Opcao A — Usar endpoints de empresa para gerenciar agentes (recomendada)**
+Em vez de chamar `agent/login` (que requer token do agente), usar os endpoints de empresa que ja funcionam com o token atual:
+- Login: `POST /agents/{agent_id}/login` com `{ campaign_id }` (endpoint company-level)
+- Logout: `POST /agents/{agent_id}/logout` (endpoint company-level, ja existe como `logout_agent`)
 
-| Conquista | Gatilho | Ícone |
-|---|---|---|
-| Primeiro Recebimento | 1º pagamento registrado | 🎯 |
-| 10 Pagamentos | 10 pagamentos acumulados | 🔟 |
-| Sem Quebra no Mês | 0 quebras no mês corrente | 🛡️ |
-| Meta Atingida | 100% da meta mensal atingida | 🏆 |
-| 5 Dias Consecutivos | Pagamentos em 5 dias seguidos | 🔥 |
-| Top Recebedor | 1º no ranking mensal | 👑 |
-| R$10k Recebidos | Acumulado de R$10.000 | 💰 |
-| R$50k Recebidos | Acumulado de R$50.000 | 💎 |
+**Opcao B — Armazenar token individual do agente**
+Cada operador teria seu proprio `api_token` salvo no perfil. Isso adiciona complexidade desnecessaria.
 
-**4. Sistema de Pontuação**
-Cada operador acumula pontos calculados assim:
-- **+10 pontos** por pagamento registrado
-- **+5 pontos** por cada R$100 recebidos
-- **-3 pontos** por quebra registrada
-- **+50 pontos** por conquista desbloqueada
-- **+100 pontos** por meta do mês atingida
-
-Os pontos ficam armazenados em uma nova tabela `operator_points`.
-
-**5. Notificação de Conquista**
-Ao desbloquear uma conquista, aparece um toast de celebração visual + a conquista é salva na tabela `achievements`.
+### Plano de Implementacao (Opcao A)
 
 ---
 
-### Arquitetura
+#### 1. Edge Function — Adicionar acao `login_agent_to_campaign`
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                   SISTEMA DE GAMIFICAÇÃO                    │
-│                                                             │
-│  ┌───────────────────┐    ┌──────────────────────────────┐  │
-│  │   DashboardPage   │    │      GamificacaoPage         │  │
-│  │                   │    │                              │  │
-│  │  [Mini Ranking]   │    │  Ranking | Conquistas | Meta │  │
-│  │  🥇 João  1.240pts│    │                              │  │
-│  │  🥈 Maria   980pts│    │  🥇 Top operadores do mês   │  │
-│  │  🥉 Pedro   720pts│    │  🏅 Conquistas desbloqueadas │  │
-│  └───────────────────┘    │  📊 Histórico de metas       │  │
-│                           └──────────────────────────────┘  │
-│                                                             │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │           useGamification hook                    │       │
-│  │   checkAndGrantAchievements(operatorId, context) │       │
-│  │   calculatePoints(clients, goals)                │       │
-│  └──────────────────────────────────────────────────┘       │
-│                                                             │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │          Banco de Dados (Cloud)                  │       │
-│  │  achievements  (já existe)                       │       │
-│  │  operator_points  (nova tabela)                  │       │
-│  └──────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+Criar uma nova acao no `threecplus-proxy` que usa o endpoint company-level para logar um agente especifico em uma campanha:
+
+```
+case 'login_agent_to_campaign':
+  // Requer agent_id e campaign_id
+  POST /agents/{agent_id}/login  com body { campaign_id }
 ```
 
----
+Isso permite que o proxy use o token da empresa (que ja funciona) para logar o agente.
 
-### Detalhes Técnicos
+#### 2. Edge Function — Renomear logica de logout
 
-**Nova tabela: `operator_points`**
-```sql
-CREATE TABLE operator_points (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL,
-  operator_id uuid NOT NULL,
-  year integer NOT NULL,
-  month integer NOT NULL,
-  points integer NOT NULL DEFAULT 0,
-  payments_count integer NOT NULL DEFAULT 0,
-  breaks_count integer NOT NULL DEFAULT 0,
-  total_received numeric NOT NULL DEFAULT 0,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-```
-Com constraint UNIQUE em `(tenant_id, operator_id, year, month)` para upsert seguro e RLS idêntica ao padrão do projeto.
+O `logout_agent` ja existe e funciona (`POST /agents/{agent_id}/logout`). O operador pode usar essa mesma acao passando seu proprio `agent_id`.
 
-**Arquivos a criar:**
+#### 3. TelefoniaDashboard.tsx — Ajustar `handleCampaignLogin`
 
-| Arquivo | Descrição |
-|---|---|
-| `src/services/gamificationService.ts` | Lógica de pontos, conquistas e ranking |
-| `src/hooks/useGamification.ts` | Hook para checar e conceder conquistas |
-| `src/components/dashboard/MiniRanking.tsx` | Card de ranking resumido no Dashboard |
-| `src/components/gamificacao/RankingTab.tsx` | Tabela de ranking completo com medalhas |
-| `src/components/gamificacao/AchievementsTab.tsx` | Grid de conquistas desbloqueadas e bloqueadas |
-| `src/components/gamificacao/PointsHistoryTab.tsx` | Histórico de pontos por mês |
-| `src/pages/GamificacaoPage.tsx` | Página principal de gamificação |
-
-**Arquivos a modificar:**
-
-| Arquivo | O que muda |
-|---|---|
-| `src/pages/DashboardPage.tsx` | Adiciona `<MiniRanking>` no painel |
-| `src/components/AppLayout.tsx` | Adiciona `/gamificacao` no sidebar (todos os usuários) e em `pageTitles` |
-| `src/App.tsx` | Adiciona rota `/gamificacao` |
-| `src/services/clientService.ts` | Chama `checkAndGrantAchievements` após `markAsPaid` e `markAsBroken` |
-
-**Hook `useGamification`:**
+Mudar de:
 ```typescript
-// Verifica marcos automaticamente ao registrar pagamento
-checkAchievements(operatorProfileId, { 
-  paymentsThisMonth, 
-  totalReceived, 
-  hasBreaksThisMonth,
-  isGoalReached 
-})
+await invoke("agent_login", { campaign_id: Number(selectedCampaign) });
+```
+Para:
+```typescript
+await invoke("login_agent_to_campaign", { 
+  agent_id: operatorAgentId, 
+  campaign_id: Number(selectedCampaign) 
+});
 ```
 
-**Cálculo de pontuação (frontend, sem edge function):**
-A pontuação é calculada em tempo real a partir dos dados de `clients` já carregados, sem precisar de nova query. A tabela `operator_points` serve como cache persistente para o histórico.
+#### 4. TelefoniaDashboard.tsx — Ajustar `handleCampaignLogout`
 
-**Conquistas verificadas no cliente:**
-Para evitar complexidade desnecessária, as conquistas são verificadas no frontend ao registrar um pagamento, consultando os dados já disponíveis e chamando um INSERT na tabela `achievements` via service. A checagem é idempotente — verifica se a conquista já existe antes de inserir.
+Mudar de:
+```typescript
+await invoke("agent_logout_self");
+```
+Para:
+```typescript
+await invoke("logout_agent", { agent_id: operatorAgentId });
+```
 
-**Mini Ranking no Dashboard:**
-Mostra apenas os top 3 ou 5 do mês atual com medalhas animadas. Para operadores, mostra a própria posição em destaque. Para admins, mostra o ranking completo.
+Isso reutiliza a acao `logout_agent` que ja existe e funciona com o token da empresa.
 
-**Página de Gamificação:**
-Acessível por todos (operadores e admins) pelo sidebar. Admins veem ranking de todos; operadores veem o próprio desempenho em destaque + ranking geral.
+#### 5. Buscar campanhas disponiveis para o agente
+
+Adicionar uma acao `agent_available_campaigns` no proxy que consulta as campanhas onde o agente pode logar. A API 3CPlus tem o endpoint `GET /agents/{agent_id}/campaigns` (company-level) que retorna campanhas disponiveis para aquele agente especifico. Se esse endpoint nao existir, o `list_campaigns` ja atende.
+
+#### 6. Validacao no frontend
+
+- Verificar que `operatorAgentId` existe antes de permitir login/logout
+- Tratar erros especificos da API (agente ja logado, campanha inativa)
+- Apos login bem-sucedido, forcar refresh para mostrar o card de status atualizado
+- Apos logout, voltar para a tela de selecao de campanha
 
 ---
 
-### Nenhuma edge function necessária.
-### 1 nova tabela no banco: `operator_points`.
-### Nenhuma dependência nova.
+### Arquivos a modificar
+
+| Arquivo | Mudanca |
+|---|---|
+| `supabase/functions/threecplus-proxy/index.ts` | Adicionar acao `login_agent_to_campaign` usando `POST /agents/{agent_id}/login` |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Ajustar `handleCampaignLogin` e `handleCampaignLogout` para usar acoes company-level com `operatorAgentId` |
+
+### Resumo das mudancas
+
+- Trocar 2 chamadas de endpoint (agent-level para company-level)
+- Adicionar 1 nova acao no proxy
+- Zero mudancas no banco de dados
+- Zero novas dependencias
+
+### Resultado esperado
+
+1. Operador acessa a aba Telefonia e ve campanhas disponiveis
+2. Seleciona uma campanha e clica "Entrar na Campanha"
+3. O proxy usa o token da empresa para logar o agente via `POST /agents/{agent_id}/login`
+4. Apos refresh, o card de status aparece com nome, ramal, campanha e metricas
+5. Operador pode sair clicando "Sair da Campanha" (usa `logout_agent` existente)
+6. Apos logout, volta para a tela de selecao
+
