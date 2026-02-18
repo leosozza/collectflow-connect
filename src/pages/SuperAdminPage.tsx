@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building2, CheckCircle, Ban, Trash2, RotateCcw, Copy, Check,
-  DollarSign, TrendingUp, Search, Settings2, Archive,
+  DollarSign, Search, Settings2, Archive, Pencil, Plus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -54,9 +54,17 @@ const SuperAdminPage = () => {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [serviceSheet, setServiceSheet] = useState<TenantRow | null>(null);
+  const [editSheet, setEditSheet] = useState<TenantRow | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCnpj, setEditCnpj] = useState("");
+  const [editSlug, setEditSlug] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TenantRow | null>(null);
   const [searchDeleted, setSearchDeleted] = useState("");
   const [copied, setCopied] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientSlug, setNewClientSlug] = useState("");
+  const [newClientCnpj, setNewClientCnpj] = useState("");
+  const [creatingClient, setCreatingClient] = useState(false);
 
   const loadTenants = async () => {
     try {
@@ -164,6 +172,61 @@ const SuperAdminPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const openEditSheet = (tenant: TenantRow) => {
+    setEditName(tenant.name);
+    setEditCnpj(tenant.cnpj || "");
+    setEditSlug(tenant.slug);
+    setEditSheet(tenant);
+  };
+
+  const saveEdit = async () => {
+    if (!editSheet) return;
+    try {
+      const { error } = await supabase
+        .from("tenants")
+        .update({ name: editName, cnpj: editCnpj } as any)
+        .eq("id", editSheet.id);
+      if (error) throw error;
+      toast({ title: "Empresa atualizada!" });
+      setEditSheet(null);
+      loadTenants();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const createNewClient = async () => {
+    if (!newClientName || !newClientSlug) {
+      toast({ title: "Preencha nome e slug", variant: "destructive" });
+      return;
+    }
+    setCreatingClient(true);
+    try {
+      // Get first active plan
+      const { data: plans } = await supabase.from("plans").select("id").eq("is_active", true).limit(1);
+      const planId = plans?.[0]?.id;
+      if (!planId) throw new Error("Nenhum plano disponível");
+
+      const { error } = await supabase.from("tenants").insert({
+        name: newClientName,
+        slug: newClientSlug,
+        cnpj: newClientCnpj || null,
+        plan_id: planId,
+        status: "active",
+      } as any);
+      if (error) throw error;
+      toast({ title: "Cliente criado com sucesso!" });
+      setNewClientName("");
+      setNewClientSlug("");
+      setNewClientCnpj("");
+      loadTenants();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingClient(false);
+    }
+  };
+
   const getActiveServicesCount = (tenant: TenantRow) => {
     const svcs = (tenant.settings as any)?.enabled_services || {};
     return Object.values(svcs).filter(Boolean).length;
@@ -179,16 +242,22 @@ const SuperAdminPage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Gestão de Tenants</h1>
-        <p className="text-muted-foreground">Painel global de empresas e serviços</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Gestão de Tenants</h1>
+          <p className="text-muted-foreground">Painel global de empresas e serviços</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={copyRegistrationLink} className="gap-1.5">
+          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copied ? "Copiado!" : "Copiar link de cadastro"}
+        </Button>
       </div>
 
       <Tabs defaultValue="dashboard">
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
-          <TabsTrigger value="link">Link de Cadastro</TabsTrigger>
+          <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
 
         {/* ========== DASHBOARD ========== */}
@@ -323,6 +392,9 @@ const SuperAdminPage = () => {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" title="Editar" onClick={() => openEditSheet(t)}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" title="Gerenciar Serviços" onClick={() => setServiceSheet(t)}>
                                   <Settings2 className="w-4 h-4" />
                                 </Button>
@@ -398,28 +470,31 @@ const SuperAdminPage = () => {
           </Tabs>
         </TabsContent>
 
-        {/* ========== LINK DE CADASTRO ========== */}
-        <TabsContent value="link">
+        {/* ========== NOVO CLIENTE ========== */}
+        <TabsContent value="novo">
           <Card>
             <CardHeader>
-              <CardTitle>Link de Cadastro</CardTitle>
-              <CardDescription>Envie este link para novos clientes. Ao acessarem, poderão criar sua empresa e escolher um plano diretamente.</CardDescription>
+              <CardTitle>Cadastrar Novo Cliente</CardTitle>
+              <CardDescription>Crie uma nova empresa manualmente no sistema</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={`${window.location.origin}/onboarding?ref=superadmin`}
-                  className="font-mono text-sm"
-                />
-                <Button onClick={copyRegistrationLink} variant="outline" className="gap-1.5 shrink-0">
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copiado" : "Copiar"}
-                </Button>
+            <CardContent className="space-y-4 max-w-lg">
+              <div className="space-y-2">
+                <Label>Nome da empresa</Label>
+                <Input value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="Ex: Empresa ABC Ltda" />
               </div>
-              <p className="text-xs text-muted-foreground">
-                O cliente receberá este link e poderá preencher os dados da empresa. Após o cadastro, a empresa aparecerá automaticamente na aba "Empresas".
-              </p>
+              <div className="space-y-2">
+                <Label>Slug (identificador único)</Label>
+                <Input value={newClientSlug} onChange={e => setNewClientSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="ex: empresa-abc" />
+                <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e hífens</p>
+              </div>
+              <div className="space-y-2">
+                <Label>CNPJ (opcional)</Label>
+                <Input value={newClientCnpj} onChange={e => setNewClientCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+              </div>
+              <Button onClick={createNewClient} disabled={creatingClient} className="gap-1.5">
+                <Plus className="w-4 h-4" />
+                {creatingClient ? "Criando..." : "Criar Empresa"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -452,6 +527,32 @@ const SuperAdminPage = () => {
                 </div>
               );
             })}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ========== SHEET: EDITAR EMPRESA ========== */}
+      <Sheet open={!!editSheet} onOpenChange={(open) => !open && setEditSheet(null)}>
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Editar Empresa</SheetTitle>
+            <SheetDescription>Atualize os dados da empresa</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da empresa</Label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Slug</Label>
+              <Input value={editSlug} disabled />
+              <p className="text-xs text-muted-foreground">O slug não pode ser alterado</p>
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ</Label>
+              <Input value={editCnpj} onChange={e => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+            </div>
+            <Button onClick={saveEdit} className="w-full">Salvar Alterações</Button>
           </div>
         </SheetContent>
       </Sheet>
