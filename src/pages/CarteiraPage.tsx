@@ -89,7 +89,6 @@ const CarteiraPage = () => {
 
   const filtersWithOperator = {
     ...filters,
-    ...(!isAdmin && profile?.id ? { operatorId: profile.id } : {}),
   };
 
   const { data: clients = [], isLoading } = useQuery({

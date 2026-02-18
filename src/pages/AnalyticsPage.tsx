@@ -76,14 +76,19 @@ const AnalyticsPage = () => {
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
 
+  const isOperator = profile?.role !== "admin";
+
   const { data: allClients = [] } = useQuery({
-    queryKey: ["analytics-clients"],
+    queryKey: ["analytics-clients", isOperator ? profile?.id : "all"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("*");
+      let query = supabase.from("clients").select("*");
+      if (isOperator && profile?.id) {
+        query = query.eq("operator_id", profile.id);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data as ClientRow[];
     },
-    enabled: profile?.role === "admin",
   });
 
   const { data: operators = [] } = useQuery({
@@ -93,7 +98,7 @@ const AnalyticsPage = () => {
       if (error) throw error;
       return data as Profile[];
     },
-    enabled: profile?.role === "admin",
+    enabled: !isOperator,
   });
 
   const yearOpts = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
@@ -188,10 +193,6 @@ const AnalyticsPage = () => {
     XLSX.writeFile(wb, `analytics-${selectedYears.join("-") || "todos"}.xlsx`);
   };
 
-  if (profile?.role !== "admin") {
-    return <div className="text-center py-12 text-muted-foreground">Acesso restrito a administradores.</div>;
-  }
-
   return (
     <TooltipProvider delayDuration={300}>
       <div className="space-y-5 animate-fade-in">
@@ -206,7 +207,9 @@ const AnalyticsPage = () => {
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             <MultiSelect options={yearOpts} selected={selectedYears} onChange={setSelectedYears} allLabel="Todos Anos" className="w-[110px]" />
             <MultiSelect options={monthOpts} selected={selectedMonths} onChange={setSelectedMonths} allLabel="Todos Meses" className="w-[120px]" />
-            <MultiSelect options={operatorOpts} selected={selectedOperators} onChange={setSelectedOperators} allLabel="Todos Op." className="w-[120px]" />
+            {!isOperator && (
+              <MultiSelect options={operatorOpts} selected={selectedOperators} onChange={setSelectedOperators} allLabel="Todos Op." className="w-[120px]" />
+            )}
             <MultiSelect options={credorOpts} selected={selectedCredores} onChange={setSelectedCredores} allLabel="Todos Cred." className="w-[120px]" />
             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.print()} title="Exportar PDF">
               <Download className="w-4 h-4" />

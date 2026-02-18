@@ -18,13 +18,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const { isTenantAdmin } = useTenant();
   const [activeTab, setActiveTab] = useState("conversas");
 
-  if (channel === "telefonia" && profile?.role !== "admin") {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Acesso restrito a administradores</p>
-      </div>
-    );
-  }
+  // Telefonia is now accessible to all users
 
   if (channel === "telefonia") {
     return (

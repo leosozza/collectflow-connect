@@ -49,12 +49,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     ...(isAdmin ? [{ label: "Cadastros", icon: Database, path: "/cadastros" }] : []),
   ];
 
-  const postContactItems = isAdmin ? [] : [
-    { label: "Acordos", icon: Handshake, path: "/acordos" },
-  ];
+  const postContactItems: typeof preContactItems = [];
 
   const contactCenterItems = [
-    ...(isAdmin ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
+    { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
     { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
   ];
 
