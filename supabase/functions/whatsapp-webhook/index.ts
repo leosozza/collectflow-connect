@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
         const updateData: any = {
           last_message_at: new Date().toISOString(),
           unread_count: newUnread,
-          remote_name: pushName || undefined,
+          remote_name: direction === "inbound" && pushName ? pushName : undefined,
         };
 
         if (direction === "inbound") {

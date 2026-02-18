@@ -11,6 +11,7 @@ export interface Conversation {
   last_message_at: string;
   unread_count: number;
   client_id: string | null;
+  client_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -75,11 +76,16 @@ export async function sendInternalNote(
 export async function fetchConversations(tenantId: string): Promise<Conversation[]> {
   const { data, error } = await supabase
     .from("conversations" as any)
-    .select("*")
+    .select("*, clients(nome_completo)")
     .eq("tenant_id", tenantId)
     .order("last_message_at", { ascending: false });
   if (error) throw error;
-  return (data || []) as unknown as Conversation[];
+
+  return ((data || []) as any[]).map((row: any) => ({
+    ...row,
+    client_name: row.clients?.nome_completo ?? undefined,
+    clients: undefined,
+  })) as Conversation[];
 }
 
 export async function fetchMessages(conversationId: string): Promise<ChatMessage[]> {
