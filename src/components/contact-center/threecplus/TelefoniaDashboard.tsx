@@ -211,12 +211,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   };
 
   const handleCampaignLogin = async () => {
-    if (!selectedCampaign) return;
+    if (!selectedCampaign || !operatorAgentId) return;
     setLoggingIn(true);
     try {
-      await invoke("agent_login", { campaign_id: Number(selectedCampaign) });
-      toast.success("Logado na campanha com sucesso");
-      setSelectedCampaign("");
+      const result = await invoke("login_agent_to_campaign", {
+        agent_id: operatorAgentId,
+        campaign_id: Number(selectedCampaign),
+      });
+      if (result?.status && result.status >= 400) {
+        toast.error(result.detail || result.message || "Erro ao entrar na campanha");
+      } else {
+        toast.success("Logado na campanha com sucesso");
+        setSelectedCampaign("");
+      }
       fetchAll();
     } catch {
       toast.error("Erro ao entrar na campanha");
@@ -226,10 +233,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   };
 
   const handleCampaignLogout = async () => {
+    if (!operatorAgentId) return;
     setLoggingOutSelf(true);
     try {
-      await invoke("agent_logout_self");
-      toast.success("Deslogado da campanha");
+      const result = await invoke("logout_agent", { agent_id: operatorAgentId });
+      if (result?.status && result.status >= 400) {
+        toast.error(result.detail || result.message || "Erro ao sair da campanha");
+      } else {
+        toast.success("Deslogado da campanha");
+      }
       fetchAll();
     } catch {
       toast.error("Erro ao sair da campanha");
