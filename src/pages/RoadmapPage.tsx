@@ -193,6 +193,36 @@ const roadmapData: RoadmapItem[] = [
     category: "Core",
     lovablePrompt: "As Notificações estão implementadas em src/components/notifications/ com NotificationBell e AgreementCelebration. Serviço em src/services/notificationService.ts.",
   },
+  {
+    id: "gamificacao",
+    title: "Gamificação de Operadores",
+    description: "Sistema de pontuação, ranking mensal, conquistas automáticas e metas por operador para incentivar recuperação de carteira e reduzir quebras.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: `A Gamificação de Operadores está implementada em src/pages/GamificacaoPage.tsx com os seguintes componentes:
+- src/components/gamificacao/RankingTab.tsx — ranking mensal com medalhas 🥇🥈🥉
+- src/components/gamificacao/AchievementsTab.tsx — conquistas desbloqueadas e bloqueadas
+- src/components/gamificacao/PointsHistoryTab.tsx — histórico de pontos por mês
+- src/components/dashboard/MiniRanking.tsx — mini ranking no Dashboard (top 5)
+
+Serviços e hooks:
+- src/services/gamificationService.ts — lógica de pontos, conquistas e ranking
+- src/hooks/useGamification.ts — hook para verificar e conceder conquistas automaticamente
+
+Tabelas no banco:
+- operator_points — pontos mensais por operador (tenant_id, operator_id, year, month, points, payments_count, breaks_count, total_received)
+- achievements — conquistas desbloqueadas (já existia)
+
+Sistema de pontuação:
+- +10 pts por pagamento registrado
+- +5 pts por cada R$100 recebidos
+- -3 pts por quebra registrada
+- +50 pts por conquista desbloqueada
+- +100 pts por meta mensal atingida
+
+Conquistas automáticas: Primeiro Recebimento 🎯, 10 Pagamentos 🔟, Sem Quebra no Mês 🛡️, Meta Atingida 🏆, Top Recebedor 👑, R$10k Recebidos 💰, R$50k Recebidos 💎`,
+  },
 
   // IN PROGRESS
   {
