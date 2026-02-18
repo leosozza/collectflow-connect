@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags, ShieldCheck } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
@@ -7,10 +7,12 @@ import TipoDividaList from "@/components/cadastros/TipoDividaList";
 import TipoStatusList from "@/components/cadastros/TipoStatusList";
 import UsersPage from "@/pages/UsersPage";
 import IntegracaoPage from "@/pages/IntegracaoPage";
+import TenantSettingsPage from "@/pages/TenantSettingsPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 
-const sections = [
+const baseSections = [
   { key: "credores", label: "Credores", icon: Building2 },
   { key: "usuarios", label: "Usuários", icon: UserCog },
   { key: "equipes", label: "Equipes", icon: Users },
@@ -22,7 +24,13 @@ const sections = [
 
 const CadastrosPage = () => {
   const [active, setActive] = useState("credores");
-  const { profile } = useAuth();
+  const { isTenantAdmin, isSuperAdmin } = useTenant();
+
+  const sections = [
+    ...baseSections,
+    ...(isTenantAdmin ? [{ key: "tenant_config", label: "Configurações Empresa", icon: Building2 }] : []),
+    ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
+  ];
 
   return (
     <div className="flex gap-6 animate-fade-in">
@@ -65,6 +73,8 @@ const CadastrosPage = () => {
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
         {active === "integracao" && <IntegracaoPage />}
+        {active === "tenant_config" && <TenantSettingsPage />}
+        {active === "super_admin" && <SuperAdminPage />}
       </div>
     </div>
   );
