@@ -13,8 +13,15 @@ import { useToast } from "@/hooks/use-toast";
 
 const OnboardingPage = () => {
   const { user } = useAuth();
-  const { refetch } = useTenant();
+  const { tenant, loading: tenantLoading, refetch } = useTenant();
   const navigate = useNavigate();
+
+  // If user already has a tenant, redirect to dashboard
+  useEffect(() => {
+    if (!tenantLoading && tenant) {
+      navigate("/", { replace: true });
+    }
+  }, [tenant, tenantLoading, navigate]);
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
