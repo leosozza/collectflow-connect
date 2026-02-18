@@ -1,134 +1,152 @@
 
-## Página de Roadmap do Produto
+## Sistema de Gamificação para Operadores
 
 ### Objetivo
-Criar uma página `/roadmap` acessível pelo menu de Configurações (CadastrosPage) que exibe de forma visual todo o progresso do sistema: o que está concluído, em andamento, planejado e futuro — com barras de progresso por categoria e um botão para copiar o contexto de cada item diretamente para o Lovable.
+Criar um sistema completo de gamificação que incentive os operadores a maximizar o recebimento de parcelas e minimizar quebras, com ranking em tempo real, medalhas, conquistas automáticas, metas mensais e um painel de desempenho individual visível a todos.
 
 ---
 
-### Estrutura do Roadmap
+### O que será construído
 
-Com base nos módulos identificados no sistema, o roadmap será organizado assim:
+**1. Ranking em Tempo Real (Dashboard)**
+- Painel de ranking gamificado no Dashboard de cada operador, mostrando posição atual no mês
+- Medalhas visuais: 🥇 ouro, 🥈 prata, 🥉 bronze para top 3
+- Métricas do ranking: valor recebido, % de recebimento vs quebra, pontuação calculada
 
-**CONCLUÍDO (100%)**
-- Dashboard & KPIs
-- Carteira de Clientes (Kanban, filtros, propensão de pagamento)
-- Gestão de Acordos (geração de boleto, termos, assinatura digital)
-- Portal do Devedor (negociação self-service, checkout, assinatura facial/desenho)
-- Contact Center — WhatsApp (conversas, IA sugestão, etiquetas, respostas rápidas, agente IA)
-- Contact Center — Telefonia 3CPlus (dashboard operadores, campanhas, discador, relatórios, mailing, SMS, blacklist)
-- Integração CobCloud (importação em massa, preview, mapeamento)
-- Integração Negociarie (envio de acordos, callback)
-- Integração WhatsApp Baylers/Evolution (instâncias, webhooks)
-- Automação de Cobrança (régua por canal, pós-tabulação, histórico)
-- Relatórios & Analytics (aging, evolução, ranking de operadores)
-- Auditoria de Atividades
-- Negativação / Protesto
-- Módulo Financeiro (despesas)
-- Configurações de Empresa (Tenant Settings)
-- Gestão de Usuários, Equipes, Credores, Status, Tipos
-- Autenticação & Onboarding Multi-Tenant
-- Assinatura Digital (desenho, facial, click)
-- Notificações internas
+**2. Painel de Gamificação Dedicado — `GamificacaoPage`**
+- Acessível pela rota `/gamificacao` (visível a todos no sidebar)
+- Aba de ranking completo dos operadores no mês
+- Aba de conquistas do operador logado
+- Aba de histórico de metas mensais
+- Barra de progresso da meta do mês
+- Leaderboard com animação de posição
 
-**EM ANDAMENTO (~60%)**
-- Operador selecionando campanha no login da Telefonia *(implementado, mas sem testes em produção)*
-- SLA de atendimento no WhatsApp *(badge + tooltip entregue, lógica de configuração em andamento)*
-- Painel de Admin unificado (Configurações consolidando Avançado e Super Admin)
+**3. Conquistas Automáticas (Achievements)**
+A tabela `achievements` já existe. O sistema irá criar conquistas automaticamente ao detectar marcos ao registrar um pagamento:
 
-**PLANEJADO / PENDENTE (~0–30%)**
-- Serasa (estrutura criada, configuração/testes pendentes)
-- Relatórios exportáveis (PDF/Excel completo por módulo)
-- App Mobile (PWA ou React Native)
-- Integração com gateway de pagamento nativo (Stripe/Pagar.me)
-- Discador preditivo avançado (script de abordagem dinâmico)
-- Dashboard executivo consolidado (multi-tenant para super admin)
+| Conquista | Gatilho | Ícone |
+|---|---|---|
+| Primeiro Recebimento | 1º pagamento registrado | 🎯 |
+| 10 Pagamentos | 10 pagamentos acumulados | 🔟 |
+| Sem Quebra no Mês | 0 quebras no mês corrente | 🛡️ |
+| Meta Atingida | 100% da meta mensal atingida | 🏆 |
+| 5 Dias Consecutivos | Pagamentos em 5 dias seguidos | 🔥 |
+| Top Recebedor | 1º no ranking mensal | 👑 |
+| R$10k Recebidos | Acumulado de R$10.000 | 💰 |
+| R$50k Recebidos | Acumulado de R$50.000 | 💎 |
 
-**FUTURAS / BACKLOG**
-- IA generativa para proposta de acordo automatizada
-- OCR de documentos de dívida
-- Score de crédito integrado (Serasa/Boa Vista)
-- Integração com ERP (SAP, Totvs)
-- Módulo de Mediação de Conflitos (API judicial)
-- WhatsApp Business API (Meta Oficial)
+**4. Sistema de Pontuação**
+Cada operador acumula pontos calculados assim:
+- **+10 pontos** por pagamento registrado
+- **+5 pontos** por cada R$100 recebidos
+- **-3 pontos** por quebra registrada
+- **+50 pontos** por conquista desbloqueada
+- **+100 pontos** por meta do mês atingida
+
+Os pontos ficam armazenados em uma nova tabela `operator_points`.
+
+**5. Notificação de Conquista**
+Ao desbloquear uma conquista, aparece um toast de celebração visual + a conquista é salva na tabela `achievements`.
 
 ---
 
-### Dados da Página
+### Arquitetura
 
-Cada item do roadmap terá:
-- **Título** e **descrição curta**
-- **Status**: `done` | `in_progress` | `planned` | `future`
-- **Progresso** (0–100%)
-- **Categoria**: ex. "Contact Center", "Integrações", "Portal", "Core"
-- **Contexto Lovable** (texto copiável para colar no chat do Lovable e executar a tarefa)
-
----
-
-### Componente Visual
-
-**Layout da página:**
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  Roadmap do Produto                                      │
-│  Barra de progresso geral (ex: 72% concluído)           │
-│                                                         │
-│  Filtros: [Todos] [Concluído] [Em Andamento] [Futuro]   │
-│           Busca por nome                                 │
-├─────────────────────────────────────────────────────────┤
-│  ✅ CONCLUÍDO                                            │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ 🟢 Dashboard & KPIs          ████████████ 100% │    │
-│  │    "Página principal com cards de métricas..."  │    │
-│  │    [📋 Copiar contexto Lovable]                 │    │
-│  └─────────────────────────────────────────────────┘    │
-│  ...                                                    │
-│                                                         │
-│  🔄 EM ANDAMENTO                                        │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ 🟡 SLA de Atendimento        ████████░░░░  65% │    │
-│  │    "Badge visual entregue, ..."                 │    │
-│  │    [📋 Copiar contexto Lovable]                 │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   SISTEMA DE GAMIFICAÇÃO                    │
+│                                                             │
+│  ┌───────────────────┐    ┌──────────────────────────────┐  │
+│  │   DashboardPage   │    │      GamificacaoPage         │  │
+│  │                   │    │                              │  │
+│  │  [Mini Ranking]   │    │  Ranking | Conquistas | Meta │  │
+│  │  🥇 João  1.240pts│    │                              │  │
+│  │  🥈 Maria   980pts│    │  🥇 Top operadores do mês   │  │
+│  │  🥉 Pedro   720pts│    │  🏅 Conquistas desbloqueadas │  │
+│  └───────────────────┘    │  📊 Histórico de metas       │  │
+│                           └──────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────┐       │
+│  │           useGamification hook                    │       │
+│  │   checkAndGrantAchievements(operatorId, context) │       │
+│  │   calculatePoints(clients, goals)                │       │
+│  └──────────────────────────────────────────────────┘       │
+│                                                             │
+│  ┌──────────────────────────────────────────────────┐       │
+│  │          Banco de Dados (Cloud)                  │       │
+│  │  achievements  (já existe)                       │       │
+│  │  operator_points  (nova tabela)                  │       │
+│  └──────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ### Detalhes Técnicos
 
-**Arquivos a criar/modificar:**
+**Nova tabela: `operator_points`**
+```sql
+CREATE TABLE operator_points (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  operator_id uuid NOT NULL,
+  year integer NOT NULL,
+  month integer NOT NULL,
+  points integer NOT NULL DEFAULT 0,
+  payments_count integer NOT NULL DEFAULT 0,
+  breaks_count integer NOT NULL DEFAULT 0,
+  total_received numeric NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+```
+Com constraint UNIQUE em `(tenant_id, operator_id, year, month)` para upsert seguro e RLS idêntica ao padrão do projeto.
 
-| Arquivo | Ação |
+**Arquivos a criar:**
+
+| Arquivo | Descrição |
 |---|---|
-| `src/pages/RoadmapPage.tsx` | Criar — página principal com todos os dados hardcoded |
-| `src/components/AppLayout.tsx` | Adicionar `/roadmap` em `pageTitles` |
-| `src/pages/CadastrosPage.tsx` | Adicionar seção "Roadmap" com ícone `Map` na sub-nav (visível para admins) |
-| `src/App.tsx` | Adicionar rota `/roadmap` |
+| `src/services/gamificationService.ts` | Lógica de pontos, conquistas e ranking |
+| `src/hooks/useGamification.ts` | Hook para checar e conceder conquistas |
+| `src/components/dashboard/MiniRanking.tsx` | Card de ranking resumido no Dashboard |
+| `src/components/gamificacao/RankingTab.tsx` | Tabela de ranking completo com medalhas |
+| `src/components/gamificacao/AchievementsTab.tsx` | Grid de conquistas desbloqueadas e bloqueadas |
+| `src/components/gamificacao/PointsHistoryTab.tsx` | Histórico de pontos por mês |
+| `src/pages/GamificacaoPage.tsx` | Página principal de gamificação |
 
-**Componentes internos da RoadmapPage:**
-- `RoadmapCard` — card de cada feature com barra de progresso e botão copiar
-- Filtros por status com `useState`
-- Campo de busca textual
-- Agrupamento por status com contadores
-- Progresso geral calculado automaticamente (média ponderada)
+**Arquivos a modificar:**
 
-**Botão "Copiar contexto Lovable":**
-Usa `navigator.clipboard.writeText(item.lovablePrompt)` + toast de confirmação `"Contexto copiado! Cole no Lovable para executar."`.
+| Arquivo | O que muda |
+|---|---|
+| `src/pages/DashboardPage.tsx` | Adiciona `<MiniRanking>` no painel |
+| `src/components/AppLayout.tsx` | Adiciona `/gamificacao` no sidebar (todos os usuários) e em `pageTitles` |
+| `src/App.tsx` | Adiciona rota `/gamificacao` |
+| `src/services/clientService.ts` | Chama `checkAndGrantAchievements` após `markAsPaid` e `markAsBroken` |
 
-**Badge de status visual:**
-- `done` → verde com ✅
-- `in_progress` → âmbar com 🔄
-- `planned` → azul com 📋
-- `future` → roxo/cinza com 🔮
+**Hook `useGamification`:**
+```typescript
+// Verifica marcos automaticamente ao registrar pagamento
+checkAchievements(operatorProfileId, { 
+  paymentsThisMonth, 
+  totalReceived, 
+  hasBreaksThisMonth,
+  isGoalReached 
+})
+```
 
-**Barra de progresso geral:**
-Calcula a média ponderada de todos os itens `progress` e exibe no topo com o componente `<Progress>` existente.
+**Cálculo de pontuação (frontend, sem edge function):**
+A pontuação é calculada em tempo real a partir dos dados de `clients` já carregados, sem precisar de nova query. A tabela `operator_points` serve como cache persistente para o histórico.
 
-**Acesso:**
-Visível apenas para admins (verificação via `isTenantAdmin`), assim como as demais seções de Configurações.
+**Conquistas verificadas no cliente:**
+Para evitar complexidade desnecessária, as conquistas são verificadas no frontend ao registrar um pagamento, consultando os dados já disponíveis e chamando um INSERT na tabela `achievements` via service. A checagem é idempotente — verifica se a conquista já existe antes de inserir.
+
+**Mini Ranking no Dashboard:**
+Mostra apenas os top 3 ou 5 do mês atual com medalhas animadas. Para operadores, mostra a própria posição em destaque. Para admins, mostra o ranking completo.
+
+**Página de Gamificação:**
+Acessível por todos (operadores e admins) pelo sidebar. Admins veem ranking de todos; operadores veem o próprio desempenho em destaque + ranking geral.
 
 ---
 
-### Nenhuma migração de banco necessária.
-### Nenhuma nova dependência necessária.
+### Nenhuma edge function necessária.
+### 1 nova tabela no banco: `operator_points`.
+### Nenhuma dependência nova.
