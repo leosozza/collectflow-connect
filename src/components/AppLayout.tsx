@@ -13,12 +13,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Handshake,
   ChevronDown,
   Headphones,
   Phone,
   MessageCircle,
-  Building2,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -55,25 +53,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
   ];
 
-  const advancedNavItems = isAdmin ? [
-    { label: "Configurações Empresa", icon: Building2, path: "/tenant/configuracoes" },
-  ] : [];
-
-  const superAdminNavItems = isSuperAdmin ? [
-    { label: "Tenants", icon: Users, path: "/admin/tenants" },
-  ] : [];
-
-  const isAdvancedRoute = advancedNavItems.some(item => location.pathname === item.path);
-  const isSuperAdminRoute = superAdminNavItems.some(item => location.pathname === item.path);
   const isContactCenterRoute = contactCenterItems.some(item => location.pathname === item.path);
 
-  const [advancedOpen, setAdvancedOpen] = useState(isAdvancedRoute);
-  const [superAdminOpen, setSuperAdminOpen] = useState(isSuperAdminRoute);
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
 
   useEffect(() => {
-    if (isAdvancedRoute) setAdvancedOpen(true);
-    if (isSuperAdminRoute) setSuperAdminOpen(true);
     if (isContactCenterRoute) setContactCenterOpen(true);
   }, [location.pathname]);
 
@@ -183,74 +167,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               </Link>
             );
           })}
-
-          {advancedNavItems.length > 0 && (
-            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-              {!collapsed && (
-                <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-2 mt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors">
-                  Avançado
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`} />
-                </CollapsibleTrigger>
-              )}
-              <CollapsibleContent className="space-y-1">
-                {advancedNavItems.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setSidebarOpen(false)}
-                      title={collapsed ? item.label : undefined}
-                      className={`
-                        flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                        ${active
-                          ? "bg-primary text-primary-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        }
-                      `}
-                    >
-                      <item.icon className="w-5 h-5 flex-shrink-0" />
-                      {!collapsed && item.label}
-                    </Link>
-                  );
-                })}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
-          {superAdminNavItems.length > 0 && (
-            <Collapsible open={superAdminOpen} onOpenChange={setSuperAdminOpen}>
-              {!collapsed && (
-                <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-2 mt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors">
-                  Super Admin
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${superAdminOpen ? "rotate-180" : ""}`} />
-                </CollapsibleTrigger>
-              )}
-              <CollapsibleContent className="space-y-1">
-                {superAdminNavItems.map((item) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setSidebarOpen(false)}
-                      title={collapsed ? item.label : undefined}
-                      className={`
-                        flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                        ${active
-                          ? "bg-primary text-primary-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        }
-                      `}
-                    >
-                      <item.icon className="w-5 h-5 flex-shrink-0" />
-                      {!collapsed && item.label}
-                    </Link>
-                  );
-                })}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
         </nav>
 
         <div className="px-2 py-4 border-t border-sidebar-border">
@@ -317,11 +233,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/acordos": "Acordos",
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
-                "/integracao": "Integração",
                 "/cadastros": "Configurações",
-                "/tenant/configuracoes": "Configurações Empresa",
                 "/signs": "Assinatura Digital",
-                "/admin/tenants": "Tenants",
               };
               const title = pageTitles[location.pathname];
               return title ? (
