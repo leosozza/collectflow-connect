@@ -1,59 +1,107 @@
 
 
-## Melhorias na Tela de Telefonia
+## Reformulacao Completa do Painel Super Admin + Limpeza de Navegacao
 
-### 1. Remover "Pagamentos" dos cards de agentes
+### 1. Remover abas nao funcionais da navegacao lateral
 
-**Arquivo: `AgentStatusTable.tsx`**
-- Remover a linha `StatRow` de "Pagamentos" (linha 199)
-- Manter apenas "Contatos" e "Acordos" nas metricas do card
-- Atualizar a interface `AgentMetrics` para remover o campo `payments`
+**Arquivo: `src/components/AppLayout.tsx`**
 
-**Arquivo: `TelefoniaDashboard.tsx`**
-- Remover a query `todayPayments` (linhas 98-111) que busca pagamentos no banco
-- Simplificar o `agentMetrics` useMemo removendo a contagem de payments
-- Tipo das metricas passa a ser `{ contacts: number; agreements: number }`
+Remover do array `advancedNavItems`:
+- "Configuracoes" (`/configuracoes`)
+- "Automacao" (`/automacao`)
+- "Log de Importacoes" (`/cadastro`)
+- "Auditoria" (`/auditoria`)
 
-### 2. Otimizar KPI Cards - layout mais compacto e fluido
+Renomear "Empresa" para "Configuracoes Empresa" no mesmo array.
 
-**Arquivo: `TelefoniaDashboard.tsx`**
-- Redesenhar os 6 KPI cards em formato horizontal inline (icone + valor + label lado a lado) em vez de empilhados verticalmente
-- Usar layout mais compacto: icone a esquerda, valor grande + label pequeno a direita
-- Reduzir padding dos cards para `p-3`
-- Mover o badge de conexao e controles de refresh para dentro da mesma barra dos KPIs, eliminando o card de toolbar separado
+O array `advancedNavItems` ficara com apenas 1 item:
+```
+{ label: "Configuracoes Empresa", icon: Building2, path: "/tenant/configuracoes" }
+```
 
-### 3. Melhorar cards dos agentes
+Como sobra apenas 1 item, o collapsible "Avancado" pode ser removido e o item fica direto na navegacao principal.
 
-**Arquivo: `AgentStatusTable.tsx`**
-- Tornar os cards mais compactos: reduzir avatar para `h-12 w-12`, menos padding
-- Mover o nome e status para layout mais horizontal e condensado
-- Campanha do agente aparece como texto pequeno abaixo do status
-- Grid mais denso: `xl:grid-cols-6` em vez de `xl:grid-cols-5`
+Atualizar tambem o `pageTitles` no header para refletir o novo nome.
 
-### 4. Melhorar card de Campanhas
+---
 
-**Arquivo: `CampaignOverview.tsx`**
-- Redesenhar com layout mais limpo:
-  - Header da campanha: nome + badge de status + horario em uma linha
-  - Metricas (Agentes, Completadas, Abandonadas) em badges/chips inline em vez de grid 3 colunas com bg-muted
-  - Slider de agressividade mais compacto, inline com o label e valor
-  - Botao Pausar/Retomar menor, posicionado ao lado do slider
-- Separar visualmente campanhas ativas (running) das pausadas/paradas com secoes ou opacidade reduzida nas inativas
+### 2. Reformular pagina Super Admin (`/admin/tenants`) com abas
 
-### 5. Barra superior unificada
+**Arquivo: `src/pages/SuperAdminPage.tsx`** - reescrever completamente
 
-**Arquivo: `TelefoniaDashboard.tsx`**
-- Unificar toolbar: Menu dropdown + titulo "Dashboard" + badge de conexao ficam numa unica linha compacta sem card separado
-- Isso libera espaco vertical e torna o layout mais fluido
+A pagina tera 3 abas: **Dashboard**, **Empresas** (ativas + excluidas), **Link de Cadastro**.
+
+#### Aba Dashboard
+- KPI Cards: Total Empresas, Ativas, Suspensas, Excluidas, Receita Mensal Estimada (soma dos planos + servicos ativos)
+- Grafico simples de empresas criadas por mes (ultimos 6 meses)
+- Lista das ultimas 5 empresas criadas
+
+#### Aba Empresas
+Sub-abas: **Ativas** | **Excluidas**
+
+**Ativas:** Tabela com colunas: Empresa, Plano, Status, Servicos Ativos, Criado em, Acoes (Gerenciar Servicos, Suspender, Excluir)
+
+**Ao clicar em "Gerenciar Servicos":** Abre um Dialog/Sheet com toggles para liberar funcionalidades para o tenant:
+- Agente de IA Digital (valor: "A definir")
+- Negativacao Serasa/Protesto (valor: "A definir")
+- WhatsApp (R$ 99,00/mes - inclui 1 instancia + 1 agente IA)
+- Instancias WhatsApp adicionais (R$ 49,00 cada)
+- Assinatura Digital (valor: "A definir")
+
+Os servicos liberados sao salvos em `tenants.settings.enabled_services` (objeto com chaves booleanas). Quando o tenant admin acessar a aba Servicos em `/tenant/configuracoes`, os servicos ja habilitados pelo super admin aparecem como ativos. Os servicos nao habilitados ficam disponiveis para autocontratacao com confirmacao de valor.
+
+**Ao clicar em "Excluir":** AlertDialog perguntando "Tem certeza que deseja excluir esta empresa?" - ao confirmar, muda status para `deleted` (soft delete).
+
+**Excluidas:** Tabela de empresas com status `deleted`, com opcao de buscar por CNPJ/CPF e botao "Reativar".
+
+#### Aba Link de Cadastro
+- Gera uma URL do tipo `{origin}/onboarding?ref=superadmin` que pode ser copiada e enviada para novos clientes
+- Botao de copiar URL com feedback visual
+- Explicacao: "Envie este link para novos clientes. Ao acessarem, poderao criar sua empresa e escolher um plano diretamente."
+
+---
+
+### 3. Atualizar TenantSettingsPage - integrar servicos liberados
+
+**Arquivo: `src/pages/TenantSettingsPage.tsx`**
+
+Na aba "Servicos":
+- Ler `tenant.settings.enabled_services` para saber quais servicos o super admin ja liberou
+- Servicos ja liberados aparecem com badge "Incluso" e switch ativo/desativado
+- Servicos nao liberados aparecem com o valor e um botao "Contratar" que abre AlertDialog de confirmacao com texto: "O valor de R$ XX,XX sera adicionado a sua proxima fatura. Deseja continuar?"
+- Ao confirmar, o servico e ativado em `settings.services`
+
+Atualizar o array SERVICOS com os novos valores:
+- WhatsApp: R$ 99,00/mes (inclui 1 instancia + 1 agente)
+- Instancia WhatsApp adicional: R$ 49,00/cada
+- Agente IA Digital: "A definir"
+- Negativacao: "A definir"
+- Assinatura Digital: "A definir"
+
+---
+
+### 4. Migracao SQL
+
+Adicionar coluna `cnpj` e `deleted_at` na tabela `tenants`:
+
+```sql
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cnpj text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+```
+
+Isso permite:
+- Busca por CNPJ na aba de excluidos
+- Soft delete com timestamp
 
 ---
 
 ### Detalhes Tecnicos
 
 **Arquivos a modificar:**
-- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` - toolbar unificada, remover query payments, KPIs compactos
-- `src/components/contact-center/threecplus/AgentStatusTable.tsx` - remover Pagamentos, cards mais compactos
-- `src/components/contact-center/threecplus/CampaignOverview.tsx` - redesign dos cards de campanha
+- `src/components/AppLayout.tsx` - remover 4 itens do menu, renomear Empresa, remover collapsible Avancado
+- `src/pages/SuperAdminPage.tsx` - reescrever com 3 abas (Dashboard, Empresas, Link de Cadastro)
+- `src/pages/TenantSettingsPage.tsx` - integrar servicos liberados pelo super admin, novos valores
+- Nova migracao SQL para adicionar `cnpj` e `deleted_at` em tenants
 
-**Nenhuma migracao de banco necessaria.**
+**Nenhuma nova dependencia necessaria.**
 
