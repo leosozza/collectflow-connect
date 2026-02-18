@@ -1,102 +1,103 @@
 
 
-## Ajustes no Perfil do Operador
+## Ajustes no Perfil do Operador - Fase 2
 
-### 1. Dashboard do Operador - Funcionalidades completas
+### 1. Dashboard - Remover botao "Relatorios"
 
 **Arquivo: `src/pages/DashboardPage.tsx`**
 
-Reformular completamente o dashboard do operador para ter as mesmas funcionalidades visuais do Admin (`AdminDashboardPage`), mas filtrado automaticamente pelo `operator_id` do proprio operador:
+Remover o botao "Relatorios" (linhas 124-132) do header do dashboard do operador. Manter apenas o botao "Analytics".
 
-- Hero card com "Total Projetado no Mes" (estilo gradient-orange igual ao admin)
-- Strip de Vencimentos com navegacao por data (ja existe)
-- 3 StatCards: Recebido, Quebra, Pendentes (ja existe)
-- Tabela "Meus Clientes" com o nome do cliente como **link clicavel** que navega para `/carteira/:cpf` (pagina de detalhe do devedor)
-- Filtros de Ano e Mes (ja existem)
-- Adicionar botoes "Analytics" e "Relatorios" no header (igual ao admin)
+---
 
-A query de clientes continuara filtrando apenas pelo `operator_id` do operador logado.
-
-O nome do cliente na tabela sera renderizado como `<Link>` ou `<button>` com estilo de link (text-primary, underline on hover) que navega para `/carteira/${client.cpf}`.
-
-### 2. Analytics completo para Operador
+### 2. Analytics - Ajustes para Operador
 
 **Arquivo: `src/pages/AnalyticsPage.tsx`**
 
-Remover a restricao `if (profile?.role !== "admin")` que bloqueia acesso. Em vez disso, quando o usuario for operador:
-- Filtrar automaticamente `allClients` pelo `operator_id` do operador logado (via `profile.id`)
-- Ocultar o filtro de "Operador" (nao faz sentido para o operador ver outros)
-- Manter todos os graficos e KPIs funcionando normalmente com dados filtrados
-- Ocultar o filtro de operador do multi-select
+- Renomear o KPI "Total Inadimplencia" para **"Total Projetado"** quando `isOperator === true`, calculando como soma de todas as parcelas (nao apenas pendentes)
+- Reordenar os 4 KPIs do operador para: **Total Projetado**, **Total de Quebra**, **Total Recebido**, **% de Recebimento**
+- Ocultar o bloco **"Top 5 Maiores Credores"** quando `isOperator === true`
+- Adicionar KPI de "% de Recebimento" (parcelas pagas / total de parcelas filtradas * 100)
 
-### 3. Carteira - Operador pode ver e editar todos os clientes
+---
 
-**Arquivo: `src/pages/CarteiraPage.tsx`**
+### 3. Telefonia - Operador ve apenas seu proprio card
 
-Atualmente o operador so ve clientes vinculados ao seu `operator_id` (linha 90-93). Alterar para:
-- Operador ve **todos** os clientes (remover filtro de `operatorId` para operadores)
-- Operador pode editar campos: telefone, email, endereco, cidade, UF, CEP, observacoes e dados relacionados a negociacao/acordo
-- Manter restricoes: operador NAO pode criar, deletar ou importar clientes (isso continua sendo admin)
+**Arquivo: `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`**
 
-Na pratica, remover o bloco `filtersWithOperator` que adiciona `operatorId` para nao-admins. O operador passara a ver toda a carteira.
+Quando o usuario for operador (`profile.role !== "admin"`):
+- Filtrar a lista de agentes para mostrar **apenas o agente correspondente** ao `threecplus_agent_id` do operador logado
+- Ocultar KPIs globais (Online, Em Ligacao, Em Pausa, etc.) e campanhas - mostrar apenas o card do operador
+- Criar um **card ampliado** com informacoes detalhadas: status, tempo no status, metricas de contatos/acordos do dia, nome da campanha atual
 
-### 4. Contact Center - Liberar Telefonia para Operador
+**Arquivo: `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx`**
 
-**Arquivo: `src/components/AppLayout.tsx`**
+Quando o usuario for operador:
+- Ocultar o menu dropdown com todas as abas administrativas
+- Mostrar apenas o dashboard do operador + teclado telefonico
 
-No array `contactCenterItems` (linha 56-59), a aba "Telefonia" esta condicionada a `isAdmin`. Alterar para mostrar para todos os usuarios:
+---
 
+### 4. Teclado Telefonico para Ligacoes Manuais
+
+**Novo arquivo: `src/components/contact-center/threecplus/DialPad.tsx`**
+
+Criar componente de teclado telefonico com:
+- Grid 3x4 com teclas 1-9, *, 0, #
+- Campo de exibicao do numero digitado
+- Botao verde de "Ligar" e botao vermelho de "Desligar"
+- Botao para entrar/sair do modo manual (`POST /agent/manual_call/enter` e `/exit`)
+
+O fluxo de ligacao manual na API 3CPlus e:
+1. `POST /agent/manual_call/enter` - Entrar no modo manual
+2. `POST /agent/manual_call/dial` com `{ phone_number }` - Discar
+3. `POST /agent/manual_call/exit` - Sair do modo manual
+
+Para o click2call (ligacao rapida quando ocioso):
+- `POST /click2call` com `{ agent_id, phone_number }`
+
+**Arquivo: `supabase/functions/threecplus-proxy/index.ts`**
+
+Adicionar 4 novas actions ao proxy:
+- `manual_call_enter`: `POST /agent/manual_call/enter`
+- `manual_call_dial`: `POST /agent/manual_call/dial` com `phone_number`
+- `manual_call_exit`: `POST /agent/manual_call/exit`
+- `click2call`: `POST /click2call` com `agent_id` e `phone_number`
+
+---
+
+### 5. Layout da Tela do Operador na Telefonia
+
+A tela do operador na telefonia tera dois paineis lado a lado:
+
+```text
++-------------------------------+-------------------+
+|   Card do Operador (grande)   |  Teclado          |
+|                               |  Telefonico       |
+|  - Status com cor/animacao    |                   |
+|  - Tempo no status atual      |  [1] [2] [3]     |
+|  - Campanha ativa             |  [4] [5] [6]     |
+|  - Contatos hoje              |  [7] [8] [9]     |
+|  - Acordos hoje               |  [*] [0] [#]     |
+|  - Ramal                      |                   |
+|                               |  [  Ligar  ]     |
+|                               |  [Desligar ]     |
++-------------------------------+-------------------+
 ```
-const contactCenterItems = [
-  { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
-  { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
-];
-```
-
-**Arquivo: `src/pages/ContactCenterPage.tsx`**
-
-Remover a restricao `if (channel === "telefonia" && profile?.role !== "admin")` que bloqueia operadores de acessar a aba de Telefonia.
-
-### 5. Remover aba "Acordos" do menu do Operador
-
-**Arquivo: `src/components/AppLayout.tsx`**
-
-O array `postContactItems` (linha 52-54) mostra "Acordos" apenas para operadores. Remover completamente este array ou deixa-lo vazio:
-
-```
-const postContactItems: typeof preContactItems = [];
-```
-
-### 6. Nome clicavel no Dashboard
-
-**Arquivo: `src/pages/DashboardPage.tsx`**
-
-Na tabela de "Meus Clientes", alterar a celula do nome do cliente para ser um link navegavel:
-
-```tsx
-<TableCell className="text-xs font-medium">
-  <button
-    onClick={() => navigate(`/carteira/${client.cpf}`)}
-    className="text-primary hover:underline cursor-pointer"
-  >
-    {client.nome_completo}
-  </button>
-</TableCell>
-```
-
-Adicionar `useNavigate` do react-router-dom ao componente.
 
 ---
 
 ### Detalhes Tecnicos
 
 **Arquivos a modificar:**
-- `src/pages/DashboardPage.tsx` - adicionar link no nome, botoes Analytics/Relatorios, hero card gradient
-- `src/pages/AnalyticsPage.tsx` - remover restricao de admin, filtrar por operador automaticamente
-- `src/pages/CarteiraPage.tsx` - remover filtro de operator_id para operadores (ver todos)
-- `src/components/AppLayout.tsx` - liberar Telefonia para todos, remover aba Acordos
-- `src/pages/ContactCenterPage.tsx` - remover restricao de admin para telefonia
+- `src/pages/DashboardPage.tsx` - remover botao Relatorios
+- `src/pages/AnalyticsPage.tsx` - KPIs renomeados/reordenados, ocultar Top 5 Credores
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` - filtrar por agente do operador, card ampliado
+- `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` - ocultar menu admin para operador
+- `supabase/functions/threecplus-proxy/index.ts` - adicionar actions manual_call_enter/dial/exit e click2call
+
+**Novo arquivo:**
+- `src/components/contact-center/threecplus/DialPad.tsx` - teclado telefonico
 
 **Nenhuma migracao SQL necessaria.**
 **Nenhuma nova dependencia necessaria.**
-
