@@ -126,17 +126,19 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (tenantData) {
-        setTenant(tenantData as Tenant);
-
-        // Fetch plan
+        // Fetch plan before setting state to avoid intermediate null renders
+        let planData = null;
         if (tenantData.plan_id) {
-          const { data: planData } = await supabase
+          const { data: pd } = await supabase
             .from("plans")
             .select("*")
             .eq("id", tenantData.plan_id)
             .single();
-          if (planData) setPlan(planData as Plan);
+          planData = pd;
         }
+        // Set everything atomically before marking loading=false
+        setTenant(tenantData as Tenant);
+        if (planData) setPlan(planData as Plan);
       }
     } catch (err) {
       console.error("Error fetching tenant data:", err);

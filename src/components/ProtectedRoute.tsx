@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
-  const { tenant, loading: tenantLoading } = useTenant();
+  const { tenant, tenantUser, loading: tenantLoading } = useTenant();
 
   if (authLoading || tenantLoading) {
     return (
@@ -26,7 +26,18 @@ const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps
     return <Navigate to="/auth" replace />;
   }
 
+  // If tenantUser resolved (role known) but tenant object still loading, keep spinner instead of redirecting
   if (requireTenant && !tenant) {
+    if (tenantUser) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-muted-foreground">Carregando...</span>
+          </div>
+        </div>
+      );
+    }
     return <Navigate to="/onboarding" replace />;
   }
 
