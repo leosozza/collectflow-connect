@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
+import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,13 +17,32 @@ import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
+import DialPad from "./DialPad";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
+  isOperatorView?: boolean;
 }
 
-const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
+const statusLabel = (status: any): string => {
+  const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
+  if (status === 1 || ["idle", "available"].includes(s)) return "Disponível";
+  if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em Ligação";
+  if (status === 3 || s === "paused") return "Em Pausa";
+  return String(status ?? "Desconhecido");
+};
+
+const statusColor = (status: any): string => {
+  const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
+  if (status === 1 || ["idle", "available"].includes(s)) return "bg-emerald-500";
+  if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive";
+  if (status === 3 || s === "paused") return "bg-amber-500";
+  return "bg-muted-foreground";
+};
+
+const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardProps) => {
   const { tenant } = useTenant();
+  const { profile } = useAuth();
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
@@ -37,6 +57,8 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
 
   const todayStart = useMemo(() => {
     const d = new Date();
@@ -185,7 +207,113 @@ const TelefoniaDashboard = ({ menuButton }: TelefoniaDashboardProps) => {
     }
   };
 
-  // KPI computations
+  // ── OPERATOR VIEW ──
+  if (isOperatorView) {
+    const myAgent = operatorAgentId
+      ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
+      : null;
+    const myMetrics = operatorAgentId ? agentMetrics[operatorAgentId] : undefined;
+    const myStatusStr = statusLabel(myAgent?.status);
+    const myStatusColor = statusColor(myAgent?.status);
+    const myCampaign = myAgent?.campaign_name || myAgent?.campaign?.name || "—";
+    const myExtension = myAgent?.extension || myAgent?.ramal || "—";
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-foreground">Minha Telefonia</h2>
+          <Badge
+            variant="outline"
+            className={`cursor-default transition-colors ${
+              lastUpdate
+                ? "border-emerald-500/40 text-emerald-700 gap-1.5"
+                : "border-destructive/40 text-destructive gap-1.5"
+            }`}
+          >
+            {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            {lastUpdate ? "Conectado" : "Desconectado"}
+            {lastUpdate && (
+              <span className="text-muted-foreground font-normal ml-1">
+                {lastUpdate.toLocaleTimeString("pt-BR")}
+              </span>
+            )}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {/* Enlarged operator card */}
+          <div className="lg:col-span-3">
+            {loading && !lastUpdate ? (
+              <Skeleton className="h-64 w-full rounded-xl" />
+            ) : !myAgent ? (
+              <div className="bg-card rounded-xl border border-border p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {operatorAgentId
+                    ? "Seu agente não está online no momento."
+                    : "Seu perfil não possui um ID de agente 3CPlus vinculado."}
+                </p>
+              </div>
+            ) : (
+              <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+                {/* Status bar */}
+                <div className={`h-2 ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
+                <div className="p-6 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground">
+                        {myAgent.name || myAgent.agent_name || "Agente"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">Ramal: {myExtension}</p>
+                    </div>
+                    <Badge variant="outline" className="text-sm gap-1.5 px-3 py-1">
+                      <span className={`w-2 h-2 rounded-full ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
+                      {myStatusStr}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Campanha</p>
+                      <p className="text-sm font-semibold text-foreground truncate mt-0.5">{myCampaign}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Tempo no Status</p>
+                      <p className="text-sm font-semibold text-foreground mt-0.5">
+                        {myAgent.status_time || myAgent.time_in_status || "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Contatos Hoje</p>
+                      <p className="text-sm font-semibold text-foreground mt-0.5">
+                        {myMetrics?.contacts ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Acordos Hoje</p>
+                      <p className="text-sm font-semibold text-foreground mt-0.5">
+                        {myMetrics?.agreements ?? 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dial pad */}
+          <div className="lg:col-span-2">
+            <DialPad
+              domain={domain}
+              apiToken={apiToken}
+              agentId={operatorAgentId ?? undefined}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ADMIN VIEW ──
   const statusStr = (s: any) => String(s ?? "").toLowerCase().replace(/[\s-]/g, "_");
   const onlineCount = agents.length;
   const onCallCount = agents.filter((a) => a.status === 2 || ["on_call", "ringing"].includes(statusStr(a.status))).length;

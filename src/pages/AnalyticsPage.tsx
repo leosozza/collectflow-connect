@@ -127,6 +127,9 @@ const AnalyticsPage = () => {
   const totalPagosQuebrados = pagos.length + quebrados.length;
   const taxaRecuperacao = totalPagosQuebrados > 0 ? ((pagos.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
   const ticketMedio = pagos.length > 0 ? totalRecebido / pagos.length : 0;
+  const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
+  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
+  const percentRecebimento = filteredClients.length > 0 ? ((pagos.length / filteredClients.length) * 100).toFixed(1) : "0";
 
   // Portfolio conversion rate
   const contatados = filteredClients.filter((c) => c.operator_id != null);
@@ -219,30 +222,61 @@ const AnalyticsPage = () => {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-            <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos valores de parcelas pendentes (em aberto) no período filtrado." /></div>
-            <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Total Inadimplência</p>
-            <p className="text-xl font-bold text-destructive">{formatCurrency(totalInadimplencia)}</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-            <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de parcelas pagas em relação ao total de parcelas resolvidas (pagas + quebradas)." /></div>
-            <Target className="w-5 h-5 text-primary mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
-            <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-            <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por parcela paga no período." /></div>
-            <Award className="w-5 h-5 text-primary mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Ticket Médio</p>
-            <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-            <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todos os valores efetivamente recebidos (status pago) no período." /></div>
-            <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Total Recebido</p>
-            <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
-          </div>
+          {isOperator ? (
+            <>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todas as parcelas (projeção total) no período filtrado." /></div>
+                <AlertTriangle className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Projetado</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(totalProjetado)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos valores de parcelas quebradas no período." /></div>
+                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total de Quebra</p>
+                <p className="text-xl font-bold text-destructive">{formatCurrency(totalQuebra)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todos os valores efetivamente recebidos (status pago) no período." /></div>
+                <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Recebido</p>
+                <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de parcelas pagas em relação ao total de parcelas filtradas." /></div>
+                <Target className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">% de Recebimento</p>
+                <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos valores de parcelas pendentes (em aberto) no período filtrado." /></div>
+                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Inadimplência</p>
+                <p className="text-xl font-bold text-destructive">{formatCurrency(totalInadimplencia)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de parcelas pagas em relação ao total de parcelas resolvidas (pagas + quebradas)." /></div>
+                <Target className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
+                <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por parcela paga no período." /></div>
+                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todos os valores efetivamente recebidos (status pago) no período." /></div>
+                <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Recebido</p>
+                <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Charts row 1 */}
@@ -301,26 +335,28 @@ const AnalyticsPage = () => {
             )}
           </div>
 
-          {/* Top 5 credores */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Os 5 credores com maior valor total pendente na carteira filtrada." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Top 5 Maiores Credores</h3>
-            {top5Credores.length > 0 ? (
-              <div className="space-y-2">
-                {top5Credores.map((d, i) => (
-                  <div key={d.credor} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-primary w-5">{i + 1}.</span>
-                      <p className="text-xs font-medium text-foreground truncate max-w-[160px]">{d.credor}</p>
+          {/* Top 5 credores - hidden for operators */}
+          {!isOperator && (
+            <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
+              <div className="absolute top-3 right-3"><InfoTooltip text="Os 5 credores com maior valor total pendente na carteira filtrada." /></div>
+              <h3 className="text-sm font-semibold text-card-foreground mb-3">Top 5 Maiores Credores</h3>
+              {top5Credores.length > 0 ? (
+                <div className="space-y-2">
+                  {top5Credores.map((d, i) => (
+                    <div key={d.credor} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-primary w-5">{i + 1}.</span>
+                        <p className="text-xs font-medium text-foreground truncate max-w-[160px]">{d.credor}</p>
+                      </div>
+                      <span className="text-xs font-bold text-destructive">{formatCurrency(d.total)}</span>
                     </div>
-                    <span className="text-xs font-bold text-destructive">{formatCurrency(d.total)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">Sem credores pendentes</div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">Sem credores pendentes</div>
+              )}
+            </div>
+          )}
 
           {/* Heatmap */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">

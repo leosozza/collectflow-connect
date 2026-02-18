@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { AlertTriangle, Menu } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,8 @@ const tabs = [
 
 const ThreeCPlusPanel = () => {
   const { tenant } = useTenant();
+  const { profile } = useAuth();
+  const isOperator = profile?.role !== "admin";
   const settings = (tenant?.settings as Record<string, any>) || {};
   const hasCredentials = settings.threecplus_domain && settings.threecplus_api_token;
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -67,6 +70,11 @@ const ThreeCPlusPanel = () => {
   }
 
   const activeLabel = tabs.find((t) => t.value === activeTab)?.label ?? "Dashboard";
+
+  // For operators, show only the dashboard (no menu)
+  if (isOperator) {
+    return <TelefoniaDashboard isOperatorView />;
+  }
 
   const menuButton = (
     <DropdownMenu>
