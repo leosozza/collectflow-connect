@@ -14,6 +14,14 @@ export const clientSchema = z.object({
   valor_pago: z.number().min(0, "Valor não pode ser negativo").max(99999999.99, "Valor muito alto"),
   data_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato: YYYY-MM-DD)"),
   status: z.enum(["pendente", "pago", "quebrado"], { message: "Status inválido" }),
+  phone: z.string().trim().max(20).optional().nullable(),
+  email: z.string().trim().email("Email inválido").max(255).optional().nullable(),
+  external_id: z.string().trim().max(100).optional().nullable(),
+  endereco: z.string().trim().max(300).optional().nullable(),
+  cidade: z.string().trim().max(100).optional().nullable(),
+  uf: z.string().trim().max(2).optional().nullable(),
+  cep: z.string().trim().max(10).optional().nullable(),
+  observacoes: z.string().trim().max(1000).optional().nullable(),
 });
 
 export type ValidatedClientData = z.infer<typeof clientSchema>;
