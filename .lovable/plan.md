@@ -1,64 +1,71 @@
 
-## Duas correções: Sidebar "Configurações" e Lista de Conversas
+## Consolidar "Avançado" e "Super Admin" dentro de Configurações
 
-### Problema 1 — "Cadastros" no sidebar
-
-Atualmente o link "Cadastros" fica dentro da `nav` principal (área rolável do meio do sidebar). O pedido é:
-- Renomear para **"Configurações"**
-- Mover para o **rodapé do sidebar**, acima do botão "Sair"
-- Atualizar o título da página no header (mapa de `pageTitles`)
-- Usar o ícone `Settings` (engrenagem) no lugar de `Database`
-- Visível apenas para admin (como já era)
-
-**Arquivo: `src/components/AppLayout.tsx`**
-
-1. Remover `{ label: "Cadastros", icon: Database, path: "/cadastros" }` de `preContactItems`
-2. Criar um item de "Configurações" com ícone `Settings` e path `/cadastros` apenas para admins
-3. No rodapé (`<div className="px-2 py-4 border-t border-sidebar-border">`), inserir esse link logo acima do botão "Sair"
-4. Atualizar `pageTitles["/cadastros"]` de `"Cadastros"` para `"Configurações"`
-
-O cabeçalho interno da `CadastrosPage` (`<h1>Cadastros</h1>`) também será atualizado para "Configurações".
+### Objetivo
+Remover os grupos "Avançado" e "Super Admin" do sidebar. As páginas `TenantSettingsPage` (/tenant/configuracoes) e `SuperAdminPage` (/admin/tenants) passam a ser acessadas como sub-seções dentro de **Configurações** (/cadastros), junto com Credores, Usuários, Equipes, etc.
 
 ---
 
-### Problema 2 — Lista de conversas ainda cortando
+### Mudanças no Sidebar — `AppLayout.tsx`
 
-O `ConversationList` tem o markup correto com `truncate` e `min-w-0`, mas o problema é que o **botão pai** (`<button className="w-full text-left ...">`) não tem `overflow-hidden`. O conteúdo vaza além da borda do contêiner pai.
+Remover completamente:
+- O bloco `Collapsible` de "Avançado" (linhas 187–219)
+- O bloco `Collapsible` de "Super Admin" (linhas 221–253)
+- As variáveis `advancedNavItems`, `superAdminNavItems`, `advancedOpen`, `superAdminOpen`, `isAdvancedRoute`, `isSuperAdminRoute`
+- Os `useEffect` que controlam esses estados
+- Os imports de `Building2` e `Handshake` se não usados
+- A entrada `/tenant/configuracoes` e `/admin/tenants` do mapa `pageTitles` no header (elas serão reconhecidas pelo título da CadastrosPage)
 
-Além disso, o contêiner da lista em `WhatsAppChatLayout` usa `shrink-0` com largura fixa de `360px` mas sem `overflow-hidden` — isso não impede o conteúdo interno de vazar visualmente.
+O sidebar fica limpo com apenas: Dashboard, Carteira, Contact Center (dropdown), e no rodapé: Configurações + Sair.
 
-**Arquivo: `src/components/contact-center/whatsapp/ConversationList.tsx`**
+---
 
-Adicionar `overflow-hidden` ao `<button>` de cada item da lista:
-```tsx
-// ANTES
-<button className="w-full text-left px-3 py-[10px] border-b ...">
-  <div className="flex items-center gap-3 min-w-0">
+### Mudanças em CadastrosPage — `src/pages/CadastrosPage.tsx`
 
-// DEPOIS
-<button className="w-full text-left px-3 py-[10px] border-b ... overflow-hidden">
-  <div className="flex items-center gap-3 w-full min-w-0">
+Adicionar duas novas seções condicionais na sub-navegação lateral:
+
+```
+sections base (para admins):
+  - Credores
+  - Usuários
+  - Equipes
+  - Perfil do Devedor
+  - Tipo de Dívida
+  - Tipo de Status
+  - Integração
+  - Configurações Empresa  ← novo (apenas isTenantAdmin)
+  - Super Admin            ← novo (apenas isSuperAdmin)
 ```
 
-**Arquivo: `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`**
+As seções são condicionais:
+- `Configurações Empresa` aparece somente quando `isTenantAdmin === true`
+- `Super Admin` aparece somente quando `isSuperAdmin === true`
 
-Adicionar `overflow-hidden` ao div que envolve a lista:
+No conteúdo principal, adicionar os casos:
 ```tsx
-// ANTES
-<div className="w-[360px] shrink-0">
-
-// DEPOIS
-<div className="w-[360px] shrink-0 overflow-hidden">
+{active === "tenant_config" && <TenantSettingsPage />}
+{active === "super_admin" && <SuperAdminPage />}
 ```
+
+Importar `useTenant` para obter `isTenantAdmin` e `isSuperAdmin`.
+Importar `TenantSettingsPage` e `SuperAdminPage`.
+
+---
+
+### Ícones
+
+- `Configurações Empresa` → ícone `Building2`
+- `Super Admin` → ícone `ShieldCheck` (mais expressivo para o super admin)
 
 ---
 
 ### Arquivos a modificar
 
-- `src/components/AppLayout.tsx` — renomear e mover "Cadastros" → "Configurações" para o rodapé
-- `src/pages/CadastrosPage.tsx` — atualizar título interno de "Cadastros" para "Configurações"
-- `src/components/contact-center/whatsapp/ConversationList.tsx` — `overflow-hidden` no botão de cada item
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — `overflow-hidden` no contêiner da lista
+| Arquivo | O que muda |
+|---|---|
+| `src/components/AppLayout.tsx` | Remove blocos "Avançado" e "Super Admin" do sidebar + variáveis relacionadas |
+| `src/pages/CadastrosPage.tsx` | Adiciona seções "Configurações Empresa" e "Super Admin" condicionais na sub-nav |
 
 ### Nenhuma migração de banco necessária.
 ### Nenhuma nova dependência necessária.
+### As rotas `/tenant/configuracoes` e `/admin/tenants` continuam funcionando normalmente (acessíveis via URL direta, mas os links do sidebar são removidos).
