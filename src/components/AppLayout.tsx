@@ -17,6 +17,7 @@ import {
   Headphones,
   Phone,
   MessageCircle,
+  Trophy,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -46,7 +47,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Carteira", icon: Wallet, path: "/carteira" },
   ];
 
-  const postContactItems: typeof preContactItems = [];
+  const postContactItems = [
+    { label: "Gamificação", icon: Trophy, path: "/gamificacao" },
+  ];
 
   const contactCenterItems = [
     { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
@@ -236,6 +239,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/cadastros": "Configurações",
                 "/signs": "Assinatura Digital",
                 "/roadmap": "Roadmap do Produto",
+                "/gamificacao": "Gamificação",
               };
               const title = pageTitles[location.pathname];
               return title ? (

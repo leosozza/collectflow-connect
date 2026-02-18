@@ -30,6 +30,7 @@ import AtendimentoPage from "./pages/AtendimentoPage";
 import ContactCenterPage from "./pages/ContactCenterPage";
 import PerfilPage from "./pages/PerfilPage";
 import RoadmapPage from "./pages/RoadmapPage";
+import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -271,6 +272,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <RoadmapPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gamificacao"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <GamificacaoPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
