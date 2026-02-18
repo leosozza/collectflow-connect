@@ -3,6 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
@@ -79,10 +80,19 @@ const ChatPanel = ({
             <div className="font-medium text-[15px] flex items-center gap-2 text-foreground">
               {conversation.remote_name || conversation.remote_phone}
               {slaDeadline && new Date(slaDeadline) < new Date() && (
-                <Badge variant="destructive" className="text-[10px] h-4 gap-0.5">
-                  <AlertTriangle className="w-2.5 h-2.5" />
-                  SLA
-                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="destructive" className="text-[10px] h-4 gap-0.5 cursor-help">
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        SLA Expirado
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[200px] text-center">
+                      <p>Prazo de atendimento (SLA) expirado em {new Date(slaDeadline).toLocaleString("pt-BR")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2">
