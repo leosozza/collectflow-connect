@@ -1946,7 +1946,9 @@ export type Database = {
       }
       tenants: {
         Row: {
+          cnpj: string | null
           created_at: string | null
+          deleted_at: string | null
           id: string
           logo_url: string | null
           name: string
@@ -1958,7 +1960,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           logo_url?: string | null
           name: string
@@ -1970,7 +1974,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
           logo_url?: string | null
           name?: string

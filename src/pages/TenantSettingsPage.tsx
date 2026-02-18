@@ -13,11 +13,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
-const SERVICOS = [
-  { key: "discador", label: "Discador 3CPlus", description: "Integração com discador preditivo", valor: 299.90 },
-  { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp com múltiplas instâncias", valor: 199.90 },
-  { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", valor: 99.90 },
-  { key: "negativacao", label: "Negativação", description: "Integração com Serasa e Protesto", valor: 149.90 },
+const SERVICE_CATALOG = [
+  { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp (1 instância + 1 agente IA incluso)", price: 99.0 },
+  { key: "whatsapp_extra_instance", label: "Instância WhatsApp Adicional", description: "Cada instância adicional de WhatsApp", price: 49.0 },
+  { key: "ai_agent", label: "Agente de IA Digital", description: "Agente inteligente para atendimento automatizado", price: null },
+  { key: "negativacao", label: "Negativação Serasa/Protesto", description: "Integração com Serasa e Protesto cartorial", price: null },
+  { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", price: null },
 ];
 
 const CONTRATO_PADRAO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE SOFTWARE
@@ -56,12 +57,16 @@ O cancelamento pode ser solicitado a qualquer momento, com aviso prévio de 30 d
 CLÁUSULA 8ª - DO FORO
 Fica eleito o foro da comarca da sede da CONTRATADA para dirimir quaisquer questões oriundas deste contrato.`;
 
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
 const TenantSettingsPage = () => {
   const { tenant, plan, isTenantAdmin, refetch } = useTenant();
   const { toast } = useToast();
   const [name, setName] = useState(tenant?.name || "");
   const [primaryColor, setPrimaryColor] = useState(tenant?.primary_color || "#F97316");
   const [saving, setSaving] = useState(false);
+  const [confirmService, setConfirmService] = useState<typeof SERVICE_CATALOG[0] | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   if (!isTenantAdmin) {
@@ -99,11 +104,17 @@ const TenantSettingsPage = () => {
     }
   };
 
+  const handleContractService = async () => {
+    if (!confirmService || !tenant) return;
+    await handleToggleService(confirmService.key, true);
+    setConfirmService(null);
+  };
+
   const handleCancelRequest = async () => {
     if (!tenant) return;
     try {
-      await updateTenant(tenant.id, { 
-        settings: { ...settings, cancellation_requested_at: new Date().toISOString() } 
+      await updateTenant(tenant.id, {
+        settings: { ...settings, cancellation_requested_at: new Date().toISOString() },
       });
       await refetch();
       toast({ title: "Solicitação de cancelamento registrada", description: "O cancelamento será efetivado em 30 dias." });
@@ -115,8 +126,8 @@ const TenantSettingsPage = () => {
   const handleSignContract = async () => {
     if (!tenant) return;
     try {
-      await updateTenant(tenant.id, { 
-        settings: { ...settings, contract_signed_at: new Date().toISOString() } 
+      await updateTenant(tenant.id, {
+        settings: { ...settings, contract_signed_at: new Date().toISOString() },
       });
       await refetch();
       toast({ title: "Contrato assinado com sucesso!" });
@@ -125,13 +136,11 @@ const TenantSettingsPage = () => {
     }
   };
 
-  const limits = plan?.limits as Record<string, any> || {};
-  const formatCurrency = (v: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
+  const limits = (plan?.limits as Record<string, any>) || {};
   const contractSigned = !!settings.contract_signed_at;
   const cancellationRequested = !!settings.cancellation_requested_at;
   const services = settings.services || {};
+  const enabledServices = settings.enabled_services || {};
 
   return (
     <div className="space-y-6">
@@ -223,14 +232,15 @@ const TenantSettingsPage = () => {
                 </div>
               )}
 
-              {/* Serviços contratados resumo */}
               <div className="border-t border-border pt-4">
                 <p className="text-sm font-medium mb-2">Serviços Adicionais Ativos</p>
                 <div className="flex flex-wrap gap-2">
-                  {SERVICOS.filter(s => services[s.key]).map(s => (
-                    <Badge key={s.key} variant="secondary">{s.label} - {formatCurrency(s.valor)}/mês</Badge>
+                  {SERVICE_CATALOG.filter(s => services[s.key] || enabledServices[s.key]).map(s => (
+                    <Badge key={s.key} variant="secondary">
+                      {s.label} {s.price ? `- ${formatCurrency(s.price)}/mês` : ""}
+                    </Badge>
                   ))}
-                  {!SERVICOS.some(s => services[s.key]) && (
+                  {!SERVICE_CATALOG.some(s => services[s.key] || enabledServices[s.key]) && (
                     <p className="text-xs text-muted-foreground">Nenhum serviço adicional ativo</p>
                   )}
                 </div>
@@ -296,24 +306,46 @@ const TenantSettingsPage = () => {
           <Card>
             <CardHeader>
               <CardTitle>Serviços Disponíveis</CardTitle>
-              <CardDescription>Ative ou desative funcionalidades do sistema</CardDescription>
+              <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {SERVICOS.map(s => (
-                <div key={s.key} className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{s.label}</p>
-                    <p className="text-xs text-muted-foreground">{s.description}</p>
+              {SERVICE_CATALOG.map(s => {
+                const isEnabledBySuperAdmin = !!enabledServices[s.key];
+                const isActiveByTenant = !!services[s.key];
+                const isActive = isEnabledBySuperAdmin || isActiveByTenant;
+
+                return (
+                  <div key={s.key} className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground">{s.label}</p>
+                        {isEnabledBySuperAdmin && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Incluso</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{s.description}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {isEnabledBySuperAdmin ? (
+                        <span className="text-xs text-primary font-medium">Ativo</span>
+                      ) : s.price !== null ? (
+                        <>
+                          <span className="text-sm font-semibold text-foreground">{formatCurrency(s.price)}/mês</span>
+                          {isActiveByTenant ? (
+                            <Switch checked onCheckedChange={() => handleToggleService(s.key, false)} />
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => setConfirmService(s)}>
+                              Contratar
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Em breve</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-semibold text-foreground">{formatCurrency(s.valor)}/mês</span>
-                    <Switch
-                      checked={!!services[s.key]}
-                      onCheckedChange={(c) => handleToggleService(s.key, c)}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
         </TabsContent>
@@ -331,7 +363,7 @@ const TenantSettingsPage = () => {
                 <div>
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Aviso Importante</p>
                   <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                    O cancelamento pode ser solicitado a qualquer momento, porém será efetivado após um período de <strong>30 dias</strong> a contar da data da solicitação. Durante esse período, todos os serviços continuam ativos normalmente.
+                    O cancelamento pode ser solicitado a qualquer momento, porém será efetivado após um período de <strong>30 dias</strong> a contar da data da solicitação.
                   </p>
                   <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
                     Após o cancelamento, seus dados permanecerão disponíveis para exportação por 90 dias.
@@ -343,7 +375,7 @@ const TenantSettingsPage = () => {
                 <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5">
                   <p className="text-sm font-medium text-destructive">Cancelamento Solicitado</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Solicitado em {new Date(settings.cancellation_requested_at).toLocaleDateString("pt-BR")}. 
+                    Solicitado em {new Date(settings.cancellation_requested_at).toLocaleDateString("pt-BR")}.
                     O cancelamento será efetivado em {new Date(new Date(settings.cancellation_requested_at).getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR")}.
                   </p>
                 </div>
@@ -356,7 +388,7 @@ const TenantSettingsPage = () => {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Confirmar Cancelamento</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Tem certeza que deseja solicitar o cancelamento? O cancelamento será efetivado em 30 dias. Durante esse período, todos os serviços continuam funcionando normalmente.
+                        Tem certeza que deseja solicitar o cancelamento? O cancelamento será efetivado em 30 dias.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -372,6 +404,22 @@ const TenantSettingsPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* DIALOG: CONFIRMAR CONTRATAÇÃO */}
+      <AlertDialog open={!!confirmService} onOpenChange={(open) => !open && setConfirmService(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Contratação</AlertDialogTitle>
+            <AlertDialogDescription>
+              O valor de <strong>{confirmService?.price ? formatCurrency(confirmService.price) : ""}/mês</strong> será adicionado à sua próxima fatura, proporcional à data de contratação. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleContractService}>Confirmar Contratação</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

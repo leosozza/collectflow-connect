@@ -8,27 +8,17 @@ import {
   Users, 
   LogOut, 
   Menu, 
-  X, 
   Zap,
-  Settings,
-  UserCog,
   Wallet,
-  Cloud,
-    ClipboardPlus,
-    Bot,
-    PenTool,
   PanelLeftClose,
   PanelLeftOpen,
   Database,
-  BarChart3,
   Handshake,
-  DollarSign,
-  FileText,
   ChevronDown,
-  Shield,
   Headphones,
   Phone,
-  MessageCircle
+  MessageCircle,
+  Building2,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -69,11 +59,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const advancedNavItems = isAdmin ? [
-    { label: "Configurações", icon: Settings, path: "/configuracoes" },
-    { label: "Automação", icon: Bot, path: "/automacao" },
-    { label: "Log de Importações", icon: ClipboardPlus, path: "/cadastro" },
-    { label: "Empresa", icon: Users, path: "/tenant/configuracoes" },
-    { label: "Auditoria", icon: FileText, path: "/auditoria" },
+    { label: "Configurações Empresa", icon: Building2, path: "/tenant/configuracoes" },
   ] : [];
 
   const superAdminNavItems = isSuperAdmin ? [
@@ -320,13 +306,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
                 "/integracao": "Integração",
-                "/configuracoes": "Configurações",
-                "/automacao": "Automação",
-                "/usuarios": "Usuários",
-                "/cadastro": "Log de Importações",
                 "/cadastros": "Cadastros",
-                "/tenant/configuracoes": "Empresa",
-                "/auditoria": "Auditoria",
+                "/tenant/configuracoes": "Configurações Empresa",
                 "/signs": "Assinatura Digital",
                 "/admin/tenants": "Tenants",
               };
