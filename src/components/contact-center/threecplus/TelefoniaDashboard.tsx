@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff,
+  RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
@@ -56,6 +56,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [interval, setRefreshInterval] = useState(30);
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("");
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loggingOutSelf, setLoggingOutSelf] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
@@ -207,6 +210,34 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+  const handleCampaignLogin = async () => {
+    if (!selectedCampaign) return;
+    setLoggingIn(true);
+    try {
+      await invoke("agent_login", { campaign_id: Number(selectedCampaign) });
+      toast.success("Logado na campanha com sucesso");
+      setSelectedCampaign("");
+      fetchAll();
+    } catch {
+      toast.error("Erro ao entrar na campanha");
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const handleCampaignLogout = async () => {
+    setLoggingOutSelf(true);
+    try {
+      await invoke("agent_logout_self");
+      toast.success("Deslogado da campanha");
+      fetchAll();
+    } catch {
+      toast.error("Erro ao sair da campanha");
+    } finally {
+      setLoggingOutSelf(false);
+    }
+  };
+
   // ── OPERATOR VIEW ──
   if (isOperatorView) {
     const myAgent = operatorAgentId
@@ -246,12 +277,47 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             {loading && !lastUpdate ? (
               <Skeleton className="h-64 w-full rounded-xl" />
             ) : !myAgent ? (
-              <div className="bg-card rounded-xl border border-border p-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {operatorAgentId
-                    ? "Seu agente não está online no momento."
-                    : "Seu perfil não possui um ID de agente 3CPlus vinculado."}
-                </p>
+              /* Campaign selector when agent is offline */
+              <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+                {!operatorAgentId ? (
+                  <p className="text-sm text-muted-foreground text-center">
+                    Seu perfil não possui um ID de agente 3CPlus vinculado.
+                  </p>
+                ) : (
+                  <>
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground">Entrar em uma Campanha</h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Selecione a campanha e clique para iniciar seu turno.
+                      </p>
+                    </div>
+                    <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione uma campanha..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {campaigns
+                          .filter((c: any) => {
+                            const s = String(c.status ?? "").toLowerCase();
+                            return s === "running" || s === "paused" || !c.paused;
+                          })
+                          .map((c: any) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={handleCampaignLogin}
+                      disabled={!selectedCampaign || loggingIn}
+                      className="w-full gap-2"
+                    >
+                      <LogIn className={`w-4 h-4 ${loggingIn ? "animate-spin" : ""}`} />
+                      {loggingIn ? "Entrando..." : "Entrar na Campanha"}
+                    </Button>
+                  </>
+                )}
               </div>
             ) : (
               <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
@@ -295,6 +361,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                       </p>
                     </div>
                   </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCampaignLogout}
+                    disabled={loggingOutSelf}
+                    className="w-full gap-2 text-destructive hover:text-destructive"
+                  >
+                    <LogOut className={`w-4 h-4 ${loggingOutSelf ? "animate-spin" : ""}`} />
+                    {loggingOutSelf ? "Saindo..." : "Sair da Campanha"}
+                  </Button>
                 </div>
               </div>
             )}
