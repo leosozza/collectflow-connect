@@ -501,24 +501,24 @@ Deno.serve(async (req) => {
         method = 'POST';
         break;
 
-      // ── Agent Login/Logout ──
-      case 'agent_login': {
-        const err = requireField(body, 'campaign_id', corsHeaders);
-        if (err) return err;
-        url = buildUrl(baseUrl, 'agent/login', authParam);
+      // ── Agent Login/Logout (company-level endpoints) ──
+      case 'login_agent_to_campaign': {
+        const err1 = requireField(body, 'agent_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'campaign_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `agents/${body.agent_id}/login`, authParam);
         method = 'POST';
         reqBody = JSON.stringify({ campaign_id: body.campaign_id });
         break;
       }
 
-      case 'agent_logout_self':
-        url = buildUrl(baseUrl, 'agent/logout', authParam);
-        method = 'POST';
+      case 'agent_available_campaigns': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `agents/${body.agent_id}/campaigns`, authParam);
         break;
-
-      case 'agent_campaigns':
-        url = buildUrl(baseUrl, 'agent/campaigns', authParam);
-        break;
+      }
 
       case 'click2call': {
         if (!body.agent_id || !body.phone_number) {
