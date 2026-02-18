@@ -501,6 +501,25 @@ Deno.serve(async (req) => {
         method = 'POST';
         break;
 
+      // ── Agent Login/Logout ──
+      case 'agent_login': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'agent/login', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ campaign_id: body.campaign_id });
+        break;
+      }
+
+      case 'agent_logout_self':
+        url = buildUrl(baseUrl, 'agent/logout', authParam);
+        method = 'POST';
+        break;
+
+      case 'agent_campaigns':
+        url = buildUrl(baseUrl, 'agent/campaigns', authParam);
+        break;
+
       case 'click2call': {
         if (!body.agent_id || !body.phone_number) {
           return new Response(JSON.stringify({ status: 400, detail: 'agent_id and phone_number are required' }),
