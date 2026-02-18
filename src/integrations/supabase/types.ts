@@ -254,6 +254,45 @@ export type Database = {
           },
         ]
       }
+      api_keys: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          is_active: boolean
+          key_hash: string
+          key_prefix: string
+          label: string
+          last_used_at: string | null
+          revoked_at: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          is_active?: boolean
+          key_hash: string
+          key_prefix: string
+          label?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_active?: boolean
+          key_hash?: string
+          key_prefix?: string
+          label?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string

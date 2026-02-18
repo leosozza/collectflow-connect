@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.calculate-propensity]
 verify_jwt = false
+
+[functions.clients-api]
+verify_jwt = false

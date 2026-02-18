@@ -18,6 +18,7 @@ import {
   Phone,
   MessageCircle,
   Trophy,
+  Code2,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -180,19 +181,34 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </div>
           )}
           {isAdmin && (
-            <Link
-              to="/cadastros"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Configurações" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/cadastros"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
-            >
-              <Settings className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Configurações"}
-            </Link>
+            <>
+              <Link
+                to="/api-docs"
+                onClick={() => setSidebarOpen(false)}
+                title={collapsed ? "API REST" : undefined}
+                className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                  location.pathname === "/api-docs"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }`}
+              >
+                <Code2 className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && "API REST"}
+              </Link>
+              <Link
+                to="/cadastros"
+                onClick={() => setSidebarOpen(false)}
+                title={collapsed ? "Configurações" : undefined}
+                className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                  location.pathname === "/cadastros"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }`}
+              >
+                <Settings className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && "Configurações"}
+              </Link>
+            </>
           )}
           <button
             onClick={handleSignOut}
@@ -240,6 +256,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/signs": "Assinatura Digital",
                 "/roadmap": "Roadmap do Produto",
                 "/gamificacao": "Gamificação",
+                "/api-docs": "API REST",
               };
               const title = pageTitles[location.pathname];
               return title ? (
