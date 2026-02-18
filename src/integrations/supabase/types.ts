@@ -1463,6 +1463,60 @@ export type Database = {
           },
         ]
       }
+      operator_points: {
+        Row: {
+          breaks_count: number
+          id: string
+          month: number
+          operator_id: string
+          payments_count: number
+          points: number
+          tenant_id: string
+          total_received: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          breaks_count?: number
+          id?: string
+          month: number
+          operator_id: string
+          payments_count?: number
+          points?: number
+          tenant_id: string
+          total_received?: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          breaks_count?: number
+          id?: string
+          month?: number
+          operator_id?: string
+          payments_count?: number
+          points?: number
+          tenant_id?: string
+          total_received?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_points_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_points_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string | null

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchClients, Client } from "@/services/clientService";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { markAsPaid, markAsBroken } from "@/services/clientService";
 import PaymentDialog from "@/components/clients/PaymentDialog";
 import {
@@ -16,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useNavigate } from "react-router-dom";
+import MiniRanking from "@/components/dashboard/MiniRanking";
+import { useGamification } from "@/hooks/useGamification";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -34,6 +35,7 @@ const DashboardPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const now = new Date();
+  const { checkAndGrantAchievements } = useGamification();
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -45,6 +47,20 @@ const DashboardPage = () => {
     queryFn: () => fetchClients(),
   });
 
+  // Compute month stats for gamification context
+  const computeMonthStats = () => {
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const monthClients = clients.filter(c => {
+      const d = parseISO(c.data_vencimento);
+      return d.getFullYear() === y && d.getMonth() === m && c.operator_id === profile?.id;
+    });
+    const paymentsThisMonth = monthClients.filter(c => c.status === "pago").length;
+    const breaksThisMonth = monthClients.filter(c => c.status === "quebrado").length;
+    const totalReceived = monthClients.filter(c => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0);
+    return { paymentsThisMonth, breaksThisMonth, totalReceived };
+  };
+
   const paymentMutation = useMutation({
     mutationFn: ({ client, valor }: { client: Client; valor: number }) =>
       markAsPaid(client, valor),
@@ -52,6 +68,11 @@ const DashboardPage = () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Pagamento registrado!");
       setPaymentClient(null);
+      // Trigger gamification check after data refreshes
+      setTimeout(() => {
+        const stats = computeMonthStats();
+        checkAndGrantAchievements({ ...stats, isGoalReached: false });
+      }, 1000);
     },
     onError: () => toast.error("Erro ao registrar pagamento"),
   });
@@ -61,6 +82,10 @@ const DashboardPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Quebra registrada!");
+      setTimeout(() => {
+        const stats = computeMonthStats();
+        checkAndGrantAchievements({ ...stats, isGoalReached: false });
+      }, 1000);
     },
     onError: () => toast.error("Erro ao registrar quebra"),
   });
@@ -166,11 +191,14 @@ const DashboardPage = () => {
         </span>
       </div>
 
-      {/* Stat cards row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
-        <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
+      {/* Stat cards row + Mini Ranking */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
+          <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
+          <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
+        </div>
+        <MiniRanking />
       </div>
 
       {/* Meus Clientes table */}
