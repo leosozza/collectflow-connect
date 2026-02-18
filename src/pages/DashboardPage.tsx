@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -120,15 +120,6 @@ const DashboardPage = () => {
           >
             <BarChart3 className="w-4 h-4" />
             <span className="hidden sm:inline">Analytics</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 border-primary text-primary hover:bg-primary/10"
-            onClick={() => navigate("/relatorios")}
-          >
-            <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">Relatórios</span>
           </Button>
           <MultiSelect
             options={yearOptions}

@@ -481,6 +481,37 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Manual Call ──
+      case 'manual_call_enter':
+        url = buildUrl(baseUrl, 'agent/manual_call/enter', authParam);
+        method = 'POST';
+        break;
+
+      case 'manual_call_dial': {
+        const err = requireField(body, 'phone_number', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, 'agent/manual_call/dial', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ phone_number: body.phone_number });
+        break;
+      }
+
+      case 'manual_call_exit':
+        url = buildUrl(baseUrl, 'agent/manual_call/exit', authParam);
+        method = 'POST';
+        break;
+
+      case 'click2call': {
+        if (!body.agent_id || !body.phone_number) {
+          return new Response(JSON.stringify({ status: 400, detail: 'agent_id and phone_number are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        url = buildUrl(baseUrl, 'click2call', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ agent_id: body.agent_id, phone_number: body.phone_number });
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ status: 400, detail: `Unknown action: ${action}` }),
