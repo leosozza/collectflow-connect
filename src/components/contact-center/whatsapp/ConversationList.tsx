@@ -139,11 +139,11 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
               <button
                 key={conv.id}
                 onClick={() => onSelect(conv)}
-                className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors ${
+                className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors overflow-hidden ${
                   selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
                 }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 w-full min-w-0">
                   <ConversationAvatar conv={conv} />
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center justify-between gap-1">

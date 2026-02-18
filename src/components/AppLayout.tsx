@@ -12,7 +12,7 @@ import {
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
-  Database,
+  Settings,
   Handshake,
   ChevronDown,
   Headphones,
@@ -46,7 +46,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
-    ...(isAdmin ? [{ label: "Cadastros", icon: Database, path: "/cadastros" }] : []),
   ];
 
   const postContactItems: typeof preContactItems = [];
@@ -261,6 +260,21 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               <p className="text-xs text-sidebar-foreground/60 capitalize">{tenantUser?.role || "operador"}</p>
             </div>
           )}
+          {isAdmin && (
+            <Link
+              to="/cadastros"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Configurações" : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                location.pathname === "/cadastros"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <Settings className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Configurações"}
+            </Link>
+          )}
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}
@@ -304,7 +318,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
                 "/integracao": "Integração",
-                "/cadastros": "Cadastros",
+                "/cadastros": "Configurações",
                 "/tenant/configuracoes": "Configurações Empresa",
                 "/signs": "Assinatura Digital",
                 "/admin/tenants": "Tenants",
