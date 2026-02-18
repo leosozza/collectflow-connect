@@ -1,93 +1,134 @@
 
+## Página de Roadmap do Produto
 
-## Campanhas disponíveis para o Operador na Telefonia
-
-### Contexto atual
-Na visao de operador (`isOperatorView`), o `TelefoniaDashboard` mostra apenas o card do agente e o DialPad. Nao ha como o operador escolher em qual campanha entrar. As campanhas sao criadas pelo Admin no painel de Campanhas, mas o operador nao tem acesso a elas.
-
-### O que sera feito
-
-Adicionar um seletor de campanhas na visao do operador, permitindo que ele veja as campanhas disponiveis e faca login/logout em uma campanha via API 3CPlus.
+### Objetivo
+Criar uma página `/roadmap` acessível pelo menu de Configurações (CadastrosPage) que exibe de forma visual todo o progresso do sistema: o que está concluído, em andamento, planejado e futuro — com barras de progresso por categoria e um botão para copiar o contexto de cada item diretamente para o Lovable.
 
 ---
 
-### 1. Adicionar endpoints no proxy (`threecplus-proxy`)
+### Estrutura do Roadmap
 
-Dois novos actions no edge function:
+Com base nos módulos identificados no sistema, o roadmap será organizado assim:
 
-- **`agent_login`** — `POST /agent/login` com body `{ campaign_id }` — Loga o agente na campanha selecionada
-- **`agent_logout_self`** — `POST /agent/logout` — Desloga o proprio agente
-- **`agent_campaigns`** — `GET /agent/campaigns` — Lista campanhas que o agente pertence
+**CONCLUÍDO (100%)**
+- Dashboard & KPIs
+- Carteira de Clientes (Kanban, filtros, propensão de pagamento)
+- Gestão de Acordos (geração de boleto, termos, assinatura digital)
+- Portal do Devedor (negociação self-service, checkout, assinatura facial/desenho)
+- Contact Center — WhatsApp (conversas, IA sugestão, etiquetas, respostas rápidas, agente IA)
+- Contact Center — Telefonia 3CPlus (dashboard operadores, campanhas, discador, relatórios, mailing, SMS, blacklist)
+- Integração CobCloud (importação em massa, preview, mapeamento)
+- Integração Negociarie (envio de acordos, callback)
+- Integração WhatsApp Baylers/Evolution (instâncias, webhooks)
+- Automação de Cobrança (régua por canal, pós-tabulação, histórico)
+- Relatórios & Analytics (aging, evolução, ranking de operadores)
+- Auditoria de Atividades
+- Negativação / Protesto
+- Módulo Financeiro (despesas)
+- Configurações de Empresa (Tenant Settings)
+- Gestão de Usuários, Equipes, Credores, Status, Tipos
+- Autenticação & Onboarding Multi-Tenant
+- Assinatura Digital (desenho, facial, click)
+- Notificações internas
 
-### 2. Componente de selecao de campanha no operador
+**EM ANDAMENTO (~60%)**
+- Operador selecionando campanha no login da Telefonia *(implementado, mas sem testes em produção)*
+- SLA de atendimento no WhatsApp *(badge + tooltip entregue, lógica de configuração em andamento)*
+- Painel de Admin unificado (Configurações consolidando Avançado e Super Admin)
 
-Na visao do operador em `TelefoniaDashboard.tsx`:
+**PLANEJADO / PENDENTE (~0–30%)**
+- Serasa (estrutura criada, configuração/testes pendentes)
+- Relatórios exportáveis (PDF/Excel completo por módulo)
+- App Mobile (PWA ou React Native)
+- Integração com gateway de pagamento nativo (Stripe/Pagar.me)
+- Discador preditivo avançado (script de abordagem dinâmico)
+- Dashboard executivo consolidado (multi-tenant para super admin)
 
-- Quando o agente **nao esta online** (myAgent === null), mostrar um card com:
-  - Select de campanhas (carregadas via `list_campaigns`)
-  - Botao "Entrar na Campanha" que chama `agent_login` com o `campaign_id` selecionado
-- Quando o agente **esta online**, o card atual continua igual mas com um botao "Sair da Campanha" que chama `agent_logout_self`
+**FUTURAS / BACKLOG**
+- IA generativa para proposta de acordo automatizada
+- OCR de documentos de dívida
+- Score de crédito integrado (Serasa/Boa Vista)
+- Integração com ERP (SAP, Totvs)
+- Módulo de Mediação de Conflitos (API judicial)
+- WhatsApp Business API (Meta Oficial)
 
-### 3. Fluxo do operador
+---
 
+### Dados da Página
+
+Cada item do roadmap terá:
+- **Título** e **descrição curta**
+- **Status**: `done` | `in_progress` | `planned` | `future`
+- **Progresso** (0–100%)
+- **Categoria**: ex. "Contact Center", "Integrações", "Portal", "Core"
+- **Contexto Lovable** (texto copiável para colar no chat do Lovable e executar a tarefa)
+
+---
+
+### Componente Visual
+
+**Layout da página:**
 ```text
-1. Operador acessa Telefonia
-2. Se nao esta logado -> ve o seletor de campanhas + botao "Entrar"
-3. Seleciona a campanha e clica "Entrar"
-4. Apos login, o dashboard atualiza e mostra o card com status + DialPad
-5. Pode clicar "Sair da Campanha" para deslogar
+┌─────────────────────────────────────────────────────────┐
+│  Roadmap do Produto                                      │
+│  Barra de progresso geral (ex: 72% concluído)           │
+│                                                         │
+│  Filtros: [Todos] [Concluído] [Em Andamento] [Futuro]   │
+│           Busca por nome                                 │
+├─────────────────────────────────────────────────────────┤
+│  ✅ CONCLUÍDO                                            │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ 🟢 Dashboard & KPIs          ████████████ 100% │    │
+│  │    "Página principal com cards de métricas..."  │    │
+│  │    [📋 Copiar contexto Lovable]                 │    │
+│  └─────────────────────────────────────────────────┘    │
+│  ...                                                    │
+│                                                         │
+│  🔄 EM ANDAMENTO                                        │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ 🟡 SLA de Atendimento        ████████░░░░  65% │    │
+│  │    "Badge visual entregue, ..."                 │    │
+│  │    [📋 Copiar contexto Lovable]                 │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Detalhes tecnicos
+### Detalhes Técnicos
 
-**Arquivo: `supabase/functions/threecplus-proxy/index.ts`**
+**Arquivos a criar/modificar:**
 
-Adicionar 3 novos cases no switch:
-
-```typescript
-case 'agent_login': {
-  const err = requireField(body, 'campaign_id', corsHeaders);
-  if (err) return err;
-  url = buildUrl(baseUrl, 'agent/login', authParam);
-  method = 'POST';
-  reqBody = JSON.stringify({ campaign_id: body.campaign_id });
-  break;
-}
-
-case 'agent_logout_self':
-  url = buildUrl(baseUrl, 'agent/logout', authParam);
-  method = 'POST';
-  break;
-
-case 'agent_campaigns':
-  url = buildUrl(baseUrl, 'agent/campaigns', authParam);
-  break;
-```
-
-**Arquivo: `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`**
-
-Na secao `OPERATOR VIEW` (linhas 210-313):
-
-- Adicionar estado `selectedCampaign` e `loggingIn`
-- Carregar campanhas com o `fetchAll` existente (ja carrega `campaigns`)
-- Quando `!myAgent`:
-  - Mostrar card com Select de campanhas + botao "Entrar na Campanha"
-  - Ao clicar, chamar `invoke("agent_login", { campaign_id })` e depois `fetchAll()`
-- Quando `myAgent` esta online:
-  - Adicionar botao discreto "Sair da Campanha" no card do agente
-  - Ao clicar, chamar `invoke("agent_logout_self")` e depois `fetchAll()`
-
----
-
-### Arquivos a modificar
-
-| Arquivo | Alteracao |
+| Arquivo | Ação |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | 3 novos actions: `agent_login`, `agent_logout_self`, `agent_campaigns` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Seletor de campanhas + login/logout na visao operador |
+| `src/pages/RoadmapPage.tsx` | Criar — página principal com todos os dados hardcoded |
+| `src/components/AppLayout.tsx` | Adicionar `/roadmap` em `pageTitles` |
+| `src/pages/CadastrosPage.tsx` | Adicionar seção "Roadmap" com ícone `Map` na sub-nav (visível para admins) |
+| `src/App.tsx` | Adicionar rota `/roadmap` |
 
-### Nenhuma migracao de banco necessaria.
-### Nenhuma nova dependencia necessaria.
+**Componentes internos da RoadmapPage:**
+- `RoadmapCard` — card de cada feature com barra de progresso e botão copiar
+- Filtros por status com `useState`
+- Campo de busca textual
+- Agrupamento por status com contadores
+- Progresso geral calculado automaticamente (média ponderada)
 
+**Botão "Copiar contexto Lovable":**
+Usa `navigator.clipboard.writeText(item.lovablePrompt)` + toast de confirmação `"Contexto copiado! Cole no Lovable para executar."`.
+
+**Badge de status visual:**
+- `done` → verde com ✅
+- `in_progress` → âmbar com 🔄
+- `planned` → azul com 📋
+- `future` → roxo/cinza com 🔮
+
+**Barra de progresso geral:**
+Calcula a média ponderada de todos os itens `progress` e exibe no topo com o componente `<Progress>` existente.
+
+**Acesso:**
+Visível apenas para admins (verificação via `isTenantAdmin`), assim como as demais seções de Configurações.
+
+---
+
+### Nenhuma migração de banco necessária.
+### Nenhuma nova dependência necessária.
