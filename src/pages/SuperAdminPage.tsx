@@ -19,9 +19,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   Building2, CheckCircle, Ban, Trash2, RotateCcw, Copy, Check,
-  DollarSign, Search, Settings2, Archive, Pencil, Plus,
+  DollarSign, Search, Settings2, Archive, Plus, Minus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -39,7 +40,6 @@ interface TenantRow {
 
 const SERVICE_CATALOG = [
   { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp (1 instância + 1 agente IA incluso)", price: 99.0 },
-  { key: "whatsapp_extra_instance", label: "Instância WhatsApp Adicional", description: "Cada instância adicional de WhatsApp", price: 49.0 },
   { key: "ai_agent", label: "Agente de IA Digital", description: "Agente inteligente para atendimento automatizado", price: null },
   { key: "negativacao", label: "Negativação Serasa/Protesto", description: "Integração com Serasa e Protesto cartorial", price: null },
   { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", price: null },
@@ -53,12 +53,13 @@ const SuperAdminPage = () => {
   const { toast } = useToast();
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [serviceSheet, setServiceSheet] = useState<TenantRow | null>(null);
-  const [editSheet, setEditSheet] = useState<TenantRow | null>(null);
+  const [manageSheet, setManageSheet] = useState<TenantRow | null>(null);
   const [editName, setEditName] = useState("");
   const [editCnpj, setEditCnpj] = useState("");
   const [editSlug, setEditSlug] = useState("");
+  const [extraInstances, setExtraInstances] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<TenantRow | null>(null);
+  const [searchActive, setSearchActive] = useState("");
   const [searchDeleted, setSearchDeleted] = useState("");
   const [copied, setCopied] = useState(false);
   const [newClientName, setNewClientName] = useState("");
@@ -81,7 +82,17 @@ const SuperAdminPage = () => {
     loadTenants();
   }, []);
 
-  const activeTenants = useMemo(() => tenants.filter(t => t.status !== "deleted"), [tenants]);
+  const activeTenants = useMemo(() => {
+    const active = tenants.filter(t => t.status !== "deleted");
+    if (!searchActive) return active;
+    const q = searchActive.toLowerCase();
+    return active.filter(t =>
+      t.name.toLowerCase().includes(q) ||
+      t.cnpj?.toLowerCase().includes(q) ||
+      t.slug.toLowerCase().includes(q)
+    );
+  }, [tenants, searchActive]);
+
   const deletedTenants = useMemo(() => {
     const deleted = tenants.filter(t => t.status === "deleted");
     if (!searchDeleted) return deleted;
@@ -101,8 +112,8 @@ const SuperAdminPage = () => {
     tenants.filter(t => t.status === "active").forEach(t => {
       const svcs = (t.settings as any)?.enabled_services || {};
       if (svcs.whatsapp) revenue += 99;
-      const extraInstances = svcs.whatsapp_extra_instances || 0;
-      revenue += extraInstances * 49;
+      const extra = svcs.whatsapp_extra_instances || 0;
+      revenue += extra * 49;
     });
     return { total: tenants.length, active, suspended, deleted, revenue };
   }, [tenants]);
@@ -121,7 +132,6 @@ const SuperAdminPage = () => {
   const softDelete = async () => {
     if (!deleteTarget) return;
     try {
-      // Use raw update for deleted_at and status
       const { error } = await supabase
         .from("tenants")
         .update({ status: "deleted", deleted_at: new Date().toISOString() } as any)
@@ -149,16 +159,34 @@ const SuperAdminPage = () => {
     }
   };
 
-  const toggleService = async (tenant: TenantRow, serviceKey: string, enabled: boolean) => {
-    const settings = (tenant.settings || {}) as Record<string, any>;
+  const toggleService = async (serviceKey: string, enabled: boolean) => {
+    if (!manageSheet) return;
+    const settings = (manageSheet.settings || {}) as Record<string, any>;
     const enabledServices = settings.enabled_services || {};
     const newEnabledServices = { ...enabledServices, [serviceKey]: enabled };
     try {
-      await updateTenant(tenant.id, { settings: { ...settings, enabled_services: newEnabledServices } });
+      await updateTenant(manageSheet.id, { settings: { ...settings, enabled_services: newEnabledServices } });
       toast({ title: enabled ? "Serviço liberado" : "Serviço removido" });
+      const updated = { ...manageSheet, settings: { ...settings, enabled_services: newEnabledServices } };
+      setManageSheet(updated);
       loadTenants();
-      // Update the sheet state
-      setServiceSheet(prev => prev ? { ...prev, settings: { ...settings, enabled_services: newEnabledServices } } : null);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const updateExtraInstances = async (count: number) => {
+    if (!manageSheet) return;
+    const settings = (manageSheet.settings || {}) as Record<string, any>;
+    const enabledServices = settings.enabled_services || {};
+    const newEnabledServices = { ...enabledServices, whatsapp_extra_instances: count };
+    try {
+      await updateTenant(manageSheet.id, { settings: { ...settings, enabled_services: newEnabledServices } });
+      toast({ title: `${count} instância(s) adicional(is) configurada(s)` });
+      const updated = { ...manageSheet, settings: { ...settings, enabled_services: newEnabledServices } };
+      setManageSheet(updated);
+      setExtraInstances(count);
+      loadTenants();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
@@ -172,23 +200,24 @@ const SuperAdminPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const openEditSheet = (tenant: TenantRow) => {
+  const openManageSheet = (tenant: TenantRow) => {
     setEditName(tenant.name);
     setEditCnpj(tenant.cnpj || "");
     setEditSlug(tenant.slug);
-    setEditSheet(tenant);
+    const svcs = (tenant.settings as any)?.enabled_services || {};
+    setExtraInstances(svcs.whatsapp_extra_instances || 0);
+    setManageSheet(tenant);
   };
 
   const saveEdit = async () => {
-    if (!editSheet) return;
+    if (!manageSheet) return;
     try {
       const { error } = await supabase
         .from("tenants")
         .update({ name: editName, cnpj: editCnpj } as any)
-        .eq("id", editSheet.id);
+        .eq("id", manageSheet.id);
       if (error) throw error;
-      toast({ title: "Empresa atualizada!" });
-      setEditSheet(null);
+      toast({ title: "Dados atualizados!" });
       loadTenants();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -202,7 +231,6 @@ const SuperAdminPage = () => {
     }
     setCreatingClient(true);
     try {
-      // Get first active plan
       const { data: plans } = await supabase.from("plans").select("id").eq("is_active", true).limit(1);
       const planId = plans?.[0]?.id;
       if (!planId) throw new Error("Nenhum plano disponível");
@@ -229,7 +257,12 @@ const SuperAdminPage = () => {
 
   const getActiveServicesCount = (tenant: TenantRow) => {
     const svcs = (tenant.settings as any)?.enabled_services || {};
-    return Object.values(svcs).filter(Boolean).length;
+    return Object.entries(svcs).filter(([k, v]) => k !== "whatsapp_extra_instances" && v === true).length;
+  };
+
+  const getExtraInstancesCount = (tenant: TenantRow) => {
+    const svcs = (tenant.settings as any)?.enabled_services || {};
+    return svcs.whatsapp_extra_instances || 0;
   };
 
   if (!isSuperAdmin) {
@@ -316,7 +349,7 @@ const SuperAdminPage = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {activeTenants.slice(0, 5).map(t => (
+                {tenants.filter(t => t.status !== "deleted").slice(0, 5).map(t => (
                   <div key={t.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div>
                       <p className="text-sm font-medium">{t.name}</p>
@@ -332,7 +365,7 @@ const SuperAdminPage = () => {
                     </div>
                   </div>
                 ))}
-                {activeTenants.length === 0 && (
+                {tenants.filter(t => t.status !== "deleted").length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">Nenhuma empresa cadastrada</p>
                 )}
               </div>
@@ -350,7 +383,16 @@ const SuperAdminPage = () => {
 
             <TabsContent value="ativas">
               <Card>
-                <CardContent className="pt-4">
+                <CardContent className="pt-4 space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome, CNPJ ou slug..."
+                      className="pl-9"
+                      value={searchActive}
+                      onChange={e => setSearchActive(e.target.value)}
+                    />
+                  </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -358,6 +400,7 @@ const SuperAdminPage = () => {
                         <TableHead>Plano</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Serviços</TableHead>
+                        <TableHead>Instâncias</TableHead>
                         <TableHead>Criado em</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -365,11 +408,13 @@ const SuperAdminPage = () => {
                     <TableBody>
                       {loading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground">Carregando...</TableCell>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">Carregando...</TableCell>
                         </TableRow>
                       ) : activeTenants.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground">Nenhuma empresa</TableCell>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">
+                            {searchActive ? "Nenhum resultado encontrado" : "Nenhuma empresa"}
+                          </TableCell>
                         </TableRow>
                       ) : (
                         activeTenants.map(t => (
@@ -387,15 +432,19 @@ const SuperAdminPage = () => {
                             <TableCell>
                               <Badge variant="secondary">{getActiveServicesCount(t)} ativos</Badge>
                             </TableCell>
+                            <TableCell>
+                              {getExtraInstancesCount(t) > 0 ? (
+                                <Badge variant="outline">1 + {getExtraInstancesCount(t)} extra</Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
                               {new Date(t.created_at).toLocaleDateString("pt-BR")}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" title="Editar" onClick={() => openEditSheet(t)}>
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" title="Gerenciar Serviços" onClick={() => setServiceSheet(t)}>
+                                <Button variant="ghost" size="icon" title="Gerenciar" onClick={() => openManageSheet(t)}>
                                   <Settings2 className="w-4 h-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" title={t.status === "active" ? "Suspender" : "Ativar"} onClick={() => toggleStatus(t)}>
@@ -500,59 +549,99 @@ const SuperAdminPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* ========== SHEET: GERENCIAR SERVIÇOS ========== */}
-      <Sheet open={!!serviceSheet} onOpenChange={(open) => !open && setServiceSheet(null)}>
-        <SheetContent className="sm:max-w-md">
+      {/* ========== SHEET: GERENCIAR EMPRESA (DADOS + SERVIÇOS + INSTÂNCIAS) ========== */}
+      <Sheet open={!!manageSheet} onOpenChange={(open) => !open && setManageSheet(null)}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Serviços - {serviceSheet?.name}</SheetTitle>
-            <SheetDescription>Libere ou remova funcionalidades para esta empresa</SheetDescription>
+            <SheetTitle>Gerenciar - {manageSheet?.name}</SheetTitle>
+            <SheetDescription>Edite os dados, serviços e instâncias da empresa</SheetDescription>
           </SheetHeader>
-          <div className="mt-6 space-y-4">
-            {SERVICE_CATALOG.map(svc => {
-              const enabledServices = (serviceSheet?.settings as any)?.enabled_services || {};
-              const isEnabled = !!enabledServices[svc.key];
-              return (
-                <div key={svc.key} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div className="flex-1 mr-3">
-                    <p className="text-sm font-medium">{svc.label}</p>
-                    <p className="text-xs text-muted-foreground">{svc.description}</p>
-                    <p className="text-xs font-semibold text-primary mt-1">
-                      {svc.price !== null ? `${formatCurrency(svc.price)}/mês` : "Valor a definir"}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={isEnabled}
-                    onCheckedChange={(checked) => serviceSheet && toggleService(serviceSheet, svc.key, checked)}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
 
-      {/* ========== SHEET: EDITAR EMPRESA ========== */}
-      <Sheet open={!!editSheet} onOpenChange={(open) => !open && setEditSheet(null)}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Editar Empresa</SheetTitle>
-            <SheetDescription>Atualize os dados da empresa</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Nome da empresa</Label>
-              <Input value={editName} onChange={e => setEditName(e.target.value)} />
+          <div className="mt-6 space-y-6">
+            {/* DADOS DA EMPRESA */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Dados da Empresa</h3>
+              <div className="space-y-2">
+                <Label>Nome</Label>
+                <Input value={editName} onChange={e => setEditName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Slug</Label>
+                <Input value={editSlug} disabled />
+                <p className="text-xs text-muted-foreground">O slug não pode ser alterado</p>
+              </div>
+              <div className="space-y-2">
+                <Label>CNPJ</Label>
+                <Input value={editCnpj} onChange={e => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+              </div>
+              <Button onClick={saveEdit} size="sm" className="w-full">Salvar Dados</Button>
             </div>
-            <div className="space-y-2">
-              <Label>Slug</Label>
-              <Input value={editSlug} disabled />
-              <p className="text-xs text-muted-foreground">O slug não pode ser alterado</p>
+
+            <Separator />
+
+            {/* SERVIÇOS */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Serviços</h3>
+              {SERVICE_CATALOG.map(svc => {
+                const enabledServices = (manageSheet?.settings as any)?.enabled_services || {};
+                const isEnabled = !!enabledServices[svc.key];
+                return (
+                  <div key={svc.key} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex-1 mr-3">
+                      <p className="text-sm font-medium">{svc.label}</p>
+                      <p className="text-xs text-muted-foreground">{svc.description}</p>
+                      <p className="text-xs font-semibold text-primary mt-1">
+                        {svc.price !== null ? `${formatCurrency(svc.price)}/mês` : "Valor a definir"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => toggleService(svc.key, checked)}
+                    />
+                  </div>
+                );
+              })}
             </div>
-            <div className="space-y-2">
-              <Label>CNPJ</Label>
-              <Input value={editCnpj} onChange={e => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+
+            <Separator />
+
+            {/* INSTÂNCIAS WHATSAPP */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Instâncias WhatsApp</h3>
+              <p className="text-xs text-muted-foreground">
+                O plano WhatsApp inclui 1 instância. Adicione instâncias extras por R$ 49,00/mês cada.
+              </p>
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-border">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Instâncias adicionais</p>
+                  <p className="text-xs text-muted-foreground">
+                    {extraInstances > 0
+                      ? `Total: 1 inclusa + ${extraInstances} extra(s) = ${formatCurrency(extraInstances * 49)}/mês`
+                      : "Nenhuma instância adicional"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={extraInstances === 0}
+                    onClick={() => updateExtraInstances(Math.max(0, extraInstances - 1))}
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </Button>
+                  <span className="text-lg font-bold w-8 text-center">{extraInstances}</span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => updateExtraInstances(extraInstances + 1)}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
             </div>
-            <Button onClick={saveEdit} className="w-full">Salvar Alterações</Button>
           </div>
         </SheetContent>
       </Sheet>
