@@ -35,6 +35,8 @@ interface ClientHeaderProps {
   totalPago: number;
   totalParcelas: number;
   parcelasPagas: number;
+  onCall?: (phone: string) => void;
+  callingPhone?: boolean;
 }
 
 const InfoItem = ({ icon: Icon, label, value, className }: { icon?: any; label: string; value: string | number; className?: string }) => (
@@ -45,7 +47,7 @@ const InfoItem = ({ icon: Icon, label, value, className }: { icon?: any; label: 
   </div>
 );
 
-const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas }: ClientHeaderProps) => {
+const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas, onCall, callingPhone }: ClientHeaderProps) => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
@@ -95,7 +97,19 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {client.phone && onCall && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onCall(client.phone!)}
+                disabled={callingPhone}
+                className="gap-1.5 border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+              >
+                <Phone className="w-4 h-4" />
+                {callingPhone ? "Discando..." : "Ligar"}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
