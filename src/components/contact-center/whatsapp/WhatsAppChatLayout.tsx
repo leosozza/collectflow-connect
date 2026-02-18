@@ -265,7 +265,7 @@ const WhatsAppChatLayout = () => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-[320px] shrink-0">
+        <div className="w-[360px] shrink-0">
           <ConversationList
             conversations={conversations}
             selectedId={selectedConv?.id || null}
