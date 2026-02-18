@@ -1,107 +1,102 @@
 
 
-## Reformulacao Completa do Painel Super Admin + Limpeza de Navegacao
+## Ajustes no Perfil do Operador
 
-### 1. Remover abas nao funcionais da navegacao lateral
+### 1. Dashboard do Operador - Funcionalidades completas
+
+**Arquivo: `src/pages/DashboardPage.tsx`**
+
+Reformular completamente o dashboard do operador para ter as mesmas funcionalidades visuais do Admin (`AdminDashboardPage`), mas filtrado automaticamente pelo `operator_id` do proprio operador:
+
+- Hero card com "Total Projetado no Mes" (estilo gradient-orange igual ao admin)
+- Strip de Vencimentos com navegacao por data (ja existe)
+- 3 StatCards: Recebido, Quebra, Pendentes (ja existe)
+- Tabela "Meus Clientes" com o nome do cliente como **link clicavel** que navega para `/carteira/:cpf` (pagina de detalhe do devedor)
+- Filtros de Ano e Mes (ja existem)
+- Adicionar botoes "Analytics" e "Relatorios" no header (igual ao admin)
+
+A query de clientes continuara filtrando apenas pelo `operator_id` do operador logado.
+
+O nome do cliente na tabela sera renderizado como `<Link>` ou `<button>` com estilo de link (text-primary, underline on hover) que navega para `/carteira/${client.cpf}`.
+
+### 2. Analytics completo para Operador
+
+**Arquivo: `src/pages/AnalyticsPage.tsx`**
+
+Remover a restricao `if (profile?.role !== "admin")` que bloqueia acesso. Em vez disso, quando o usuario for operador:
+- Filtrar automaticamente `allClients` pelo `operator_id` do operador logado (via `profile.id`)
+- Ocultar o filtro de "Operador" (nao faz sentido para o operador ver outros)
+- Manter todos os graficos e KPIs funcionando normalmente com dados filtrados
+- Ocultar o filtro de operador do multi-select
+
+### 3. Carteira - Operador pode ver e editar todos os clientes
+
+**Arquivo: `src/pages/CarteiraPage.tsx`**
+
+Atualmente o operador so ve clientes vinculados ao seu `operator_id` (linha 90-93). Alterar para:
+- Operador ve **todos** os clientes (remover filtro de `operatorId` para operadores)
+- Operador pode editar campos: telefone, email, endereco, cidade, UF, CEP, observacoes e dados relacionados a negociacao/acordo
+- Manter restricoes: operador NAO pode criar, deletar ou importar clientes (isso continua sendo admin)
+
+Na pratica, remover o bloco `filtersWithOperator` que adiciona `operatorId` para nao-admins. O operador passara a ver toda a carteira.
+
+### 4. Contact Center - Liberar Telefonia para Operador
 
 **Arquivo: `src/components/AppLayout.tsx`**
 
-Remover do array `advancedNavItems`:
-- "Configuracoes" (`/configuracoes`)
-- "Automacao" (`/automacao`)
-- "Log de Importacoes" (`/cadastro`)
-- "Auditoria" (`/auditoria`)
+No array `contactCenterItems` (linha 56-59), a aba "Telefonia" esta condicionada a `isAdmin`. Alterar para mostrar para todos os usuarios:
 
-Renomear "Empresa" para "Configuracoes Empresa" no mesmo array.
-
-O array `advancedNavItems` ficara com apenas 1 item:
 ```
-{ label: "Configuracoes Empresa", icon: Building2, path: "/tenant/configuracoes" }
+const contactCenterItems = [
+  { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
+  { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
+];
 ```
 
-Como sobra apenas 1 item, o collapsible "Avancado" pode ser removido e o item fica direto na navegacao principal.
+**Arquivo: `src/pages/ContactCenterPage.tsx`**
 
-Atualizar tambem o `pageTitles` no header para refletir o novo nome.
+Remover a restricao `if (channel === "telefonia" && profile?.role !== "admin")` que bloqueia operadores de acessar a aba de Telefonia.
 
----
+### 5. Remover aba "Acordos" do menu do Operador
 
-### 2. Reformular pagina Super Admin (`/admin/tenants`) com abas
+**Arquivo: `src/components/AppLayout.tsx`**
 
-**Arquivo: `src/pages/SuperAdminPage.tsx`** - reescrever completamente
+O array `postContactItems` (linha 52-54) mostra "Acordos" apenas para operadores. Remover completamente este array ou deixa-lo vazio:
 
-A pagina tera 3 abas: **Dashboard**, **Empresas** (ativas + excluidas), **Link de Cadastro**.
-
-#### Aba Dashboard
-- KPI Cards: Total Empresas, Ativas, Suspensas, Excluidas, Receita Mensal Estimada (soma dos planos + servicos ativos)
-- Grafico simples de empresas criadas por mes (ultimos 6 meses)
-- Lista das ultimas 5 empresas criadas
-
-#### Aba Empresas
-Sub-abas: **Ativas** | **Excluidas**
-
-**Ativas:** Tabela com colunas: Empresa, Plano, Status, Servicos Ativos, Criado em, Acoes (Gerenciar Servicos, Suspender, Excluir)
-
-**Ao clicar em "Gerenciar Servicos":** Abre um Dialog/Sheet com toggles para liberar funcionalidades para o tenant:
-- Agente de IA Digital (valor: "A definir")
-- Negativacao Serasa/Protesto (valor: "A definir")
-- WhatsApp (R$ 99,00/mes - inclui 1 instancia + 1 agente IA)
-- Instancias WhatsApp adicionais (R$ 49,00 cada)
-- Assinatura Digital (valor: "A definir")
-
-Os servicos liberados sao salvos em `tenants.settings.enabled_services` (objeto com chaves booleanas). Quando o tenant admin acessar a aba Servicos em `/tenant/configuracoes`, os servicos ja habilitados pelo super admin aparecem como ativos. Os servicos nao habilitados ficam disponiveis para autocontratacao com confirmacao de valor.
-
-**Ao clicar em "Excluir":** AlertDialog perguntando "Tem certeza que deseja excluir esta empresa?" - ao confirmar, muda status para `deleted` (soft delete).
-
-**Excluidas:** Tabela de empresas com status `deleted`, com opcao de buscar por CNPJ/CPF e botao "Reativar".
-
-#### Aba Link de Cadastro
-- Gera uma URL do tipo `{origin}/onboarding?ref=superadmin` que pode ser copiada e enviada para novos clientes
-- Botao de copiar URL com feedback visual
-- Explicacao: "Envie este link para novos clientes. Ao acessarem, poderao criar sua empresa e escolher um plano diretamente."
-
----
-
-### 3. Atualizar TenantSettingsPage - integrar servicos liberados
-
-**Arquivo: `src/pages/TenantSettingsPage.tsx`**
-
-Na aba "Servicos":
-- Ler `tenant.settings.enabled_services` para saber quais servicos o super admin ja liberou
-- Servicos ja liberados aparecem com badge "Incluso" e switch ativo/desativado
-- Servicos nao liberados aparecem com o valor e um botao "Contratar" que abre AlertDialog de confirmacao com texto: "O valor de R$ XX,XX sera adicionado a sua proxima fatura. Deseja continuar?"
-- Ao confirmar, o servico e ativado em `settings.services`
-
-Atualizar o array SERVICOS com os novos valores:
-- WhatsApp: R$ 99,00/mes (inclui 1 instancia + 1 agente)
-- Instancia WhatsApp adicional: R$ 49,00/cada
-- Agente IA Digital: "A definir"
-- Negativacao: "A definir"
-- Assinatura Digital: "A definir"
-
----
-
-### 4. Migracao SQL
-
-Adicionar coluna `cnpj` e `deleted_at` na tabela `tenants`:
-
-```sql
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cnpj text;
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+```
+const postContactItems: typeof preContactItems = [];
 ```
 
-Isso permite:
-- Busca por CNPJ na aba de excluidos
-- Soft delete com timestamp
+### 6. Nome clicavel no Dashboard
+
+**Arquivo: `src/pages/DashboardPage.tsx`**
+
+Na tabela de "Meus Clientes", alterar a celula do nome do cliente para ser um link navegavel:
+
+```tsx
+<TableCell className="text-xs font-medium">
+  <button
+    onClick={() => navigate(`/carteira/${client.cpf}`)}
+    className="text-primary hover:underline cursor-pointer"
+  >
+    {client.nome_completo}
+  </button>
+</TableCell>
+```
+
+Adicionar `useNavigate` do react-router-dom ao componente.
 
 ---
 
 ### Detalhes Tecnicos
 
 **Arquivos a modificar:**
-- `src/components/AppLayout.tsx` - remover 4 itens do menu, renomear Empresa, remover collapsible Avancado
-- `src/pages/SuperAdminPage.tsx` - reescrever com 3 abas (Dashboard, Empresas, Link de Cadastro)
-- `src/pages/TenantSettingsPage.tsx` - integrar servicos liberados pelo super admin, novos valores
-- Nova migracao SQL para adicionar `cnpj` e `deleted_at` em tenants
+- `src/pages/DashboardPage.tsx` - adicionar link no nome, botoes Analytics/Relatorios, hero card gradient
+- `src/pages/AnalyticsPage.tsx` - remover restricao de admin, filtrar por operador automaticamente
+- `src/pages/CarteiraPage.tsx` - remover filtro de operator_id para operadores (ver todos)
+- `src/components/AppLayout.tsx` - liberar Telefonia para todos, remover aba Acordos
+- `src/pages/ContactCenterPage.tsx` - remover restricao de admin para telefonia
 
+**Nenhuma migracao SQL necessaria.**
 **Nenhuma nova dependencia necessaria.**
 
