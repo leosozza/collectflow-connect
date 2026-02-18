@@ -15,15 +15,61 @@ interface ConversationListProps {
   instances: { id: string; name: string }[];
 }
 
+// Generate a stable color from a string
+function stringToColor(str: string): string {
+  const colors = [
+    "bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500",
+    "bg-pink-500", "bg-teal-500", "bg-indigo-500", "bg-red-500",
+  ];
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function getInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+const SYSTEM_NAME = "temis connect pay";
+
+function ConversationAvatar({ conv }: { conv: Conversation }) {
+  const displayName = conv.client_name || conv.remote_name;
+  const isSystemName = displayName?.toLowerCase() === SYSTEM_NAME;
+
+  if (displayName && !isSystemName) {
+    const initials = getInitials(displayName);
+    const colorClass = stringToColor(displayName);
+    return (
+      <div className={`w-[49px] h-[49px] rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
+        <span className="text-white font-semibold text-[15px]">{initials}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-[49px] h-[49px] rounded-full bg-[#dfe5e7] dark:bg-[#6b7c85] flex items-center justify-center shrink-0">
+      <User className="w-6 h-6 text-[#cfd7db] dark:text-[#aebac1]" />
+    </div>
+  );
+}
+
 const ConversationList = ({ conversations, selectedId, onSelect, instances }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
 
   const filtered = conversations.filter((c) => {
+    const displayName = c.client_name || c.remote_name;
     const matchSearch =
       !search ||
-      c.remote_name.toLowerCase().includes(search.toLowerCase()) ||
+      displayName.toLowerCase().includes(search.toLowerCase()) ||
       c.remote_phone.includes(search);
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
@@ -87,52 +133,53 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
             Nenhuma conversa encontrada
           </div>
         ) : (
-          filtered.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => onSelect(conv)}
-              className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors ${
-                selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-[49px] h-[49px] rounded-full bg-[#dfe5e7] dark:bg-[#6b7c85] flex items-center justify-center shrink-0">
-                  <User className="w-6 h-6 text-[#cfd7db] dark:text-[#aebac1]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-normal text-[15px] text-foreground truncate">
-                      {conv.remote_name || conv.remote_phone}
-                    </span>
-                    <span className="text-[12px] text-muted-foreground whitespace-nowrap ml-1">
-                      {conv.last_message_at
-                        ? formatDistanceToNow(new Date(conv.last_message_at), {
-                            addSuffix: false,
-                            locale: ptBR,
-                          })
-                        : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-[2px]">
-                    <span className="text-[13px] text-muted-foreground truncate">
-                      {conv.remote_phone}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {(conv as any).sla_deadline_at && new Date((conv as any).sla_deadline_at) < new Date() && (
-                        <AlertTriangle className="w-3 h-3 text-destructive" />
-                      )}
-                      <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
-                      {conv.unread_count > 0 && (
-                        <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">
-                          {conv.unread_count}
-                        </Badge>
-                      )}
+          filtered.map((conv) => {
+            const displayName = conv.client_name || (conv.remote_name?.toLowerCase() !== SYSTEM_NAME ? conv.remote_name : null) || conv.remote_phone;
+            return (
+              <button
+                key={conv.id}
+                onClick={() => onSelect(conv)}
+                className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors ${
+                  selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <ConversationAvatar conv={conv} />
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
+                        {displayName}
+                      </span>
+                      <span className="text-[12px] text-muted-foreground whitespace-nowrap shrink-0">
+                        {conv.last_message_at
+                          ? formatDistanceToNow(new Date(conv.last_message_at), {
+                              addSuffix: false,
+                              locale: ptBR,
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-[2px] gap-1">
+                      <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
+                        {conv.remote_phone}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(conv as any).sla_deadline_at && new Date((conv as any).sla_deadline_at) < new Date() && (
+                          <AlertTriangle className="w-3 h-3 text-destructive" />
+                        )}
+                        <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
+                        {conv.unread_count > 0 && (
+                          <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">
+                            {conv.unread_count}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </ScrollArea>
     </div>
