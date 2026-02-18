@@ -235,6 +235,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/analytics": "Analytics",
                 "/cadastros": "Configurações",
                 "/signs": "Assinatura Digital",
+                "/roadmap": "Roadmap do Produto",
               };
               const title = pageTitles[location.pathname];
               return title ? (

@@ -29,6 +29,7 @@ import AuditoriaPage from "./pages/AuditoriaPage";
 import AtendimentoPage from "./pages/AtendimentoPage";
 import ContactCenterPage from "./pages/ContactCenterPage";
 import PerfilPage from "./pages/PerfilPage";
+import RoadmapPage from "./pages/RoadmapPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -260,6 +261,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <PerfilPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/roadmap"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <RoadmapPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

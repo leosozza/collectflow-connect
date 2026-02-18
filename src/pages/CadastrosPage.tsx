@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags, ShieldCheck } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags, ShieldCheck, Map } from "lucide-react";
+import RoadmapPage from "@/pages/RoadmapPage";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
@@ -30,6 +31,7 @@ const CadastrosPage = () => {
     ...baseSections,
     ...(isTenantAdmin ? [{ key: "tenant_config", label: "Configurações Empresa", icon: Building2 }] : []),
     ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
+    ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap do Produto", icon: Map }] : []),
   ];
 
   return (
@@ -75,6 +77,7 @@ const CadastrosPage = () => {
         {active === "integracao" && <IntegracaoPage />}
         {active === "tenant_config" && <TenantSettingsPage />}
         {active === "super_admin" && <SuperAdminPage />}
+        {active === "roadmap" && <RoadmapPage />}
       </div>
     </div>
   );
