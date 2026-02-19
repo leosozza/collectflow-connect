@@ -1,57 +1,143 @@
 
-## Adicionar as 5 Fases Estratégicas ao Roadmap
+## Evolucao do Modulo de Gamificacao
 
 ### Objetivo
 
-Inserir os 5 blocos de funcionalidades avançadas ("O Agente Autônomo", "N8N Embutido", "Multicanal", "Smart Payments", "ML Preditivo") como novos cards no Roadmap, mantendo o padrão visual e de dados já existente.
+Transformar campanhas, metas e conquistas em um sistema flexivel e multi-credor, onde o admin do tenant pode:
+- Vincular campanhas a 1 ou mais credores
+- Selecionar participantes por equipe ou individualmente
+- Criar e editar conquistas como templates reutilizaveis (nao apenas "conceder")
+- Definir metas por credor
 
-### Análise do Estado Atual
+---
 
-O arquivo `src/pages/RoadmapPage.tsx` já possui a estrutura completa com:
-- Interface `RoadmapItem` com campos: `id`, `title`, `description`, `status`, `progress`, `category`, `lovablePrompt`
-- 4 status possíveis: `done`, `in_progress`, `planned`, `future`
-- Array `roadmapData[]` com 26 itens existentes
-- Exibição agrupada por status com cards, barra de progresso e botão "Copiar contexto"
+### 1. Mudancas no Banco de Dados
 
-### Itens a Adicionar
+#### 1.1 Tabela `campaign_credores` (nova - relacao N:N)
 
-Serão adicionados **12 novos cards**, todos nas seções `"planned"` ou `"future"`, agrupados pelas 5 fases:
+Vincula campanhas a credores.
 
-| # | Título | Status | Categoria | Progresso |
-|---|--------|--------|-----------|-----------|
-| 1 | Políticas de Desconto Dinâmico | planned | IA | 5% |
-| 2 | Agente IA Autônomo de Negociação | planned | IA | 0% |
-| 3 | Análise de Sentimento do Devedor | future | IA | 0% |
-| 4 | Construtor Visual de Fluxos (N8N Embutido) | future | Automação | 0% |
-| 5 | Motor de Execução de Fluxos | future | Automação | 0% |
-| 6 | Grupos de WhatsApp — Mutirão IA | future | Contact Center | 0% |
-| 7 | Transição de Canal Inteligente | future | Automação | 0% |
-| 8 | Pix QR Code Dinâmico com Juros em Tempo Real | planned | Integrações | 0% |
-| 9 | Webhook de Baixa Automática | planned | Integrações | 0% |
-| 10 | Split de Pagamento (Comissão + Credor) | future | Financeiro | 0% |
-| 11 | Dashboard de ROI — IA vs Humano | future | IA | 0% |
-| 12 | Régua Inversa Preventiva & Lead Scoring Avançado | future | IA | 0% |
+| Coluna | Tipo | Descricao |
+|---|---|---|
+| id | uuid PK | |
+| campaign_id | uuid FK | Referencia `gamification_campaigns` |
+| credor_id | uuid FK | Referencia `credores` |
+| tenant_id | uuid | Para RLS |
 
-### Cada card terá um `lovablePrompt` detalhado
+RLS: admins gerenciam, usuarios do tenant visualizam.
 
-Cada item terá um prompt técnico completo com:
-- Referência exata aos arquivos existentes do projeto
-- Tabelas do banco já existentes relevantes
-- Edge functions a criar
-- Passo a passo de implementação aproveitando o código já pronto
+#### 1.2 Adicionar `source_type` ao `campaign_participants`
 
-### Único Arquivo Modificado
+Para diferenciar se o participante foi adicionado individualmente ou via equipe:
 
-| Arquivo | Ação |
+| Coluna | Tipo | Default |
+|---|---|---|
+| source_type | text | 'individual' |
+| source_id | uuid | null |
+
+`source_type` = 'equipe' ou 'individual'. `source_id` = id da equipe quando aplicavel.
+
+#### 1.3 Tabela `achievement_templates` (nova)
+
+Templates editaveis de conquistas por tenant/credor.
+
+| Coluna | Tipo | Descricao |
+|---|---|---|
+| id | uuid PK | |
+| tenant_id | uuid | |
+| credor_id | uuid | Nullable (global do tenant se null) |
+| title | text | Nome da conquista |
+| description | text | |
+| icon | text | Emoji |
+| criteria_type | text | 'manual', 'payments_count', 'total_received', 'no_breaks', 'goal_reached' |
+| criteria_value | numeric | Valor do criterio (ex: 10 para "10 pagamentos") |
+| points_reward | integer | Pontos concedidos ao desbloquear |
+| is_active | boolean | |
+
+RLS: admins gerenciam, usuarios visualizam.
+
+#### 1.4 Adicionar `credor_id` a `operator_goals`
+
+| Coluna | Tipo | Default |
+|---|---|---|
+| credor_id | uuid | null |
+
+Permite metas por credor. Se null, e meta global.
+
+---
+
+### 2. Mudancas no Frontend
+
+#### 2.1 CampaignForm (reformulado)
+
+O formulario de campanha ganha 2 novas secoes:
+
+**Secao "Credores"** - MultiSelect com lista de credores ativos do tenant. Obrigatorio selecionar ao menos 1.
+
+**Secao "Participantes"** - Duas opcoes:
+- **Por Equipe**: MultiSelect de equipes. Ao selecionar equipes, todos os membros sao automaticamente adicionados como participantes.
+- **Individual**: MultiSelect de operadores do tenant.
+
+Toggle entre os dois modos. Ao salvar, insere os registros em `campaign_credores` e `campaign_participants`.
+
+#### 2.2 CampaignCard (atualizado)
+
+Exibir badges dos credores vinculados a campanha abaixo do titulo.
+
+#### 2.3 AchievementsManagementTab (reformulado)
+
+Dividir em 2 sub-abas:
+- **Templates**: CRUD de templates de conquistas (tabela `achievement_templates`). Cada template pode ser vinculado a um credor especifico ou ser global. Campos editaveis: titulo, descricao, icone, criterio, valor, pontos, ativo/inativo.
+- **Concedidas**: Lista atual de conquistas ja atribuidas (tabela `achievements`), com botao "Conceder" que usa os templates como base.
+
+#### 2.4 GoalsManagementTab (atualizado)
+
+Adicionar filtro de credor. Quando um credor e selecionado, as metas sao filtradas/criadas com `credor_id`. Quando "Todos" e selecionado, mostra metas globais (credor_id = null).
+
+---
+
+### 3. Mudancas nos Services
+
+#### 3.1 `campaignService.ts`
+
+- `createCampaign`: apos criar a campanha, inserir registros em `campaign_credores` e `campaign_participants` (expandindo membros de equipe via query em `equipe_membros`).
+- `updateCampaign`: atualizar credores e participantes (delete + re-insert).
+- `fetchCampaigns`: incluir join para trazer credores vinculados.
+- Nova interface `Campaign` com campo `credores?: string[]` e `participants?: string[]`.
+
+#### 3.2 `achievementTemplateService.ts` (novo)
+
+CRUD para `achievement_templates`: fetch, create, update, delete, fetchByCredor.
+
+#### 3.3 `goalService.ts`
+
+- `upsertGoal`: aceitar `credor_id` opcional.
+- `fetchGoals`: aceitar filtro por `credor_id`.
+- Atualizar unique constraint para incluir `credor_id`.
+
+---
+
+### 4. Arquivos Modificados/Criados
+
+| Arquivo | Acao |
 |---|---|
-| `src/pages/RoadmapPage.tsx` | Inserir 12 novos objetos no array `roadmapData[]` (linhas 23–544) |
+| `src/components/gamificacao/CampaignForm.tsx` | Reformular com selecao de credores, equipes e operadores |
+| `src/components/gamificacao/CampaignCard.tsx` | Exibir badges de credores |
+| `src/components/gamificacao/CampaignsTab.tsx` | Passar credores e equipes para o form |
+| `src/components/gamificacao/AchievementsManagementTab.tsx` | Sub-abas Templates + Concedidas, CRUD de templates |
+| `src/components/gamificacao/GoalsManagementTab.tsx` | Filtro por credor |
+| `src/services/campaignService.ts` | Logica de credores e participantes |
+| `src/services/achievementTemplateService.ts` | Novo service para templates |
+| `src/services/goalService.ts` | Suporte a credor_id |
 
-Nenhum novo arquivo, nenhuma mudança de lógica ou visual — apenas a adição dos dados no array existente. O sistema de agrupamento, busca, filtros e cards já vai exibir os novos itens automaticamente com o visual correto.
+### 5. Fluxo do Admin ao Criar Campanha
 
-### Categorias adicionadas
-
-Os novos itens usam categorias novas (`"Automação"`, `"Financeiro"`) que serão exibidas nos badges de categoria corretamente, pois o badge é renderizado dinamicamente com o valor do campo `category`.
-
-### Resultado esperado
-
-O Roadmap passará de 26 para 38 itens, com a seção `"Futuro"` crescendo significativamente e `"Planejado"` recebendo 4 novos itens relacionados a Smart Payments e IA de Negociação, refletindo a visão estratégica do produto como orquestrador de crédito autônomo baseado em IA.
+```text
+1. Clica "Nova Campanha"
+2. Preenche titulo, metrica, periodo, datas, premio
+3. Seleciona 1+ credores (MultiSelect)
+4. Escolhe modo: "Por Equipe" ou "Individual"
+   - Equipe: seleciona equipes -> membros sao incluidos automaticamente
+   - Individual: seleciona operadores manualmente
+5. Salva -> cria campanha + campaign_credores + campaign_participants
+```
