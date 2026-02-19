@@ -204,9 +204,21 @@ const CarteiraPage = () => {
 
       return bulkCreateClients(enrichedRows, profile!.id);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["import_logs"] });
+      // Log spreadsheet import
+      if (tenant?.id) {
+        supabase.from("import_logs" as any).insert({
+          tenant_id: tenant.id,
+          source: "spreadsheet",
+          total_records: variables.length,
+          inserted: variables.length,
+          credor: variables[0]?.credor || "",
+          imported_by: profile?.id,
+        });
+      }
       toast.success("Clientes importados com sucesso!");
       setImportOpen(false);
     },

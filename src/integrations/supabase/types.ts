@@ -1405,6 +1405,69 @@ export type Database = {
           },
         ]
       }
+      import_logs: {
+        Row: {
+          api_key_id: string | null
+          created_at: string
+          credor: string | null
+          errors: Json | null
+          id: string
+          imported_by: string | null
+          inserted: number
+          metadata: Json | null
+          skipped: number
+          source: string
+          tenant_id: string
+          total_records: number
+          updated: number
+        }
+        Insert: {
+          api_key_id?: string | null
+          created_at?: string
+          credor?: string | null
+          errors?: Json | null
+          id?: string
+          imported_by?: string | null
+          inserted?: number
+          metadata?: Json | null
+          skipped?: number
+          source?: string
+          tenant_id: string
+          total_records?: number
+          updated?: number
+        }
+        Update: {
+          api_key_id?: string | null
+          created_at?: string
+          credor?: string | null
+          errors?: Json | null
+          id?: string
+          imported_by?: string | null
+          inserted?: number
+          metadata?: Json | null
+          skipped?: number
+          source?: string
+          tenant_id?: string
+          total_records?: number
+          updated?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_logs_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invite_links: {
         Row: {
           created_at: string

@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchApiKeys, generateApiKey, revokeApiKey, type ApiKey } from "@/services/apiKeyService";
+import { formatDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2 } from "lucide-react";
+import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2, FileSpreadsheet } from "lucide-react";
 
 const BASE_URL = `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`;
 
@@ -76,6 +79,102 @@ function EndpointCard({
   );
 }
 
+function ImportLogsPanel({ tenantId }: { tenantId?: string }) {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ["import_logs", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("import_logs" as any)
+        .select("*")
+        .eq("tenant_id", tenantId!)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!tenantId,
+    refetchInterval: 30000,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileSpreadsheet className="w-5 h-5 text-primary" />
+          Histórico de Importações
+        </CardTitle>
+        <CardDescription>
+          Monitoramento de mailings recebidos via API e importação de planilha
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <FileSpreadsheet className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">Nenhuma importação registrada ainda</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Origem</TableHead>
+                <TableHead>Credor</TableHead>
+                <TableHead className="text-center">Total</TableHead>
+                <TableHead className="text-center">Inseridos</TableHead>
+                <TableHead className="text-center">Erros</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log: any) => {
+                const hasErrors = (log.errors?.length || 0) > 0;
+                return (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-sm">
+                      {new Date(log.created_at).toLocaleString("pt-BR")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {log.source === "api" ? "API" : "Planilha"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm font-medium">{log.credor || "—"}</TableCell>
+                    <TableCell className="text-center">{log.total_records}</TableCell>
+                    <TableCell className="text-center text-primary font-medium">{log.inserted}</TableCell>
+                    <TableCell className="text-center">
+                      {log.skipped > 0 ? (
+                        <span className="text-destructive font-medium">{log.skipped}</span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {hasErrors ? (
+                        <Badge variant="outline" className="text-xs text-destructive border-destructive/30 bg-destructive/10">
+                          <AlertCircle className="w-3 h-3 mr-1" /> Com erros
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-primary border-primary/30 bg-primary/10">
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Sucesso
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ApiDocsPage() {
   const { user, profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
@@ -133,31 +232,56 @@ export default function ApiDocsPage() {
   }
 
   const singlePayloadExample = `{
-  "credor": "EMPRESA XYZ",
-  "nome_completo": "João da Silva",
-  "cpf": "123.456.789-00",
-  "phone": "11999999999",
-  "email": "joao@email.com",
-  "external_id": "EXT-001",
-  "endereco": "Rua das Flores, 123",
-  "cidade": "São Paulo",
-  "uf": "SP",
-  "cep": "01310-100",
-  "observacoes": "Cliente VIP",
-  "numero_parcela": 1,
-  "total_parcelas": 3,
-  "valor_entrada": 500.00,
-  "valor_parcela": 300.00,
-  "valor_pago": 0,
-  "data_vencimento": "2026-03-01",
-  "status": "pendente",
-  "status_cobranca_id": "uuid-do-status-de-cobranca"
+  "CREDOR": "YBRASIL",
+  "COD_DEVEDOR": "13852975",
+  "COD_CONTRATO": "675109",
+  "NOME_DEVEDOR": "Ingrid Grazielly Rocha Tarroco",
+  "TITULO": "1333746",
+  "CNPJ_CPF": "491.679.778-71",
+  "FONE_1": "(11) 9829-73032",
+  "FONE_2": "",
+  "FONE_3": "",
+  "EMAIL": "",
+  "ENDERECO": "Rua das Flores",
+  "NUMERO": "123",
+  "COMPLEMENTO": "Apto 4",
+  "BAIRRO": "Centro",
+  "CIDADE": "São Paulo",
+  "ESTADO": "SP",
+  "CEP": "01310-100",
+  "PARCELA": 1,
+  "DT_VENCIMENTO": "2026-03-01",
+  "VL_TITULO": 1100,
+  "VL_SALDO": 0,
+  "VL_ATUALIZADO": 1100,
+  "STATUS": "ATIVO",
+  "status_cobranca_id": "uuid-do-status (opcional)"
 }`;
 
   const bulkPayloadExample = `{
   "records": [
-    { "nome_completo": "Cliente 1", "cpf": "111.111.111-11", "credor": "EMPRESA", "valor_parcela": 500, "data_vencimento": "2026-03-01", "external_id": "EXT-001" },
-    { "nome_completo": "Cliente 2", "cpf": "222.222.222-22", "credor": "EMPRESA", "valor_parcela": 300, "data_vencimento": "2026-04-01", "external_id": "EXT-002" }
+    {
+      "CREDOR": "YBRASIL",
+      "COD_DEVEDOR": "13852975",
+      "NOME_DEVEDOR": "Ingrid Grazielly Rocha Tarroco",
+      "CNPJ_CPF": "491.679.778-71",
+      "FONE_1": "(11) 9829-73032",
+      "PARCELA": 1,
+      "DT_VENCIMENTO": "2026-03-01",
+      "VL_ATUALIZADO": 1100,
+      "STATUS": "ATIVO"
+    },
+    {
+      "CREDOR": "YBRASIL",
+      "COD_DEVEDOR": "13821797",
+      "NOME_DEVEDOR": "Bruna Freitas dos Santos",
+      "CNPJ_CPF": "440.015.648-66",
+      "FONE_1": "(11) 9848-11855",
+      "PARCELA": 1,
+      "DT_VENCIMENTO": "2026-03-01",
+      "VL_ATUALIZADO": 399,
+      "STATUS": "ATIVO"
+    }
   ],
   "upsert": true,
   "upsert_key": "external_id"
@@ -292,7 +416,7 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
       </Card>
 
       <Tabs defaultValue="keys">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="keys" className="flex items-center gap-2">
             <Key className="w-4 h-4" /> API Keys
           </TabsTrigger>
@@ -301,6 +425,9 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
           </TabsTrigger>
           <TabsTrigger value="examples" className="flex items-center gap-2">
             <Zap className="w-4 h-4" /> Exemplos
+          </TabsTrigger>
+          <TabsTrigger value="imports" className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4" /> Importações
           </TabsTrigger>
         </TabsList>
 
@@ -510,24 +637,33 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
                 </TableHeader>
                 <TableBody>
                   {[
-                    ["nome_completo", "string", "✅", "Nome completo do devedor"],
-                    ["cpf", "string", "✅", "CPF (qualquer formato)"],
-                    ["credor", "string", "✅", "Nome do credor/empresa"],
-                    ["valor_parcela", "number", "✅", "Valor da parcela em R$"],
-                    ["data_vencimento", "string", "✅", "Data YYYY-MM-DD"],
-                    ["external_id", "string", "—", "ID no sistema externo (usado para upsert)"],
-                    ["numero_parcela", "integer", "—", "Número da parcela (padrão: 1)"],
+                    ["NOME_DEVEDOR / nome_completo", "string", "✅", "Nome completo do devedor"],
+                    ["CNPJ_CPF / cpf", "string", "✅", "CPF ou CNPJ (qualquer formato)"],
+                    ["CREDOR / credor", "string", "✅", "Nome do credor/empresa"],
+                    ["VL_ATUALIZADO / valor_parcela", "number", "✅", "Valor atualizado da parcela"],
+                    ["DT_VENCIMENTO / data_vencimento", "string", "✅", "Data (DD/MM/YYYY ou YYYY-MM-DD)"],
+                    ["COD_DEVEDOR / external_id", "string", "—", "ID no sistema externo (usado para upsert)"],
+                    ["PARCELA / numero_parcela", "integer", "—", "Número da parcela (padrão: 1)"],
                     ["total_parcelas", "integer", "—", "Total de parcelas"],
+                    ["VL_TITULO", "number", "—", "Valor original do título"],
+                    ["VL_SALDO", "number", "—", "Saldo remanescente"],
                     ["valor_entrada", "number", "—", "Valor de entrada"],
                     ["valor_pago", "number", "—", "Valor já pago"],
-                    ["status", "string", "—", "pendente | pago | quebrado"],
-                    ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (cadastrado em Cadastros > Status)"],
-                    ["phone", "string", "—", "Telefone"],
-                    ["email", "string", "—", "Email"],
-                    ["endereco", "string", "—", "Endereço completo"],
-                    ["cidade", "string", "—", "Cidade"],
-                    ["uf", "string", "—", "UF (2 letras)"],
-                    ["cep", "string", "—", "CEP"],
+                    ["STATUS / status", "string", "—", "ATIVO | CANCELADO | PAGO | QUEBRADO"],
+                    ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (Cadastros > Tipo de Status)"],
+                    ["FONE_1 / phone", "string", "—", "Telefone principal"],
+                    ["FONE_2", "string", "—", "Telefone secundário (salvo em observações)"],
+                    ["FONE_3", "string", "—", "Telefone terciário (salvo em observações)"],
+                    ["EMAIL / email", "string", "—", "Email"],
+                    ["ENDERECO", "string", "—", "Endereço (rua)"],
+                    ["NUMERO", "string", "—", "Número do endereço"],
+                    ["COMPLEMENTO", "string", "—", "Complemento"],
+                    ["BAIRRO", "string", "—", "Bairro"],
+                    ["CIDADE / cidade", "string", "—", "Cidade"],
+                    ["ESTADO / uf", "string", "—", "UF (2 letras)"],
+                    ["CEP / cep", "string", "—", "CEP"],
+                    ["COD_CONTRATO", "string", "—", "Código do contrato (salvo em observações)"],
+                    ["TITULO", "string", "—", "Código do título"],
                     ["observacoes", "string", "—", "Observações livres"],
                   ].map(([field, type, req, desc]) => (
                     <TableRow key={field}>
@@ -604,6 +740,11 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
               </ul>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Importações ── */}
+        <TabsContent value="imports" className="space-y-4 mt-4">
+          <ImportLogsPanel tenantId={tenant?.id} />
         </TabsContent>
       </Tabs>
 
