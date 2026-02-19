@@ -195,33 +195,36 @@ const roadmapData: RoadmapItem[] = [
   },
   {
     id: "gamificacao",
-    title: "Gamificação de Operadores",
-    description: "Sistema de pontuação, ranking mensal, conquistas automáticas e metas por operador para incentivar recuperação de carteira e reduzir quebras.",
+    title: "Gamificação de Operadores — Multi-Credor",
+    description: "Sistema de pontuação, ranking mensal, conquistas editáveis por tenant/credor, campanhas com múltiplos credores e participantes por equipe ou individual.",
     status: "done",
     progress: 100,
     category: "Core",
     lovablePrompt: `A Gamificação de Operadores está implementada em src/pages/GamificacaoPage.tsx com os seguintes componentes:
 - src/components/gamificacao/RankingTab.tsx — ranking mensal com medalhas 🥇🥈🥉
 - src/components/gamificacao/AchievementsTab.tsx — conquistas desbloqueadas e bloqueadas
+- src/components/gamificacao/AchievementsManagementTab.tsx — CRUD de templates de conquistas por credor
 - src/components/gamificacao/PointsHistoryTab.tsx — histórico de pontos por mês
+- src/components/gamificacao/CampaignsTab.tsx — campanhas com multi-credor e seleção de participantes
+- src/components/gamificacao/CampaignForm.tsx — formulário com MultiSelect de credores, seleção por equipe ou individual
+- src/components/gamificacao/GoalsManagementTab.tsx — metas por credor com filtro
 - src/components/dashboard/MiniRanking.tsx — mini ranking no Dashboard (top 5)
 
 Serviços e hooks:
 - src/services/gamificationService.ts — lógica de pontos, conquistas e ranking
+- src/services/campaignService.ts — campanhas com campaign_credores e campaign_participants
+- src/services/achievementTemplateService.ts — CRUD de templates de conquistas editáveis
+- src/services/goalService.ts — metas com suporte a credor_id
 - src/hooks/useGamification.ts — hook para verificar e conceder conquistas automaticamente
 
 Tabelas no banco:
-- operator_points — pontos mensais por operador (tenant_id, operator_id, year, month, points, payments_count, breaks_count, total_received)
-- achievements — conquistas desbloqueadas (já existia)
-
-Sistema de pontuação:
-- +10 pts por pagamento registrado
-- +5 pts por cada R$100 recebidos
-- -3 pts por quebra registrada
-- +50 pts por conquista desbloqueada
-- +100 pts por meta mensal atingida
-
-Conquistas automáticas: Primeiro Recebimento 🎯, 10 Pagamentos 🔟, Sem Quebra no Mês 🛡️, Meta Atingida 🏆, Top Recebedor 👑, R$10k Recebidos 💰, R$50k Recebidos 💎`,
+- operator_points — pontos mensais por operador
+- achievements — conquistas concedidas
+- achievement_templates — templates editáveis por tenant/credor
+- gamification_campaigns — campanhas de gamificação
+- campaign_credores — relação N:N campanha <-> credor
+- campaign_participants — participantes com source_type (individual/equipe) e source_id
+- operator_goals — metas com credor_id opcional`,
   },
 
   {
@@ -376,25 +379,23 @@ Integração: usar os dados do cliente já carregados no TelefoniaDashboard para
   {
     id: "dashboard-executivo",
     title: "Dashboard Executivo Multi-Tenant",
-    description: "Visão consolidada para o Super Admin com dados de todos os tenants em um único painel.",
-    status: "planned",
-    progress: 10,
+    description: "Visão consolidada para o Super Admin com gráficos por empresa: clientes, valor recuperado, taxa de acordos, usuários ativos e crescimento mês a mês.",
+    status: "done",
+    progress: 100,
     category: "Core",
-    lovablePrompt: `Criar um Dashboard Executivo para o Super Admin com visão consolidada de todos os tenants.
+    lovablePrompt: `O Dashboard Executivo está implementado em src/pages/AdminDashboardPage.tsx, acessível em /admin/dashboard (apenas para super admins).
 
-Métricas a exibir:
-1. Total de clientes por tenant (gráfico de barras)
-2. Valor total recuperado por tenant no mês
-3. Taxa de acordos (fechados vs negociados) por tenant
-4. Usuários ativos por tenant
-5. Crescimento mês a mês de cada tenant
+Métricas implementadas:
+1. KPIs globais: total de clientes, valor total recuperado, taxa de acordos (%), usuários ativos
+2. Gráfico de linha: crescimento mês a mês (acordos + valor recuperado, últimos 6 meses) com Recharts
+3. Gráfico de barras: clientes por empresa (top 10)
+4. Gráfico de barras: valor recuperado por empresa (top 10)
+5. Tabela: taxa de acordos (negociados/fechados/%) com badge de performance por empresa
+6. Tabela: usuários + clientes por empresa com status (ativa/suspensa)
 
-Implementação:
-1. Criar src/pages/AdminDashboardPage.tsx (já existe, verificar o conteúdo atual)
-2. Queries SQL: selects com GROUP BY tenant_id nas tabelas clients e agreements
-3. Verificar que RLS não bloqueie o super admin (ele deve ver todos os tenants)
-4. Adicionar graficos com Recharts (já instalado)
-5. Acessível em /admin/dashboard, visível apenas para isSuperAdmin`,
+Rota: /admin/dashboard — protegida por isSuperAdmin check.
+Link na sidebar do AppLayout visível apenas para super admins (BarChart3 icon).
+RLS: super admin já tem acesso irrestrito via is_super_admin() function em todas as tabelas.`,
   },
 
   // FUTURE

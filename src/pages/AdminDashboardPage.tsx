@@ -1,325 +1,445 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import { formatCurrency } from "@/lib/formatters";
-import { calculateTieredCommission, CommissionGrade, CommissionTier } from "@/lib/commission";
-import StatCard from "@/components/StatCard";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
-  CalendarClock, ChevronLeft, ChevronRight, Users, Wallet, BarChart3,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, Legend,
+} from "recharts";
+import {
+  Building2, Users, DollarSign, TrendingUp, Handshake, BarChart3,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { useNavigate } from "react-router-dom";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-interface Profile {
-  id: string;
-  full_name: string;
-  role: string;
-  commission_rate: number;
-  commission_grade_id: string | null;
-}
+interface TenantRow { id: string; name: string; slug: string; status: string; }
+interface ClientAgg { tenant_id: string; count: number; }
+interface AgreementAgg { tenant_id: string; total: number; closed: number; }
+interface UserAgg { tenant_id: string; count: number; }
 
-interface ClientRow {
-  id: string;
-  operator_id: string | null;
-  valor_parcela: number;
-  valor_pago: number;
-  quebra: number;
-  status: string;
-  data_vencimento: string;
-  nome_completo: string;
-  cpf: string;
-  credor: string;
-  numero_parcela: number;
-  total_parcelas: number;
-  valor_entrada: number;
-  created_at: string;
-  updated_at: string;
-}
+const now = new Date();
+const months = Array.from({ length: 6 }, (_, i) => subMonths(now, 5 - i));
 
-const generateYearOptions = () => {
-  const now = new Date();
-  const years: number[] = [];
-  for (let i = 0; i < 3; i++) years.push(now.getFullYear() - i);
-  return years;
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-lg">
+      <p className="font-semibold text-popover-foreground mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
 };
 
-const monthNames = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
-
 const AdminDashboardPage = () => {
-  const { profile } = useAuth();
-  const navigate = useNavigate();
-  const now = new Date();
+  const { isSuperAdmin } = useTenant();
 
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth().toString());
-  const [selectedOperator, setSelectedOperator] = useState<string>("todos");
-  const [browseDate, setBrowseDate] = useState(new Date());
-
-  const { data: allClients = [] } = useQuery({
-    queryKey: ["admin-clients"],
+  const { data: tenants = [] } = useQuery<TenantRow[]>({
+    queryKey: ["super-admin-tenants"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("*");
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, name, slug, status")
+        .neq("status", "deleted")
+        .order("name");
       if (error) throw error;
-      return data as ClientRow[];
+      return data || [];
     },
-    enabled: profile?.role === "admin",
+    enabled: isSuperAdmin,
   });
 
-  const { data: operators = [] } = useQuery({
-    queryKey: ["operators"],
+  // Clients count by tenant
+  const { data: clientsRaw = [] } = useQuery({
+    queryKey: ["exec-clients-by-tenant"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").eq("role", "operador");
+      const { data, error } = await supabase
+        .from("clients")
+        .select("tenant_id, id");
       if (error) throw error;
-      return data as Profile[];
+      return data || [];
     },
-    enabled: profile?.role === "admin",
+    enabled: isSuperAdmin,
   });
 
-  const { data: grades = [] } = useQuery({
-    queryKey: ["commission-grades"],
+  // Agreements by tenant
+  const { data: agreementsRaw = [] } = useQuery({
+    queryKey: ["exec-agreements-by-tenant"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("commission_grades").select("*");
+      const { data, error } = await supabase
+        .from("agreements")
+        .select("tenant_id, status, proposed_total");
       if (error) throw error;
-      return (data || []).map((d) => ({ ...d, tiers: d.tiers as unknown as CommissionTier[] })) as CommissionGrade[];
+      return data || [];
     },
-    enabled: profile?.role === "admin",
+    enabled: isSuperAdmin,
   });
 
-  const yearOptions = useMemo(generateYearOptions, []);
+  // Profiles (users) by tenant
+  const { data: profilesRaw = [] } = useQuery({
+    queryKey: ["exec-profiles-by-tenant"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("tenant_id, user_id");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isSuperAdmin,
+  });
 
-  const monthFilteredClients = useMemo(() => {
-    const year = parseInt(selectedYear);
-    const month = parseInt(selectedMonth);
-    return allClients.filter((c) => {
-      const d = parseISO(c.data_vencimento);
-      return d.getFullYear() === year && d.getMonth() === month;
+  // Month-over-month: agreements per tenant per month (last 6 months)
+  const { data: agreementsByMonth = [] } = useQuery({
+    queryKey: ["exec-agreements-by-month"],
+    queryFn: async () => {
+      const since = format(startOfMonth(months[0]), "yyyy-MM-dd");
+      const { data, error } = await supabase
+        .from("agreements")
+        .select("tenant_id, created_at, proposed_total, status")
+        .gte("created_at", since);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  const tenantMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    tenants.forEach(t => { m[t.id] = t.name; });
+    return m;
+  }, [tenants]);
+
+  // Clients per tenant
+  const clientsByTenant = useMemo<ClientAgg[]>(() => {
+    const map: Record<string, number> = {};
+    clientsRaw.forEach((c: any) => {
+      if (c.tenant_id) map[c.tenant_id] = (map[c.tenant_id] || 0) + 1;
     });
-  }, [allClients, selectedYear, selectedMonth]);
+    return Object.entries(map)
+      .map(([tenant_id, count]) => ({ tenant_id, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [clientsRaw]);
 
-  const filteredClients =
-    selectedOperator === "todos"
-      ? monthFilteredClients
-      : monthFilteredClients.filter((c) => c.operator_id === selectedOperator);
-
-  const pendentes = filteredClients.filter((c) => c.status === "pendente");
-  const pagos = filteredClients.filter((c) => c.status === "pago");
-  const quebrados = filteredClients.filter((c) => c.status === "quebrado");
-
-  const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
-  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const totalEmAberto = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
-
-  const selectedOp = operators.find((op) => op.id === selectedOperator);
-
-  const getOperatorCommission = (op: Profile, received: number) => {
-    const grade = grades.find((g) => g.id === op.commission_grade_id);
-    if (grade) return calculateTieredCommission(received, grade.tiers as CommissionTier[]);
-    return { rate: op.commission_rate, commission: received * (op.commission_rate / 100) };
-  };
-
-  // Browse date for vencimentos
-  const browseDateStr = format(browseDate, "yyyy-MM-dd");
-  const browseClients = useMemo(() => {
-    const base = selectedOperator === "todos"
-      ? allClients
-      : allClients.filter((c) => c.operator_id === selectedOperator);
-    return base.filter((c) => c.data_vencimento === browseDateStr);
-  }, [allClients, selectedOperator, browseDateStr]);
-
-  const navigateDate = (dir: number) => {
-    setBrowseDate((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() + dir);
-      return d;
+  // Agreements agg per tenant
+  const agreementsByTenant = useMemo<AgreementAgg[]>(() => {
+    const map: Record<string, { total: number; closed: number }> = {};
+    agreementsRaw.forEach((a: any) => {
+      if (!a.tenant_id) return;
+      if (!map[a.tenant_id]) map[a.tenant_id] = { total: 0, closed: 0 };
+      map[a.tenant_id].total++;
+      if (["approved", "pago", "active"].includes(a.status)) map[a.tenant_id].closed++;
     });
-  };
+    return Object.entries(map)
+      .map(([tenant_id, v]) => ({ tenant_id, ...v }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+  }, [agreementsRaw]);
 
-  // Per-operator stats
-  const operatorStats = operators.map((op) => {
-    const opClients = monthFilteredClients.filter((c) => c.operator_id === op.id);
-    const opPagos = opClients.filter((c) => c.status === "pago");
-    const opRecebido = opPagos.reduce((s, c) => s + Number(c.valor_pago), 0);
-    const opQuebra = opClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const { rate, commission } = getOperatorCommission(op, opRecebido);
-    return {
-      ...op,
-      totalRecebido: opRecebido,
-      totalQuebra: opQuebra,
-      comissao: commission,
-      commissionRate: rate,
-      totalClients: opClients.length,
-    };
-  });
+  // Users per tenant
+  const usersByTenant = useMemo<UserAgg[]>(() => {
+    const map: Record<string, number> = {};
+    profilesRaw.forEach((p: any) => {
+      if (p.tenant_id) map[p.tenant_id] = (map[p.tenant_id] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([tenant_id, count]) => ({ tenant_id, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [profilesRaw]);
 
-  const totalComissoes = operatorStats.reduce((s, op) => s + op.comissao, 0);
+  // Recovered value per tenant (approved agreements)
+  const recoveredByTenant = useMemo(() => {
+    const map: Record<string, number> = {};
+    agreementsRaw.forEach((a: any) => {
+      if (!a.tenant_id) return;
+      if (["approved", "pago", "active"].includes(a.status)) {
+        map[a.tenant_id] = (map[a.tenant_id] || 0) + Number(a.proposed_total || 0);
+      }
+    });
+    return Object.entries(map)
+      .map(([tenant_id, value]) => ({ tenant_id, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [agreementsRaw]);
 
-  if (profile?.role !== "admin") {
+  // Month-over-month growth (total agreements per month across all tenants)
+  const growthData = useMemo(() => {
+    return months.map(m => {
+      const start = startOfMonth(m);
+      const end = endOfMonth(m);
+      const count = agreementsByMonth.filter((a: any) => {
+        const d = new Date(a.created_at);
+        return d >= start && d <= end;
+      }).length;
+      const value = agreementsByMonth
+        .filter((a: any) => {
+          const d = new Date(a.created_at);
+          return d >= start && d <= end && ["approved", "pago", "active"].includes(a.status);
+        })
+        .reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
+      return {
+        month: format(m, "MMM/yy", { locale: ptBR }),
+        acordos: count,
+        recuperado: Math.round(value),
+      };
+    });
+  }, [agreementsByMonth]);
+
+  // Top-level KPIs
+  const totalClients = clientsRaw.length;
+  const totalRecovered = agreementsRaw
+    .filter((a: any) => ["approved", "pago", "active"].includes(a.status))
+    .reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
+  const totalAgreements = agreementsRaw.length;
+  const closedAgreements = agreementsRaw.filter((a: any) =>
+    ["approved", "pago", "active"].includes(a.status)
+  ).length;
+  const conversionRate = totalAgreements > 0
+    ? ((closedAgreements / totalAgreements) * 100).toFixed(1)
+    : "0.0";
+  const totalUsers = profilesRaw.length;
+
+  if (!isSuperAdmin) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        Acesso restrito a administradores.
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">Acesso restrito a Super Admins.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* Header with filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Painel Administrativo</h1>
-          <p className="text-muted-foreground text-sm">
-            {selectedOperator === "todos"
-              ? "Visão consolidada de todos operadores"
-              : `Visualizando: ${selectedOp?.full_name || "Operador"}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button size="sm" onClick={() => navigate("/analytics")} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <BarChart3 className="w-4 h-4 mr-1" />
-            Analytics
-          </Button>
-          <Button size="sm" onClick={() => navigate("/relatorios")} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <BarChart3 className="w-4 h-4 mr-1" />
-            Relatórios
-          </Button>
-          <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-            <SelectTrigger className="w-[150px] h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              {operators.map((op) => (
-                <SelectItem key={op.id} value={op.id}>
-                  {op.full_name || "Sem nome"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[85px] h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((y) => (
-                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[115px] h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {monthNames.map((name, i) => (
-                <SelectItem key={i} value={i.toString()}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <BarChart3 className="w-6 h-6 text-primary" />
+          Dashboard Executivo
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Visão consolidada de {tenants.length} empresas ativas
+        </p>
       </div>
 
-      {/* Hero card: Total Projetado */}
-      <div className="gradient-orange rounded-xl p-5 text-center shadow-lg">
-        <p className="text-xs font-medium text-primary-foreground/80 mb-1 uppercase tracking-wider">Total Projetado no Mês</p>
-        <p className="text-3xl font-extrabold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
-        <p className="text-xs text-primary-foreground/70 mt-1">{filteredClients.length} parcelas no período</p>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="w-4 h-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Total Clientes</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">{totalClients.toLocaleString("pt-BR")}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Total Recuperado</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">{formatCurrency(totalRecovered)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Handshake className="w-4 h-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Taxa de Acordos</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">{conversionRate}%</p>
+            <p className="text-xs text-muted-foreground">{closedAgreements}/{totalAgreements}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="w-4 h-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Usuários Ativos</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">{totalUsers}</p>
+            <p className="text-xs text-muted-foreground">{tenants.length} empresas</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Vencimentos strip */}
-      <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold text-card-foreground">Vencimentos</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
-            {format(browseDate, "dd/MM/yyyy")}
-          </span>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
-        <div className="text-right">
-          <span className="text-sm font-bold text-foreground">{browseClients.length}</span>
-          <span className="text-xs text-muted-foreground ml-1">registros</span>
-          <span className="text-xs text-muted-foreground mx-1">•</span>
-          <span className="text-sm font-bold text-primary">{formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}</span>
-        </div>
+      {/* Growth Chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Crescimento Mês a Mês (últimos 6 meses)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={growthData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
+              <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }}
+                tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="acordos" name="Acordos" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <Line yAxisId="right" type="monotone" dataKey="recuperado" name="Valor (R$)" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Two columns: clients + recovered */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Clients by tenant */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Clientes por Empresa (top 10)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {clientsByTenant.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={clientsByTenant.map(c => ({
+                  name: (tenantMap[c.tenant_id] || c.tenant_id).slice(0, 14),
+                  clientes: c.count,
+                }))} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="clientes" name="Clientes" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recovered value by tenant */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Valor Recuperado por Empresa (top 10)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recoveredByTenant.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={recoveredByTenant.map(r => ({
+                  name: (tenantMap[r.tenant_id] || r.tenant_id).slice(0, 14),
+                  valor: Math.round(r.value),
+                }))} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="valor" name="Valor (R$)" fill="hsl(var(--chart-2))" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Stat cards row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard title="Recebido" value={formatCurrency(totalRecebido)} icon="received" />
-        <StatCard title="Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
-      </div>
-
-      {/* Operators breakdown table */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Desempenho por Operador</h2>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Wallet className="w-3.5 h-3.5" />
-            <span>Total comissões: <strong className="text-warning">{formatCurrency(totalComissoes)}</strong></span>
-          </div>
-        </div>
-        {operatorStats.length === 0 ? (
-          <div className="p-5 text-center text-muted-foreground text-sm">
-            Nenhum operador cadastrado
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
-                  <th className="px-4 py-2.5 text-left font-medium">Operador</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Clientes</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Recebido</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Quebra</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Comissão (%)</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Comissão (R$)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operatorStats.map((op) => (
-                  <tr
-                    key={op.id}
-                    className={`border-t border-border transition-colors cursor-pointer ${
-                      selectedOperator === op.id
-                        ? "bg-primary/5 border-l-2 border-l-primary"
-                        : "hover:bg-muted/30"
-                    }`}
-                    onClick={() => setSelectedOperator(selectedOperator === op.id ? "todos" : op.id)}
-                  >
-                    <td className="px-4 py-2.5 text-sm font-medium text-card-foreground">{op.full_name || "Sem nome"}</td>
-                    <td className="px-4 py-2.5 text-sm text-right">{op.totalClients}</td>
-                    <td className="px-4 py-2.5 text-sm text-right text-success">{formatCurrency(op.totalRecebido)}</td>
-                    <td className="px-4 py-2.5 text-sm text-right text-destructive">{formatCurrency(op.totalQuebra)}</td>
-                    <td className="px-4 py-2.5 text-sm text-right">{op.commissionRate}%</td>
-                    <td className="px-4 py-2.5 text-sm text-right text-warning">{formatCurrency(op.comissao)}</td>
+      {/* Agreements conversion by tenant (table) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Handshake className="w-4 h-4 text-primary" />
+            Taxa de Acordos por Empresa
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {agreementsByTenant.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
+                    <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Negociados</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Fechados</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Taxa</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {agreementsByTenant.map(a => {
+                    const rate = a.total > 0 ? ((a.closed / a.total) * 100).toFixed(1) : "0.0";
+                    const rateNum = parseFloat(rate);
+                    const tenant = tenants.find(t => t.id === a.tenant_id);
+                    return (
+                      <tr key={a.tenant_id} className="border-t border-border hover:bg-muted/30">
+                        <td className="px-4 py-2.5 font-medium">{tenant?.name || a.tenant_id.slice(0, 8)}</td>
+                        <td className="px-4 py-2.5 text-right">{a.total}</td>
+                        <td className="px-4 py-2.5 text-right text-primary">{a.closed}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold">{rate}%</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <Badge variant={rateNum >= 60 ? "default" : rateNum >= 30 ? "secondary" : "destructive"} className="text-xs">
+                            {rateNum >= 60 ? "Ótimo" : rateNum >= 30 ? "Regular" : "Baixo"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Users by tenant */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
+            Usuários por Empresa
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {usersByTenant.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
+                    <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Slug</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Usuários</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Clientes</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersByTenant.map(u => {
+                    const tenant = tenants.find(t => t.id === u.tenant_id);
+                    const clientCount = clientsRaw.filter((c: any) => c.tenant_id === u.tenant_id).length;
+                    return (
+                      <tr key={u.tenant_id} className="border-t border-border hover:bg-muted/30">
+                        <td className="px-4 py-2.5 font-medium">{tenant?.name || u.tenant_id.slice(0, 8)}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{tenant?.slug || "-"}</td>
+                        <td className="px-4 py-2.5 text-right">{u.count}</td>
+                        <td className="px-4 py-2.5 text-right">{clientCount.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <Badge variant={tenant?.status === "active" ? "default" : "destructive"} className="text-xs">
+                            {tenant?.status === "active" ? "Ativa" : "Suspensa"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
