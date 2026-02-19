@@ -15,16 +15,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 20%;
 
-    --primary: 24 95% 53%;
+    --primary: 30 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 20% 22%;
+    --secondary: 228 24% 13%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 220 14% 90%;
     --muted-foreground: 220 10% 45%;
 
-    --accent: 24 95% 53%;
+    --accent: 30 100% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -32,18 +32,18 @@
 
     --border: 220 13% 87%;
     --input: 220 13% 87%;
-    --ring: 24 95% 53%;
+    --ring: 30 100% 50%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 220 20% 22%;
+    --sidebar-background: 228 24% 13%;
     --sidebar-foreground: 220 10% 85%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 30 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 20% 28%;
     --sidebar-accent-foreground: 220 10% 90%;
     --sidebar-border: 220 20% 30%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-ring: 30 100% 50%;
 
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
@@ -61,16 +61,16 @@
     --popover: 220 20% 14%;
     --popover-foreground: 220 10% 90%;
 
-    --primary: 24 95% 53%;
+    --primary: 30 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 20% 22%;
+    --secondary: 228 24% 13%;
     --secondary-foreground: 220 10% 90%;
 
     --muted: 220 20% 18%;
     --muted-foreground: 220 10% 55%;
 
-    --accent: 24 95% 53%;
+    --accent: 30 100% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62% 30%;
@@ -78,16 +78,16 @@
 
     --border: 220 20% 20%;
     --input: 220 20% 20%;
-    --ring: 24 95% 53%;
+    --ring: 30 100% 50%;
 
-    --sidebar-background: 220 20% 10%;
+    --sidebar-background: 228 24% 8%;
     --sidebar-foreground: 220 10% 85%;
-    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary: 30 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 20% 16%;
+    --sidebar-accent: 228 24% 16%;
     --sidebar-accent-foreground: 220 10% 90%;
-    --sidebar-border: 220 20% 16%;
-    --sidebar-ring: 24 95% 53%;
+    --sidebar-border: 228 24% 18%;
+    --sidebar-ring: 30 100% 50%;
   }
 }
 
@@ -115,11 +115,11 @@
   }
 
   .gradient-orange {
-    background: linear-gradient(135deg, hsl(24, 95%, 53%) 0%, hsl(30, 100%, 60%) 100%);
+    background: linear-gradient(135deg, #FF7F00 0%, #FF9A33 100%);
   }
 
   .gradient-dark {
-    background: linear-gradient(135deg, hsl(220, 20%, 22%) 0%, hsl(220, 25%, 16%) 100%);
+    background: linear-gradient(135deg, #1A1D29 0%, #222538 100%);
   }
 
   .scrollbar-thin {

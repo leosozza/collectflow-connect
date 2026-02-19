@@ -3,12 +3,12 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import rivoLogo from "@/assets/rivo_connect.png";
 import { 
   LayoutDashboard, 
   Users, 
   LogOut, 
   Menu, 
-  Zap,
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
@@ -86,11 +86,12 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         transform transition-all duration-200 ease-in-out
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>
-        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "gap-3 px-6"} py-5 border-b border-sidebar-border`}>
-          <div className="w-8 h-8 rounded-lg gradient-orange flex items-center justify-center flex-shrink-0">
-            <Zap className="w-5 h-5 text-primary-foreground" />
-          </div>
-          {!collapsed && <span className="text-lg font-bold text-sidebar-foreground">{tenant?.name || "Connect Control"}</span>}
+        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "gap-3 px-4"} py-5 border-b border-sidebar-border`}>
+          {collapsed ? (
+            <img src={rivoLogo} alt="RIVO" className="h-6 w-auto object-contain" />
+          ) : (
+            <img src={rivoLogo} alt="RIVO CONNECT" className="h-8 w-auto object-contain" />
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
