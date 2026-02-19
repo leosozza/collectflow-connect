@@ -1,77 +1,91 @@
 
-## Link Público para a Documentação da API
+
+## Reorganizar o Painel de Configuracoes
 
 ### Objetivo
 
-Criar uma rota pública `/api-docs/public` que exibe a documentação completa da API (endpoints, campos, exemplos de código) sem exigir login. Essa URL pode ser enviada para qualquer desenvolvedor ou IA para análise e integração.
+Transformar a lista plana de itens na sub-navegacao lateral em grupos visuais claros com separadores, busca rapida, badges informativos e animacao suave no item ativo.
 
-### O que será criado
+---
 
-#### 1. Nova rota pública `/api-docs/public` em `App.tsx`
+### Estrutura de Grupos
 
-Rota sem `ProtectedRoute`, sem `AppLayout` — acessível sem autenticação. Renderiza um componente dedicado com toda a documentação técnica.
-
-#### 2. Componente `ApiDocsPublicPage.tsx`
-
-Página limpa (sem sidebar/menu interno) com:
-
-- Header com logo/nome do sistema e badge "Documentação Pública"
-- URL base da API em destaque
-- Seção de Autenticação (header `X-API-Key`)
-- Todos os endpoints documentados (igual à aba "Endpoints" atual)
-- Tabela de campos aceitos
-- Exemplos de código (Python, Node.js, cURL) para importação em massa
-- Footer indicando que a chave deve ser solicitada ao administrador
-
-#### 3. Botão "Compartilhar Documentação" na página `/api-docs` (admin)
-
-Na página existente `ApiDocsPage.tsx`, adicionar no topo um card com:
-
-- URL do link público (`/api-docs/public`) em campo copiável
-- Botão "Copiar Link" com feedback
-- Nota explicativa: "Compartilhe com devs ou IA para integração — não expõe dados ou chaves"
-
-### Estrutura de Arquivos
-
-| Arquivo | Ação |
-|---|---|
-| `src/pages/ApiDocsPublicPage.tsx` | Novo — página pública de documentação |
-| `src/App.tsx` | Adicionar rota `/api-docs/public` sem autenticação |
-| `src/pages/ApiDocsPage.tsx` | Adicionar card com link público e botão copiar |
-
-### O que a página pública NÃO expõe
-
-- Nenhuma chave de API (apenas formato/exemplos com placeholder)
-- Nenhum dado do tenant
-- Nenhum dado de clientes
-- Acesso apenas à documentação estática
-
-### Fluxo de uso
+A navegacao lateral sera organizada em 3 categorias:
 
 ```text
-Admin acessa /api-docs
-    |
-    v
-Copia o link público: https://collectflow-connect.lovable.app/api-docs/public
-    |
-    v
-Envia para dev/IA
-    |
-    v
-Dev/IA acessa /api-docs/public (sem login)
-    |
-    v
-Vê documentação completa → integra o sistema externo
+Configuracoes
+------------------------------
+[Campo de busca rapida]
+
+CADASTROS
+  Credores          [3]
+  Equipes           [2]
+  Perfil do Devedor
+  Tipo de Divida
+  Tipo de Status
+
+PESSOAS
+  Usuarios          [5]
+
+SISTEMA
+  Integracao
+  Config. Empresa   (se tenant_admin)
+  Super Admin       (se super_admin)
+  Roadmap           (se tenant_admin)
 ```
 
-### Detalhes da Página Pública
+---
 
-A página pública vai usar a URL base hardcoded (`https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`) e apresentar:
+### Mudancas Detalhadas
 
-1. **Autenticação**: Como usar o header `X-API-Key` (solicitar chave ao admin)
-2. **Endpoints**: Todos os 9 endpoints com métodos, paths, parâmetros e exemplos
-3. **Campos**: Tabela completa de campos aceitos (obrigatório/opcional)
-4. **Exemplos**: Python, Node.js, cURL para importação em massa de 10.000+ registros
-5. **Boas práticas**: Idempotência, upsert, tratamento de erros
+#### 1. Agrupar secoes por categoria
 
-A página tem visual limpo, responsivo e otimizado para leitura por humanos e IA.
+As secoes serao organizadas em um array de grupos:
+
+| Grupo | Itens |
+|---|---|
+| Cadastros | Credores, Equipes, Perfil do Devedor, Tipo de Divida, Tipo de Status |
+| Pessoas | Usuarios |
+| Sistema | Integracao, Config. Empresa*, Super Admin*, Roadmap* |
+
+(*) Itens condicionais baseados em permissao.
+
+#### 2. Separadores visuais entre grupos
+
+Cada grupo tera um label em texto pequeno e uppercase (estilo "overline") seguido dos itens. Um `Separator` do shadcn sera usado entre grupos.
+
+#### 3. Animacao suave no item ativo
+
+Substituir a mudanca abrupta de cor por uma transicao com `transition-all duration-200` e um indicador lateral (borda esquerda colorida de 3px) no item ativo, alem do background.
+
+#### 4. Badges com contadores
+
+Adicionar queries para contar:
+- **Credores**: total de credores ativos
+- **Equipes**: total de equipes
+- **Usuarios**: total de usuarios do tenant
+
+Os badges serao exibidos como `Badge variant="secondary"` ao lado do label, usando dados ja carregados pelos hooks existentes (`useQuery` com `fetchCredores`, `fetchEquipes`). Uma nova query simples contara profiles do tenant.
+
+#### 5. Busca rapida
+
+Um campo `Input` com icone de lupa no topo da navegacao que filtra os itens visiveis pelo label. Itens que nao correspondem ao filtro ficam ocultos, mas os grupos vazios tambem sao ocultados.
+
+---
+
+### Arquivo Modificado
+
+| Arquivo | Acao |
+|---|---|
+| `src/pages/CadastrosPage.tsx` | Refatorar para usar grupos, separadores, busca, badges e animacao |
+
+Nenhum arquivo novo sera criado. As queries de contagem usarao os services existentes (`cadastrosService`). Para contar usuarios, sera feita uma query direta ao `profiles` filtrado por `tenant_id`.
+
+---
+
+### Visual do Item Ativo (antes/depois)
+
+**Antes**: Background solido primary, texto branco, sem transicao.
+
+**Depois**: Background `primary/10`, texto `primary`, borda esquerda de 3px na cor primary, `transition-all duration-200` para entrada suave. Hover com `bg-muted` e `text-foreground`.
+
