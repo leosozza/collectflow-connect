@@ -68,31 +68,42 @@ function EndpointRow({
 }
 
 const singlePayloadExample = `{
-  "credor": "EMPRESA XYZ",
-  "nome_completo": "João da Silva",
-  "cpf": "123.456.789-00",
-  "phone": "11999999999",
-  "email": "joao@email.com",
-  "external_id": "EXT-001",
-  "endereco": "Rua das Flores, 123",
-  "cidade": "São Paulo",
-  "uf": "SP",
-  "cep": "01310-100",
-  "observacoes": "Cliente VIP",
-  "numero_parcela": 1,
-  "total_parcelas": 3,
-  "valor_entrada": 500.00,
-  "valor_parcela": 300.00,
-  "valor_pago": 0,
-  "data_vencimento": "2026-03-01",
-  "status": "pendente",
-  "status_cobranca_id": "uuid-do-status-de-cobranca"
+  "CREDOR": "YBRASIL",
+  "COD_DEVEDOR": "13852975",
+  "NOME_DEVEDOR": "Ingrid Grazielly Rocha Tarroco",
+  "CNPJ_CPF": "491.679.778-71",
+  "FONE_1": "(11) 9829-73032",
+  "PARCELA": 1,
+  "DT_VENCIMENTO": "19/12/2025",
+  "VL_ATUALIZADO": 1100,
+  "STATUS": "ATIVO",
+  "status_cobranca_id": "uuid-do-status (opcional)"
 }`;
 
 const bulkPayloadExample = `{
   "records": [
-    { "nome_completo": "Cliente 1", "cpf": "111.111.111-11", "credor": "EMPRESA", "valor_parcela": 500, "data_vencimento": "2026-03-01", "external_id": "EXT-001" },
-    { "nome_completo": "Cliente 2", "cpf": "222.222.222-22", "credor": "EMPRESA", "valor_parcela": 300, "data_vencimento": "2026-04-01", "external_id": "EXT-002" }
+    {
+      "CREDOR": "YBRASIL",
+      "COD_DEVEDOR": "13852975",
+      "NOME_DEVEDOR": "Ingrid Grazielly Rocha Tarroco",
+      "CNPJ_CPF": "491.679.778-71",
+      "FONE_1": "(11) 9829-73032",
+      "PARCELA": 1,
+      "DT_VENCIMENTO": "19/12/2025",
+      "VL_ATUALIZADO": 1100,
+      "STATUS": "ATIVO"
+    },
+    {
+      "CREDOR": "YBRASIL",
+      "COD_DEVEDOR": "13821797",
+      "NOME_DEVEDOR": "Bruna Freitas dos Santos",
+      "CNPJ_CPF": "440.015.648-66",
+      "FONE_1": "(11) 9848-11855",
+      "PARCELA": 1,
+      "DT_VENCIMENTO": "19/12/2025",
+      "VL_ATUALIZADO": 399,
+      "STATUS": "ATIVO"
+    }
   ],
   "upsert": true,
   "upsert_key": "external_id"
@@ -172,24 +183,31 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
   -H "X-API-Key: cf_xxxxxxxxxxxxxxxxxxxxxxxx"`;
 
 const fields = [
-  ["nome_completo", "string", "✅", "Nome completo do devedor"],
-  ["cpf", "string", "✅", "CPF (qualquer formato — será sanitizado)"],
-  ["credor", "string", "✅", "Nome do credor/empresa"],
-  ["valor_parcela", "number", "✅", "Valor da parcela em R$"],
-  ["data_vencimento", "string", "✅", "Data no formato YYYY-MM-DD"],
-  ["external_id", "string", "—", "ID no sistema externo (usado para upsert idempotente)"],
-  ["numero_parcela", "integer", "—", "Número da parcela atual (padrão: 1)"],
-  ["total_parcelas", "integer", "—", "Total de parcelas do acordo"],
+  ["NOME_DEVEDOR / nome_completo", "string", "✅", "Nome completo do devedor"],
+  ["CNPJ_CPF / cpf", "string", "✅", "CPF ou CNPJ (qualquer formato)"],
+  ["CREDOR / credor", "string", "✅", "Nome do credor/empresa"],
+  ["VL_ATUALIZADO / valor_parcela", "number", "✅", "Valor atualizado da parcela"],
+  ["DT_VENCIMENTO / data_vencimento", "string", "✅", "Data (DD/MM/YYYY ou YYYY-MM-DD)"],
+  ["COD_DEVEDOR / external_id", "string", "—", "ID no sistema externo (usado para upsert)"],
+  ["PARCELA / numero_parcela", "integer", "—", "Número da parcela (padrão: 1)"],
+  ["total_parcelas", "integer", "—", "Total de parcelas"],
+  ["VL_TITULO", "number", "—", "Valor original do título"],
   ["valor_entrada", "number", "—", "Valor de entrada pago"],
   ["valor_pago", "number", "—", "Valor já pago acumulado"],
-  ["status", "string", "—", "pendente | pago | quebrado"],
-  ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (etapa do funil de cobrança)"],
-  ["phone", "string", "—", "Telefone com DDD"],
-  ["email", "string", "—", "Email do devedor"],
-  ["endereco", "string", "—", "Endereço completo"],
-  ["cidade", "string", "—", "Cidade"],
-  ["uf", "string", "—", "UF (2 letras)"],
-  ["cep", "string", "—", "CEP"],
+  ["STATUS / status", "string", "—", "ATIVO | CANCELADO | PAGO | QUEBRADO"],
+  ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (etapa do funil)"],
+  ["FONE_1 / phone", "string", "—", "Telefone principal"],
+  ["FONE_2", "string", "—", "Telefone secundário (salvo em observações)"],
+  ["FONE_3", "string", "—", "Telefone terciário (salvo em observações)"],
+  ["EMAIL / email", "string", "—", "Email do devedor"],
+  ["ENDERECO", "string", "—", "Endereço (rua)"],
+  ["NUMERO", "string", "—", "Número do endereço"],
+  ["COMPLEMENTO", "string", "—", "Complemento"],
+  ["BAIRRO", "string", "—", "Bairro"],
+  ["CIDADE / cidade", "string", "—", "Cidade"],
+  ["ESTADO / uf", "string", "—", "UF (2 letras)"],
+  ["CEP / cep", "string", "—", "CEP"],
+  ["COD_CONTRATO", "string", "—", "Código do contrato (salvo em observações)"],
   ["observacoes", "string", "—", "Observações livres"],
 ];
 
