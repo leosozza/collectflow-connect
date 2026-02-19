@@ -541,6 +541,465 @@ Implementação:
 4. Secrets necessários: META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
 5. Integrar com o sistema de automação existente como canal adicional`,
   },
+
+  // ──────────────────────────────────────────────────
+  // FASE 1 — O "Core" do Agente de IA Autônomo
+  // ──────────────────────────────────────────────────
+  {
+    id: "politicas-desconto-dinamico",
+    title: "Políticas de Desconto Dinâmico",
+    description: "Tabela de margem de desconto por credor com regras automáticas aplicadas durante negociação.",
+    status: "planned",
+    progress: 5,
+    category: "IA",
+    lovablePrompt: `Implementar o módulo de Políticas de Desconto Dinâmico para o Agente IA de Negociação.
+
+Objetivo: Criar uma tabela de regras de desconto por credor que o agente IA consulta automaticamente antes de fazer uma proposta.
+
+Passos:
+1. Criar migração SQL com a tabela discount_policies:
+   - credor_id (FK credores.id)
+   - tenant_id
+   - min_days_overdue (dias mínimos de atraso para aplicar)
+   - max_days_overdue (dias máximos)
+   - max_discount_percent (desconto máximo permitido)
+   - installments_allowed (boolean)
+   - max_installments (número máximo de parcelas)
+   - is_active (boolean)
+
+2. Criar CRUD no CredorForm (src/components/cadastros/CredorForm.tsx) — nova aba "Políticas de Desconto"
+
+3. Criar serviço src/services/discountPolicyService.ts com:
+   - fetchPoliciesByCredor(credorId)
+   - getApplicablePolicy(credorId, daysOverdue) — retorna a política mais adequada
+
+4. Integrar no AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx):
+   - Ao abrir o calculador, buscar a política vigente do credor
+   - Limitar o campo de desconto ao max_discount_percent automaticamente
+   - Exibir badge "Política: X% máx" no formulário
+
+5. RLS: tenant_id deve estar presente em todas as queries.
+
+Tabelas relacionadas: credores, agreements, clients`,
+  },
+  {
+    id: "agente-ia-autonomo",
+    title: "Agente IA Autônomo de Negociação",
+    description: "LLM integrado via Edge Function que negocia em tempo real com contorno de objeções no contexto de cobrança.",
+    status: "planned",
+    progress: 0,
+    category: "IA",
+    lovablePrompt: `Evoluir o Agente IA do Contact Center para negociar de forma autônoma, aplicando políticas de desconto e contornando objeções.
+
+O que já existe:
+- src/components/contact-center/whatsapp/AIAgentTab.tsx — aba de configuração do agente
+- src/components/contact-center/whatsapp/AISuggestion.tsx — sugestões IA no chat
+- supabase/functions/chat-ai-suggest/index.ts — edge function de sugestão
+
+O que implementar:
+1. Evoluir supabase/functions/chat-ai-suggest/index.ts para modo AUTÔNOMO:
+   - Receber: histórico da conversa, dados do cliente (dívida, credor, score), política de desconto vigente
+   - Usar google/gemini-2.5-flash (sem API key externa)
+   - System prompt especializado em cobrança: tom empático, contorno de objeções, LGPD compliance
+   - Retornar: proposta de desconto, número de parcelas, argumento de negociação
+
+2. Criar modo "Piloto Automático" no AIAgentTab:
+   - Toggle "Agente Autônomo Ativo"
+   - Quando ativo: a IA responde automaticamente sem intervenção humana
+   - Quando inativo: apenas sugestões (comportamento atual)
+
+3. Lógica de proposta:
+   - 1ª mensagem: oferta com desconto mínimo da política
+   - Objeção detectada → acionar até max_discount_percent
+   - Aceite → gerar link de pagamento automaticamente (via negociarie-proxy existente)
+
+4. Guardar log de cada decisão da IA na tabela message_logs (campo: rule_id = null, channel = 'ai_agent')
+
+Tabelas: conversations, chat_messages, clients, agreements, discount_policies (nova), ai_agents`,
+  },
+  {
+    id: "analise-sentimento-devedor",
+    title: "Análise de Sentimento do Devedor",
+    description: "IA classifica o tom emocional do devedor (agressivo, receptivo, neutro) e adapta a resposta automaticamente.",
+    status: "future",
+    progress: 0,
+    category: "IA",
+    lovablePrompt: `Implementar análise de sentimento nas conversas do Contact Center WhatsApp para adaptar a abordagem do agente IA.
+
+Conceito:
+- A cada mensagem recebida do devedor, classificar o sentimento: POSITIVO / NEUTRO / NEGATIVO / AGRESSIVO
+- Usar essa classificação para: ajustar o tom da resposta IA e alertar o supervisor
+
+Implementação:
+1. Evoluir supabase/functions/chat-ai-suggest/ para incluir análise de sentimento:
+   - Adicionar ao payload de resposta: { sentiment: 'positive'|'neutral'|'negative'|'aggressive', confidence: 0-1 }
+   - Usar google/gemini-2.5-flash-lite (rápido e barato para esta tarefa simples)
+
+2. Salvar sentimento em nova coluna chat_messages.sentiment (migração SQL)
+
+3. Exibir no ChatPanel (src/components/contact-center/whatsapp/ChatPanel.tsx):
+   - Ícone de sentimento ao lado de cada mensagem do devedor
+   - 😊 Positivo | 😐 Neutro | 😠 Negativo | 🚨 Agressivo
+
+4. Criar componente AISummaryPanel (já existe em src/components/contact-center/whatsapp/AISummaryPanel.tsx):
+   - Histórico de sentimentos da conversa
+   - Recomendação de abordagem: "Tom formal recomendado" ou "Ofereça mais desconto"
+
+5. Notificar supervisor quando sentimento = AGRESSIVO (usar notificationService.ts)
+
+Tabelas: chat_messages (nova coluna sentiment), conversations, profiles`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // FASE 2 — Módulo de Automação Visual (N8N Embutido)
+  // ──────────────────────────────────────────────────
+  {
+    id: "construtor-visual-fluxos",
+    title: "Construtor Visual de Fluxos (N8N Embutido)",
+    description: "Interface drag-and-drop com reactflow para criar réguas de cobrança visuais sem código.",
+    status: "future",
+    progress: 0,
+    category: "Automação",
+    lovablePrompt: `Implementar um Construtor Visual de Fluxos de Cobrança usando reactflow, similar ao N8N, dentro do próprio sistema.
+
+Instalar: bun add reactflow
+
+Estrutura de dados — criar tabela workflow_flows:
+- id, tenant_id, name, description, is_active
+- nodes (JSON): array de nós do fluxo
+- edges (JSON): array de conexões
+- trigger_type: 'overdue' | 'agreement_broken' | 'first_contact'
+- created_at, updated_at
+
+Tipos de Nós a implementar:
+GATILHOS (cor azul):
+  - node_trigger_overdue: "Fatura Vencida há X dias"
+  - node_trigger_broken: "Acordo Quebrado"
+  - node_trigger_no_contact: "Sem Contato há X dias"
+
+AÇÕES (cor verde):
+  - node_action_whatsapp: "Enviar WhatsApp" (usa instância Evolution existente)
+  - node_action_sms: "Enviar SMS" (via 3CPlus existente)
+  - node_action_wait: "Aguardar X dias"
+  - node_action_ai_negotiate: "Chamar Agente IA para Negociar"
+  - node_action_update_status: "Atualizar Status do Cliente"
+
+CONDIÇÕES (cor amarela):
+  - node_condition_score: "Se propensity_score > X"
+  - node_condition_value: "Se valor_dívida > R$ X"
+
+Implementação:
+1. Criar src/pages/WorkflowBuilderPage.tsx com canvas reactflow
+2. Painel lateral de nós arrastáveis (sidebar)
+3. Propriedades de cada nó ao clicar (form lateral)
+4. Botão "Salvar Fluxo" → persiste no banco
+5. Botão "Ativar/Desativar" → liga/desliga o motor de execução
+
+Rota: /automacao/fluxos (dentro da AutomacaoPage existente como nova tab)`,
+  },
+  {
+    id: "motor-execucao-fluxos",
+    title: "Motor de Execução de Fluxos",
+    description: "Engine em Edge Functions + CRON que executa os fluxos visuais de cobrança automaticamente.",
+    status: "future",
+    progress: 0,
+    category: "Automação",
+    lovablePrompt: `Implementar o Motor de Execução que roda os fluxos criados no Construtor Visual de Fluxos.
+
+Arquitetura:
+1. Edge Function supabase/functions/workflow-engine/index.ts:
+   - Recebe: { workflow_id, client_id, trigger_type, trigger_data }
+   - Carrega o JSON do fluxo (nodes + edges) do banco
+   - Executa nó por nó em ordem topológica
+   - Para cada nó de ação: chama o serviço correspondente (Evolution para WhatsApp, 3CPlus para SMS, etc.)
+   - Para nó "Aguardar X dias": registra em tabela workflow_executions com next_run_at
+
+2. CRON Job (supabase/config.toml) — rodar a cada hora:
+   - Buscar workflow_executions onde next_run_at <= now() e status = 'waiting'
+   - Retomar execução a partir do próximo nó
+   - Chamar workflow-engine com o estado salvo
+
+3. Tabela workflow_executions:
+   - workflow_id, client_id, current_node_id, status ('running'|'waiting'|'done'|'error')
+   - execution_log (JSON) — histórico de cada nó executado
+   - next_run_at, started_at, completed_at
+
+4. Gatilhos automáticos — edge functions existentes chamarão o motor:
+   - auto-break-overdue → dispara trigger_type='agreement_broken'
+   - Webhook de vencimento → dispara trigger_type='overdue'
+
+5. Painel de monitoramento na AutomacaoPage: quantas execuções ativas, log de erros
+
+Tabelas: workflow_flows (nova), workflow_executions (nova), clients, chat_messages, message_logs`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // FASE 3 — Ecossistema Multicanal & Grupos IA
+  // ──────────────────────────────────────────────────
+  {
+    id: "grupos-whatsapp-mutirao",
+    title: "Grupos de WhatsApp — Mutirão IA",
+    description: "IA orquestra grupos de WhatsApp para mutirões de 'Limpa Nome', gerenciando múltiplos devedores simultaneamente.",
+    status: "future",
+    progress: 0,
+    category: "Contact Center",
+    lovablePrompt: `Implementar criação e gestão de Grupos de WhatsApp para Mutirões de Limpa Nome, orquestrados pela IA.
+
+Conceito: Selecionar N devedores de uma carteira, criar um grupo WA, e a IA negocia com todos simultaneamente.
+
+Pré-requisito: Instâncias WhatsApp via Evolution API (já existente em src/components/integracao/WhatsAppIntegrationTab.tsx)
+
+Implementação:
+1. Criar tabela mutirao_grupos:
+   - id, tenant_id, instance_id, nome, grupo_id_evolution, status ('criando'|'ativo'|'encerrado')
+   - data_inicio, data_fim, descricao_oferta, max_discount_percent
+
+2. Criar tabela mutirao_participantes:
+   - mutirao_id, client_id, phone, status_resposta ('sem_resposta'|'negociando'|'acordou'|'recusou')
+
+3. UI — nova aba "Mutirão" na CarteiraPage:
+   - Seleção múltipla de clientes na tabela (CarteiraTable.tsx — já suporta seleção)
+   - Botão "Criar Mutirão" abre dialog com: nome do mutirão, oferta de desconto, data fim
+   - Ao confirmar: chama edge function para criar grupo via Evolution API
+
+4. Edge function supabase/functions/mutirao-manager/:
+   - POST /create: cria grupo WA via evolution-proxy, adiciona participantes
+   - POST /broadcast: envia mensagem inicial da IA para o grupo
+   - Webhook de respostas: identifica cliente pela mensagem e atualiza status
+
+5. Painel de acompanhamento: taxa de resposta, acordos fechados, encerrar mutirão
+
+Tabelas: whatsapp_instances, clients, agreements, conversations`,
+  },
+  {
+    id: "transicao-canal-inteligente",
+    title: "Transição de Canal Inteligente",
+    description: "Lógica automática: tenta WhatsApp → falha → SMS → falha → agenda Voice Bot, maximizando taxa de contato.",
+    status: "future",
+    progress: 0,
+    category: "Automação",
+    lovablePrompt: `Implementar a lógica de Transição de Canal Inteligente para maximizar a taxa de contato com devedores.
+
+Fluxo: WhatsApp → (falha/sem resposta após Xh) → SMS → (falha após Yh) → Ligação 3CPlus
+
+O que já existe para aproveitar:
+- Evolution API: supabase/functions/evolution-proxy/ (WhatsApp)
+- 3CPlus: supabase/functions/threecplus-proxy/ (SMS e Voice)
+- Motor de Fluxos: workflow-engine (a ser criado na Fase 2)
+- message_logs: tabela com histórico de tentativas por canal
+
+Implementação como nó especial no Construtor de Fluxos:
+1. Criar node_action_smart_channel no WorkflowBuilder:
+   - Configura: tempo de espera por canal, número de tentativas por canal
+   - Exemplo: "WhatsApp: 2 tentativas com 4h de intervalo → SMS: 1 vez → Ligação"
+
+2. No workflow-engine, ao executar este nó:
+   - Verificar message_logs para o client_id: qual foi o último canal e resultado
+   - Se WhatsApp não entregue (status evolution = 'failed'): escalar para SMS
+   - Se SMS falhou: criar tarefa de ligação no 3CPlus (endpoint agent_call da API 3CPlus)
+   - Registrar cada tentativa em message_logs (canal, status, data)
+
+3. Configuração global em TenantSettingsPage:
+   - Tempos de espera padrão por canal
+   - Habilitar/desabilitar canais disponíveis
+
+Tabelas: message_logs, clients, whatsapp_instances, workflow_executions`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // FASE 4 — Smart Payments & Split Financeiro
+  // ──────────────────────────────────────────────────
+  {
+    id: "pix-qrcode-dinamico",
+    title: "Pix QR Code Dinâmico com Juros em Tempo Real",
+    description: "Geração de Pix Copia e Cola / QR Code calculando juros e multa em tempo real na Edge Function.",
+    status: "planned",
+    progress: 0,
+    category: "Integrações",
+    lovablePrompt: `Implementar geração de Pix QR Code Dinâmico com cálculo de juros em tempo real, sem depender da Negociarie.
+
+Contexto do sistema:
+- Credores já possuem: juros_mes, multa, pix_chave (tabela credores)
+- Acordos existem na tabela agreements com: original_total, proposed_total, first_due_date
+
+Edge Function supabase/functions/generate-pix/:
+1. Receber: { agreement_id, tenant_id, payment_date (opcional, default: hoje) }
+2. Buscar dados do credor e do acordo
+3. Calcular juros diários: valor_base * (juros_mes/100/30) * dias_atraso
+4. Calcular multa: valor_base * (multa/100) — aplicar apenas uma vez se já vencido
+5. Montar payload EMV (padrão Pix Banco Central) com a chave pix do credor
+6. Retornar: { pix_copia_cola: string, valor_final: number, juros_aplicados: number, qrcode_base64?: string }
+
+Para QR Code visual: usar biblioteca qrcode (instalar: bun add qrcode)
+
+Integrar em:
+- PortalCheckout (src/components/portal/PortalCheckout.tsx) — botão "Gerar Pix Atualizado"
+- NegotiationPanel (src/components/atendimento/NegotiationPanel.tsx) — para o operador copiar e enviar
+- AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx)
+
+Exibir: valor atualizado, data de validade (24h), campo de cópia do Pix Copia e Cola com botão
+
+Tabelas: agreements, credores, portal_payments`,
+  },
+  {
+    id: "webhook-baixa-automatica",
+    title: "Webhook de Baixa Automática",
+    description: "Recebe confirmação de pagamento via webhook e baixa automaticamente o acordo, atualiza status do cliente.",
+    status: "planned",
+    progress: 0,
+    category: "Integrações",
+    lovablePrompt: `Implementar Webhook de Baixa Automática para receber confirmações de pagamento Pix e atualizar o sistema.
+
+O que já existe:
+- supabase/functions/negociarie-callback/ — já faz baixa para pagamentos via Negociarie
+- tabela portal_payments — registra pagamentos do portal
+- tabela agreements — status de acordo (pending, approved, paid)
+
+Nova Edge Function supabase/functions/payment-webhook/:
+1. Receber POST com payload do gateway (Pix direto, Negociarie, futuro Stripe)
+2. Verificar assinatura/token do webhook para segurança
+3. Identificar o pagamento: por negociarie_id_geral ou agreement_id
+4. Executar baixa:
+   a. Atualizar agreements.status = 'paid'
+   b. Atualizar clients.status = 'pago' e clients.valor_pago
+   c. Inserir em portal_payments com status = 'paid'
+   d. Criar notificação interna (usar função create_notification do banco)
+   e. Registrar em audit_logs
+5. Disparar gamificação: chamar lógica de pontos do operador responsável
+
+Configuração:
+- Adicionar secret PAYMENT_WEBHOOK_SECRET para verificação de assinatura
+- Exibir URL do webhook em IntegracaoPage para o cliente configurar no gateway
+
+Tabelas: agreements, clients, portal_payments, audit_logs, notifications, operator_points`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // FASE 4 (cont.) — Split de Pagamento
+  // ──────────────────────────────────────────────────
+  {
+    id: "split-pagamento",
+    title: "Split de Pagamento (Comissão + Credor)",
+    description: "Sistema de split que separa automaticamente a comissão da assessoria e o valor líquido do credor.",
+    status: "future",
+    progress: 0,
+    category: "Financeiro",
+    lovablePrompt: `Implementar Sistema de Split de Pagamento para separar automaticamente comissão da assessoria e valor do credor.
+
+Conceito:
+- Quando um pagamento é confirmado, o valor total é dividido:
+  * X% para o credor (valor líquido do crédito recuperado)
+  * Y% para a assessoria (honorários de cobrança)
+  * Z% para o operador (comissão individual — já existe commission_grades)
+
+Implementação:
+1. Adicionar campos na tabela credores (migração):
+   - honorarios_percent (number) — % de honorários da assessoria
+   - split_enabled (boolean)
+   - split_account_id (chave da conta destino para transferência)
+
+2. Criar tabela payment_splits:
+   - payment_id (FK portal_payments), tenant_id
+   - credor_amount, honorarios_amount, operator_commission
+   - split_status ('pending'|'executed'|'failed')
+   - executed_at
+
+3. No Webhook de Baixa Automática (payment-webhook), após confirmar pagamento:
+   - Calcular o split usando honorarios_percent do credor
+   - Calcular comissão do operador com commission_grades existente (src/lib/commission.ts)
+   - Inserir em payment_splits
+
+4. Painel "Split Financeiro" na FinanceiroPage:
+   - Listagem de splits pendentes e executados
+   - Totais: quanto foi para credores vs honorários vs comissões
+   - Gráfico de pizza com Recharts (já instalado)
+
+Tabelas: portal_payments, agreements, credores, commission_grades, operator_points, profiles`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // FASE 5 — Inteligência Preditiva & Dashboards
+  // ──────────────────────────────────────────────────
+  {
+    id: "dashboard-roi-ia-vs-humano",
+    title: "Dashboard de ROI — IA vs Humano",
+    description: "Painel comparando valor recuperado por IA autônoma vs operadores humanos, mostrando custo-benefício.",
+    status: "future",
+    progress: 0,
+    category: "IA",
+    lovablePrompt: `Implementar Dashboard de ROI comparando recuperação por Agente IA vs Operadores Humanos.
+
+Métricas principais:
+1. Valor total recuperado: IA vs Humano (gráfico de barras side-by-side)
+2. Número de acordos: IA vs Humano
+3. Ticket médio de acordo: IA vs Humano
+4. Taxa de quebra de acordo: IA vs Humano
+5. Custo por acordo (estimado): IA tem custo fixo de infra vs salário de operador
+6. ROI do Agente IA: (valor_recuperado_ia - custo_ia) / custo_ia * 100
+
+Como identificar acordos fechados pela IA:
+- Acordos onde created_by = perfil do ai_agent (tabela ai_agents, campo profile_id)
+- Ou agreements com portal_origin = true (auto-serviço)
+- Campo sugerido: agreements.origin ('human'|'ai_agent'|'portal')
+- Migração: ADD COLUMN origin TEXT DEFAULT 'human' em agreements
+
+Implementação:
+1. Criar src/components/dashboard/ROIDashboard.tsx com Recharts
+2. Adicionar aba "ROI & IA" na AnalyticsPage (src/pages/AnalyticsPage.tsx)
+3. Queries:
+   - SELECT origin, COUNT(*), SUM(proposed_total) FROM agreements GROUP BY origin
+   - JOIN com operator_points para cruzar com dados de gamificação
+4. Filtros: por período (mês/trimestre/ano), por credor, por equipe
+
+Tabelas: agreements (nova coluna origin), operator_points, ai_agents, clients`,
+  },
+  {
+    id: "regua-inversa-lead-scoring",
+    title: "Régua Inversa Preventiva & Lead Scoring Avançado",
+    description: "Avisos preventivos antes do vencimento + modelo de propensão de pagamento para otimizar custo de disparo.",
+    status: "future",
+    progress: 0,
+    category: "IA",
+    lovablePrompt: `Implementar Régua Inversa Preventiva e Lead Scoring Avançado para otimizar a recuperação de crédito.
+
+── RÉGUA INVERSA ──
+Objetivo: Enviar mensagens ANTES do vencimento para prevenir inadimplência.
+
+Implementação:
+1. Adicionar nós de gatilho pré-vencimento no Construtor de Fluxos:
+   - node_trigger_pre_overdue: "X dias ANTES do vencimento"
+   - Exemplo: -7 dias → lembrete amigável, -3 dias → lembrete de urgência, -1 dia → último aviso
+
+2. No CRON do workflow-engine: verificar clientes com data_vencimento entre hoje e hoje+X dias
+3. Template de mensagem preventivo (diferente do tom de cobrança)
+4. Registrar em message_logs com channel = 'preventive'
+
+── LEAD SCORING AVANÇADO ──
+Objetivo: Melhorar o campo propensity_score dos clientes com modelo ML mais preciso.
+
+O que já existe:
+- supabase/functions/calculate-propensity/ — calcula score básico
+- clients.propensity_score — armazena o score
+
+Evoluir o modelo de propensão em calculate-propensity/:
+Variáveis a considerar:
+- dias_atraso: quanto mais tempo, menor a propensão
+- historico_pagamentos: quantas vezes pagou antes (positivo)
+- acordos_quebrados: quantas quebras (negativo forte)
+- valor_divida: valores menores têm maior propensão
+- canal_resposta: se respondeu WhatsApp antes (positivo)
+- tipo_devedor_id: usar como feature de segmentação
+
+Usar google/gemini-2.5-flash para scoring quando dados insuficientes para regras.
+
+Output:
+1. Score 0-100 por cliente
+2. Segmentos: QUENTE (>70) | MORNO (40-70) | FRIO (<40)
+3. Badge visual na CarteiraTable e CarteiraKanban (PropensityBadge.tsx já existe)
+4. Exportação priorizada: no DialerExportDialog, ordenar por score DESC
+
+Tabelas: clients, agreements, call_dispositions, message_logs, campaign_participants`,
+  },
 ];
 
 const statusConfig: Record<Status, { label: string; emoji: string; color: string; badgeClass: string; progressClass: string }> = {
