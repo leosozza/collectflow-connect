@@ -17,6 +17,7 @@ import MessageHistory from "@/components/automacao/MessageHistory";
 import { Link } from "react-router-dom";
 import DispositionAutomationsTab from "@/components/automacao/DispositionAutomationsTab";
 import WorkflowListTab from "@/components/automacao/workflow/WorkflowListTab";
+import GatilhosTab from "@/components/automacao/GatilhosTab";
 
 const AutomacaoPage = () => {
   const { tenant, isTenantAdmin } = useTenant();
@@ -103,6 +104,7 @@ const AutomacaoPage = () => {
       <Tabs defaultValue="fluxos">
         <TabsList>
           <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
+          <TabsTrigger value="gatilhos">Gatilhos</TabsTrigger>
           <TabsTrigger value="regras">Regras</TabsTrigger>
           <TabsTrigger value="pos-tabulacao">Pós-Tabulação</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -111,6 +113,10 @@ const AutomacaoPage = () => {
 
         <TabsContent value="fluxos">
           <WorkflowListTab />
+        </TabsContent>
+
+        <TabsContent value="gatilhos">
+          <GatilhosTab />
         </TabsContent>
 
         <TabsContent value="regras" className="space-y-4">
