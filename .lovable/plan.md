@@ -1,189 +1,186 @@
 
 
-# Construtor Visual de Fluxos de Cobranca + Motor de Execucao
+# Upgrade do Construtor Visual de Fluxos — Estilo ThotAI
 
 ## Resumo
 
-Implementacao completa de um construtor visual de fluxos no estilo N8N usando React Flow, integrado na pagina de Automacao como nova aba "Fluxos". Inclui o motor de execucao via backend function e CRON job para processar os fluxos criados.
+O construtor atual e funcional mas basico: tem poucos tipos de nos, sidebar simples sem busca, painel de propriedades limitado, e falta recursos como undo/redo, simulador de teste, templates, e validacao de fluxo. O objetivo e trazer o nivel de completude do ThotAI, adaptado ao contexto de cobranca.
 
 ---
 
-## Fase 1 — Banco de Dados
+## O que muda
 
-### Tabela `workflow_flows`
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid PK | |
-| tenant_id | uuid NOT NULL | Isolamento multi-tenant |
-| name | text NOT NULL | Nome do fluxo |
-| description | text DEFAULT '' | Descricao |
-| is_active | boolean DEFAULT false | Liga/desliga execucao |
-| nodes | jsonb DEFAULT '[]' | Array de nos do React Flow |
-| edges | jsonb DEFAULT '[]' | Array de conexoes |
-| trigger_type | text NOT NULL | 'overdue', 'agreement_broken', 'first_contact' |
-| created_at | timestamptz DEFAULT now() | |
-| updated_at | timestamptz DEFAULT now() | |
+### 1. Arquitetura de Nos Unificada
 
-### Tabela `workflow_executions`
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid PK | |
-| tenant_id | uuid NOT NULL | |
-| workflow_id | uuid NOT NULL (FK workflow_flows) | |
-| client_id | uuid NOT NULL (FK clients) | |
-| current_node_id | text | ID do no atual |
-| status | text DEFAULT 'running' | 'running', 'waiting', 'done', 'error' |
-| execution_log | jsonb DEFAULT '[]' | Historico de cada no executado |
-| next_run_at | timestamptz | Para nos "Aguardar X dias" |
-| started_at | timestamptz DEFAULT now() | |
-| completed_at | timestamptz | |
-| error_message | text | |
-| created_at | timestamptz DEFAULT now() | |
+Substituir os 3 componentes de nos separados (TriggerNode, ActionNode, ConditionNode) por um unico componente `CustomFlowNode` que renderiza qualquer tipo de no dinamicamente, assim como o ThotAI faz. Isso simplifica a manutencao e permite adicionar novos tipos de nos sem criar novos componentes.
 
-### RLS
-- Ambas as tabelas: admins do tenant podem gerenciar (ALL), usuarios do tenant podem visualizar (SELECT)
-- Trigger `update_updated_at_column` em `workflow_flows`
+**Novo arquivo:** `src/components/automacao/workflow/FlowNodeTypes.ts`
+- Definicao centralizada de todos os tipos de nos com icone, cor, categoria e descricao
+- Interface `FlowNodeData` completa com todas as propriedades possiveis
+- Funcao `getNodeType()` para buscar configuracao por tipo
 
----
+**Categorias de nos (adaptadas para cobranca):**
 
-## Fase 2 — Construtor Visual (Frontend)
+| Categoria | Cor | Nos |
+|-----------|-----|-----|
+| Gatilhos | Azul (#3b82f6) | Fatura Vencida, Acordo Quebrado, Sem Contato, Webhook, Manual |
+| Mensagens | Verde (#22c55e) | WhatsApp Texto, WhatsApp Midia, WhatsApp Botoes, SMS, Email |
+| Logica | Amarelo (#f59e0b) | Condição Score, Condição Valor, Condição Status, Aguardar Resposta, Delay, Capturar Resposta |
+| Acoes | Roxo (#8b5cf6) | Agente IA, Atualizar Status, Criar Acordo, Chamar Webhook, Definir Variavel |
+| Controle | Rosa (#ec4899) | Transferir Humano, Encerrar Fluxo, Loop |
 
-### Dependencia
-- Instalar `reactflow` via bun
+**Novo componente:** `src/components/automacao/workflow/nodes/CustomFlowNode.tsx`
+- Renderiza qualquer tipo de no com cor e icone da configuracao
+- Mostra preview do conteudo (mensagem truncada, valor da condicao, etc.)
+- Handles dinamicos: botoes geram handles individuais, condicoes tem Sim/Nao
+- Suporte a botoes de acoes inline (duplicar, excluir) no hover
 
-### Novos arquivos
+### 2. Sidebar com Busca e Accordion
 
-**`src/services/workflowService.ts`**
-- CRUD para `workflow_flows`: fetchWorkflows, createWorkflow, updateWorkflow, deleteWorkflow
-- Leitura de `workflow_executions`: fetchExecutions, fetchExecutionStats
+**Reescrever:** `src/components/automacao/workflow/WorkflowSidebar.tsx`
 
-**`src/components/automacao/workflow/WorkflowCanvas.tsx`**
-- Componente principal com React Flow canvas
-- Inicializacao com nodes/edges do banco ou vazio
-- Controles de zoom, minimap
-- onNodesChange, onEdgesChange, onConnect handlers
-- Botoes: Salvar, Ativar/Desativar, Voltar
+- Campo de busca no topo para filtrar nos por nome/descricao
+- Accordion por categoria (colapsavel)
+- Cada no mostra icone + nome + descricao curta
+- Drag & drop com visual de arrastar (grip icon)
+- Botao de colapsar sidebar para maximizar canvas
+- Tooltip com descricao completa ao passar o mouse
 
-**`src/components/automacao/workflow/WorkflowSidebar.tsx`**
-- Painel lateral esquerdo com nos arrastáveis organizados por categoria:
-  - **Gatilhos** (azul): Fatura Vencida, Acordo Quebrado, Sem Contato
-  - **Acoes** (verde): Enviar WhatsApp, Enviar SMS, Aguardar, Agente IA, Atualizar Status
-  - **Condicoes** (amarelo): Score Propensao, Valor Divida
+### 3. Painel de Configuracao Avancado
 
-**`src/components/automacao/workflow/WorkflowNodeProperties.tsx`**
-- Sheet/painel lateral direito que abre ao clicar em um no
-- Formulario dinamico com campos especificos por tipo de no:
-  - trigger_overdue: campo "dias de atraso"
-  - action_whatsapp: campo "template da mensagem"
-  - action_wait: campo "dias para aguardar"
-  - condition_score: campo "score minimo"
-  - etc.
+**Reescrever:** `src/components/automacao/workflow/WorkflowNodeProperties.tsx`
 
-**`src/components/automacao/workflow/nodes/`** (custom nodes)
-- `TriggerNode.tsx` — no com borda azul, icone de raio
-- `ActionNode.tsx` — no com borda verde, icone de engrenagem
-- `ConditionNode.tsx` — no losango amarelo, com 2 handles (Sim/Nao)
+Transformar de Sheet lateral para painel inline (ao lado do canvas), com:
 
-**`src/components/automacao/workflow/WorkflowListTab.tsx`**
-- Lista de todos os fluxos do tenant
-- Cards com nome, trigger_type, status ativo/inativo
-- Botoes: Editar (abre canvas), Duplicar, Excluir
-- Botao "Novo Fluxo" abre canvas vazio
-- Mini dashboard de execucoes (ativas, com erro, concluidas)
+- Botao de minimizar/expandir
+- ScrollArea para conteudo longo
+- Campos dinamicos por tipo de no:
+  - **WhatsApp Texto:** textarea com preview de variaveis, seletor de instancia
+  - **WhatsApp Botoes:** editor de botoes (adicionar/remover, ate 3), cada botao com handle proprio
+  - **WhatsApp Midia:** upload de midia ou URL, tipo de midia (imagem/video/audio/documento)
+  - **Condições:** operador (>, <, =, !=, contem), valor, campo de comparacao
+  - **Delay:** slider + input para minutos/horas/dias
+  - **Capturar Resposta:** pergunta, nome da variavel, tipo de validacao, timeout
+  - **Webhook:** URL, metodo (GET/POST/PUT), headers, body template, variavel para resposta
+  - **Definir Variavel:** nome, valor, escopo (fluxo/cliente)
+- Botao "Excluir No" com confirmacao
+- Botao "Duplicar No"
 
-### Integracao na AutomacaoPage
-- Nova aba "Fluxos" no TabsList existente
-- TabsContent renderiza `WorkflowListTab` ou `WorkflowCanvas` conforme estado
+### 4. Canvas Melhorado
 
-### Roteamento
-- Manter na mesma rota `/automacao` (controle por estado interno da aba, sem rota separada)
+**Reescrever:** `src/components/automacao/workflow/WorkflowCanvas.tsx`
 
----
+Adicionar:
 
-## Fase 3 — Motor de Execucao (Backend)
+- **Undo/Redo** com Ctrl+Z / Ctrl+Shift+Z (hook `useFlowHistory`)
+- **Visual de drop zone** ao arrastar nos sobre o canvas (borda + mensagem "Solte aqui")
+- **Selecao de edges** com click para destacar e excluir
+- **Panel inferior** com dicas de uso ("Arraste blocos da paleta... Conecte arrastando entre nos...")
+- **Panel superior contextual** ao selecionar no/edge (mostra nome + botoes Duplicar/Excluir)
+- **Confirmacao de exclusao** via AlertDialog (nao mais confirm() nativo)
+- **MiniMap colorido** com cores por tipo de no
+- **Edges com setas** (MarkerType.ArrowClosed) e estilo customizado
+- **Delete key protection** para nao deletar quando digitando em inputs
+- **Validacao ao salvar:** verificar se trigger existe, nos orfaos, botoes sem conexao
 
-### Edge Function `workflow-engine/index.ts`
-- Recebe: `{ workflow_id, client_id, trigger_type, trigger_data }`
-- Carrega workflow do banco (nodes + edges)
-- Faz ordenacao topologica dos nos a partir do trigger
-- Executa no por no:
-  - **action_whatsapp**: chama `evolution-proxy` internamente para enviar mensagem
-  - **action_sms**: chama `threecplus-proxy` para SMS
-  - **action_wait**: cria registro em `workflow_executions` com `next_run_at` e status 'waiting', para execucao
-  - **action_ai_negotiate**: chama `chat-ai-suggest` com contexto do cliente
-  - **action_update_status**: atualiza `clients.status` diretamente
-  - **condition_score/value**: avalia condicao e segue pela edge correta (Sim/Nao)
-- Registra cada passo no `execution_log`
-- Em caso de erro, marca status='error' com mensagem
+### 5. Simulador de Teste
 
-### Edge Function `workflow-resume/index.ts`
-- Funcao chamada pelo CRON
-- Busca `workflow_executions` onde `next_run_at <= now()` e `status = 'waiting'`
-- Para cada uma, chama `workflow-engine` com o estado salvo para retomar a partir do proximo no
+**Novo arquivo:** `src/components/automacao/workflow/FlowTestSimulator.tsx`
 
-### CRON Job
-- Usar `pg_cron` + `pg_net` para chamar `workflow-resume` a cada hora
-- SQL inserido via insert tool (nao migration, pois contem URLs especificas)
+Painel lateral que simula a execucao do fluxo visualmente:
 
-### Integracao com gatilhos existentes
-- `auto-break-overdue/index.ts`: apos marcar clientes como "quebrado", buscar workflows ativos com `trigger_type='agreement_broken'` e disparar `workflow-engine` para cada cliente afetado
+- Botao "Testar" na toolbar do editor
+- Mostra os nos sendo executados em sequencia com highlight
+- Para em condicoes e pergunta "Sim ou Nao?"
+- Para em "Aguardar Resposta" e permite digitar resposta simulada
+- Log de execucao em tempo real
+- Highlight do no atual no canvas (borda brilhante)
 
-### config.toml
-- Adicionar entries para `workflow-engine` e `workflow-resume` com `verify_jwt = false`
+### 6. Templates de Fluxo
 
----
+**Novo arquivo:** `src/components/automacao/workflow/FlowTemplates.ts`
 
-## Fase 4 — Painel de Monitoramento
+Templates pre-definidos para criar fluxos rapidamente:
 
-Dentro da aba "Fluxos", abaixo da lista de workflows:
-- Cards: Execucoes Ativas, Aguardando, Concluidas, Com Erro (ultimos 30 dias)
-- Tabela de execucoes recentes com: workflow name, client CPF, status, no atual, data inicio
+- **Cobranca Basica:** Trigger Vencida > WhatsApp Lembrete > Aguardar 3 dias > WhatsApp Urgente > Atualizar Status
+- **Negociacao Inteligente:** Trigger Vencida > Condicao Score > (Alto) Agente IA > (Baixo) WhatsApp Padrao
+- **Recuperacao de Acordo:** Trigger Acordo Quebrado > WhatsApp > Aguardar 7 dias > SMS > Atualizar Status
+
+**Novo arquivo:** `src/components/automacao/workflow/FlowTemplatesDialog.tsx`
+
+Dialog com cards visuais dos templates, botao "Usar Template" que popula o canvas.
+
+### 7. Hook de Historico
+
+**Novo arquivo:** `src/hooks/useFlowHistory.ts`
+
+- Pilha de estados (nodes + edges) com limite de 50 entradas
+- Metodos: pushState, undo, redo, canUndo, canRedo
+- Detecta mudancas significativas para nao poluir historico
+
+### 8. Lista de Fluxos Melhorada
+
+**Atualizar:** `src/components/automacao/workflow/WorkflowListTab.tsx`
+
+- Adicionar botao "Templates" ao lado de "Novo Fluxo"
+- Tabela de execucoes recentes (ultimas 10) com: fluxo, cliente CPF, status, no atual, data
+- Filtro por status na lista de fluxos (Todos/Ativos/Inativos)
+- Busca por nome de fluxo
 
 ---
 
 ## Detalhes Tecnicos
 
-### Tipos de nos (nodeTypes no React Flow)
+### Novos tipos de nos adicionados
 
 ```text
-TRIGGERS (handle: source only)
-  trigger_overdue     { days: number }
-  trigger_broken      {}
-  trigger_no_contact  { days: number }
+GATILHOS (novos)
+  trigger_webhook     { webhook_url: string }
+  trigger_manual      {}
 
-ACTIONS (handle: source + target)
-  action_whatsapp     { message_template: string }
-  action_sms          { message_template: string }
-  action_wait         { days: number }
-  action_ai_negotiate { context?: string }
-  action_update_status { new_status: string }
+MENSAGENS (novos)
+  action_whatsapp_media    { media_url, media_type, caption }
+  action_whatsapp_buttons  { message, buttons: [{id, text}] }
+  action_email             { subject, body, to_field }
 
-CONDITIONS (handles: target + source_yes + source_no)
-  condition_score     { operator: '>' | '<', value: number }
-  condition_value     { operator: '>' | '<', value: number }
+LOGICA (novos)
+  condition_status    { status_values: string[] }
+  wait_response       { timeout_seconds, timeout_node_id }
+  delay               { delay_minutes }
+  input_capture       { question, variable_name, validation_type }
+  loop                { max_iterations, exit_condition }
+
+ACOES (novos)
+  action_create_agreement  { discount, installments }
+  action_webhook           { url, method, headers, body, save_to }
+  action_set_variable      { name, value, scope }
+
+CONTROLE (novos)
+  transfer_to_human  { department, message }
+  end_flow           {}
 ```
-
-### Ordenacao topologica no motor
-1. Encontrar no trigger (sem edges de entrada)
-2. BFS/DFS seguindo edges
-3. Para conditions, seguir edge com `sourceHandle` === 'yes' ou 'no' conforme resultado
-4. Parar em action_wait (persistir estado) ou quando nao ha mais edges
 
 ### Arquivos criados/modificados
 
 | Arquivo | Acao |
 |---------|------|
-| `src/services/workflowService.ts` | Novo |
-| `src/components/automacao/workflow/WorkflowCanvas.tsx` | Novo |
-| `src/components/automacao/workflow/WorkflowSidebar.tsx` | Novo |
-| `src/components/automacao/workflow/WorkflowNodeProperties.tsx` | Novo |
-| `src/components/automacao/workflow/WorkflowListTab.tsx` | Novo |
-| `src/components/automacao/workflow/nodes/TriggerNode.tsx` | Novo |
-| `src/components/automacao/workflow/nodes/ActionNode.tsx` | Novo |
-| `src/components/automacao/workflow/nodes/ConditionNode.tsx` | Novo |
-| `src/pages/AutomacaoPage.tsx` | Modificar (nova aba) |
-| `supabase/functions/workflow-engine/index.ts` | Novo |
-| `supabase/functions/workflow-resume/index.ts` | Novo |
-| `supabase/functions/auto-break-overdue/index.ts` | Modificar (trigger workflows) |
-| Migration SQL | Nova tabela workflow_flows + workflow_executions |
+| `src/components/automacao/workflow/FlowNodeTypes.ts` | Novo |
+| `src/components/automacao/workflow/nodes/CustomFlowNode.tsx` | Novo (substitui os 3 anteriores) |
+| `src/components/automacao/workflow/WorkflowSidebar.tsx` | Reescrever |
+| `src/components/automacao/workflow/WorkflowNodeProperties.tsx` | Reescrever |
+| `src/components/automacao/workflow/WorkflowCanvas.tsx` | Reescrever |
+| `src/components/automacao/workflow/FlowTestSimulator.tsx` | Novo |
+| `src/components/automacao/workflow/FlowTemplates.ts` | Novo |
+| `src/components/automacao/workflow/FlowTemplatesDialog.tsx` | Novo |
+| `src/components/automacao/workflow/WorkflowListTab.tsx` | Atualizar |
+| `src/hooks/useFlowHistory.ts` | Novo |
+| `supabase/functions/workflow-engine/index.ts` | Atualizar (novos tipos de nos) |
+
+### Nao requer alteracoes no banco de dados
+
+Os campos `nodes` e `edges` ja sao JSONB, entao os novos tipos de nos sao automaticamente suportados. O motor de execucao precisa apenas ser atualizado para processar os novos tipos.
+
+### Compatibilidade
+
+Fluxos existentes continuarao funcionando. O novo `CustomFlowNode` reconhece todos os tipos antigos (trigger_overdue, action_whatsapp, etc.) atraves do mapeamento em `FlowNodeTypes.ts`.
 
