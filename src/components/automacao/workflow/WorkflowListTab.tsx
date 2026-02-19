@@ -29,7 +29,11 @@ const triggerLabels: Record<string, string> = {
   manual: "Manual",
 };
 
-const WorkflowListTab = () => {
+interface WorkflowListTabProps {
+  defaultTriggerType?: string | null;
+}
+
+const WorkflowListTab = ({ defaultTriggerType }: WorkflowListTabProps) => {
   const { tenant } = useTenant();
   const { toast } = useToast();
 
@@ -76,6 +80,12 @@ const WorkflowListTab = () => {
   }, [tenant, toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (defaultTriggerType) {
+      setEditingWorkflow("new");
+    }
+  }, [defaultTriggerType]);
 
   const handleDelete = async (wf: WorkflowFlow) => {
     if (!confirm(`Excluir fluxo "${wf.name}"?`)) return;

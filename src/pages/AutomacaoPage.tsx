@@ -27,6 +27,8 @@ const AutomacaoPage = () => {
   const [editingRule, setEditingRule] = useState<CollectionRule | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("fluxos");
+  const [newFlowTriggerType, setNewFlowTriggerType] = useState<string | null>(null);
 
   const loadRules = useCallback(async () => {
     if (!tenant) return;
@@ -94,6 +96,11 @@ const AutomacaoPage = () => {
     }
   };
 
+  const handleNavigateToNewFlow = (triggerType: string) => {
+    setNewFlowTriggerType(triggerType);
+    setActiveTab("fluxos");
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -101,7 +108,7 @@ const AutomacaoPage = () => {
         <p className="text-muted-foreground">Configure regras automáticas de notificação e acompanhe envios</p>
       </div>
 
-      <Tabs defaultValue="fluxos">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setNewFlowTriggerType(null); }}>
         <TabsList>
           <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
           <TabsTrigger value="gatilhos">Gatilhos</TabsTrigger>
@@ -112,11 +119,11 @@ const AutomacaoPage = () => {
         </TabsList>
 
         <TabsContent value="fluxos">
-          <WorkflowListTab />
+          <WorkflowListTab defaultTriggerType={newFlowTriggerType} />
         </TabsContent>
 
         <TabsContent value="gatilhos">
-          <GatilhosTab />
+          <GatilhosTab onNavigateToNewFlow={handleNavigateToNewFlow} />
         </TabsContent>
 
         <TabsContent value="regras" className="space-y-4">
