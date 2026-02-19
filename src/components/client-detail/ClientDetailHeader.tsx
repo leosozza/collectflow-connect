@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Headset, ChevronDown } from "lucide-react";
+import { ArrowLeft, FileText, Headset, ChevronDown, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -32,6 +36,18 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nome_completo: client.nome_completo || "",
+    phone: client.phone || "",
+    email: client.email || "",
+    endereco: client.endereco || "",
+    cidade: client.cidade || "",
+    uf: client.uf || "",
+    cep: client.cep || "",
+    observacoes: client.observacoes || "",
+    external_id: client.external_id || "",
+  });
   const formattedCpf = formatCPF(cpf || "");
 
   const { data: tiposDevedor = [] } = useQuery({
@@ -55,6 +71,32 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
     onError: () => toast.error("Erro ao atualizar perfil"),
   });
 
+  const updateClientMutation = useMutation({
+    mutationFn: async (data: typeof editForm) => {
+      const clientIds = clients.map(c => c.id);
+      for (const id of clientIds) {
+        const { error } = await supabase.from("clients").update({
+          nome_completo: data.nome_completo,
+          phone: data.phone || null,
+          email: data.email || null,
+          endereco: data.endereco || null,
+          cidade: data.cidade || null,
+          uf: data.uf || null,
+          cep: data.cep || null,
+          observacoes: data.observacoes || null,
+          external_id: data.external_id || null,
+        } as any).eq("id", id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Dados do devedor atualizados!");
+      setEditOpen(false);
+    },
+    onError: () => toast.error("Erro ao salvar dados"),
+  });
+
   const openWhatsApp = () => {
     if (!client.phone) {
       toast.error("Nenhum telefone cadastrado para este devedor");
@@ -70,108 +112,217 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const endereco = [client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
   return (
-    <Card className="p-4">
-      {/* Linha 1: Nome + Ações */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/carteira")}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <h1 className="text-2xl font-bold text-foreground flex-1">{client.nome_completo}</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
-            onClick={openWhatsApp}
-            title="WhatsApp"
-          >
-            <WhatsAppIcon className="w-5 h-5" />
+    <>
+      <Card className="p-4">
+        {/* Linha 1: Nome + Ações */}
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/carteira")}>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
-            onClick={() => navigate(`/atendimento/${client.id}`)}
-            title="Atendimento"
-          >
-            <Headset className="w-5 h-5" />
-          </Button>
-          <Button onClick={onFormalizarAcordo} className="gap-2">
-            <FileText className="w-4 h-4" />
-            Formalizar Acordo
-          </Button>
-        </div>
-      </div>
-
-      {/* Linha 2: Metadados */}
-      <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
-        <span><strong>CPF:</strong> {formattedCpf}</span>
-        <span className="text-border">|</span>
-        <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
-        <span className="text-border">|</span>
-        <span><strong>Email:</strong> {client.email || "—"}</span>
-        <span className="text-border">|</span>
-        <span><strong>Credor:</strong> {client.credor}</span>
-        <span className="text-border">|</span>
-        <span><strong>Em Aberto:</strong> <span className="text-destructive font-semibold">{formatCurrency(totalAberto)}</span></span>
-      </div>
-
-      {/* Linha 3: Colapsável */}
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex items-center justify-between w-full px-12 py-2 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
-          <span>Mais informações do devedor</span>
-          <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-12 pt-3 pb-1 border-t border-border mt-2">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Cod. Devedor</p>
-                <p className="text-sm font-semibold text-foreground">{client.external_id || "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Total Pago</p>
-                <p className="text-sm font-semibold text-success">{formatCurrency(totalPago)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
-                <p className="text-sm font-semibold text-foreground">{pagas}/{clients.length}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Endereço</p>
-                <p className="text-sm text-foreground">{endereco || "—"}</p>
-              </div>
-            </div>
-            <div className="mt-4 pt-3 border-t border-border">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
-                <Select
-                  value={client.tipo_devedor_id || "none"}
-                  onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
-                >
-                  <SelectTrigger className="h-8 text-sm w-48">
-                    <SelectValue placeholder="Selecionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {tiposDevedor.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {client.observacoes && (
-              <div className="mt-4 pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{client.observacoes}</p>
-              </div>
-            )}
+          <h1 className="text-2xl font-bold text-foreground flex-1">{client.nome_completo}</h1>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
+              onClick={openWhatsApp}
+              title="WhatsApp"
+            >
+              <WhatsAppIcon className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
+              onClick={() => navigate(`/atendimento/${client.id}`)}
+              title="Atendimento"
+            >
+              <Headset className="w-5 h-5" />
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}>
+              <Pencil className="w-4 h-4" />
+              Editar
+            </Button>
+            <Button onClick={onFormalizarAcordo} className="gap-2">
+              <FileText className="w-4 h-4" />
+              Formalizar Acordo
+            </Button>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+        </div>
+
+        {/* Linha 2: Metadados */}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
+          <span><strong>CPF:</strong> {formattedCpf}</span>
+          <span className="text-border">|</span>
+          <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
+          <span className="text-border">|</span>
+          <span><strong>Email:</strong> {client.email || "—"}</span>
+          <span className="text-border">|</span>
+          <span><strong>Credor:</strong> {client.credor}</span>
+          <span className="text-border">|</span>
+          <span><strong>Em Aberto:</strong> <span className="text-destructive font-semibold">{formatCurrency(totalAberto)}</span></span>
+        </div>
+
+        {/* Linha 3: Colapsável */}
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-12 py-2 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
+            <span>Mais informações do devedor</span>
+            <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-12 pt-3 pb-1 border-t border-border mt-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Cod. Devedor</p>
+                  <p className="text-sm font-semibold text-foreground">{client.external_id || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Total Pago</p>
+                  <p className="text-sm font-semibold text-success">{formatCurrency(totalPago)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
+                  <p className="text-sm font-semibold text-foreground">{pagas}/{clients.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Endereço</p>
+                  <p className="text-sm text-foreground">{endereco || "—"}</p>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-border">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
+                  <Select
+                    value={client.tipo_devedor_id || "none"}
+                    onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
+                  >
+                    <SelectTrigger className="h-8 text-sm w-48">
+                      <SelectValue placeholder="Selecionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {tiposDevedor.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {client.observacoes && (
+                <div className="mt-4 pt-3 border-t border-border">
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{client.observacoes}</p>
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
+
+      {/* Sheet de Edição */}
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Editar Dados do Devedor</SheetTitle>
+          </SheetHeader>
+          <div className="grid gap-4 py-6">
+            <div className="grid gap-2">
+              <Label htmlFor="nome_completo">Nome Completo</Label>
+              <Input
+                id="nome_completo"
+                value={editForm.nome_completo}
+                onChange={e => setEditForm(f => ({ ...f, nome_completo: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                value={editForm.phone}
+                onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={editForm.email}
+                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="external_id">Cód. Devedor (ID Externo)</Label>
+              <Input
+                id="external_id"
+                value={editForm.external_id}
+                onChange={e => setEditForm(f => ({ ...f, external_id: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endereco">Endereço</Label>
+              <Input
+                id="endereco"
+                value={editForm.endereco}
+                onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 grid gap-2">
+                <Label htmlFor="cidade">Cidade</Label>
+                <Input
+                  id="cidade"
+                  value={editForm.cidade}
+                  onChange={e => setEditForm(f => ({ ...f, cidade: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="uf">UF</Label>
+                <Input
+                  id="uf"
+                  value={editForm.uf}
+                  onChange={e => setEditForm(f => ({ ...f, uf: e.target.value }))}
+                  maxLength={2}
+                  placeholder="SP"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cep">CEP</Label>
+              <Input
+                id="cep"
+                value={editForm.cep}
+                onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))}
+                placeholder="00000-000"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="observacoes">Observações</Label>
+              <Textarea
+                id="observacoes"
+                value={editForm.observacoes}
+                onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
+                rows={4}
+                placeholder="Anotações sobre o devedor..."
+              />
+            </div>
+          </div>
+          <SheetFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => updateClientMutation.mutate(editForm)}
+              disabled={updateClientMutation.isPending}
+            >
+              {updateClientMutation.isPending ? "Salvando..." : "Salvar Alterações"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 };
 
 export default ClientDetailHeader;
+
