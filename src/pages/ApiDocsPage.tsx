@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2 } from "lucide-react";
+import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2 } from "lucide-react";
 
 const BASE_URL = `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`;
 
@@ -235,6 +235,16 @@ curl "${BASE_URL}/clients?page=1&limit=100&status=pendente" \\
 curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
   -H "X-API-Key: cf_xxxxxxxxxxxxxxxxxxxxxxxx"`;
 
+  const publicUrl = `${window.location.origin}/api-docs/public`;
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(publicUrl);
+    setLinkCopied(true);
+    toast.success("Link copiado!");
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -246,6 +256,39 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
           <p className="text-sm text-muted-foreground">Integre sistemas externos para gerenciar leads em massa</p>
         </div>
       </div>
+
+      {/* Card de Link Público */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="pt-5 pb-5">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Link2 className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex-1 space-y-2">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Compartilhar Documentação</p>
+                <p className="text-xs text-muted-foreground">
+                  Envie este link para devs ou IA para integração — não expõe dados ou chaves
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-background border border-border rounded px-3 py-2 font-mono truncate">
+                  {publicUrl}
+                </code>
+                <Button size="sm" variant="outline" onClick={handleCopyLink} className="flex-shrink-0">
+                  {linkCopied ? <CheckCircle2 className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+                  <span className="ml-1.5">{linkCopied ? "Copiado!" : "Copiar"}</span>
+                </Button>
+                <Button size="sm" variant="outline" asChild className="flex-shrink-0">
+                  <a href="/api-docs/public" target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="keys">
         <TabsList className="grid w-full grid-cols-3">
