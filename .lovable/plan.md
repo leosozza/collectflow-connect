@@ -1,95 +1,77 @@
 
-## Finalizar Modulo de SLA de Atendimento no WhatsApp
+## Link Público para a Documentação da API
 
-### Estado Atual
+### Objetivo
 
-- A coluna `conversations.sla_deadline_at` ja existe no banco
-- O webhook (`whatsapp-webhook`) ja calcula o SLA usando `tenants.settings.sla_minutes` (default 30 min) — aplica ao criar/reabrir conversas inbound e limpa ao enviar outbound
-- O badge "SLA Expirado" ja existe no ChatPanel com tooltip
-- A ConversationList ja mostra icone AlertTriangle quando SLA expirou
-- Nao existe campo `sla_hours` na tabela `credores` (o SLA e global pelo tenant)
+Criar uma rota pública `/api-docs/public` que exibe a documentação completa da API (endpoints, campos, exemplos de código) sem exigir login. Essa URL pode ser enviada para qualquer desenvolvedor ou IA para análise e integração.
 
-### O que sera implementado
+### O que será criado
 
----
+#### 1. Nova rota pública `/api-docs/public` em `App.tsx`
 
-### 1. Coluna `sla_hours` na tabela `credores`
+Rota sem `ProtectedRoute`, sem `AppLayout` — acessível sem autenticação. Renderiza um componente dedicado com toda a documentação técnica.
 
-Adicionar coluna para permitir prazo SLA personalizado por credor:
+#### 2. Componente `ApiDocsPublicPage.tsx`
 
-```sql
-ALTER TABLE public.credores ADD COLUMN sla_hours NUMERIC DEFAULT NULL;
-```
+Página limpa (sem sidebar/menu interno) com:
 
-Quando `NULL`, o sistema usa o valor global do tenant (`tenants.settings.sla_minutes`). Quando preenchido, o webhook usara este valor para o calculo.
+- Header com logo/nome do sistema e badge "Documentação Pública"
+- URL base da API em destaque
+- Seção de Autenticação (header `X-API-Key`)
+- Todos os endpoints documentados (igual à aba "Endpoints" atual)
+- Tabela de campos aceitos
+- Exemplos de código (Python, Node.js, cURL) para importação em massa
+- Footer indicando que a chave deve ser solicitada ao administrador
 
----
+#### 3. Botão "Compartilhar Documentação" na página `/api-docs` (admin)
 
-### 2. Campo de configuracao no CredorForm
+Na página existente `ApiDocsPage.tsx`, adicionar no topo um card com:
 
-Na aba **Negociacao** do formulario de credor, adicionar um campo "Prazo SLA de Atendimento (horas)" com:
-- Input numerico (aceita decimais, ex: 0.5 = 30 min)
-- Texto auxiliar explicando que se vazio, usa o padrao do tenant
-- Posicionado apos os campos de juros/multa
+- URL do link público (`/api-docs/public`) em campo copiável
+- Botão "Copiar Link" com feedback
+- Nota explicativa: "Compartilhe com devs ou IA para integração — não expõe dados ou chaves"
 
----
+### Estrutura de Arquivos
 
-### 3. Logica no webhook para SLA por credor
-
-Atualizar `whatsapp-webhook/index.ts` para:
-- Ao criar/atualizar conversa inbound, verificar se a conversa esta vinculada a um cliente (`client_id`)
-- Se vinculada, buscar o credor do cliente e verificar se tem `sla_hours` configurado
-- Usar `sla_hours * 60` minutos se disponivel, senao fallback para `tenants.settings.sla_minutes`
-
----
-
-### 4. Indicador visual aprimorado na ConversationList
-
-Alem do icone vermelho para SLA expirado (ja existe), adicionar:
-- Icone amarelo (Clock) para conversas **proximas de expirar** (menos de 25% do tempo restante)
-- Tooltip com o tempo restante ou a data/hora do prazo
-
----
-
-### 5. Edge Function para notificacao de SLA expirado
-
-Criar `supabase/functions/check-sla-expiry/index.ts` que:
-- Busca conversas abertas com `sla_deadline_at < now()` que ainda nao tiveram notificacao enviada
-- Envia notificacao interna (via `notifications` table) ao operador responsavel (`assigned_to`)
-- Titulo: "SLA Expirado" / Mensagem: "A conversa com {nome} excedeu o prazo de atendimento"
-- Tipo: `warning`, referencia: `conversation` + conversation_id
-- Para evitar notificacoes duplicadas, adiciona coluna `sla_notified_at` na tabela conversations
-
-Esta function sera chamada via cron job (`pg_cron`) a cada 5 minutos.
-
----
-
-### 6. Coluna de controle `sla_notified_at`
-
-```sql
-ALTER TABLE public.conversations ADD COLUMN sla_notified_at TIMESTAMPTZ DEFAULT NULL;
-```
-
-Resetada para NULL quando o SLA e recalculado (nova mensagem inbound).
-
----
-
-### Arquivos a criar/modificar
-
-| Arquivo | Acao |
+| Arquivo | Ação |
 |---|---|
-| `supabase/migrations/..._sla_module.sql` | Adicionar `sla_hours` em credores e `sla_notified_at` em conversations |
-| `src/components/cadastros/CredorForm.tsx` | Adicionar campo "Prazo SLA" na aba Negociacao |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Adicionar indicador amarelo para SLA proximo de expirar + tooltip |
-| `supabase/functions/whatsapp-webhook/index.ts` | Buscar `sla_hours` do credor vinculado ao cliente |
-| `supabase/functions/check-sla-expiry/index.ts` | **Nova** — verificar SLAs expirados e enviar notificacoes |
-| `supabase/config.toml` | Adicionar `[functions.check-sla-expiry] verify_jwt = false` |
+| `src/pages/ApiDocsPublicPage.tsx` | Novo — página pública de documentação |
+| `src/App.tsx` | Adicionar rota `/api-docs/public` sem autenticação |
+| `src/pages/ApiDocsPage.tsx` | Adicionar card com link público e botão copiar |
 
-### Resumo
+### O que a página pública NÃO expõe
 
-- 2 colunas novas (`credores.sla_hours`, `conversations.sla_notified_at`)
-- 1 edge function nova (`check-sla-expiry`)
-- 1 cron job (a cada 5 min)
-- SLA configuravel por credor com fallback para padrao do tenant
-- Indicadores visuais: vermelho (expirado) + amarelo (proximo de expirar)
-- Notificacoes automaticas ao operador quando SLA expira
+- Nenhuma chave de API (apenas formato/exemplos com placeholder)
+- Nenhum dado do tenant
+- Nenhum dado de clientes
+- Acesso apenas à documentação estática
+
+### Fluxo de uso
+
+```text
+Admin acessa /api-docs
+    |
+    v
+Copia o link público: https://collectflow-connect.lovable.app/api-docs/public
+    |
+    v
+Envia para dev/IA
+    |
+    v
+Dev/IA acessa /api-docs/public (sem login)
+    |
+    v
+Vê documentação completa → integra o sistema externo
+```
+
+### Detalhes da Página Pública
+
+A página pública vai usar a URL base hardcoded (`https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`) e apresentar:
+
+1. **Autenticação**: Como usar o header `X-API-Key` (solicitar chave ao admin)
+2. **Endpoints**: Todos os 9 endpoints com métodos, paths, parâmetros e exemplos
+3. **Campos**: Tabela completa de campos aceitos (obrigatório/opcional)
+4. **Exemplos**: Python, Node.js, cURL para importação em massa de 10.000+ registros
+5. **Boas práticas**: Idempotência, upsert, tratamento de erros
+
+A página tem visual limpo, responsivo e otimizado para leitura por humanos e IA.
