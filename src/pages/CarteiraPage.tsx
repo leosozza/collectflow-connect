@@ -184,7 +184,26 @@ const CarteiraPage = () => {
   });
 
   const importMutation = useMutation({
-    mutationFn: (rows: ImportedRow[]) => bulkCreateClients(rows, profile!.id),
+    mutationFn: (rows: ImportedRow[]) => {
+      // Resolve status_raw to status_cobranca_id using tipos_status
+      const statusNameMap = new Map<string, string>();
+      tiposStatus.forEach((t: any) => {
+        statusNameMap.set(t.nome.toUpperCase().trim(), t.id);
+      });
+
+      const enrichedRows = rows.map((row) => {
+        if (row.status_raw && !row.status_cobranca_id) {
+          const key = row.status_raw.toUpperCase().trim();
+          const matched = statusNameMap.get(key);
+          if (matched) {
+            return { ...row, status_cobranca_id: matched };
+          }
+        }
+        return row;
+      });
+
+      return bulkCreateClients(enrichedRows, profile!.id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });

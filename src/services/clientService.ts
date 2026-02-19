@@ -198,6 +198,8 @@ export const bulkCreateClients = async (
     valor_pago: number;
     data_vencimento: string;
     status: "pendente" | "pago" | "quebrado";
+    status_cobranca_id?: string;
+    [key: string]: any;
   }>,
   operatorId: string
 ): Promise<void> => {
@@ -209,10 +211,13 @@ export const bulkCreateClients = async (
     throw new Error(`Dados inválidos encontrados:\n${firstErrors}${errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : ""}`);
   }
 
-  const records = valid.map((c) => ({
-    ...c,
-    operator_id: operatorId,
-  }));
+  const records = valid.map((c) => {
+    const { status_raw, ...rest } = c as any;
+    return {
+      ...rest,
+      operator_id: operatorId,
+    };
+  });
 
   // Insert in batches of 100
   const batchSize = 100;

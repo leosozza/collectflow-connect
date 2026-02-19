@@ -126,6 +126,7 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Status Cobrança</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -140,6 +141,7 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                         <TableCell className="text-right">{formatCurrency(row.valor_pago)}</TableCell>
                         <TableCell>{row.data_vencimento ? formatDate(row.data_vencimento) : "-"}</TableCell>
                         <TableCell className="capitalize">{row.status}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{row.status_raw || "—"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
