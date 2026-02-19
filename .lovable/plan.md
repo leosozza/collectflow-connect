@@ -1,84 +1,95 @@
 
-## Corrigir Fluxo de Login/Logout de Campanha do Operador na Telefonia 3CPlus
+## Finalizar Modulo de SLA de Atendimento no WhatsApp
 
-### Problema Identificado
+### Estado Atual
 
-O endpoint `POST /agents/{agent-id}/login` usado atualmente **nao existe** na API 3CPlus (retorna 404). A API 3CPlus exige que o login seja feito via `POST /agent/login` usando o **token individual do agente**, nao o token administrativo da empresa.
+- A coluna `conversations.sla_deadline_at` ja existe no banco
+- O webhook (`whatsapp-webhook`) ja calcula o SLA usando `tenants.settings.sla_minutes` (default 30 min) — aplica ao criar/reabrir conversas inbound e limpa ao enviar outbound
+- O badge "SLA Expirado" ja existe no ChatPanel com tooltip
+- A ConversationList ja mostra icone AlertTriangle quando SLA expirou
+- Nao existe campo `sla_hours` na tabela `credores` (o SLA e global pelo tenant)
 
-### Solucao
+### O que sera implementado
 
-A API 3CPlus expoe os tokens individuais de cada agente pelo endpoint `GET /users` (acessivel com o token admin). O proxy precisa:
+---
 
-1. Buscar o token do agente via `GET /users`
-2. Usar esse token para chamar `POST /agent/login` com `{ campaign_id }` no body
-3. Para logout, usar `POST /agent/logout` com o token do agente (em vez do endpoint company-level)
+### 1. Coluna `sla_hours` na tabela `credores`
 
-### Mudancas Necessarias
+Adicionar coluna para permitir prazo SLA personalizado por credor:
 
-#### 1. Edge Function: `threecplus-proxy/index.ts`
-
-Modificar os actions `login_agent_to_campaign` e adicionar `logout_agent_self`:
-
-**`login_agent_to_campaign`** (corrigido):
-- Recebe `agent_id` e `campaign_id`
-- Faz GET `/users` com o admin token para buscar a lista de usuarios
-- Encontra o usuario cujo `id === agent_id` e extrai seu `api_token`
-- Faz POST `/agent/login` usando o token do agente, com body `{ campaign_id }`
-
-**`logout_agent_self`** (novo action):
-- Recebe `agent_id`
-- Busca o token do agente da mesma forma (GET `/users`)
-- Faz POST `/agent/logout` usando o token do agente
-
-Tambem corrigir `agent_available_campaigns`:
-- Endpoint atual `GET /agents/{agent_id}/campaigns` nao existe
-- Correto: `GET /agent/campaigns` usando o token do agente
-
-#### 2. Frontend: `TelefoniaDashboard.tsx`
-
-Ajustes menores:
-- Alterar `handleCampaignLogout` para usar o novo action `logout_agent_self` em vez de `logout_agent`
-- Melhorar tratamento de erro para mostrar mensagens mais claras
-- Verificar se `status: 0` (offline) e corretamente identificado para mostrar o seletor de campanha
-
-### Detalhes Tecnicos
-
-```text
-Fluxo Login (corrigido):
-  Frontend -> invoke("login_agent_to_campaign", { agent_id, campaign_id })
-     |
-     v
-  Edge Function:
-     1. GET /users?api_token=ADMIN_TOKEN -> lista usuarios
-     2. Encontra usuario com id === agent_id -> extrai agent_api_token
-     3. POST /agent/login?api_token=AGENT_TOKEN  body: { campaign_id }
-     |
-     v
-  3CPlus: agente logado na campanha
-
-Fluxo Logout (corrigido):
-  Frontend -> invoke("logout_agent_self", { agent_id })
-     |
-     v
-  Edge Function:
-     1. GET /users?api_token=ADMIN_TOKEN -> lista usuarios
-     2. Encontra usuario com id === agent_id -> extrai agent_api_token
-     3. POST /agent/logout?api_token=AGENT_TOKEN
-     |
-     v
-  3CPlus: agente deslogado
+```sql
+ALTER TABLE public.credores ADD COLUMN sla_hours NUMERIC DEFAULT NULL;
 ```
 
-### Arquivos Modificados
+Quando `NULL`, o sistema usa o valor global do tenant (`tenants.settings.sla_minutes`). Quando preenchido, o webhook usara este valor para o calculo.
+
+---
+
+### 2. Campo de configuracao no CredorForm
+
+Na aba **Negociacao** do formulario de credor, adicionar um campo "Prazo SLA de Atendimento (horas)" com:
+- Input numerico (aceita decimais, ex: 0.5 = 30 min)
+- Texto auxiliar explicando que se vazio, usa o padrao do tenant
+- Posicionado apos os campos de juros/multa
+
+---
+
+### 3. Logica no webhook para SLA por credor
+
+Atualizar `whatsapp-webhook/index.ts` para:
+- Ao criar/atualizar conversa inbound, verificar se a conversa esta vinculada a um cliente (`client_id`)
+- Se vinculada, buscar o credor do cliente e verificar se tem `sla_hours` configurado
+- Usar `sla_hours * 60` minutos se disponivel, senao fallback para `tenants.settings.sla_minutes`
+
+---
+
+### 4. Indicador visual aprimorado na ConversationList
+
+Alem do icone vermelho para SLA expirado (ja existe), adicionar:
+- Icone amarelo (Clock) para conversas **proximas de expirar** (menos de 25% do tempo restante)
+- Tooltip com o tempo restante ou a data/hora do prazo
+
+---
+
+### 5. Edge Function para notificacao de SLA expirado
+
+Criar `supabase/functions/check-sla-expiry/index.ts` que:
+- Busca conversas abertas com `sla_deadline_at < now()` que ainda nao tiveram notificacao enviada
+- Envia notificacao interna (via `notifications` table) ao operador responsavel (`assigned_to`)
+- Titulo: "SLA Expirado" / Mensagem: "A conversa com {nome} excedeu o prazo de atendimento"
+- Tipo: `warning`, referencia: `conversation` + conversation_id
+- Para evitar notificacoes duplicadas, adiciona coluna `sla_notified_at` na tabela conversations
+
+Esta function sera chamada via cron job (`pg_cron`) a cada 5 minutos.
+
+---
+
+### 6. Coluna de controle `sla_notified_at`
+
+```sql
+ALTER TABLE public.conversations ADD COLUMN sla_notified_at TIMESTAMPTZ DEFAULT NULL;
+```
+
+Resetada para NULL quando o SLA e recalculado (nova mensagem inbound).
+
+---
+
+### Arquivos a criar/modificar
 
 | Arquivo | Acao |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Corrigir `login_agent_to_campaign`, adicionar `logout_agent_self`, corrigir `agent_available_campaigns` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `logout_agent_self` no handleCampaignLogout, tratar status 0 como offline |
+| `supabase/migrations/..._sla_module.sql` | Adicionar `sla_hours` em credores e `sla_notified_at` em conversations |
+| `src/components/cadastros/CredorForm.tsx` | Adicionar campo "Prazo SLA" na aba Negociacao |
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Adicionar indicador amarelo para SLA proximo de expirar + tooltip |
+| `supabase/functions/whatsapp-webhook/index.ts` | Buscar `sla_hours` do credor vinculado ao cliente |
+| `supabase/functions/check-sla-expiry/index.ts` | **Nova** — verificar SLAs expirados e enviar notificacoes |
+| `supabase/config.toml` | Adicionar `[functions.check-sla-expiry] verify_jwt = false` |
 
-### Consideracoes de Seguranca
+### Resumo
 
-- Os tokens individuais dos agentes nunca sao expostos ao frontend
-- Toda a logica de resolucao de tokens acontece dentro da edge function
-- O frontend continua enviando apenas `agent_id` e `campaign_id`
-- O admin token e usado somente para buscar os tokens dos agentes no servidor
+- 2 colunas novas (`credores.sla_hours`, `conversations.sla_notified_at`)
+- 1 edge function nova (`check-sla-expiry`)
+- 1 cron job (a cada 5 min)
+- SLA configuravel por credor com fallback para padrao do tenant
+- Indicadores visuais: vermelho (expirado) + amarelo (proximo de expirar)
+- Notificacoes automaticas ao operador quando SLA expira
