@@ -644,9 +644,11 @@ export type Database = {
         Row: {
           cep: string | null
           cidade: string | null
+          cod_contrato: string | null
           cpf: string
           created_at: string
           credor: string
+          data_pagamento: string | null
           data_vencimento: string
           email: string | null
           endereco: string | null
@@ -657,6 +659,8 @@ export type Database = {
           observacoes: string | null
           operator_id: string | null
           phone: string | null
+          phone2: string | null
+          phone3: string | null
           propensity_score: number | null
           quebra: number | null
           status: Database["public"]["Enums"]["client_status"]
@@ -669,16 +673,20 @@ export type Database = {
           total_parcelas: number
           uf: string | null
           updated_at: string
+          valor_atualizado: number | null
           valor_entrada: number
           valor_pago: number
           valor_parcela: number
+          valor_saldo: number | null
         }
         Insert: {
           cep?: string | null
           cidade?: string | null
+          cod_contrato?: string | null
           cpf: string
           created_at?: string
           credor?: string
+          data_pagamento?: string | null
           data_vencimento: string
           email?: string | null
           endereco?: string | null
@@ -689,6 +697,8 @@ export type Database = {
           observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
+          phone2?: string | null
+          phone3?: string | null
           propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
@@ -701,16 +711,20 @@ export type Database = {
           total_parcelas?: number
           uf?: string | null
           updated_at?: string
+          valor_atualizado?: number | null
           valor_entrada?: number
           valor_pago?: number
           valor_parcela?: number
+          valor_saldo?: number | null
         }
         Update: {
           cep?: string | null
           cidade?: string | null
+          cod_contrato?: string | null
           cpf?: string
           created_at?: string
           credor?: string
+          data_pagamento?: string | null
           data_vencimento?: string
           email?: string | null
           endereco?: string | null
@@ -721,6 +735,8 @@ export type Database = {
           observacoes?: string | null
           operator_id?: string | null
           phone?: string | null
+          phone2?: string | null
+          phone3?: string | null
           propensity_score?: number | null
           quebra?: number | null
           status?: Database["public"]["Enums"]["client_status"]
@@ -733,9 +749,11 @@ export type Database = {
           total_parcelas?: number
           uf?: string | null
           updated_at?: string
+          valor_atualizado?: number | null
           valor_entrada?: number
           valor_pago?: number
           valor_parcela?: number
+          valor_saldo?: number | null
         }
         Relationships: [
           {

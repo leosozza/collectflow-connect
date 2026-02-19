@@ -84,6 +84,8 @@ function normalizeRecord(record: Record<string, unknown>): Record<string, unknow
     "FONE_3": "fone3",
     "FONE 3": "fone3",
     "TITULO": "titulo",
+    "DT_PAGAMENTO": "data_pagamento",
+    "DT PAGAMENTO": "data_pagamento",
   };
 
   const normalized: Record<string, unknown> = {};
@@ -108,12 +110,16 @@ function normalizeRecord(record: Record<string, unknown>): Record<string, unknow
 
   const vlAtualizado = Number(normalized.vl_atualizado ?? 0);
   const vlTitulo = Number(normalized.vl_titulo ?? 0);
+  const vlSaldo = Number(normalized.vl_saldo ?? 0);
   if (!normalized.valor_parcela) {
     normalized.valor_parcela = vlAtualizado > 0 ? vlAtualizado : vlTitulo;
   }
   if (!normalized.valor_entrada) {
     normalized.valor_entrada = normalized.valor_parcela;
   }
+  // Store in dedicated columns
+  normalized.valor_atualizado = vlAtualizado;
+  normalized.valor_saldo = vlSaldo;
   delete normalized.vl_atualizado;
   delete normalized.vl_titulo;
   delete normalized.vl_saldo;
@@ -126,22 +132,23 @@ function normalizeRecord(record: Record<string, unknown>): Record<string, unknow
   }
   delete normalized.status_mailing;
 
-  const obsParts: string[] = [];
-  if (normalized.cod_contrato) obsParts.push(`Contrato: ${normalized.cod_contrato}`);
-  if (normalized.fone2) obsParts.push(`Fone 2: ${normalized.fone2}`);
-  if (normalized.fone3) obsParts.push(`Fone 3: ${normalized.fone3}`);
-  if (obsParts.length > 0 && !normalized.observacoes) {
-    normalized.observacoes = obsParts.join(" | ");
-  }
-  delete normalized.cod_contrato;
+  // Store cod_contrato, phone2, phone3 in dedicated columns
+  if (normalized.fone2) normalized.phone2 = String(normalized.fone2);
+  if (normalized.fone3) normalized.phone3 = String(normalized.fone3);
+  if (normalized.cod_contrato) normalized.cod_contrato = String(normalized.cod_contrato);
   delete normalized.fone2;
   delete normalized.fone3;
   delete normalized.titulo;
 
-  if (normalized.data_vencimento && typeof normalized.data_vencimento === "string") {
-    const brMatch = (normalized.data_vencimento as string).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (brMatch) {
-      normalized.data_vencimento = `${brMatch[3]}-${brMatch[2].padStart(2, "0")}-${brMatch[1].padStart(2, "0")}`;
+  // Normalize BR dates to ISO
+  for (const dateField of ["data_vencimento", "data_pagamento"]) {
+    if (normalized[dateField] && typeof normalized[dateField] === "string") {
+      const val = (normalized[dateField] as string).trim();
+      if (!val) { normalized[dateField] = null; continue; }
+      const brMatch = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (brMatch) {
+        normalized[dateField] = `${brMatch[3]}-${brMatch[2].padStart(2, "0")}-${brMatch[1].padStart(2, "0")}`;
+      }
     }
   }
 
@@ -191,8 +198,11 @@ function buildClientRow(record: Record<string, unknown>, tenantId: string) {
     cpf: String(record.cpf ?? "").trim(),
     credor: String(record.credor ?? "").trim(),
     phone: record.phone ? String(record.phone).trim() : null,
+    phone2: record.phone2 ? String(record.phone2).trim() : null,
+    phone3: record.phone3 ? String(record.phone3).trim() : null,
     email: record.email ? String(record.email).trim() : null,
     external_id: record.external_id ? String(record.external_id).trim() : null,
+    cod_contrato: record.cod_contrato ? String(record.cod_contrato).trim() : null,
     endereco: record.endereco ? String(record.endereco).trim() : null,
     cidade: record.cidade ? String(record.cidade).trim() : null,
     uf: record.uf ? String(record.uf).trim() : null,
@@ -203,7 +213,10 @@ function buildClientRow(record: Record<string, unknown>, tenantId: string) {
     valor_entrada: Number(record.valor_entrada ?? 0),
     valor_parcela: Number(record.valor_parcela ?? 0),
     valor_pago: Number(record.valor_pago ?? 0),
+    valor_atualizado: Number(record.valor_atualizado ?? 0),
+    valor_saldo: Number(record.valor_saldo ?? 0),
     data_vencimento: String(record.data_vencimento),
+    data_pagamento: record.data_pagamento ? String(record.data_pagamento) : null,
     status: (record.status as string) || "pendente",
     updated_at: new Date().toISOString(),
   };
