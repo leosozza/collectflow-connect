@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -136,10 +137,32 @@ const MaxListPage = () => {
     cpf: "", contrato: "", status: "todos",
   });
   const [data, setData] = useState<MappedRecord[]>([]);
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
   const [count, setCount] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+
+  const visibleData = data.slice(0, 500);
+  const allVisibleSelected = visibleData.length > 0 && visibleData.every((_, i) => selectedIndexes.has(i));
+  const someSelected = selectedIndexes.size > 0;
+
+  const toggleAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIndexes(new Set());
+    } else {
+      setSelectedIndexes(new Set(visibleData.map((_, i) => i)));
+    }
+  };
+
+  const toggleOne = (index: number) => {
+    setSelectedIndexes((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!tenantLoading && tenant && !ALLOWED_SLUGS.includes(tenant.slug)) {
@@ -182,6 +205,7 @@ const MaxListPage = () => {
       const json = await response.json();
       const mapped = (json.Items || []).map(mapItem);
       setData(mapped);
+      setSelectedIndexes(new Set());
       setCount(json.Count ?? mapped.length);
       toast.success(`${json.Count ?? mapped.length} registros encontrados`);
     } catch (err: any) {
@@ -204,7 +228,11 @@ const MaxListPage = () => {
   };
 
   const handleSendToCRM = async () => {
-    if (data.length === 0) {
+    const sourceData = someSelected
+      ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
+      : data;
+
+    if (sourceData.length === 0) {
       toast.error("Nenhum dado para enviar");
       return;
     }
@@ -212,7 +240,7 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(0);
 
-    const records = data
+    const records = sourceData
       .filter((item) => item.CNPJ_CPF && item.NOME_DEVEDOR && item.TITULO)
       .map((item) => ({
         nome_completo: item.NOME_DEVEDOR.trim(),
@@ -421,7 +449,7 @@ const MaxListPage = () => {
             </Button>
             <Button variant="secondary" onClick={handleSendToCRM} disabled={data.length === 0 || importing}>
               {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-              Enviar para CRM
+              {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
             </Button>
           </div>
         </CardContent>
@@ -449,6 +477,11 @@ const MaxListPage = () => {
             <CardTitle className="text-base flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4" />
               Preview ({data.length.toLocaleString("pt-BR")} registros)
+              {someSelected && (
+                <Badge variant="outline" className="ml-2">
+                  {selectedIndexes.size} selecionados
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -456,6 +489,13 @@ const MaxListPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allVisibleSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Selecionar todos"
+                      />
+                    </TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Contrato</TableHead>
@@ -468,8 +508,15 @@ const MaxListPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.slice(0, 500).map((item, i) => (
-                    <TableRow key={i}>
+                  {visibleData.map((item, i) => (
+                    <TableRow key={i} className={selectedIndexes.has(i) ? "bg-accent/30" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIndexes.has(i)}
+                          onCheckedChange={() => toggleOne(i)}
+                          aria-label={`Selecionar ${item.NOME_DEVEDOR}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{item.CNPJ_CPF}</TableCell>
                       <TableCell className="max-w-[200px] truncate">{item.NOME_DEVEDOR}</TableCell>
                       <TableCell>{item.COD_CONTRATO}</TableCell>
