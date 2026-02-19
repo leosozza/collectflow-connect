@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle } from "lucide-react";
+import { Search, User, AlertTriangle, Clock } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Conversation } from "@/services/conversationService";
 import { formatDistanceToNow } from "date-fns";
@@ -164,9 +165,45 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
                         {conv.remote_phone}
                       </span>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {(conv as any).sla_deadline_at && new Date((conv as any).sla_deadline_at) < new Date() && (
-                          <AlertTriangle className="w-3 h-3 text-destructive" />
-                        )}
+                        {(() => {
+                          const deadline = (conv as any).sla_deadline_at;
+                          if (!deadline) return null;
+                          const deadlineDate = new Date(deadline);
+                          const now = new Date();
+                          if (deadlineDate < now) {
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertTriangle className="w-3 h-3 text-destructive" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          }
+                          const createdAt = new Date(conv.created_at);
+                          const totalMs = deadlineDate.getTime() - createdAt.getTime();
+                          const remainingMs = deadlineDate.getTime() - now.getTime();
+                          if (totalMs > 0 && remainingMs < totalMs * 0.25) {
+                            const mins = Math.round(remainingMs / 60000);
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Clock className="w-3 h-3 text-yellow-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          }
+                          return null;
+                        })()}
                         <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
                         {conv.unread_count > 0 && (
                           <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">

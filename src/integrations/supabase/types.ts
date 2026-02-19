@@ -831,6 +831,7 @@ export type Database = {
           remote_name: string
           remote_phone: string
           sla_deadline_at: string | null
+          sla_notified_at: string | null
           status: string
           tenant_id: string
           unread_count: number
@@ -846,6 +847,7 @@ export type Database = {
           remote_name?: string
           remote_phone: string
           sla_deadline_at?: string | null
+          sla_notified_at?: string | null
           status?: string
           tenant_id: string
           unread_count?: number
@@ -861,6 +863,7 @@ export type Database = {
           remote_name?: string
           remote_phone?: string
           sla_deadline_at?: string | null
+          sla_notified_at?: string | null
           status?: string
           tenant_id?: string
           unread_count?: number
@@ -936,6 +939,7 @@ export type Database = {
           razao_social: string
           signature_enabled: boolean | null
           signature_type: string | null
+          sla_hours: number | null
           status: string
           telefone: string | null
           template_acordo: string | null
@@ -985,6 +989,7 @@ export type Database = {
           razao_social: string
           signature_enabled?: boolean | null
           signature_type?: string | null
+          sla_hours?: number | null
           status?: string
           telefone?: string | null
           template_acordo?: string | null
@@ -1034,6 +1039,7 @@ export type Database = {
           razao_social?: string
           signature_enabled?: boolean | null
           signature_type?: string | null
+          sla_hours?: number | null
           status?: string
           telefone?: string | null
           template_acordo?: string | null
