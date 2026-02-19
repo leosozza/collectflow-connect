@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCredores, fetchEquipes } from "@/services/cadastrosService";
+import { fetchCredores, fetchEquipes, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 
 interface NavItem {
@@ -50,6 +50,12 @@ const CadastrosPage = () => {
     enabled: !!tenantId,
   });
 
+  const { data: tiposStatus } = useQuery({
+    queryKey: ["tipos_status-count", tenantId],
+    queryFn: () => fetchTiposStatus(tenantId!),
+    enabled: !!tenantId,
+  });
+
   const { data: usuariosCount } = useQuery({
     queryKey: ["usuarios-count", tenantId],
     queryFn: async () => {
@@ -70,7 +76,7 @@ const CadastrosPage = () => {
         { key: "equipes", label: "Equipes", icon: Users, badge: equipes?.length ?? null },
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
-        { key: "tipo_status", label: "Tipo de Status", icon: Tags },
+        { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
       ],
     },
     {
