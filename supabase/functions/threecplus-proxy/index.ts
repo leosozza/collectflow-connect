@@ -600,17 +600,38 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ status: 400, detail: 'agent_id and phone_number are required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
-        url = buildUrl(baseUrl, 'click2call', authParam);
-        method = 'POST';
-        // 3CPlus API requires agent_id as integer, not string
+        // 3CPlus click2call requires 'extension' (SIP extension) and 'phone' (destination number)
+        // First, fetch the agent user to get their SIP extension number
         const agentIdNum = Number(body.agent_id);
-        // Ensure phone has Brazil country code (55) - 3CPlus requires full international format
+        const usersUrl = buildUrl(baseUrl, `users`, authParam, { per_page: '500' });
+        const usersResp = await fetch(usersUrl, { headers: { 'Content-Type': 'application/json' } });
+        const usersData = await usersResp.json();
+        
+        // Find the agent by id to get their extension
+        let extension: string | number | undefined;
+        if (usersData?.data?.data && Array.isArray(usersData.data.data)) {
+          const agent = usersData.data.data.find((u: any) => Number(u.id) === agentIdNum);
+          if (agent) {
+            extension = agent.extension || agent.extensions?.[0]?.extension || agent.username;
+            console.log(`Found agent: id=${agent.id}, extension=${extension}, username=${agent.username}`);
+          }
+        }
+        
+        if (!extension) {
+          console.log(`Agent ${agentIdNum} extension not found, using agent_id as fallback`);
+          extension = agentIdNum;
+        }
+
+        // Normalize phone: remove non-digits and ensure Brazil DDI prefix
         let phone = String(body.phone_number).replace(/\D/g, '');
         if (!phone.startsWith('55')) {
           phone = '55' + phone;
         }
-        console.log(`click2call payload: agent_id=${agentIdNum} (${typeof agentIdNum}), phone=${phone}`);
-        reqBody = JSON.stringify({ agent_id: agentIdNum, phone_number: phone });
+        
+        console.log(`click2call payload: extension=${extension}, phone=${phone}`);
+        url = buildUrl(baseUrl, 'click2call', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ extension, phone });
         break;
       }
 
