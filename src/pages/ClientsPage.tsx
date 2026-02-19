@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +13,8 @@ import {
   ClientFormData,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
+import { fetchTiposStatus } from "@/services/cadastrosService";
+import { useTenant } from "@/hooks/useTenant";
 import ClientTable from "@/components/clients/ClientTable";
 import ClientForm from "@/components/clients/ClientForm";
 import ClientFilters from "@/components/clients/ClientFilters";
@@ -30,6 +32,7 @@ import {
 
 const ClientsPage = () => {
   const { profile } = useAuth();
+  const { tenant } = useTenant();
   const { trackAction } = useActivityTracker();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
@@ -51,6 +54,12 @@ const ClientsPage = () => {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
     queryFn: () => fetchClients(filters),
+  });
+
+  const { data: tiposStatus = [] } = useQuery({
+    queryKey: ["tipos_status", tenant?.id],
+    queryFn: () => fetchTiposStatus(tenant!.id),
+    enabled: !!tenant?.id,
   });
 
   const createMutation = useMutation({
@@ -99,7 +108,18 @@ const ClientsPage = () => {
   });
 
   const importMutation = useMutation({
-    mutationFn: (rows: ImportedRow[]) => bulkCreateClients(rows, profile!.id),
+    mutationFn: (rows: ImportedRow[]) => {
+      const statusNameMap = new Map<string, string>();
+      tiposStatus.forEach((t: any) => statusNameMap.set(t.nome.toUpperCase().trim(), t.id));
+      const enrichedRows = rows.map((row) => {
+        if (row.status_raw && !row.status_cobranca_id) {
+          const matched = statusNameMap.get(row.status_raw.toUpperCase().trim());
+          if (matched) return { ...row, status_cobranca_id: matched };
+        }
+        return row;
+      });
+      return bulkCreateClients(enrichedRows, profile!.id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Clientes importados com sucesso!");

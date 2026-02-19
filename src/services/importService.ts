@@ -11,6 +11,8 @@ export interface ImportedRow {
   valor_pago: number;
   data_vencimento: string;
   status: "pendente" | "pago" | "quebrado";
+  status_raw?: string;
+  status_cobranca_id?: string;
   phone?: string;
   email?: string;
   endereco?: string;
@@ -211,6 +213,9 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       status = "quebrado";
     }
 
+    // Keep original status text for status_cobranca mapping
+    const statusOriginal = getCellStr(colMap["status"]).trim();
+
     // Address concatenation
     const endParts = [
       getCellStr(colMap["endereco"]),
@@ -243,6 +248,7 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       valor_pago: valorPago,
       data_vencimento: dataVencimento,
       status,
+      status_raw: statusOriginal || undefined,
       phone: fone1 || undefined,
       email: getCellStr(colMap["email"]) || undefined,
       endereco,
