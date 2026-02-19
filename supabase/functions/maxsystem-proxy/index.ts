@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Allowed tenant slugs
-const ALLOWED_SLUGS = ["maxfama"];
+const ALLOWED_SLUGS = ["maxfama", "temis"];
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

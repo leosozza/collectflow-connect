@@ -14,7 +14,7 @@ import { Search, Download, Upload, Loader2, FileSpreadsheet, Database } from "lu
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
-const ALLOWED_SLUGS = ["maxfama"];
+const ALLOWED_SLUGS = ["maxfama", "temis"];
 const BATCH_SIZE = 500;
 
 interface MaxSystemItem {
