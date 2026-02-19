@@ -1,186 +1,118 @@
 
 
-# Upgrade do Construtor Visual de Fluxos — Estilo ThotAI
+# Gatilhos para Acionar Workflows Automaticamente
 
-## Resumo
+## Problema Atual
 
-O construtor atual e funcional mas basico: tem poucos tipos de nos, sidebar simples sem busca, painel de propriedades limitado, e falta recursos como undo/redo, simulador de teste, templates, e validacao de fluxo. O objetivo e trazer o nivel de completude do ThotAI, adaptado ao contexto de cobranca.
+O construtor visual de fluxos ja esta completo (sidebar com busca, nos unificados, simulador, templates, undo/redo, painel de configuracao). Porem, falta a **infraestrutura de gatilhos** para que os fluxos sejam acionados automaticamente. Atualmente, apenas o gatilho "Acordo Quebrado" funciona (via `auto-break-overdue`). Os demais gatilhos (Fatura Vencida, Sem Contato, Webhook, Manual) nao disparam nada.
 
----
+## O que sera implementado
 
-## O que muda
+### 1. Edge Function: `workflow-trigger-overdue`
 
-### 1. Arquitetura de Nos Unificada
+Nova funcao que roda periodicamente (CRON) para detectar clientes com faturas vencidas e disparar workflows com `trigger_type = 'overdue'`.
 
-Substituir os 3 componentes de nos separados (TriggerNode, ActionNode, ConditionNode) por um unico componente `CustomFlowNode` que renderiza qualquer tipo de no dinamicamente, assim como o ThotAI faz. Isso simplifica a manutencao e permite adicionar novos tipos de nos sem criar novos componentes.
+- Busca clientes com `data_vencimento` vencida e status diferente de "pago", "quebrado"
+- Para cada workflow ativo com trigger_type "overdue", verifica o campo `days` do no trigger
+- Compara a diferenca entre hoje e `data_vencimento` com o valor de `days` configurado
+- Evita duplicidade: verifica se ja existe execucao ativa (running/waiting) para o par workflow+client
+- Chama `workflow-engine` para iniciar a execucao
 
-**Novo arquivo:** `src/components/automacao/workflow/FlowNodeTypes.ts`
-- Definicao centralizada de todos os tipos de nos com icone, cor, categoria e descricao
-- Interface `FlowNodeData` completa com todas as propriedades possiveis
-- Funcao `getNodeType()` para buscar configuracao por tipo
+### 2. Edge Function: `workflow-trigger-no-contact`
 
-**Categorias de nos (adaptadas para cobranca):**
+Nova funcao (CRON) para detectar clientes sem contato recente.
 
-| Categoria | Cor | Nos |
-|-----------|-----|-----|
-| Gatilhos | Azul (#3b82f6) | Fatura Vencida, Acordo Quebrado, Sem Contato, Webhook, Manual |
-| Mensagens | Verde (#22c55e) | WhatsApp Texto, WhatsApp Midia, WhatsApp Botoes, SMS, Email |
-| Logica | Amarelo (#f59e0b) | Condição Score, Condição Valor, Condição Status, Aguardar Resposta, Delay, Capturar Resposta |
-| Acoes | Roxo (#8b5cf6) | Agente IA, Atualizar Status, Criar Acordo, Chamar Webhook, Definir Variavel |
-| Controle | Rosa (#ec4899) | Transferir Humano, Encerrar Fluxo, Loop |
+- Busca clientes ativos cuja ultima interacao (ultimo registro em `message_logs` ou `chat_messages`) foi ha mais de X dias
+- Compara com o `days` configurado no no trigger do workflow
+- Evita duplicatas da mesma forma
+- Dispara `workflow-engine` com `trigger_type = 'first_contact'`
 
-**Novo componente:** `src/components/automacao/workflow/nodes/CustomFlowNode.tsx`
-- Renderiza qualquer tipo de no com cor e icone da configuracao
-- Mostra preview do conteudo (mensagem truncada, valor da condicao, etc.)
-- Handles dinamicos: botoes geram handles individuais, condicoes tem Sim/Nao
-- Suporte a botoes de acoes inline (duplicar, excluir) no hover
+### 3. Endpoint de Webhook: atualizar `workflow-engine`
 
-### 2. Sidebar com Busca e Accordion
+Modificar o `workflow-engine` para aceitar chamadas externas via webhook:
 
-**Reescrever:** `src/components/automacao/workflow/WorkflowSidebar.tsx`
+- Quando `trigger_type = 'webhook'`, aceitar requisicoes com um `webhook_token` no corpo
+- Buscar workflows ativos com trigger_type "webhook" e validar o token
+- Iniciar execucao para o client_id informado
 
-- Campo de busca no topo para filtrar nos por nome/descricao
-- Accordion por categoria (colapsavel)
-- Cada no mostra icone + nome + descricao curta
-- Drag & drop com visual de arrastar (grip icon)
-- Botao de colapsar sidebar para maximizar canvas
-- Tooltip com descricao completa ao passar o mouse
+### 4. Botao "Disparar Manualmente" na UI
 
-### 3. Painel de Configuracao Avancado
+Adicionar ao `WorkflowListTab`:
 
-**Reescrever:** `src/components/automacao/workflow/WorkflowNodeProperties.tsx`
+- Botao "Disparar" em cada card de workflow ativo
+- Dialog para selecionar o cliente (busca por nome/CPF)
+- Chama `workflow-engine` diretamente com o workflow_id + client_id selecionado
+- Mostra toast de confirmacao
 
-Transformar de Sheet lateral para painel inline (ao lado do canvas), com:
+### 5. Atualizacao do `auto-break-overdue`
 
-- Botao de minimizar/expandir
-- ScrollArea para conteudo longo
-- Campos dinamicos por tipo de no:
-  - **WhatsApp Texto:** textarea com preview de variaveis, seletor de instancia
-  - **WhatsApp Botoes:** editor de botoes (adicionar/remover, ate 3), cada botao com handle proprio
-  - **WhatsApp Midia:** upload de midia ou URL, tipo de midia (imagem/video/audio/documento)
-  - **Condições:** operador (>, <, =, !=, contem), valor, campo de comparacao
-  - **Delay:** slider + input para minutos/horas/dias
-  - **Capturar Resposta:** pergunta, nome da variavel, tipo de validacao, timeout
-  - **Webhook:** URL, metodo (GET/POST/PUT), headers, body template, variavel para resposta
-  - **Definir Variavel:** nome, valor, escopo (fluxo/cliente)
-- Botao "Excluir No" com confirmacao
-- Botao "Duplicar No"
+Ja existe e funciona. Sem alteracoes necessarias.
 
-### 4. Canvas Melhorado
+### 6. Registro no config.toml
 
-**Reescrever:** `src/components/automacao/workflow/WorkflowCanvas.tsx`
+Adicionar entradas para as novas funcoes:
+- `workflow-trigger-overdue` (verify_jwt = false)
+- `workflow-trigger-no-contact` (verify_jwt = false)
 
-Adicionar:
+### 7. CRON Jobs
 
-- **Undo/Redo** com Ctrl+Z / Ctrl+Shift+Z (hook `useFlowHistory`)
-- **Visual de drop zone** ao arrastar nos sobre o canvas (borda + mensagem "Solte aqui")
-- **Selecao de edges** com click para destacar e excluir
-- **Panel inferior** com dicas de uso ("Arraste blocos da paleta... Conecte arrastando entre nos...")
-- **Panel superior contextual** ao selecionar no/edge (mostra nome + botoes Duplicar/Excluir)
-- **Confirmacao de exclusao** via AlertDialog (nao mais confirm() nativo)
-- **MiniMap colorido** com cores por tipo de no
-- **Edges com setas** (MarkerType.ArrowClosed) e estilo customizado
-- **Delete key protection** para nao deletar quando digitando em inputs
-- **Validacao ao salvar:** verificar se trigger existe, nos orfaos, botoes sem conexao
-
-### 5. Simulador de Teste
-
-**Novo arquivo:** `src/components/automacao/workflow/FlowTestSimulator.tsx`
-
-Painel lateral que simula a execucao do fluxo visualmente:
-
-- Botao "Testar" na toolbar do editor
-- Mostra os nos sendo executados em sequencia com highlight
-- Para em condicoes e pergunta "Sim ou Nao?"
-- Para em "Aguardar Resposta" e permite digitar resposta simulada
-- Log de execucao em tempo real
-- Highlight do no atual no canvas (borda brilhante)
-
-### 6. Templates de Fluxo
-
-**Novo arquivo:** `src/components/automacao/workflow/FlowTemplates.ts`
-
-Templates pre-definidos para criar fluxos rapidamente:
-
-- **Cobranca Basica:** Trigger Vencida > WhatsApp Lembrete > Aguardar 3 dias > WhatsApp Urgente > Atualizar Status
-- **Negociacao Inteligente:** Trigger Vencida > Condicao Score > (Alto) Agente IA > (Baixo) WhatsApp Padrao
-- **Recuperacao de Acordo:** Trigger Acordo Quebrado > WhatsApp > Aguardar 7 dias > SMS > Atualizar Status
-
-**Novo arquivo:** `src/components/automacao/workflow/FlowTemplatesDialog.tsx`
-
-Dialog com cards visuais dos templates, botao "Usar Template" que popula o canvas.
-
-### 7. Hook de Historico
-
-**Novo arquivo:** `src/hooks/useFlowHistory.ts`
-
-- Pilha de estados (nodes + edges) com limite de 50 entradas
-- Metodos: pushState, undo, redo, canUndo, canRedo
-- Detecta mudancas significativas para nao poluir historico
-
-### 8. Lista de Fluxos Melhorada
-
-**Atualizar:** `src/components/automacao/workflow/WorkflowListTab.tsx`
-
-- Adicionar botao "Templates" ao lado de "Novo Fluxo"
-- Tabela de execucoes recentes (ultimas 10) com: fluxo, cliente CPF, status, no atual, data
-- Filtro por status na lista de fluxos (Todos/Ativos/Inativos)
-- Busca por nome de fluxo
+Adicionar via SQL dois novos CRON jobs:
+- `workflow-trigger-overdue`: rodar diariamente (1x por dia, de manha)
+- `workflow-trigger-no-contact`: rodar diariamente (1x por dia)
 
 ---
 
 ## Detalhes Tecnicos
 
-### Novos tipos de nos adicionados
+### Prevencao de duplicatas
+
+Antes de disparar qualquer workflow, todas as funcoes de trigger verificam:
 
 ```text
-GATILHOS (novos)
-  trigger_webhook     { webhook_url: string }
-  trigger_manual      {}
+SELECT count(*) FROM workflow_executions
+WHERE workflow_id = ? AND client_id = ? AND status IN ('running', 'waiting')
+```
 
-MENSAGENS (novos)
-  action_whatsapp_media    { media_url, media_type, caption }
-  action_whatsapp_buttons  { message, buttons: [{id, text}] }
-  action_email             { subject, body, to_field }
+Se ja existir execucao ativa, pula o cliente.
 
-LOGICA (novos)
-  condition_status    { status_values: string[] }
-  wait_response       { timeout_seconds, timeout_node_id }
-  delay               { delay_minutes }
-  input_capture       { question, variable_name, validation_type }
-  loop                { max_iterations, exit_condition }
+### Fluxo de dados dos gatilhos
 
-ACOES (novos)
-  action_create_agreement  { discount, installments }
-  action_webhook           { url, method, headers, body, save_to }
-  action_set_variable      { name, value, scope }
+```text
+CRON (diario)
+  |
+  +--> workflow-trigger-overdue
+  |      |--> Busca clientes com fatura vencida
+  |      |--> Para cada: chama workflow-engine
+  |
+  +--> workflow-trigger-no-contact
+         |--> Busca clientes sem contato recente
+         |--> Para cada: chama workflow-engine
 
-CONTROLE (novos)
-  transfer_to_human  { department, message }
-  end_flow           {}
+auto-break-overdue (existente, CRON horario)
+  |--> Marca clientes como "quebrado"
+  |--> Dispara workflows "agreement_broken"
+
+UI (manual)
+  |--> Usuario clica "Disparar"
+  |--> Seleciona cliente
+  |--> Chama workflow-engine diretamente
+
+Webhook externo
+  |--> POST /workflow-engine com trigger_type=webhook
+  |--> Valida e inicia execucao
 ```
 
 ### Arquivos criados/modificados
 
 | Arquivo | Acao |
 |---------|------|
-| `src/components/automacao/workflow/FlowNodeTypes.ts` | Novo |
-| `src/components/automacao/workflow/nodes/CustomFlowNode.tsx` | Novo (substitui os 3 anteriores) |
-| `src/components/automacao/workflow/WorkflowSidebar.tsx` | Reescrever |
-| `src/components/automacao/workflow/WorkflowNodeProperties.tsx` | Reescrever |
-| `src/components/automacao/workflow/WorkflowCanvas.tsx` | Reescrever |
-| `src/components/automacao/workflow/FlowTestSimulator.tsx` | Novo |
-| `src/components/automacao/workflow/FlowTemplates.ts` | Novo |
-| `src/components/automacao/workflow/FlowTemplatesDialog.tsx` | Novo |
-| `src/components/automacao/workflow/WorkflowListTab.tsx` | Atualizar |
-| `src/hooks/useFlowHistory.ts` | Novo |
-| `supabase/functions/workflow-engine/index.ts` | Atualizar (novos tipos de nos) |
+| `supabase/functions/workflow-trigger-overdue/index.ts` | Novo |
+| `supabase/functions/workflow-trigger-no-contact/index.ts` | Novo |
+| `supabase/functions/workflow-engine/index.ts` | Modificar (webhook support) |
+| `src/components/automacao/workflow/WorkflowListTab.tsx` | Modificar (botao disparar manual + dialog cliente) |
+| `supabase/config.toml` | Atualizar (novas funcoes) |
 
 ### Nao requer alteracoes no banco de dados
 
-Os campos `nodes` e `edges` ja sao JSONB, entao os novos tipos de nos sao automaticamente suportados. O motor de execucao precisa apenas ser atualizado para processar os novos tipos.
-
-### Compatibilidade
-
-Fluxos existentes continuarao funcionando. O novo `CustomFlowNode` reconhece todos os tipos antigos (trigger_overdue, action_whatsapp, etc.) atraves do mapeamento em `FlowNodeTypes.ts`.
+As tabelas `workflow_flows` e `workflow_executions` ja suportam todos os campos necessarios.
 
