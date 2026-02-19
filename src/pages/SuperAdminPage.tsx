@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+const AdminDashboardPage = lazy(() => import("@/pages/AdminDashboardPage"));
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";
 import { supabase } from "@/integrations/supabase/client";
@@ -286,12 +287,20 @@ const SuperAdminPage = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="dashboard">
+      <Tabs defaultValue="executivo">
         <TabsList>
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="executivo">Dashboard Executivo</TabsTrigger>
+          <TabsTrigger value="dashboard">Resumo Tenants</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
           <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
+
+        {/* ========== DASHBOARD EXECUTIVO ========== */}
+        <TabsContent value="executivo" className="mt-4">
+          <Suspense fallback={<div className="text-muted-foreground text-sm p-4">Carregando...</div>}>
+            <AdminDashboardPage />
+          </Suspense>
+        </TabsContent>
 
         {/* ========== DASHBOARD ========== */}
         <TabsContent value="dashboard" className="space-y-4">
