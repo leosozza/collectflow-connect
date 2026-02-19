@@ -1,16 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
-import { fetchWorkflows, type WorkflowFlow } from "@/services/workflowService";
+import { fetchWorkflows, updateWorkflow, type WorkflowFlow } from "@/services/workflowService";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Clock, AlertTriangle, Webhook, Hand, PhoneOff, Zap, Play, Pause, Settings2 } from "lucide-react";
+import { Clock, AlertTriangle, Webhook, Hand, PhoneOff, Zap, Play, Pause, Settings2, Plus, Link2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { updateWorkflow } from "@/services/workflowService";
 
 const triggerConfig: Record<string, { label: string; description: string; icon: any; color: string; cron?: string }> = {
   overdue: {
@@ -48,7 +47,11 @@ const triggerConfig: Record<string, { label: string; description: string; icon: 
   },
 };
 
-const GatilhosTab = () => {
+interface GatilhosTabProps {
+  onNavigateToNewFlow?: (triggerType: string) => void;
+}
+
+const GatilhosTab = ({ onNavigateToNewFlow }: GatilhosTabProps) => {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const [workflows, setWorkflows] = useState<WorkflowFlow[]>([]);
@@ -61,6 +64,11 @@ const GatilhosTab = () => {
   const [clientResults, setClientResults] = useState<any[]>([]);
   const [searchingClients, setSearchingClients] = useState(false);
   const [triggering, setTriggering] = useState(false);
+
+  // Link workflow dialog
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkTriggerType, setLinkTriggerType] = useState<string>("");
+  const [linking, setLinking] = useState(false);
 
   const load = useCallback(async () => {
     if (!tenant) return;
@@ -77,7 +85,6 @@ const GatilhosTab = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  // Group workflows by trigger_type
   const groupedByTrigger = Object.entries(triggerConfig).map(([type, config]) => ({
     type,
     config,
@@ -99,6 +106,25 @@ const GatilhosTab = () => {
     setClientSearch("");
     setClientResults([]);
     setTriggerDialogOpen(true);
+  };
+
+  const openLinkDialog = (triggerType: string) => {
+    setLinkTriggerType(triggerType);
+    setLinkDialogOpen(true);
+  };
+
+  const handleLinkWorkflow = async (wf: WorkflowFlow) => {
+    setLinking(true);
+    try {
+      await updateWorkflow(wf.id, { trigger_type: linkTriggerType });
+      toast({ title: `Fluxo "${wf.name}" vinculado ao gatilho "${triggerConfig[linkTriggerType]?.label}"` });
+      setLinkDialogOpen(false);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLinking(false);
+    }
   };
 
   const searchClients = useCallback(async (query: string) => {
@@ -136,6 +162,9 @@ const GatilhosTab = () => {
     } finally { setTriggering(false); }
   };
 
+  // Workflows not assigned to current trigger type (available for linking)
+  const availableForLink = workflows.filter((w) => w.trigger_type !== linkTriggerType);
+
   if (loading) {
     return <div className="text-center py-12 text-muted-foreground">Carregando gatilhos...</div>;
   }
@@ -145,7 +174,7 @@ const GatilhosTab = () => {
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Gatilhos Automáticos</h2>
         <p className="text-sm text-muted-foreground">
-          Veja todos os tipos de gatilhos disponíveis e quais fluxos estão configurados para cada um.
+          Configure quais fluxos serão acionados por cada tipo de gatilho. Vincule fluxos existentes ou crie novos.
         </p>
       </div>
 
@@ -171,11 +200,21 @@ const GatilhosTab = () => {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{config.description}</p>
                   </div>
-                  {config.cron && (
-                    <Badge variant="outline" className="text-[10px] shrink-0">
-                      <Settings2 className="w-3 h-3 mr-1" /> {config.cron}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {config.cron && (
+                      <Badge variant="outline" className="text-[10px]">
+                        <Settings2 className="w-3 h-3 mr-1" /> {config.cron}
+                      </Badge>
+                    )}
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openLinkDialog(type)}>
+                      <Link2 className="w-3.5 h-3.5 mr-1" /> Vincular Fluxo
+                    </Button>
+                    {onNavigateToNewFlow && (
+                      <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onNavigateToNewFlow(type)}>
+                        <Plus className="w-3.5 h-3.5 mr-1" /> Novo Fluxo
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               {wfs.length > 0 && (
@@ -210,10 +249,61 @@ const GatilhosTab = () => {
                   </div>
                 </CardContent>
               )}
+              {wfs.length === 0 && (
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground text-center py-3 border rounded-md bg-muted/30">
+                    Nenhum fluxo vinculado a este gatilho. Clique em "Vincular Fluxo" ou "Novo Fluxo" para começar.
+                  </p>
+                </CardContent>
+              )}
             </Card>
           );
         })}
       </div>
+
+      {/* Link Workflow Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vincular Fluxo ao Gatilho</DialogTitle>
+            <DialogDescription>
+              Selecione um fluxo existente para associar ao gatilho "{triggerConfig[linkTriggerType]?.label}".
+              O tipo de gatilho do fluxo será atualizado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {availableForLink.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                Todos os fluxos já estão vinculados a este gatilho ou não há fluxos criados.
+              </p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto border rounded-md divide-y">
+                {availableForLink.map((wf) => (
+                  <button
+                    key={wf.id}
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors text-sm flex justify-between items-center gap-2"
+                    onClick={() => handleLinkWorkflow(wf)}
+                    disabled={linking}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{wf.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Gatilho atual: {triggerConfig[wf.trigger_type]?.label || wf.trigger_type}
+                      </p>
+                    </div>
+                    <Badge variant={wf.is_active ? "default" : "secondary"} className="text-[10px] shrink-0">
+                      {wf.is_active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manual Trigger Dialog */}
       <Dialog open={triggerDialogOpen} onOpenChange={setTriggerDialogOpen}>
