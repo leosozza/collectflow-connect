@@ -86,7 +86,7 @@ function validateClientRecord(record: Record<string, unknown>): ValidationResult
 }
 
 function buildClientRow(record: Record<string, unknown>, tenantId: string) {
-  return {
+  const row: Record<string, unknown> = {
     tenant_id: tenantId,
     nome_completo: String(record.nome_completo ?? "").trim(),
     cpf: String(record.cpf ?? "").trim(),
@@ -108,6 +108,10 @@ function buildClientRow(record: Record<string, unknown>, tenantId: string) {
     status: (record.status as string) || "pendente",
     updated_at: new Date().toISOString(),
   };
+  if (record.status_cobranca_id && typeof record.status_cobranca_id === "string") {
+    row.status_cobranca_id = record.status_cobranca_id.trim();
+  }
+  return row;
 }
 
 function json(body: unknown, status = 200) {
