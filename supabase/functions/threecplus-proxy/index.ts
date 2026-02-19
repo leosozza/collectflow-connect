@@ -604,8 +604,13 @@ Deno.serve(async (req) => {
         method = 'POST';
         // 3CPlus API requires agent_id as integer, not string
         const agentIdNum = Number(body.agent_id);
-        console.log(`click2call payload: agent_id=${agentIdNum} (${typeof agentIdNum}), phone=${body.phone_number}`);
-        reqBody = JSON.stringify({ agent_id: agentIdNum, phone_number: body.phone_number });
+        // Ensure phone has Brazil country code (55) - 3CPlus requires full international format
+        let phone = String(body.phone_number).replace(/\D/g, '');
+        if (!phone.startsWith('55')) {
+          phone = '55' + phone;
+        }
+        console.log(`click2call payload: agent_id=${agentIdNum} (${typeof agentIdNum}), phone=${phone}`);
+        reqBody = JSON.stringify({ agent_id: agentIdNum, phone_number: phone });
         break;
       }
 
