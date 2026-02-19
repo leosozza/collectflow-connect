@@ -105,7 +105,7 @@ export default function ApiDocsPublicPage() {
           </EndpointRow>
           <EndpointRow method="POST" path="/clients" description="Criar/atualizar 1 cliente (upsert)">
             <p className="text-sm text-zinc-500 mb-2">Aceita formato mailing (NOME_DEVEDOR, CNPJ_CPF, etc.) ou formato interno</p>
-            <CodeBlock code={`{\n  "CREDOR": "EMPRESA",\n  "COD_DEVEDOR": "12345",\n  "NOME_DEVEDOR": "João Silva",\n  "CNPJ_CPF": "123.456.789-00",\n  "FONE_1": "(11) 99999-0000",\n  "PARCELA": 1,\n  "DT_VENCIMENTO": "01/03/2026",\n  "VL_ATUALIZADO": 1100,\n  "STATUS": "ATIVO"\n}`} lang="JSON" />
+            <CodeBlock code={`{\n  "CREDOR": "EMPRESA",\n  "COD_DEVEDOR": "12345",\n  "COD_CONTRATO": "CTR-2026-001",\n  "NOME_DEVEDOR": "João Silva",\n  "CNPJ_CPF": "123.456.789-00",\n  "FONE_1": "(11) 99999-0000",\n  "FONE_2": "(11) 88888-0000",\n  "FONE_3": "(11) 77777-0000",\n  "PARCELA": 1,\n  "DT_VENCIMENTO": "01/03/2026",\n  "DT_PAGAMENTO": "",\n  "VL_TITULO": 1000,\n  "VL_ATUALIZADO": 1100,\n  "VL_SALDO": 900,\n  "STATUS": "ATIVO"\n}`} lang="JSON" />
           </EndpointRow>
           <EndpointRow method="POST" path="/clients/bulk" description="Inserção em massa (até 500/chamada)">
             <CodeBlock code={`{\n  "records": [\n    { "CREDOR": "EMPRESA", "NOME_DEVEDOR": "João", "CNPJ_CPF": "123...", "PARCELA": 1, "DT_VENCIMENTO": "01/03/2026", "VL_ATUALIZADO": 1100, "STATUS": "ATIVO" }\n  ],\n  "upsert": true,\n  "upsert_key": "external_id"\n}`} lang="JSON" />
@@ -249,18 +249,21 @@ export default function ApiDocsPublicPage() {
                     ["VL_ATUALIZADO / valor_parcela", "number", "✅", "Valor atualizado da parcela"],
                     ["DT_VENCIMENTO / data_vencimento", "string", "✅", "DD/MM/YYYY ou YYYY-MM-DD"],
                     ["COD_DEVEDOR / external_id", "string", "—", "ID externo (upsert key)"],
+                    ["COD_CONTRATO / cod_contrato", "string", "—", "Número do contrato"],
                     ["PARCELA / numero_parcela", "integer", "—", "Nº parcela (padrão: 1)"],
                     ["total_parcelas", "integer", "—", "Total de parcelas"],
+                    ["DT_PAGAMENTO / data_pagamento", "date", "—", "Data efetiva do pagamento"],
+                    ["VL_SALDO / valor_saldo", "number", "—", "Valor do saldo devedor"],
                     ["STATUS / status", "string", "—", "ATIVO | CANCELADO | PAGO | QUEBRADO"],
                     ["status_cobranca_id", "UUID", "—", "UUID do status de cobrança"],
                     ["FONE_1 / phone", "string", "—", "Telefone principal"],
-                    ["FONE_2, FONE_3", "string", "—", "Telefones extras (salvos em obs.)"],
+                    ["FONE_2 / phone2", "string", "—", "Telefone secundário"],
+                    ["FONE_3 / phone3", "string", "—", "Telefone terciário"],
                     ["EMAIL / email", "string", "—", "Email do devedor"],
                     ["ENDERECO, NUMERO, BAIRRO", "string", "—", "Componentes do endereço"],
                     ["CIDADE / cidade", "string", "—", "Cidade"],
                     ["ESTADO / uf", "string", "—", "UF (2 letras)"],
                     ["CEP / cep", "string", "—", "CEP"],
-                    ["COD_CONTRATO", "string", "—", "Código do contrato (em obs.)"],
                   ].map(([field, type, req, desc]) => (
                     <TableRow key={field}>
                       <TableCell><code className="text-xs font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{field}</code></TableCell>

@@ -317,7 +317,7 @@ export default function ApiDocsPage() {
               </EndpointCard>
               <EndpointCard method="POST" path="/clients" description="Criar ou atualizar 1 cliente (upsert)">
                 <p className="text-sm text-muted-foreground mb-2">Aceita campos no formato mailing (NOME_DEVEDOR, CNPJ_CPF, etc.)</p>
-                <CodeBlock code={`{\n  "CREDOR": "EMPRESA",\n  "COD_DEVEDOR": "12345",\n  "NOME_DEVEDOR": "João Silva",\n  "CNPJ_CPF": "123.456.789-00",\n  "FONE_1": "(11) 99999-0000",\n  "PARCELA": 1,\n  "DT_VENCIMENTO": "01/03/2026",\n  "VL_ATUALIZADO": 1100,\n  "STATUS": "ATIVO"\n}`} lang="JSON" />
+                <CodeBlock code={`{\n  "CREDOR": "EMPRESA",\n  "COD_DEVEDOR": "12345",\n  "COD_CONTRATO": "CTR-2026-001",\n  "NOME_DEVEDOR": "João Silva",\n  "CNPJ_CPF": "123.456.789-00",\n  "FONE_1": "(11) 99999-0000",\n  "FONE_2": "(11) 88888-0000",\n  "FONE_3": "(11) 77777-0000",\n  "PARCELA": 1,\n  "DT_VENCIMENTO": "01/03/2026",\n  "DT_PAGAMENTO": "",\n  "VL_TITULO": 1000,\n  "VL_ATUALIZADO": 1100,\n  "VL_SALDO": 900,\n  "STATUS": "ATIVO"\n}`} lang="JSON" />
               </EndpointCard>
               <EndpointCard method="POST" path="/clients/bulk" description="Inserção em massa (até 500/chamada)">
                 <CodeBlock code={`{\n  "records": [{ ... }, { ... }],\n  "upsert": true,\n  "upsert_key": "external_id"\n}`} lang="JSON" />
