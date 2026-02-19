@@ -67,7 +67,7 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     COD_DEVEDOR: item.IdRecord,
     COD_CONTRATO: item.ContractNumber,
     NOME_DEVEDOR: item.ResponsibleName,
-    TITULO: String(item.Id),
+    TITULO: `${item.ContractNumber.trim()}-${item.Number}`,
     CNPJ_CPF: item.ResponsibleCPF,
     FONE_1: item.CellPhone1 ?? "",
     FONE_2: item.CellPhone2 ?? "",
