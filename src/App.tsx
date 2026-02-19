@@ -34,6 +34,7 @@ import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
+import MaxListPage from "./pages/MaxListPage";
 
 
 const queryClient = new QueryClient();
@@ -296,6 +297,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <ApiDocsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/maxlist"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <MaxListPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
