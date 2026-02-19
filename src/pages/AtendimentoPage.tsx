@@ -227,7 +227,12 @@ const AtendimentoPage = () => {
       if (error) throw error;
       if (data?.status && data.status >= 400) {
         const detail = data.detail || data.message || (Array.isArray(data.errors) ? data.errors[0] : null) || "Erro ao discar";
-        toast.error(detail);
+        // "O agente não está online" means the agent is not logged in to 3CPlus
+        if (detail.toLowerCase().includes("não está online") || detail.toLowerCase().includes("not online")) {
+          toast.error("Agente não está online no 3CPlus. Faça login na plataforma de telefonia antes de discar.");
+        } else {
+          toast.error(detail);
+        }
       } else {
         toast.success("Ligação iniciada");
       }
