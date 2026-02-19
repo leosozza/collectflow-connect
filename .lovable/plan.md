@@ -1,104 +1,93 @@
 
-# Documentacao Completa do Sistema - API REST
 
-## Contexto
-Atualmente, a documentacao (`/api-docs` e `/api-docs/public`) cobre apenas operacoes de clientes/mailing. O sistema possui muitas outras funcionalidades (acordos, pagamentos, portal, WhatsApp, propensity score, workflows) que nao estao expostas via API REST publica e nao estao documentadas.
+# Pagina de Importacao MaxList dentro do CollectFlow
 
-## Objetivo
-Expandir a API REST (`clients-api`) para cobrir todo o sistema e reescrever as paginas de documentacao com cobertura completa.
+## O que sera feito
+Criar uma pagina dedicada dentro do sistema para importar listas diretamente do MaxSystem, substituindo a aplicacao MaxList externa. A pagina tera filtros de data, preview dos dados, e envio direto para a base de clientes -- tudo com acesso restrito a um tenant especifico.
 
----
+## Funcionalidades
 
-## Novos Endpoints a Implementar na Edge Function `clients-api`
+1. **Filtros de busca** - Campos de data para Vencimento (de/ate), Pagamento (de/ate) e Registro (de/ate), igual ao MaxList atual
+2. **Consulta ao MaxSystem** - Busca via API do MaxSystem com contagem de resultados
+3. **Preview dos dados** - Tabela mostrando os registros encontrados antes de importar
+4. **Importacao em lote** - Envio via edge function para a base de clientes com upsert por external_id
+5. **Download Excel** - Opcao de baixar a planilha como no MaxList atual
+6. **Controle de acesso** - Apenas o tenant autorizado (configuravel) tera acesso a essa pagina
 
-### 1. Acordos (Agreements)
-- **GET /agreements** - Listar acordos (filtros: status, cpf, credor)
-- **GET /agreements/:id** - Buscar acordo por ID
-- **POST /agreements** - Criar proposta de acordo
-- **PUT /agreements/:id/approve** - Aprovar acordo
-- **PUT /agreements/:id/reject** - Rejeitar acordo
+## Fluxo
 
-### 2. Pagamentos (Payments)
-- **GET /payments** - Listar pagamentos (filtros: agreement_id, status)
-- **GET /payments/:id** - Status de um pagamento
-- **POST /payments/pix** - Gerar cobranca PIX
-- **POST /payments/cartao** - Gerar cobranca Cartao
+```text
++------------------+     +------------------+     +------------------+
+| Filtros de Data  | --> | Consulta API     | --> | Preview Tabela   |
+| (Venc/Pag/Reg)   |     | MaxSystem        |     | com contagem     |
++------------------+     +------------------+     +------------------+
+                                                          |
+                                              +-----------+-----------+
+                                              |                       |
+                                     +--------v--------+    +--------v--------+
+                                     | Enviar para CRM |    | Download Excel  |
+                                     | (clients/bulk)  |    | (.xlsx)         |
+                                     +-----------------+    +-----------------+
+```
 
-### 3. Portal do Devedor
-- **POST /portal/lookup** - Consultar dividas por CPF
-- **POST /portal/agreement** - Criar proposta via portal
+## Controle de Acesso
 
-### 4. Status de Cobranca
-- **GET /status-types** - Listar tipos de status cadastrados (retorna id + nome)
-- **PUT /clients/:id/status** - Atualizar status de cobranca de um cliente
-
-### 5. Credores
-- **GET /credores** - Listar credores ativos
-
-### 6. Propensity Score
-- **POST /propensity/calculate** - Disparar calculo de propensao por CPF ou lote
-
-### 7. WhatsApp
-- **POST /whatsapp/send** - Enviar mensagem para um cliente
-- **POST /whatsapp/bulk** - Envio em massa
-
-### 8. Webhooks
-- **POST /webhooks/configure** - Registrar URL de callback para notificacoes
-
----
-
-## Reestruturacao das Paginas de Documentacao
-
-### Pagina Interna (`/api-docs` - ApiDocsPage.tsx)
-Reorganizar as tabs:
-
-| Tab | Conteudo |
-|-----|----------|
-| API Keys | Gerenciamento de chaves (manter atual) |
-| Clientes | Endpoints de CRUD de clientes + mailing |
-| Acordos | Endpoints de acordos e negociacao |
-| Pagamentos | Endpoints de cobrancas PIX/Cartao |
-| Portal | Endpoints do portal do devedor |
-| Cadastros | Status types, credores |
-| Integracao | WhatsApp, propensity, webhooks |
-| Importacoes | Monitoramento de mailings (manter atual) |
-
-### Pagina Publica (`/api-docs/public` - ApiDocsPublicPage.tsx)
-Reestruturar com secoes claras:
-
-1. **Autenticacao** (manter)
-2. **Clientes** - CRUD completo
-3. **Acordos** - Criar, consultar, aprovar/rejeitar
-4. **Pagamentos** - Gerar cobranças, verificar status
-5. **Portal** - Consulta de dívidas, solicitação de acordo
-6. **Cadastros** - Status de cobrança, credores
-7. **WhatsApp** - Envio individual e em massa
-8. **Webhooks** - Configuração de callbacks
-9. **Campos aceitos** (expandir)
-10. **Exemplos** - Python, Node.js, cURL para cada modulo
-11. **Erros e Rate Limits**
+- Rota `/maxlist` acessivel apenas para tenants autorizados
+- Verificacao feita no componente via `useTenant()` comparando o `tenant.id` ou `tenant.slug` com uma lista permitida
+- Se o tenant nao tiver acesso, redireciona para o dashboard
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivo: `supabase/functions/clients-api/index.ts`
-- Adicionar rotas para `agreements/*`, `payments/*`, `portal/*`, `status-types`, `credores`, `propensity/*`, `whatsapp/*`, `webhooks/*`
-- Reutilizar logica existente dos services (agreementService, etc.) adaptada para Deno
-- Manter autenticacao via X-API-Key com tenant isolation
-- Para pagamentos, chamar internamente a Negociarie API (ja implementada no portal-checkout)
+### Arquivos a criar
 
-### Arquivo: `src/pages/ApiDocsPage.tsx`
-- Reescrever com tabs expandidas cobrindo cada modulo
-- Incluir exemplos de payload e resposta para cada endpoint
-- Manter ImportLogsPanel na tab Importacoes
+**`src/pages/MaxListPage.tsx`** (~400 linhas)
+- Pagina React com filtros de data (Vencimento DE/ATE, Pagamento DE/ATE, Registro DE/ATE)
+- Botao "Buscar" que consulta o MaxSystem via edge function proxy
+- Tabela de preview com scroll usando componentes UI existentes (Table, ScrollArea)
+- Botao "Enviar para CRM" que faz POST para `clients-api/clients/bulk` em lotes de 500
+- Botao "Download Excel" usando a lib `xlsx` ja instalada
+- Barra de progresso durante importacao
+- Verificacao de tenant autorizado no mount
 
-### Arquivo: `src/pages/ApiDocsPublicPage.tsx`
-- Reescrever com secoes navegaveis para cada modulo
-- Incluir exemplos completos em Python, Node.js e cURL
-- Adicionar tabela de codigos de erro e rate limits
+**`supabase/functions/maxsystem-proxy/index.ts`** (~80 linhas)
+- Edge function proxy para evitar CORS ao chamar `https://maxsystem.azurewebsites.net/api/Installment`
+- Recebe os filtros de data como query params
+- Retorna os Items e Count do MaxSystem
+- Autenticacao via JWT (usuario logado) + verificacao de tenant
 
-### Estimativa
-- Edge function: ~400 linhas adicionais de rotas
-- ApiDocsPage: reescrita completa (~900 linhas)
-- ApiDocsPublicPage: reescrita completa (~700 linhas)
+### Alteracoes em arquivos existentes
+
+**`src/App.tsx`**
+- Adicionar rota `/maxlist` protegida com `ProtectedRoute requireTenant`
+
+**`src/components/AppLayout.tsx`**
+- Adicionar link "MaxList" no menu lateral (visivel apenas para o tenant autorizado)
+
+**`supabase/config.toml`** (nao editavel diretamente, mas a function sera registrada automaticamente)
+
+### Mapeamento de campos MaxSystem -> CollectFlow
+
+| MaxSystem API Field | Campo Intermediario | Campo clients |
+|---|---|---|
+| ResponsibleName | NOME_DEVEDOR | nome_completo |
+| ResponsibleCPF | CNPJ_CPF | cpf |
+| ContractNumber | COD_CONTRATO | cod_contrato |
+| Id (titulo) | TITULO | external_id |
+| Number | PARCELA | numero_parcela |
+| Value | VL_TITULO | valor_parcela |
+| PaymentDateQuery | DT_VENCIMENTO | data_vencimento |
+| PaymentDateEffected | DT_PAGAMENTO | data_pagamento |
+| IsCancelled | STATUS | status (pendente/pago/quebrado) |
+| CellPhone1 | FONE_1 | phone |
+| CellPhone2 | FONE_2 | phone2 |
+| HomePhone | FONE_3 | phone3 |
+
+### Logica de status
+- Se tem `DT_PAGAMENTO` -> "pago"
+- Se `IsCancelled === true` -> "quebrado"
+- Caso contrario -> "pendente"
+
+### Tenant autorizado
+O controle de acesso sera feito comparando o slug do tenant. Inicialmente configurado como constante no codigo, podendo futuramente ser movido para uma tabela de configuracao.
