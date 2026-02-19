@@ -79,7 +79,14 @@ Deno.serve(async (req: Request) => {
     const filter = url.searchParams.get("filter") || "";
     const top = url.searchParams.get("top") || "50000";
 
-    const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${top}&%24orderby=ResponsibleCPF+desc&%24filter=(${encodeURI(filter)})`;
+    if (!filter) {
+      return new Response(JSON.stringify({ error: "Filter is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${top}&%24orderby=ResponsibleCPF+desc&%24filter=${encodeURI(filter)}`;
 
     const response = await fetch(maxUrl);
     if (!response.ok) {

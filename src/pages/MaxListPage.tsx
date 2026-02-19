@@ -147,18 +147,11 @@ const MaxListPage = () => {
     setCount(null);
 
     try {
-      const { data: result, error } = await supabase.functions.invoke("maxsystem-proxy", {
-        body: null,
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      // Use fetch directly since invoke doesn't support query params well
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      const url = `https://${projectId}.supabase.co/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=50000`;
+      const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=50000`;
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
