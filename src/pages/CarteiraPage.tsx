@@ -358,7 +358,7 @@ const CarteiraPage = () => {
         <CarteiraKanban
           clients={displayClients}
           loading={isLoading}
-          agreementCpfs={agreementCpfs}
+          tiposStatus={tiposStatus as any}
         />
       ) : (
         /* Client table */

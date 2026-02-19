@@ -1,58 +1,25 @@
 import { useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
-import { Headset, GripVertical } from "lucide-react";
+import { Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PropensityBadge from "./PropensityBadge";
 
+interface StatusCobranca {
+  id: string;
+  nome: string;
+  cor: string;
+}
+
 interface CarteiraKanbanProps {
   clients: Client[];
   loading: boolean;
-  agreementCpfs: Set<string>;
+  tiposStatus: StatusCobranca[];
 }
 
-interface KanbanColumn {
-  key: string;
-  label: string;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-}
-
-const COLUMNS: KanbanColumn[] = [
-  {
-    key: "pendente",
-    label: "Pendentes",
-    color: "text-amber-600",
-    bgColor: "bg-amber-50 dark:bg-amber-950/30",
-    borderColor: "border-t-amber-500",
-  },
-  {
-    key: "em_acordo",
-    label: "Em Acordo",
-    color: "text-blue-600",
-    bgColor: "bg-blue-50 dark:bg-blue-950/30",
-    borderColor: "border-t-blue-500",
-  },
-  {
-    key: "quebrado",
-    label: "Quebrado",
-    color: "text-red-600",
-    bgColor: "bg-red-50 dark:bg-red-950/30",
-    borderColor: "border-t-red-500",
-  },
-  {
-    key: "pago",
-    label: "Pago",
-    color: "text-emerald-600",
-    bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
-    borderColor: "border-t-emerald-500",
-  },
-];
-
-const CarteiraKanban = ({ clients, loading, agreementCpfs }: CarteiraKanbanProps) => {
+const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) => {
   const navigate = useNavigate();
 
   if (loading) {
@@ -63,39 +30,63 @@ const CarteiraKanban = ({ clients, loading, agreementCpfs }: CarteiraKanbanProps
     );
   }
 
+  // Build columns from tipos_status + a fallback for clients without status
+  const columns = [
+    ...tiposStatus.map((t) => ({
+      key: t.id,
+      label: t.nome,
+      color: t.cor || "#6b7280",
+    })),
+    {
+      key: "__sem_status",
+      label: "Sem Status",
+      color: "#6b7280",
+    },
+  ];
+
   const getColumnClients = (columnKey: string): Client[] => {
-    if (columnKey === "em_acordo") {
-      return clients.filter(
-        (c) => c.status === "pendente" && agreementCpfs.has(c.cpf.replace(/\D/g, ""))
-      );
+    if (columnKey === "__sem_status") {
+      return clients.filter((c: any) => !c.status_cobranca_id);
     }
-    if (columnKey === "pendente") {
-      return clients.filter(
-        (c) => c.status === "pendente" && !agreementCpfs.has(c.cpf.replace(/\D/g, ""))
-      );
-    }
-    return clients.filter((c) => c.status === columnKey);
+    return clients.filter((c: any) => c.status_cobranca_id === columnKey);
   };
 
   const getColumnTotal = (columnClients: Client[]): number => {
     return columnClients.reduce((sum, c) => sum + Number(c.valor_parcela), 0);
   };
 
+  // Filter out empty "Sem Status" if no clients match
+  const visibleColumns = columns.filter((col) => {
+    if (col.key === "__sem_status") {
+      return getColumnClients(col.key).length > 0;
+    }
+    return true;
+  });
+
+  const gridCols =
+    visibleColumns.length <= 4
+      ? `grid-cols-1 md:grid-cols-2 xl:grid-cols-${visibleColumns.length}`
+      : `grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-${Math.min(visibleColumns.length, 6)}`;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-      {COLUMNS.map((col) => {
+    <div className={`grid ${gridCols} gap-4`}>
+      {visibleColumns.map((col) => {
         const columnClients = getColumnClients(col.key);
         const total = getColumnTotal(columnClients);
 
         return (
           <div
             key={col.key}
-            className={`rounded-xl border border-border border-t-4 ${col.borderColor} ${col.bgColor} flex flex-col min-h-[400px]`}
+            className="rounded-xl border border-border border-t-4 bg-muted/30 flex flex-col min-h-[400px]"
+            style={{ borderTopColor: col.color }}
           >
             {/* Column header */}
             <div className="px-4 py-3 border-b border-border/50">
               <div className="flex items-center justify-between">
-                <h3 className={`font-semibold ${col.color}`}>{col.label}</h3>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: col.color }} />
+                  <h3 className="font-semibold text-sm text-foreground">{col.label}</h3>
+                </div>
                 <Badge variant="secondary" className="text-xs">
                   {columnClients.length}
                 </Badge>
