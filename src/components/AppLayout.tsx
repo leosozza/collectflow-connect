@@ -198,7 +198,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "Painel Super Admin"}
             </Link>
           )}
-          {tenant?.slug === "maxfama" && (
+          {(tenant?.slug === "maxfama" || tenant?.slug === "temis") && (
             <Link
               to="/maxlist"
               onClick={() => setSidebarOpen(false)}
