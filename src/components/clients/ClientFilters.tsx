@@ -99,7 +99,7 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
         <CollapsibleContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-3 border-t border-border">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Status</Label>
+              <Label className="text-xs text-muted-foreground">Status do Acordo</Label>
               <Select value={filters.status} onValueChange={(v) => update("status", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
