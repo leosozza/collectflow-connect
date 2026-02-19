@@ -39,6 +39,39 @@ Deno.serve(async (req) => {
     const count = data?.length || 0;
     console.log(`Auto-break: ${count} overdue clients marked as quebrado (due <= ${cutoffStr}, 48h rule)`);
 
+    // Trigger workflow engine for each broken client
+    if (count > 0) {
+      const { data: workflows } = await supabase
+        .from("workflow_flows")
+        .select("id, tenant_id")
+        .eq("is_active", true)
+        .eq("trigger_type", "agreement_broken");
+
+      if (workflows && workflows.length > 0) {
+        for (const client of data!) {
+          for (const wf of workflows) {
+            try {
+              await fetch(`${supabaseUrl}/functions/v1/workflow-engine`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${supabaseKey}`,
+                },
+                body: JSON.stringify({
+                  workflow_id: wf.id,
+                  client_id: client.id,
+                  trigger_type: "agreement_broken",
+                }),
+              });
+            } catch (e) {
+              console.error(`Failed to trigger workflow ${wf.id} for client ${client.id}:`, e);
+            }
+          }
+        }
+        console.log(`Triggered ${workflows.length} workflow(s) for ${count} client(s)`);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, updated: count, cutoff_date: cutoffStr }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

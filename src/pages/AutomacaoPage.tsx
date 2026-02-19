@@ -16,6 +16,7 @@ import RuleForm from "@/components/automacao/RuleForm";
 import MessageHistory from "@/components/automacao/MessageHistory";
 import { Link } from "react-router-dom";
 import DispositionAutomationsTab from "@/components/automacao/DispositionAutomationsTab";
+import WorkflowListTab from "@/components/automacao/workflow/WorkflowListTab";
 
 const AutomacaoPage = () => {
   const { tenant, isTenantAdmin } = useTenant();
@@ -99,13 +100,18 @@ const AutomacaoPage = () => {
         <p className="text-muted-foreground">Configure regras automáticas de notificação e acompanhe envios</p>
       </div>
 
-      <Tabs defaultValue="regras">
+      <Tabs defaultValue="fluxos">
         <TabsList>
+          <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
           <TabsTrigger value="regras">Regras</TabsTrigger>
           <TabsTrigger value="pos-tabulacao">Pós-Tabulação</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
           <TabsTrigger value="config">Configurações</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="fluxos">
+          <WorkflowListTab />
+        </TabsContent>
 
         <TabsContent value="regras" className="space-y-4">
           {showForm || editingRule ? (

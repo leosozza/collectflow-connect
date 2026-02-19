@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.check-sla-expiry]
 verify_jwt = false
+
+[functions.workflow-engine]
+verify_jwt = false
+
+[functions.workflow-resume]
+verify_jwt = false
