@@ -224,60 +224,46 @@ Sistema de pontuação:
 Conquistas automáticas: Primeiro Recebimento 🎯, 10 Pagamentos 🔟, Sem Quebra no Mês 🛡️, Meta Atingida 🏆, Top Recebedor 👑, R$10k Recebidos 💰, R$50k Recebidos 💎`,
   },
 
-  // IN PROGRESS
   {
     id: "campanha-operador",
     title: "Seleção de Campanha pelo Operador",
-    description: "Operador pode escolher em qual campanha entrar ao logar na Telefonia. Implementado mas sem testes em produção.",
-    status: "in_progress",
-    progress: 70,
+    description: "Operador seleciona e entra em campanhas 3CPlus diretamente pela interface. Inclui login/logout com resolução de token individual via Edge Function proxy.",
+    status: "done",
+    progress: 100,
     category: "Contact Center",
-    lovablePrompt: `Testar e finalizar o fluxo de seleção de campanha pelo operador na Telefonia 3CPlus. O operador deve conseguir:
-1. Ver campanhas disponíveis ao acessar a aba Telefonia
-2. Selecionar uma campanha e clicar "Entrar na Campanha"
-3. Ver seu status atualizado após login
-4. Poder sair da campanha com "Sair da Campanha"
+    lovablePrompt: `O fluxo de seleção de campanha pelo operador está 100% implementado e funcional. Arquivos-chave:
+- src/components/contact-center/threecplus/TelefoniaDashboard.tsx — seção isOperatorView com Select de campanhas, botão "Entrar na Campanha" e card de status online.
+- supabase/functions/threecplus-proxy/index.ts — actions: login_agent_to_campaign, logout_agent_self, agent_available_campaigns.
 
-Arquivo principal: src/components/contact-center/threecplus/TelefoniaDashboard.tsx (seção isOperatorView)
-Edge function: supabase/functions/threecplus-proxy/index.ts (actions: agent_login, agent_logout_self, agent_campaigns)
-
-Verificar se os endpoints da API 3CPlus estão corretos e se o fluxo funciona end-to-end.`,
+Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama login_agent_to_campaign (resolve token via GET /users) → POST /agent/login com campaign_id. Sair chama logout_agent_self → POST /agent/logout.`,
   },
   {
     id: "sla-whatsapp",
     title: "SLA de Atendimento WhatsApp",
-    description: "Badge visual e tooltip entregues. Falta: configuração do prazo por credor e lógica de alerta automático.",
-    status: "in_progress",
-    progress: 55,
+    description: "Sistema completo de SLA: campo por credor, cálculo automático no webhook, notificação por edge function e indicadores visuais na lista de conversas.",
+    status: "done",
+    progress: 100,
     category: "Contact Center",
-    lovablePrompt: `Finalizar o módulo de SLA de Atendimento no WhatsApp. O que já está pronto:
-- Badge "SLA Expirado" com tooltip mostrando data/hora em src/components/contact-center/whatsapp/ChatPanel.tsx
-
-O que falta implementar:
-1. Campo de configuração do prazo SLA (em horas) por credor nas configurações do credor (CredorForm)
-2. Lógica para calcular sla_deadline_at automaticamente quando uma conversa é criada/aberta
-3. Trigger ou edge function que atualiza o status do SLA e envia notificação interna quando expira
-4. Indicador visual na lista de conversas (ConversationList) para conversas próximas de expirar
-
-Tabela: conversations.sla_deadline_at já existe no banco.`,
+    lovablePrompt: `O módulo de SLA de Atendimento WhatsApp está 100% implementado. Componentes:
+- src/components/cadastros/CredorForm.tsx — campo "Prazo SLA de Atendimento (horas)" na aba Negociação, salvo em credores.sla_hours.
+- supabase/functions/whatsapp-webhook/index.ts — helper getSlaMinutes() prioriza sla_hours do credor (via JOIN clients→credores), fallback para tenant settings. Calcula sla_deadline_at em cada mensagem inbound.
+- supabase/functions/check-sla-expiry/index.ts — edge function que monitora conversas com SLA expirado e envia notificações internas para operadores.
+- src/components/contact-center/whatsapp/ConversationList.tsx — ícone AlertTriangle (vermelho) para SLA expirado e Clock (amarelo) quando <25% do tempo restante, com tooltips mostrando data/hora.
+- src/components/contact-center/whatsapp/ChatPanel.tsx — badge "SLA Expirado" no cabeçalho do chat.`,
   },
   {
     id: "admin-panel",
-    title: "Painel de Admin Unificado",
-    description: "Consolidação das seções Configurações, Avançado e Super Admin em uma navegação coesa.",
-    status: "in_progress",
-    progress: 65,
+    title: "Painel de Configurações Unificado",
+    description: "Sub-navegação lateral com grupos categorizados (Cadastros, Pessoas, Sistema), separadores visuais, badges de contagem, busca rápida e animação no item ativo.",
+    status: "done",
+    progress: 100,
     category: "Core",
-    lovablePrompt: `Melhorar a organização do Painel de Configurações (CadastrosPage) para torná-lo mais claro e intuitivo.
-
-Atual: src/pages/CadastrosPage.tsx tem seções soltas na sub-nav lateral.
-
-Melhorias sugeridas:
-1. Agrupar seções por categoria (ex: "Cadastros", "Integrações", "Avançado")
-2. Adicionar separadores visuais entre grupos
-3. Melhorar o visual dos itens ativos com animação suave
-4. Adicionar contadores ou badges em seções relevantes (ex: usuários ativos)
-5. Considerar adicionar busca rápida nas configurações`,
+    lovablePrompt: `O Painel de Configurações está 100% implementado em src/pages/CadastrosPage.tsx. Inclui:
+- Grupos de navegação: "Cadastros" (Credores, Equipes, Perfil do Devedor, Tipo de Dívida, Tipo de Status), "Pessoas" (Usuários), "Sistema" (Integração, Config. Empresa, Super Admin, Roadmap).
+- Separadores visuais (Separator) entre grupos com rótulo em caps lock.
+- Badges de contagem dinâmica via useQuery (número de credores, equipes e usuários ativos).
+- Busca rápida (Input com ícone Search) que filtra itens em tempo real.
+- Item ativo com borda lateral esquerda colorida (border-primary) e fundo primary/10.`,
   },
 
   // PLANNED
