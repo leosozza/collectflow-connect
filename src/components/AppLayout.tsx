@@ -20,6 +20,7 @@ import {
   Trophy,
   Code2,
   BarChart3,
+  FileSpreadsheet,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -197,6 +198,21 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "Painel Super Admin"}
             </Link>
           )}
+          {tenant?.slug === "maxfama" && (
+            <Link
+              to="/maxlist"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "MaxList" : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                location.pathname === "/maxlist"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <FileSpreadsheet className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "MaxList"}
+            </Link>
+          )}
           {isAdmin && (
             <>
               <Link
@@ -276,6 +292,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/api-docs": "API REST",
                 "/admin/dashboard": "Dashboard Executivo",
                 "/admin/tenants": "Super Admin",
+                "/maxlist": "MaxList - Importação",
               };
               const title = pageTitles[location.pathname];
               return title ? (
