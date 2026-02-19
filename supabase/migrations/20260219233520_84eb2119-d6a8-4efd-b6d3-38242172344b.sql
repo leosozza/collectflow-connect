@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS clients_external_id_tenant_id_unique ON public.clients (external_id, tenant_id) WHERE external_id IS NOT NULL;
