@@ -2105,6 +2105,67 @@ export type Database = {
           },
         ]
       }
+      scripts_abordagem: {
+        Row: {
+          canal: string
+          conteudo: string
+          created_at: string
+          credor_id: string | null
+          id: string
+          is_active: boolean
+          tenant_id: string
+          tipo_devedor_id: string | null
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          canal?: string
+          conteudo?: string
+          created_at?: string
+          credor_id?: string | null
+          id?: string
+          is_active?: boolean
+          tenant_id: string
+          tipo_devedor_id?: string | null
+          titulo?: string
+          updated_at?: string
+        }
+        Update: {
+          canal?: string
+          conteudo?: string
+          created_at?: string
+          credor_id?: string | null
+          id?: string
+          is_active?: boolean
+          tenant_id?: string
+          tipo_devedor_id?: string | null
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scripts_abordagem_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_abordagem_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_abordagem_tipo_devedor_id_fkey"
+            columns: ["tipo_devedor_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_devedor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       serasa_logs: {
         Row: {
           action: string

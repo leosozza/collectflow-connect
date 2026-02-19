@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
 import CredorReguaTab from "./CredorReguaTab";
+import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -190,11 +191,12 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         </SheetHeader>
 
         <Tabs defaultValue="dados" className="mt-4">
-          <TabsList className="w-full flex-wrap">
+        <TabsList className="w-full flex-wrap">
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
             <TabsTrigger value="regua" className="flex-1">Régua</TabsTrigger>
+            <TabsTrigger value="scripts" className="flex-1">Scripts</TabsTrigger>
             <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
             <TabsTrigger value="portal" className="flex-1">Portal</TabsTrigger>
           </TabsList>
@@ -433,6 +435,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           {/* ABA 4 - RÉGUA DE COBRANÇA */}
           <TabsContent value="regua" className="mt-4">
             <CredorReguaTab credorId={editing?.id} />
+          </TabsContent>
+
+          {/* ABA 5 - SCRIPTS DE ABORDAGEM */}
+          <TabsContent value="scripts" className="mt-4">
+            <CredorScriptsTab credorId={editing?.id} />
           </TabsContent>
 
           {/* ABA 5 - ASSINATURA DIGITAL */}
