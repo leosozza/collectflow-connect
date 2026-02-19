@@ -34,7 +34,6 @@ import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
-import AdminDashboardPage from "./pages/AdminDashboardPage";
 
 const queryClient = new QueryClient();
 
@@ -296,16 +295,6 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <ApiDocsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/dashboard"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AdminDashboardPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
