@@ -33,6 +33,7 @@ import RoadmapPage from "./pages/RoadmapPage";
 import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
 import ApiDocsPage from "./pages/ApiDocsPage";
+import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 
 const queryClient = new QueryClient();
 
@@ -224,6 +225,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/api-docs/public" element={<ApiDocsPublicPage />} />
             <Route path="/portal/:tenantSlug" element={<PortalPage />} />
             <Route path="/portal/:tenantSlug/checkout/:token" element={<PortalPage />} />
             <Route path="/portal/:tenantSlug/termo/:token" element={<PortalPage />} />
