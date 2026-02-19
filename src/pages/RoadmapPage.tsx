@@ -383,7 +383,7 @@ Integração: usar os dados do cliente já carregados no TelefoniaDashboard para
     status: "done",
     progress: 100,
     category: "Core",
-    lovablePrompt: `O Dashboard Executivo está implementado em src/pages/AdminDashboardPage.tsx, acessível em /admin/dashboard (apenas para super admins).
+    lovablePrompt: `O Dashboard Executivo está implementado em src/pages/AdminDashboardPage.tsx e acessível como a primeira aba ("Dashboard Executivo") dentro do Painel Super Admin em /admin/tenants.
 
 Métricas implementadas:
 1. KPIs globais: total de clientes, valor total recuperado, taxa de acordos (%), usuários ativos
@@ -393,9 +393,10 @@ Métricas implementadas:
 5. Tabela: taxa de acordos (negociados/fechados/%) com badge de performance por empresa
 6. Tabela: usuários + clientes por empresa com status (ativa/suspensa)
 
-Rota: /admin/dashboard — protegida por isSuperAdmin check.
-Link na sidebar do AppLayout visível apenas para super admins (BarChart3 icon).
-RLS: super admin já tem acesso irrestrito via is_super_admin() function em todas as tabelas.`,
+Integração:
+- Embutido via lazy import em src/pages/SuperAdminPage.tsx como <TabsContent value="executivo">
+- Link na sidebar (AppLayout): "Painel Super Admin" → /admin/tenants, visível apenas para isSuperAdmin
+- RLS: super admin já tem acesso irrestrito via is_super_admin() function em todas as tabelas.`,
   },
 
   // FUTURE
