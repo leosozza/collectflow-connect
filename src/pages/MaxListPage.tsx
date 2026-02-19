@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Upload, Loader2, FileSpreadsheet, Database } from "lucide-react";
+import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -91,7 +92,6 @@ function buildFilter(filters: Record<string, string>): string {
 
   const addDateFilter = (value: string, direction: "de" | "ate", type: string) => {
     if (!value) return;
-    const [d, m, y] = value.split("-"); // input type=date => YYYY-MM-DD
     const iso = `${value}T00:00:00`;
     const fieldMap: Record<string, string> = {
       vencimento: "PaymentDateQuery",
@@ -110,6 +110,20 @@ function buildFilter(filters: Record<string, string>): string {
   addDateFilter(filters.regDe, "de", "registro");
   addDateFilter(filters.regAte, "ate", "registro");
 
+  if (filters.cpf?.trim()) {
+    parts.push(`ResponsibleCPF+eq+'${filters.cpf.trim()}'`);
+  }
+
+  if (filters.contrato?.trim()) {
+    parts.push(`ContractNumber+eq+'${filters.contrato.trim()}'`);
+  }
+
+  if (filters.status === "ativo") {
+    parts.push(`IsCancelled+eq+false`);
+  } else if (filters.status === "cancelado") {
+    parts.push(`IsCancelled+eq+true`);
+  }
+
   return parts.join("+and+");
 }
 
@@ -119,6 +133,7 @@ const MaxListPage = () => {
 
   const [filters, setFilters] = useState({
     vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "",
+    cpf: "", contrato: "", status: "todos",
   });
   const [data, setData] = useState<MappedRecord[]>([]);
   const [count, setCount] = useState<number | null>(null);
@@ -138,7 +153,7 @@ const MaxListPage = () => {
   const handleSearch = async () => {
     const filter = buildFilter(filters);
     if (!filter) {
-      toast.error("Informe pelo menos um filtro de data");
+      toast.error("Informe pelo menos um filtro");
       return;
     }
 
@@ -362,6 +377,37 @@ const MaxListPage = () => {
                   <Input type="date" value={filters.regAte} onChange={(e) => updateFilter("regAte", e.target.value)} />
                 </div>
               </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+            <div className="space-y-2">
+              <Label className="font-semibold">CPF/CNPJ</Label>
+              <Input
+                placeholder="Digite o CPF ou CNPJ"
+                value={filters.cpf}
+                onChange={(e) => updateFilter("cpf", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Contrato</Label>
+              <Input
+                placeholder="Número do contrato"
+                value={filters.contrato}
+                onChange={(e) => updateFilter("contrato", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Status</Label>
+              <Select value={filters.status} onValueChange={(v) => updateFilter("status", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex gap-2 mt-4">
