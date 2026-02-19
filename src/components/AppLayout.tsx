@@ -86,7 +86,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         transform transition-all duration-200 ease-in-out
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>
-        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "gap-3 px-4"} py-5 border-b border-sidebar-border`}>
+        <div className={`flex items-center justify-center ${collapsed ? "px-2" : "px-4"} py-5 border-b border-sidebar-border`}>
           {collapsed ? (
             <img src={rivoLogo} alt="RIVO" className="h-6 w-auto object-contain" />
           ) : (
