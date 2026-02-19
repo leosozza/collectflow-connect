@@ -85,7 +85,8 @@ const singlePayloadExample = `{
   "valor_parcela": 300.00,
   "valor_pago": 0,
   "data_vencimento": "2026-03-01",
-  "status": "pendente"
+  "status": "pendente",
+  "status_cobranca_id": "uuid-do-status-de-cobranca"
 }`;
 
 const bulkPayloadExample = `{
@@ -182,6 +183,7 @@ const fields = [
   ["valor_entrada", "number", "—", "Valor de entrada pago"],
   ["valor_pago", "number", "—", "Valor já pago acumulado"],
   ["status", "string", "—", "pendente | pago | quebrado"],
+  ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (etapa do funil de cobrança)"],
   ["phone", "string", "—", "Telefone com DDD"],
   ["email", "string", "—", "Email do devedor"],
   ["endereco", "string", "—", "Endereço completo"],

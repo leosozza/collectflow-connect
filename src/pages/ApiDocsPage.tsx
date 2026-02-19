@@ -150,7 +150,8 @@ export default function ApiDocsPage() {
   "valor_parcela": 300.00,
   "valor_pago": 0,
   "data_vencimento": "2026-03-01",
-  "status": "pendente"
+  "status": "pendente",
+  "status_cobranca_id": "uuid-do-status-de-cobranca"
 }`;
 
   const bulkPayloadExample = `{
@@ -520,6 +521,7 @@ curl -X DELETE "${BASE_URL}/clients/by-cpf/123.456.789-00" \\
                     ["valor_entrada", "number", "—", "Valor de entrada"],
                     ["valor_pago", "number", "—", "Valor já pago"],
                     ["status", "string", "—", "pendente | pago | quebrado"],
+                    ["status_cobranca_id", "string (UUID)", "—", "UUID do status de cobrança (cadastrado em Cadastros > Status)"],
                     ["phone", "string", "—", "Telefone"],
                     ["email", "string", "—", "Email"],
                     ["endereco", "string", "—", "Endereço completo"],
