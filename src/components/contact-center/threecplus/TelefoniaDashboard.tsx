@@ -18,6 +18,7 @@ import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import DialPad from "./DialPad";
+import ScriptPanel from "./ScriptPanel";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
@@ -400,6 +401,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             />
           </div>
         </div>
+
+        {/* Script Panel */}
+        <ScriptPanel clientPhone={myAgent?.phone || myAgent?.remote_phone} />
       </div>
     );
   }

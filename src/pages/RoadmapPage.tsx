@@ -360,21 +360,31 @@ Para Pagar.me:
   },
   {
     id: "discador-avancado",
-    title: "Discador Preditivo Avançado",
-    description: "Script de abordagem dinâmico por perfil do devedor, integrado ao discador 3CPlus.",
-    status: "planned",
-    progress: 5,
+    title: "Scripts de Abordagem Dinâmicos — Discador 3CPlus",
+    description: "Scripts personalizados por credor e perfil do devedor com variáveis dinâmicas, exibidos em painel lateral para o operador durante a ligação.",
+    status: "done",
+    progress: 100,
     category: "Contact Center",
-    lovablePrompt: `Implementar scripts de abordagem dinâmicos no discador 3CPlus, personalizados por perfil do devedor.
+    lovablePrompt: `Os Scripts de Abordagem Dinâmicos estão implementados e integrados ao discador 3CPlus.
 
-Funcionalidades:
-1. Criar tabela scripts_abordagem com campos: credor_id, tipo_devedor_id, canal, conteudo, is_active
-2. CRUD de scripts nas Configurações do Credor (CredorForm)
-3. Ao receber uma chamada no discador (TelefoniaDashboard), buscar o script adequado baseado no tipo_devedor do cliente
-4. Exibir o script em um painel lateral para o operador durante a chamada
-5. Variáveis dinâmicas: {{nome}}, {{valor}}, {{credor}}, {{vencimento}}
+Banco de dados:
+- Tabela scripts_abordagem: credor_id, tipo_devedor_id, canal, titulo, conteudo, is_active, tenant_id
+- RLS completo: admins gerenciam, usuários do tenant visualizam.
 
-Integração: usar os dados do cliente já carregados no TelefoniaDashboard para preencher variáveis.`,
+Frontend — Gestão (admin):
+- src/components/cadastros/CredorScriptsTab.tsx — CRUD de scripts dentro do CredorForm
+- Nova aba "Scripts" no CredorForm (src/components/cadastros/CredorForm.tsx)
+- Suporte a seleção de canal (telefone, whatsapp, geral) e perfil do devedor
+- Inserção de variáveis dinâmicas: {{nome}}, {{valor}}, {{credor}}, {{vencimento}}, {{parcelas}}, {{operador}}
+
+Frontend — Uso em tempo real (operador):
+- src/components/contact-center/threecplus/ScriptPanel.tsx — painel colapsável exibido na view do operador
+- Busca o script mais adequado por prioridade: credor+tipo_devedor > credor > tipo_devedor > global
+- Resolve variáveis automaticamente com dados do cliente identificado pelo telefone em ligação
+- Botão "Copiar Script" para facilitar uso
+
+Serviço:
+- src/services/scriptAbordagemService.ts — fetchScriptsByCredor, fetchScriptForClient, resolveScriptVariables, CRUD completo`,
   },
   {
     id: "dashboard-executivo",
