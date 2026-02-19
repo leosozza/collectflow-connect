@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchTiposStatus, upsertTipoStatus, deleteTipoStatus } from "@/services/cadastrosService";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Download, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,7 +109,7 @@ const TipoStatusList = () => {
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         {isLoading ? <div className="p-8 text-center text-muted-foreground">Carregando...</div> : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground text-sm">Nenhum status encontrado</div> : (
           <Table>
-            <TableHeader><TableRow className="bg-muted/50"><TableHead>Status</TableHead><TableHead>Descrição</TableHead><TableHead>Regras</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/50"><TableHead>Status</TableHead><TableHead>UUID (API)</TableHead><TableHead>Descrição</TableHead><TableHead>Regras</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.map((t: any) => (
                 <TableRow key={t.id}>
@@ -117,6 +117,14 @@ const TipoStatusList = () => {
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.cor || "#6b7280" }} />
                       <span className="font-medium">{t.nome}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground max-w-[120px] truncate" title={t.id}>{t.id}</code>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(t.id); toast.success("UUID copiado!"); }}>
+                        <Copy className="w-3 h-3" />
+                      </Button>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{t.descricao || "—"}</TableCell>
