@@ -602,7 +602,10 @@ Deno.serve(async (req) => {
         }
         url = buildUrl(baseUrl, 'click2call', authParam);
         method = 'POST';
-        reqBody = JSON.stringify({ agent_id: body.agent_id, phone_number: body.phone_number });
+        // 3CPlus API requires agent_id as integer, not string
+        const agentIdNum = Number(body.agent_id);
+        console.log(`click2call payload: agent_id=${agentIdNum} (${typeof agentIdNum}), phone=${body.phone_number}`);
+        reqBody = JSON.stringify({ agent_id: agentIdNum, phone_number: body.phone_number });
         break;
       }
 

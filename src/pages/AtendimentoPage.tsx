@@ -226,7 +226,8 @@ const AtendimentoPage = () => {
       });
       if (error) throw error;
       if (data?.status && data.status >= 400) {
-        toast.error(data.detail || data.message || "Erro ao discar");
+        const detail = data.detail || data.message || (Array.isArray(data.errors) ? data.errors[0] : null) || "Erro ao discar";
+        toast.error(detail);
       } else {
         toast.success("Ligação iniciada");
       }
