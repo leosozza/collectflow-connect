@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Copy, Trash2, Play, Pause, Activity, Clock, CheckCircle, AlertTriangle, LayoutTemplate, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Pencil, Copy, Trash2, Play, Pause, Activity, Clock, CheckCircle, AlertTriangle, LayoutTemplate, Search, Zap } from "lucide-react";
 import WorkflowCanvas from "./WorkflowCanvas";
 import FlowTemplatesDialog from "./FlowTemplatesDialog";
 import type { FlowTemplate } from "./FlowTemplates";
@@ -41,6 +42,14 @@ const WorkflowListTab = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // Manual trigger state
+  const [triggerDialogOpen, setTriggerDialogOpen] = useState(false);
+  const [triggerWorkflow, setTriggerWorkflow] = useState<WorkflowFlow | null>(null);
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientResults, setClientResults] = useState<any[]>([]);
+  const [searchingClients, setSearchingClients] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+
   const load = useCallback(async () => {
     if (!tenant) return;
     setLoading(true);
@@ -52,7 +61,6 @@ const WorkflowListTab = () => {
       setWorkflows(data);
       setStats(s);
 
-      // Fetch recent executions
       const { data: execs } = await supabase
         .from("workflow_executions")
         .select("id, workflow_id, client_id, status, current_node_id, created_at")
@@ -101,7 +109,62 @@ const WorkflowListTab = () => {
 
   const handleTemplateSelect = (tpl: FlowTemplate) => {
     setEditingWorkflow("new");
-    // Template will be loaded in canvas via props — user opens canvas first
+  };
+
+  // Manual trigger
+  const openTriggerDialog = (wf: WorkflowFlow) => {
+    setTriggerWorkflow(wf);
+    setClientSearch("");
+    setClientResults([]);
+    setTriggerDialogOpen(true);
+  };
+
+  const searchClients = useCallback(async (query: string) => {
+    if (!tenant || query.length < 2) {
+      setClientResults([]);
+      return;
+    }
+    setSearchingClients(true);
+    try {
+      const { data } = await supabase
+        .from("clients")
+        .select("id, nome_completo, cpf")
+        .eq("tenant_id", tenant.id)
+        .or(`nome_completo.ilike.%${query}%,cpf.ilike.%${query}%`)
+        .limit(10);
+      setClientResults(data || []);
+    } catch {
+      setClientResults([]);
+    } finally {
+      setSearchingClients(false);
+    }
+  }, [tenant]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchClients(clientSearch), 300);
+    return () => clearTimeout(timer);
+  }, [clientSearch, searchClients]);
+
+  const handleManualTrigger = async (clientId: string) => {
+    if (!triggerWorkflow) return;
+    setTriggering(true);
+    try {
+      const { error } = await supabase.functions.invoke("workflow-engine", {
+        body: {
+          workflow_id: triggerWorkflow.id,
+          client_id: clientId,
+          trigger_type: "manual",
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Fluxo disparado com sucesso!" });
+      setTriggerDialogOpen(false);
+      load();
+    } catch (err: any) {
+      toast({ title: "Erro ao disparar fluxo", description: err.message, variant: "destructive" });
+    } finally {
+      setTriggering(false);
+    }
   };
 
   const filteredWorkflows = useMemo(() => {
@@ -213,6 +276,11 @@ const WorkflowListTab = () => {
                 <div className="flex gap-1 pt-1">
                   <Button size="sm" variant="ghost" onClick={() => setEditingWorkflow(wf)}><Pencil className="w-3.5 h-3.5" /></Button>
                   <Button size="sm" variant="ghost" onClick={() => handleDuplicate(wf)}><Copy className="w-3.5 h-3.5" /></Button>
+                  {wf.is_active && (
+                    <Button size="sm" variant="ghost" className="text-primary" onClick={() => openTriggerDialog(wf)} title="Disparar manualmente">
+                      <Zap className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(wf)}><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
               </CardContent>
@@ -256,6 +324,47 @@ const WorkflowListTab = () => {
       )}
 
       <FlowTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} onSelect={handleTemplateSelect} />
+
+      {/* Manual Trigger Dialog */}
+      <Dialog open={triggerDialogOpen} onOpenChange={setTriggerDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disparar Fluxo Manualmente</DialogTitle>
+            <DialogDescription>
+              Selecione um cliente para executar o fluxo "{triggerWorkflow?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Buscar por nome ou CPF..."
+              value={clientSearch}
+              onChange={(e) => setClientSearch(e.target.value)}
+            />
+            {searchingClients && <p className="text-xs text-muted-foreground">Buscando...</p>}
+            {clientResults.length > 0 && (
+              <div className="max-h-60 overflow-y-auto border rounded-md divide-y">
+                {clientResults.map((c) => (
+                  <button
+                    key={c.id}
+                    className="w-full text-left px-3 py-2 hover:bg-muted transition-colors text-sm flex justify-between items-center"
+                    onClick={() => handleManualTrigger(c.id)}
+                    disabled={triggering}
+                  >
+                    <span className="font-medium">{c.nome_completo}</span>
+                    <span className="text-xs text-muted-foreground">{c.cpf}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {clientSearch.length >= 2 && !searchingClients && clientResults.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum cliente encontrado</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTriggerDialogOpen(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
