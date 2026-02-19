@@ -305,6 +305,18 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div><Label>Desconto Máximo (%)</Label><Input type="number" value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", parseFloat(e.target.value) || 0)} /></div>
                 <div><Label>Juros ao Mês (%)</Label><Input type="number" value={form.juros_mes ?? 0} onChange={e => set("juros_mes", parseFloat(e.target.value) || 0)} /></div>
                 <div><Label>Multa (%)</Label><Input type="number" value={form.multa ?? 0} onChange={e => set("multa", parseFloat(e.target.value) || 0)} /></div>
+                <div className="col-span-2">
+                  <Label>Prazo SLA de Atendimento (horas)</Label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder="Ex: 1 = 1h, 0.5 = 30min"
+                    value={form.sla_hours ?? ""}
+                    onChange={e => set("sla_hours", e.target.value ? parseFloat(e.target.value) : null)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Se vazio, usa o prazo padrão do tenant. Aceita decimais (ex: 0.5 = 30 minutos).</p>
+                </div>
               </div>
             </div>
 

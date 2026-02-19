@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.clients-api]
 verify_jwt = false
+
+[functions.check-sla-expiry]
+verify_jwt = false

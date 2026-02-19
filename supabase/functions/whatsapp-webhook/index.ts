@@ -74,8 +74,29 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    // Helper: get SLA minutes from tenant settings
-    const getSlaMinutes = async (): Promise<number> => {
+    // Helper: get SLA minutes (per-credor first, then tenant fallback)
+    const getSlaMinutes = async (clientId?: string | null): Promise<number> => {
+      // Try per-credor SLA if client is linked
+      if (clientId) {
+        const { data: client } = await supabase
+          .from("clients")
+          .select("credor")
+          .eq("id", clientId)
+          .maybeSingle();
+        if (client?.credor) {
+          const { data: credor } = await supabase
+            .from("credores")
+            .select("sla_hours")
+            .eq("tenant_id", tenantId)
+            .eq("razao_social", client.credor)
+            .maybeSingle();
+          if (credor?.sla_hours != null) {
+            console.log("Using credor SLA:", credor.sla_hours, "hours");
+            return credor.sla_hours * 60;
+          }
+        }
+      }
+      // Fallback to tenant global
       const { data: tenant } = await supabase
         .from("tenants")
         .select("settings")
@@ -204,8 +225,10 @@ Deno.serve(async (req) => {
 
         if (direction === "inbound") {
           updateData.status = "open";
-          const slaMinutes = await getSlaMinutes();
+          const linkedClientId = existingConv.client_id || updateData.client_id || null;
+          const slaMinutes = await getSlaMinutes(linkedClientId);
           updateData.sla_deadline_at = new Date(Date.now() + slaMinutes * 60 * 1000).toISOString();
+          updateData.sla_notified_at = null; // reset notification flag
         } else {
           updateData.sla_deadline_at = null;
         }
@@ -231,7 +254,7 @@ Deno.serve(async (req) => {
         }
 
         const assignedTo = direction === "inbound" ? await assignRoundRobin() : null;
-        const slaMinutes = await getSlaMinutes();
+        const slaMinutes = await getSlaMinutes(clientId);
 
         const { data: newConv, error: convErr } = await supabase
           .from("conversations")
