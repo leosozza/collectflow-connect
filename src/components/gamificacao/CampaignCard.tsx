@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Campaign, CampaignParticipant, fetchCampaignParticipants, METRIC_OPTIONS, PERIOD_OPTIONS } from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
-import { Trophy, Clock, Gift } from "lucide-react";
+import { Trophy, Clock, Gift, Building2 } from "lucide-react";
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -38,6 +38,19 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
             {isActive ? "Ativa" : campaign.status === "rascunho" ? "Rascunho" : "Encerrada"}
           </Badge>
         </div>
+
+        {/* Credores badges */}
+        {campaign.credores && campaign.credores.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {campaign.credores.map((c) => (
+              <Badge key={c.credor_id} variant="outline" className="text-[10px] gap-1 bg-muted/50">
+                <Building2 className="w-2.5 h-2.5" />
+                {c.razao_social || "Credor"}
+              </Badge>
+            ))}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-1.5 mt-2">
           <Badge variant="outline" className="text-[10px]">{metricLabel}</Badge>
           <Badge variant="outline" className="text-[10px]">{periodLabel}</Badge>

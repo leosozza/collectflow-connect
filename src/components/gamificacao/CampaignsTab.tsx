@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchCampaigns, createCampaign, updateCampaign, deleteCampaign, Campaign } from "@/services/campaignService";
+import {
+  fetchCampaigns, createCampaign, updateCampaign, deleteCampaign,
+  saveCampaignCredores, saveCampaignParticipants, Campaign,
+} from "@/services/campaignService";
 import CampaignForm from "./CampaignForm";
 import CampaignCard from "./CampaignCard";
 import { Button } from "@/components/ui/button";
@@ -22,16 +25,30 @@ const CampaignsTab = () => {
     enabled: !!tenant?.id,
   });
 
-  const createMut = useMutation({
-    mutationFn: async (data: any) => {
+  const saveMut = useMutation({
+    mutationFn: async ({
+      data,
+      credorIds,
+      participants,
+    }: {
+      data: any;
+      credorIds: string[];
+      participants: { operator_id: string; source_type: string; source_id: string | null }[];
+    }) => {
+      let campaignId: string;
       if (editing) {
         await updateCampaign(editing.id, data);
+        campaignId = editing.id;
       } else {
-        await createCampaign({ ...data, tenant_id: tenant!.id, created_by: profile!.id });
+        const created = await createCampaign({ ...data, tenant_id: tenant!.id, created_by: profile!.id });
+        campaignId = created.id;
       }
+      await saveCampaignCredores(campaignId, tenant!.id, credorIds);
+      await saveCampaignParticipants(campaignId, tenant!.id, participants);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
+      qc.invalidateQueries({ queryKey: ["campaign-participants"] });
       setFormOpen(false);
       setEditing(null);
       toast.success(editing ? "Campanha atualizada!" : "Campanha criada!");
@@ -119,9 +136,9 @@ const CampaignsTab = () => {
         <CampaignForm
           open={formOpen}
           onClose={() => { setFormOpen(false); setEditing(null); }}
-          onSave={(data) => createMut.mutate(data)}
+          onSave={(data, credorIds, participants) => saveMut.mutate({ data, credorIds, participants })}
           campaign={editing}
-          loading={createMut.isPending}
+          loading={saveMut.isPending}
         />
       )}
     </div>

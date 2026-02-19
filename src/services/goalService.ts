@@ -7,17 +7,26 @@ export interface OperatorGoal {
   year: number;
   month: number;
   target_amount: number;
+  credor_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
 }
 
-export const fetchGoals = async (year: number, month: number): Promise<OperatorGoal[]> => {
-  const { data, error } = await supabase
+export const fetchGoals = async (year: number, month: number, credorId?: string | null): Promise<OperatorGoal[]> => {
+  let query = supabase
     .from("operator_goals")
     .select("*")
     .eq("year", year)
     .eq("month", month);
+
+  if (credorId) {
+    query = query.eq("credor_id", credorId);
+  } else {
+    query = query.is("credor_id", null);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data as OperatorGoal[]) || [];
 };
@@ -44,6 +53,7 @@ export const upsertGoal = async (params: {
   target_amount: number;
   tenant_id: string;
   created_by: string;
+  credor_id?: string | null;
 }): Promise<void> => {
   const { error } = await supabase
     .from("operator_goals")
@@ -54,6 +64,7 @@ export const upsertGoal = async (params: {
       target_amount: params.target_amount,
       tenant_id: params.tenant_id,
       created_by: params.created_by,
-    } as any, { onConflict: "tenant_id,operator_id,year,month" });
+      credor_id: params.credor_id || null,
+    } as any, { onConflict: "operator_goals_unique_idx" });
   if (error) throw error;
 };

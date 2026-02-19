@@ -14,6 +14,7 @@ export interface Campaign {
   created_by: string;
   created_at: string;
   updated_at: string;
+  credores?: { credor_id: string; razao_social?: string }[];
 }
 
 export interface CampaignParticipant {
@@ -23,6 +24,8 @@ export interface CampaignParticipant {
   operator_id: string;
   score: number;
   rank: number | null;
+  source_type: string;
+  source_id: string | null;
   updated_at: string;
   profile?: { full_name: string; avatar_url: string | null };
 }
@@ -54,10 +57,29 @@ export const fetchCampaigns = async (tenantId?: string): Promise<Campaign[]> => 
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data as Campaign[]) || [];
+
+  const campaigns = (data as Campaign[]) || [];
+
+  if (campaigns.length === 0) return campaigns;
+
+  // Fetch linked credores
+  const campaignIds = campaigns.map((c) => c.id);
+  const { data: links } = await supabase
+    .from("campaign_credores")
+    .select("campaign_id, credor_id, credores!campaign_credores_credor_id_fkey(razao_social)")
+    .in("campaign_id", campaignIds);
+
+  const credorMap = new Map<string, { credor_id: string; razao_social?: string }[]>();
+  for (const link of (links || []) as any[]) {
+    const arr = credorMap.get(link.campaign_id) || [];
+    arr.push({ credor_id: link.credor_id, razao_social: link.credores?.razao_social });
+    credorMap.set(link.campaign_id, arr);
+  }
+
+  return campaigns.map((c) => ({ ...c, credores: credorMap.get(c.id) || [] }));
 };
 
-export const createCampaign = async (campaign: Omit<Campaign, "id" | "created_at" | "updated_at">): Promise<Campaign> => {
+export const createCampaign = async (campaign: Omit<Campaign, "id" | "created_at" | "updated_at" | "credores">): Promise<Campaign> => {
   const { data, error } = await supabase
     .from("gamification_campaigns")
     .insert(campaign as any)
@@ -68,9 +90,10 @@ export const createCampaign = async (campaign: Omit<Campaign, "id" | "created_at
 };
 
 export const updateCampaign = async (id: string, updates: Partial<Campaign>): Promise<void> => {
+  const { credores, ...rest } = updates;
   const { error } = await supabase
     .from("gamification_campaigns")
-    .update(updates as any)
+    .update(rest as any)
     .eq("id", id);
   if (error) throw error;
 };
@@ -81,6 +104,47 @@ export const deleteCampaign = async (id: string): Promise<void> => {
     .delete()
     .eq("id", id);
   if (error) throw error;
+};
+
+export const saveCampaignCredores = async (
+  campaignId: string,
+  tenantId: string,
+  credorIds: string[]
+): Promise<void> => {
+  // Delete existing
+  await supabase.from("campaign_credores").delete().eq("campaign_id", campaignId);
+  // Insert new
+  if (credorIds.length > 0) {
+    const rows = credorIds.map((credor_id) => ({
+      campaign_id: campaignId,
+      credor_id,
+      tenant_id: tenantId,
+    }));
+    const { error } = await supabase.from("campaign_credores").insert(rows as any);
+    if (error) throw error;
+  }
+};
+
+export const saveCampaignParticipants = async (
+  campaignId: string,
+  tenantId: string,
+  participants: { operator_id: string; source_type: string; source_id: string | null }[]
+): Promise<void> => {
+  // Delete existing
+  await supabase.from("campaign_participants").delete().eq("campaign_id", campaignId);
+  // Insert new
+  if (participants.length > 0) {
+    const rows = participants.map((p) => ({
+      campaign_id: campaignId,
+      tenant_id: tenantId,
+      operator_id: p.operator_id,
+      source_type: p.source_type,
+      source_id: p.source_id,
+      score: 0,
+    }));
+    const { error } = await supabase.from("campaign_participants").insert(rows as any);
+    if (error) throw error;
+  }
 };
 
 export const fetchCampaignParticipants = async (campaignId: string): Promise<CampaignParticipant[]> => {

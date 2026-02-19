@@ -19,6 +19,7 @@ const GoalsManagementTab = () => {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [credorFilter, setCredorFilter] = useState<string>("__global__");
   const [editedGoals, setEditedGoals] = useState<Record<string, number>>({});
 
   const { data: operators = [] } = useQuery({
@@ -34,9 +35,25 @@ const GoalsManagementTab = () => {
     enabled: !!tenant?.id,
   });
 
+  const { data: credores = [] } = useQuery({
+    queryKey: ["credores-active", tenant?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("credores")
+        .select("id, razao_social")
+        .eq("tenant_id", tenant!.id)
+        .eq("status", "ativo")
+        .order("razao_social");
+      return data || [];
+    },
+    enabled: !!tenant?.id,
+  });
+
+  const effectiveCredorId = credorFilter === "__global__" ? null : credorFilter;
+
   const { data: goals = [] } = useQuery({
-    queryKey: ["goals", year, month],
-    queryFn: () => fetchGoals(year, month),
+    queryKey: ["goals", year, month, effectiveCredorId],
+    queryFn: () => fetchGoals(year, month, effectiveCredorId),
   });
 
   const goalMap = new Map(goals.map((g) => [g.operator_id, g.target_amount]));
@@ -52,6 +69,7 @@ const GoalsManagementTab = () => {
           target_amount: amount,
           tenant_id: tenant!.id,
           created_by: user!.id,
+          credor_id: effectiveCredorId,
         });
       }
     },
@@ -70,8 +88,8 @@ const GoalsManagementTab = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setEditedGoals({}); }}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             {months.map((m) => (
@@ -79,11 +97,20 @@ const GoalsManagementTab = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+        <Select value={String(year)} onValueChange={(v) => { setYear(Number(v)); setEditedGoals({}); }}>
           <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
           <SelectContent>
             {[year - 1, year, year + 1].map((y) => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={credorFilter} onValueChange={(v) => { setCredorFilter(v); setEditedGoals({}); }}>
+          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__global__">Global (todos credores)</SelectItem>
+            {credores.map((c: any) => (
+              <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>
             ))}
           </SelectContent>
         </Select>

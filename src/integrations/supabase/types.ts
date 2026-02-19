@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievement_templates: {
+        Row: {
+          created_at: string
+          credor_id: string | null
+          criteria_type: string
+          criteria_value: number
+          description: string
+          icon: string
+          id: string
+          is_active: boolean
+          points_reward: number
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credor_id?: string | null
+          criteria_type?: string
+          criteria_value?: number
+          description?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          points_reward?: number
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credor_id?: string | null
+          criteria_type?: string
+          criteria_value?: number
+          description?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          points_reward?: number
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievement_templates_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "achievement_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       achievements: {
         Row: {
           description: string | null
@@ -385,6 +445,52 @@ export type Database = {
           },
         ]
       }
+      campaign_credores: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          credor_id: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          credor_id: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          credor_id?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_credores_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "gamification_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_credores_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_credores_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_participants: {
         Row: {
           campaign_id: string
@@ -392,6 +498,8 @@ export type Database = {
           operator_id: string
           rank: number | null
           score: number
+          source_id: string | null
+          source_type: string
           tenant_id: string
           updated_at: string
         }
@@ -401,6 +509,8 @@ export type Database = {
           operator_id: string
           rank?: number | null
           score?: number
+          source_id?: string | null
+          source_type?: string
           tenant_id: string
           updated_at?: string
         }
@@ -410,6 +520,8 @@ export type Database = {
           operator_id?: string
           rank?: number | null
           score?: number
+          source_id?: string | null
+          source_type?: string
           tenant_id?: string
           updated_at?: string
         }
@@ -1530,6 +1642,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          credor_id: string | null
           id: string
           month: number
           operator_id: string
@@ -1541,6 +1654,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          credor_id?: string | null
           id?: string
           month: number
           operator_id: string
@@ -1552,6 +1666,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          credor_id?: string | null
           id?: string
           month?: number
           operator_id?: string
@@ -1561,6 +1676,13 @@ export type Database = {
           year?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "operator_goals_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "operator_goals_tenant_id_fkey"
             columns: ["tenant_id"]
