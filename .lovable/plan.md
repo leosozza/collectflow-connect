@@ -1,91 +1,57 @@
 
-
-## Reorganizar o Painel de Configuracoes
+## Adicionar as 5 Fases Estratégicas ao Roadmap
 
 ### Objetivo
 
-Transformar a lista plana de itens na sub-navegacao lateral em grupos visuais claros com separadores, busca rapida, badges informativos e animacao suave no item ativo.
+Inserir os 5 blocos de funcionalidades avançadas ("O Agente Autônomo", "N8N Embutido", "Multicanal", "Smart Payments", "ML Preditivo") como novos cards no Roadmap, mantendo o padrão visual e de dados já existente.
 
----
+### Análise do Estado Atual
 
-### Estrutura de Grupos
+O arquivo `src/pages/RoadmapPage.tsx` já possui a estrutura completa com:
+- Interface `RoadmapItem` com campos: `id`, `title`, `description`, `status`, `progress`, `category`, `lovablePrompt`
+- 4 status possíveis: `done`, `in_progress`, `planned`, `future`
+- Array `roadmapData[]` com 26 itens existentes
+- Exibição agrupada por status com cards, barra de progresso e botão "Copiar contexto"
 
-A navegacao lateral sera organizada em 3 categorias:
+### Itens a Adicionar
 
-```text
-Configuracoes
-------------------------------
-[Campo de busca rapida]
+Serão adicionados **12 novos cards**, todos nas seções `"planned"` ou `"future"`, agrupados pelas 5 fases:
 
-CADASTROS
-  Credores          [3]
-  Equipes           [2]
-  Perfil do Devedor
-  Tipo de Divida
-  Tipo de Status
+| # | Título | Status | Categoria | Progresso |
+|---|--------|--------|-----------|-----------|
+| 1 | Políticas de Desconto Dinâmico | planned | IA | 5% |
+| 2 | Agente IA Autônomo de Negociação | planned | IA | 0% |
+| 3 | Análise de Sentimento do Devedor | future | IA | 0% |
+| 4 | Construtor Visual de Fluxos (N8N Embutido) | future | Automação | 0% |
+| 5 | Motor de Execução de Fluxos | future | Automação | 0% |
+| 6 | Grupos de WhatsApp — Mutirão IA | future | Contact Center | 0% |
+| 7 | Transição de Canal Inteligente | future | Automação | 0% |
+| 8 | Pix QR Code Dinâmico com Juros em Tempo Real | planned | Integrações | 0% |
+| 9 | Webhook de Baixa Automática | planned | Integrações | 0% |
+| 10 | Split de Pagamento (Comissão + Credor) | future | Financeiro | 0% |
+| 11 | Dashboard de ROI — IA vs Humano | future | IA | 0% |
+| 12 | Régua Inversa Preventiva & Lead Scoring Avançado | future | IA | 0% |
 
-PESSOAS
-  Usuarios          [5]
+### Cada card terá um `lovablePrompt` detalhado
 
-SISTEMA
-  Integracao
-  Config. Empresa   (se tenant_admin)
-  Super Admin       (se super_admin)
-  Roadmap           (se tenant_admin)
-```
+Cada item terá um prompt técnico completo com:
+- Referência exata aos arquivos existentes do projeto
+- Tabelas do banco já existentes relevantes
+- Edge functions a criar
+- Passo a passo de implementação aproveitando o código já pronto
 
----
+### Único Arquivo Modificado
 
-### Mudancas Detalhadas
-
-#### 1. Agrupar secoes por categoria
-
-As secoes serao organizadas em um array de grupos:
-
-| Grupo | Itens |
+| Arquivo | Ação |
 |---|---|
-| Cadastros | Credores, Equipes, Perfil do Devedor, Tipo de Divida, Tipo de Status |
-| Pessoas | Usuarios |
-| Sistema | Integracao, Config. Empresa*, Super Admin*, Roadmap* |
+| `src/pages/RoadmapPage.tsx` | Inserir 12 novos objetos no array `roadmapData[]` (linhas 23–544) |
 
-(*) Itens condicionais baseados em permissao.
+Nenhum novo arquivo, nenhuma mudança de lógica ou visual — apenas a adição dos dados no array existente. O sistema de agrupamento, busca, filtros e cards já vai exibir os novos itens automaticamente com o visual correto.
 
-#### 2. Separadores visuais entre grupos
+### Categorias adicionadas
 
-Cada grupo tera um label em texto pequeno e uppercase (estilo "overline") seguido dos itens. Um `Separator` do shadcn sera usado entre grupos.
+Os novos itens usam categorias novas (`"Automação"`, `"Financeiro"`) que serão exibidas nos badges de categoria corretamente, pois o badge é renderizado dinamicamente com o valor do campo `category`.
 
-#### 3. Animacao suave no item ativo
+### Resultado esperado
 
-Substituir a mudanca abrupta de cor por uma transicao com `transition-all duration-200` e um indicador lateral (borda esquerda colorida de 3px) no item ativo, alem do background.
-
-#### 4. Badges com contadores
-
-Adicionar queries para contar:
-- **Credores**: total de credores ativos
-- **Equipes**: total de equipes
-- **Usuarios**: total de usuarios do tenant
-
-Os badges serao exibidos como `Badge variant="secondary"` ao lado do label, usando dados ja carregados pelos hooks existentes (`useQuery` com `fetchCredores`, `fetchEquipes`). Uma nova query simples contara profiles do tenant.
-
-#### 5. Busca rapida
-
-Um campo `Input` com icone de lupa no topo da navegacao que filtra os itens visiveis pelo label. Itens que nao correspondem ao filtro ficam ocultos, mas os grupos vazios tambem sao ocultados.
-
----
-
-### Arquivo Modificado
-
-| Arquivo | Acao |
-|---|---|
-| `src/pages/CadastrosPage.tsx` | Refatorar para usar grupos, separadores, busca, badges e animacao |
-
-Nenhum arquivo novo sera criado. As queries de contagem usarao os services existentes (`cadastrosService`). Para contar usuarios, sera feita uma query direta ao `profiles` filtrado por `tenant_id`.
-
----
-
-### Visual do Item Ativo (antes/depois)
-
-**Antes**: Background solido primary, texto branco, sem transicao.
-
-**Depois**: Background `primary/10`, texto `primary`, borda esquerda de 3px na cor primary, `transition-all duration-200` para entrada suave. Hover com `bg-muted` e `text-foreground`.
-
+O Roadmap passará de 26 para 38 itens, com a seção `"Futuro"` crescendo significativamente e `"Planejado"` recebendo 4 novos itens relacionados a Smart Payments e IA de Negociação, refletindo a visão estratégica do produto como orquestrador de crédito autônomo baseado em IA.
