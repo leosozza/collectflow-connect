@@ -236,7 +236,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     if (!operatorAgentId) return;
     setLoggingOutSelf(true);
     try {
-      const result = await invoke("logout_agent", { agent_id: operatorAgentId });
+      const result = await invoke("logout_agent_self", { agent_id: operatorAgentId });
       if (result?.status && result.status >= 400) {
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
@@ -255,6 +255,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     const myAgent = operatorAgentId
       ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
       : null;
+    // Treat status 0 (offline) as not logged in — show campaign selector
+    const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
     const myMetrics = operatorAgentId ? agentMetrics[operatorAgentId] : undefined;
     const myStatusStr = statusLabel(myAgent?.status);
     const myStatusColor = statusColor(myAgent?.status);
@@ -288,7 +290,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           <div className="lg:col-span-3">
             {loading && !lastUpdate ? (
               <Skeleton className="h-64 w-full rounded-xl" />
-            ) : !myAgent ? (
+            ) : !isAgentOnline ? (
               /* Campaign selector when agent is offline */
               <div className="bg-card rounded-xl border border-border p-6 space-y-4">
                 {!operatorAgentId ? (

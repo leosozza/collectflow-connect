@@ -501,22 +501,97 @@ Deno.serve(async (req) => {
         method = 'POST';
         break;
 
-      // ── Agent Login/Logout (company-level endpoints) ──
+      // ── Agent Login/Logout (agent-level token endpoints) ──
       case 'login_agent_to_campaign': {
         const err1 = requireField(body, 'agent_id', corsHeaders);
         if (err1) return err1;
         const err2 = requireField(body, 'campaign_id', corsHeaders);
         if (err2) return err2;
-        url = buildUrl(baseUrl, `agents/${body.agent_id}/login`, authParam);
+        // Resolve agent token via GET /users
+        const usersUrlLogin = buildUrl(baseUrl, 'users', authParam);
+        const usersResLogin = await fetch(usersUrlLogin, { headers: { 'Content-Type': 'application/json' } });
+        if (!usersResLogin.ok) {
+          const errText = await usersResLogin.text();
+          console.error(`Failed to fetch users for agent token: ${usersResLogin.status} ${errText.substring(0, 200)}`);
+          return new Response(
+            JSON.stringify({ status: usersResLogin.status, detail: 'Falha ao buscar token do agente' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const usersDataLogin = await usersResLogin.json();
+        const usersList = Array.isArray(usersDataLogin) ? usersDataLogin : usersDataLogin?.data || [];
+        const targetUser = usersList.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
+        if (!targetUser || !targetUser.api_token) {
+          console.error(`Agent ${body.agent_id} not found or has no api_token. Users count: ${usersList.length}`);
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const agentAuthLogin = `api_token=${targetUser.api_token}`;
+        url = `${baseUrl}/agent/login?${agentAuthLogin}`;
         method = 'POST';
         reqBody = JSON.stringify({ campaign_id: body.campaign_id });
+        console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/login`);
+        break;
+      }
+
+      case 'logout_agent_self': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        // Resolve agent token via GET /users
+        const usersUrlLogout = buildUrl(baseUrl, 'users', authParam);
+        const usersResLogout = await fetch(usersUrlLogout, { headers: { 'Content-Type': 'application/json' } });
+        if (!usersResLogout.ok) {
+          const errText = await usersResLogout.text();
+          console.error(`Failed to fetch users for agent logout: ${usersResLogout.status} ${errText.substring(0, 200)}`);
+          return new Response(
+            JSON.stringify({ status: usersResLogout.status, detail: 'Falha ao buscar token do agente' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const usersDataLogout = await usersResLogout.json();
+        const usersListLogout = Array.isArray(usersDataLogout) ? usersDataLogout : usersDataLogout?.data || [];
+        const targetLogout = usersListLogout.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
+        if (!targetLogout || !targetLogout.api_token) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const agentAuthLogout = `api_token=${targetLogout.api_token}`;
+        url = `${baseUrl}/agent/logout?${agentAuthLogout}`;
+        method = 'POST';
+        console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/logout`);
         break;
       }
 
       case 'agent_available_campaigns': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `agents/${body.agent_id}/campaigns`, authParam);
+        // Resolve agent token via GET /users
+        const usersUrlCamp = buildUrl(baseUrl, 'users', authParam);
+        const usersResCamp = await fetch(usersUrlCamp, { headers: { 'Content-Type': 'application/json' } });
+        if (!usersResCamp.ok) {
+          const errText = await usersResCamp.text();
+          console.error(`Failed to fetch users for agent campaigns: ${usersResCamp.status} ${errText.substring(0, 200)}`);
+          return new Response(
+            JSON.stringify({ status: usersResCamp.status, detail: 'Falha ao buscar token do agente' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const usersDataCamp = await usersResCamp.json();
+        const usersListCamp = Array.isArray(usersDataCamp) ? usersDataCamp : usersDataCamp?.data || [];
+        const targetCamp = usersListCamp.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
+        if (!targetCamp || !targetCamp.api_token) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const agentAuthCamp = `api_token=${targetCamp.api_token}`;
+        url = `${baseUrl}/agent/campaigns?${agentAuthCamp}`;
+        console.log(`Resolved agent token for ${body.agent_id}, calling GET /agent/campaigns`);
         break;
       }
 
