@@ -90,7 +90,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           {collapsed ? (
             <img src={rivoLogo} alt="RIVO" className="h-6 w-auto object-contain" />
           ) : (
-            <img src={rivoLogo} alt="RIVO CONNECT" className="h-8 w-auto object-contain" />
+            <img src={rivoLogo} alt="RIVO CONNECT" className="h-14 w-auto object-contain" />
           )}
         </div>
 
