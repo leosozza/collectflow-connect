@@ -12,6 +12,7 @@ interface ExecutionRequest {
   trigger_data?: Record<string, any>;
   resume_from_node?: string;
   execution_id?: string;
+  webhook_token?: string;
 }
 
 Deno.serve(async (req) => {
@@ -23,6 +24,61 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: ExecutionRequest = await req.json();
+
+    // Handle webhook trigger: find matching workflows by token
+    if (body.trigger_type === "webhook" && body.webhook_token) {
+      const { data: wfs } = await supabase
+        .from("workflow_flows")
+        .select("*")
+        .eq("is_active", true)
+        .eq("trigger_type", "webhook");
+
+      if (!wfs || wfs.length === 0) {
+        return new Response(JSON.stringify({ error: "No webhook workflows found" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Find workflow whose trigger node has matching webhook_token
+      let matchedWf: any = null;
+      for (const wf of wfs) {
+        const nodes: any[] = wf.nodes || [];
+        const triggerNode = nodes.find((n: any) => n.data?.nodeType === "trigger_webhook");
+        if (triggerNode?.data?.webhook_token === body.webhook_token) {
+          matchedWf = wf;
+          break;
+        }
+      }
+
+      if (!matchedWf) {
+        return new Response(JSON.stringify({ error: "Invalid webhook token" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!body.client_id) {
+        return new Response(JSON.stringify({ error: "client_id is required for webhook triggers" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check duplicate
+      const { count } = await supabase
+        .from("workflow_executions")
+        .select("id", { count: "exact", head: true })
+        .eq("workflow_id", matchedWf.id)
+        .eq("client_id", body.client_id)
+        .in("status", ["running", "waiting"]);
+
+      if (count && count > 0) {
+        return new Response(JSON.stringify({ message: "Execution already active" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      body.workflow_id = matchedWf.id;
+    }
+
     const { workflow_id, client_id, resume_from_node, execution_id } = body;
 
     // Load workflow
