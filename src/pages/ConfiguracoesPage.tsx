@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Building2, Cloud, Map, Settings, Search } from "lucide-react";
+import { Cloud, Map, Settings, Search, Code2, FileSpreadsheet } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import TenantSettingsPage from "@/pages/TenantSettingsPage";
 import RoadmapPage from "@/pages/RoadmapPage";
+import ApiDocsPage from "@/pages/ApiDocsPage";
+import MaxListPage from "@/pages/MaxListPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { Input } from "@/components/ui/input";
@@ -22,16 +24,18 @@ interface NavGroup {
 const ConfiguracoesPage = () => {
   const [active, setActive] = useState("integracao");
   const [search, setSearch] = useState("");
-  const { isTenantAdmin, isSuperAdmin } = useTenant();
+  const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
+
+  const isMaxList = tenant?.slug === "maxfama" || tenant?.slug === "temis";
 
   const groups: NavGroup[] = [
     {
       title: "Sistema",
       items: [
         { key: "integracao", label: "Integração", icon: Cloud },
-        ...(isTenantAdmin ? [{ key: "tenant_config", label: "Central Empresa", icon: Building2 }] : []),
-        
         ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
+        ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
+        ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
       ],
     },
   ];
@@ -114,9 +118,9 @@ const ConfiguracoesPage = () => {
           <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
         </div>
         {active === "integracao" && <IntegracaoPage />}
-        {active === "tenant_config" && <TenantSettingsPage />}
-        
         {active === "roadmap" && <RoadmapPage />}
+        {active === "api_docs" && <ApiDocsPage />}
+        {active === "maxlist" && <MaxListPage />}
       </div>
     </div>
   );
