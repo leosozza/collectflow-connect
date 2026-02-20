@@ -166,21 +166,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             {!collapsed && "Cadastros"}
           </Link>
 
-          <Link
-            to="/configuracoes"
-            onClick={() => setSidebarOpen(false)}
-            title={collapsed ? "Configurações" : undefined}
-            className={`
-              flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${location.pathname === "/configuracoes"
-                ? "bg-primary text-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }
-            `}
-          >
-            <Settings className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && "Configurações"}
-          </Link>
         </nav>
 
         <div className="px-2 py-4 border-t border-sidebar-border">
@@ -235,6 +220,19 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "API REST"}
             </Link>
           )}
+          <Link
+            to="/configuracoes"
+            onClick={() => setSidebarOpen(false)}
+            title={collapsed ? "Configurações" : undefined}
+            className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+              location.pathname === "/configuracoes"
+                ? "bg-primary text-primary-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }`}
+          >
+            <Settings className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && "Configurações"}
+          </Link>
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}
