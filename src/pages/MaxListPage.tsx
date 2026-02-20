@@ -463,20 +463,7 @@ const MaxListPage = () => {
               </Select>
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-4 mt-4">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Status de Cobrança</Label>
-              <Select value={selectedStatusCobrancaId} onValueChange={setSelectedStatusCobrancaId}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Selecione o status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposStatus?.map((ts) => (
-                    <SelectItem key={ts.id} value={ts.id}>{ts.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex gap-2 mt-4">
             <Button onClick={handleSearch} disabled={searching}>
               {searching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
               Buscar
@@ -485,11 +472,28 @@ const MaxListPage = () => {
               <Download className="w-4 h-4 mr-2" />
               Download Excel
             </Button>
-            <Button variant="secondary" onClick={handleSendToCRM} disabled={data.length === 0 || importing}>
-              {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-              {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
-            </Button>
           </div>
+          {data.length > 0 && (
+            <div className="flex flex-wrap items-end gap-4 mt-4 pt-4 border-t">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Status ao importar no Rivo</Label>
+                <Select value={selectedStatusCobrancaId} onValueChange={setSelectedStatusCobrancaId}>
+                  <SelectTrigger className="w-[240px]">
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposStatus?.map((ts) => (
+                      <SelectItem key={ts.id} value={ts.id}>{ts.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button variant="secondary" onClick={handleSendToCRM} disabled={importing}>
+                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
