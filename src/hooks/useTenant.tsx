@@ -97,12 +97,17 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       // We have a tenant_id, determine role via SECURITY DEFINER functions
-      const [{ data: isSA }, { data: isTA }] = await Promise.all([
+      const [{ data: isSA }, { data: isTA }, { data: realRole }] = await Promise.all([
         supabase.rpc("is_super_admin", { _user_id: user.id }),
         supabase.rpc("is_tenant_admin", { _user_id: user.id, _tenant_id: tenantId }),
+        supabase.rpc("get_my_tenant_role"),
       ]);
 
-      const userRole = isSA ? "super_admin" as const : isTA ? "admin" as const : "operador" as const;
+      const userRole = isSA
+        ? "super_admin" as const
+        : isTA
+          ? "admin" as const
+          : ((realRole as TenantUser["role"]) || "operador" as const);
 
       const tuData = {
         id: tenantId,
