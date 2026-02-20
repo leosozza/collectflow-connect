@@ -54,7 +54,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState, useMemo, useEffect } from "react";
-import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare, Link2, Copy } from "lucide-react";
+import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare, Link2, Copy, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
 import { fetchWhatsAppInstances, type WhatsAppInstance } from "@/services/whatsappInstanceService";
@@ -93,6 +93,11 @@ const UsersPage = () => {
   const [inviteExpiry, setInviteExpiry] = useState<string>("7");
   const [generatedLink, setGeneratedLink] = useState<string>("");
   const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [newUserOpen, setNewUserOpen] = useState(false);
+  const [newUserRole, setNewUserRole] = useState<string>("operador");
+  const [newUserExpiry, setNewUserExpiry] = useState<string>("7");
+  const [newUserLink, setNewUserLink] = useState<string>("");
+  const [generatingNewUser, setGeneratingNewUser] = useState(false);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
@@ -176,7 +181,7 @@ const UsersPage = () => {
   }, [editUser?.id, currentOperatorInstances.join(",")]);
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id, instanceIds }: { id: string; role: "admin" | "operador"; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null; instanceIds: string[] }) => {
+    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id, instanceIds }: { id: string; role: string; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null; instanceIds: string[] }) => {
       const { error } = await supabase
         .from("profiles")
         .update({ role, commission_grade_id, full_name, threecplus_agent_id } as any)
@@ -276,9 +281,14 @@ const UsersPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
         </div>
-        <Button onClick={() => { setInviteOpen(true); setGeneratedLink(""); }} className="gap-2">
-          <Link2 className="w-4 h-4" /> Convidar por Link
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setNewUserOpen(true); setNewUserLink(""); }} className="gap-2">
+            <UserPlus className="w-4 h-4" /> Novo Usuário
+          </Button>
+          <Button onClick={() => { setInviteOpen(true); setGeneratedLink(""); }} className="gap-2">
+            <Link2 className="w-4 h-4" /> Convidar por Link
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -351,6 +361,8 @@ const UsersPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="operador">Operador</SelectItem>
+                  <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="gerente">Gerente</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -502,7 +514,7 @@ const UsersPage = () => {
                 if (editUser) {
                   updateMutation.mutate({
                     id: editUser.id,
-                    role: editRole as "admin" | "operador",
+                    role: editRole,
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
                     threecplus_agent_id: editAgentId,
@@ -550,10 +562,12 @@ const UsersPage = () => {
               <Label>Cargo</Label>
               <Select value={inviteRole} onValueChange={setInviteRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="operador">Operador</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
+              <SelectContent>
+                <SelectItem value="operador">Operador</SelectItem>
+                <SelectItem value="supervisor">Supervisor</SelectItem>
+                <SelectItem value="gerente">Gerente</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
@@ -619,6 +633,97 @@ const UsersPage = () => {
                 }}
               >
                 {generatingInvite ? "Gerando..." : "Gerar Link"}
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Novo Usuário Dialog */}
+      <Dialog open={newUserOpen} onOpenChange={(o) => { setNewUserOpen(o); if (!o) setNewUserLink(""); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Novo Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Selecione o cargo e a validade do convite. Um link será gerado para o usuário se cadastrar.
+            </p>
+            <div className="space-y-2">
+              <Label>Cargo</Label>
+              <Select value={newUserRole} onValueChange={setNewUserRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operador">Operador</SelectItem>
+                  <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="gerente">Gerente</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Validade do convite</Label>
+              <Select value={newUserExpiry} onValueChange={setNewUserExpiry}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">24 horas</SelectItem>
+                  <SelectItem value="7">7 dias</SelectItem>
+                  <SelectItem value="30">30 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {newUserLink ? (
+              <div className="space-y-2">
+                <Label>Link de acesso gerado</Label>
+                <div className="flex gap-2">
+                  <Input value={newUserLink} readOnly className="text-xs" />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(newUserLink);
+                      toast.success("Link copiado!");
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Compartilhe este link com o novo usuário para que ele possa criar sua conta.</p>
+              </div>
+            ) : (
+              <Button
+                className="w-full"
+                disabled={generatingNewUser}
+                onClick={async () => {
+                  if (!tenant?.id || !profile?.user_id) return;
+                  setGeneratingNewUser(true);
+                  try {
+                    const expiresAt = new Date();
+                    expiresAt.setDate(expiresAt.getDate() + parseInt(newUserExpiry));
+
+                    const { data, error } = await supabase
+                      .from("invite_links")
+                      .insert({
+                        tenant_id: tenant.id,
+                        role: newUserRole as any,
+                        created_by: profile.user_id,
+                        expires_at: expiresAt.toISOString(),
+                      } as any)
+                      .select("token")
+                      .single();
+
+                    if (error) throw error;
+                    const link = `${window.location.origin}/auth?invite=${(data as any).token}`;
+                    setNewUserLink(link);
+                    toast.success("Link gerado! Compartilhe com o novo usuário.");
+                  } catch {
+                    toast.error("Erro ao gerar link");
+                  } finally {
+                    setGeneratingNewUser(false);
+                  }
+                }}
+              >
+                {generatingNewUser ? "Gerando..." : "Gerar Link de Acesso"}
               </Button>
             )}
           </div>
