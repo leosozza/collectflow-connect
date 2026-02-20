@@ -73,6 +73,7 @@ const CadastrosPage = () => {
       title: "Cadastros",
       items: [
         { key: "credores", label: "Credores", icon: Building2, badge: credores?.length ?? null },
+        { key: "usuarios", label: "Usuários", icon: UserCog, badge: usuariosCount ?? null },
         { key: "equipes", label: "Equipes", icon: Users, badge: equipes?.length ?? null },
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
@@ -80,16 +81,10 @@ const CadastrosPage = () => {
       ],
     },
     {
-      title: "Pessoas",
-      items: [
-        { key: "usuarios", label: "Usuários", icon: UserCog, badge: usuariosCount ?? null },
-      ],
-    },
-    {
       title: "Sistema",
       items: [
         { key: "integracao", label: "Integração", icon: Cloud },
-        ...(isTenantAdmin ? [{ key: "tenant_config", label: "Config. Empresa", icon: Building2 }] : []),
+        ...(isTenantAdmin ? [{ key: "tenant_config", label: "Central Empresa", icon: Building2 }] : []),
         ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
         ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
       ],
