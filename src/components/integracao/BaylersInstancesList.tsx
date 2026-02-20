@@ -158,7 +158,13 @@ const BaylersInstancesList = () => {
       } else if (result?.not_found) {
         toast({ title: "Instância não encontrada", description: "Remova e recrie esta instância.", variant: "destructive" });
       } else {
-        toast({ title: "Instância já conectada ou QR indisponível" });
+        // API generates QR asynchronously via webhook — session was reset, QR will arrive via webhook
+        toast({
+          title: "QR Code sendo gerado",
+          description: "A sessão foi reiniciada. Abra o WhatsApp no celular → Dispositivos conectados → Conectar dispositivo e escaneie o QR que aparecerá em instantes. Clique novamente neste botão se necessário.",
+        });
+        // Refresh status after a moment to reflect new state
+        setTimeout(() => handleCheckStatus(inst), 3000);
       }
       // Auto-configure webhook after connect
       try {
