@@ -1,92 +1,29 @@
 
-## Separar Cadastros da Configurações
+## Remover "Super Admin" de /Configurações
 
-### O que o usuário quer
+### Mudança única — `src/pages/ConfiguracoesPage.tsx`
 
-Criar duas entradas distintas no menu lateral:
+**O que será removido:**
 
-1. **Cadastros** (novo item no nav principal, abaixo de Contact Center) — contém apenas as 6 abas operacionais: Credores, Usuários, Equipes, Perfil do Devedor, Tipo de Dívida, Tipo de Status.
+1. A linha que adiciona o item condicionalmente ao grupo Sistema:
+   ```ts
+   ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
+   ```
 
-2. **Configurações** (item já existente, renomeado/reorganizado) — mantém apenas a seção Sistema com: Integração, Central Empresa, Super Admin e Roadmap.
+2. O import do ícone `ShieldCheck` (que só era usado nesse item).
 
----
+3. O import do componente `SuperAdminPage` (que só era renderizado quando `active === "super_admin"`).
 
-### Estrutura atual vs. estrutura desejada
+4. O bloco de renderização condicional:
+   ```tsx
+   {active === "super_admin" && <SuperAdminPage />}
+   ```
 
-**Sidebar atual:**
-```text
-Dashboard
-Gamificação
-Carteira
-[Contact Center]
-Perfil → /cadastros  (mostra tudo junto: Cadastros + Sistema)
-```
+**Resultado:** A aba "Configurações" passa a exibir apenas:
+- Integração
+- Central Empresa (tenant_admin)
+- Roadmap (tenant_admin)
 
-**Sidebar desejada:**
-```text
-Dashboard
-Gamificação
-Carteira
-[Contact Center]
-Cadastros → /cadastros     ← só as 6 abas de cadastro
-Configurações → /configuracoes   ← só Sistema (Integração, Central Empresa, etc.)
-```
+O acesso ao Super Admin continua disponível pelo link **"Painel Super Admin"** no menu lateral principal (rota `/admin/tenants`), que já existe e é visível apenas para `isSuperAdmin`.
 
----
-
-### Plano de implementação — 3 arquivos alterados
-
----
-
-#### 1. `src/pages/CadastrosPage.tsx` — dividir em dois componentes
-
-**A) Manter** `CadastrosPage` com apenas o grupo "Cadastros":
-- Remove o grupo "Sistema" inteiramente deste arquivo.
-- O título interno muda de "Configurações" para "Cadastros".
-- Aba ativa inicial permanece `credores`.
-
-**B) Criar** `src/pages/ConfiguracoesPage.tsx` (já existe como rota `/configuracoes`, mas atualmente não tem conteúdo relevante — será reaproveitado) com o grupo "Sistema":
-- Itens: Integração, Central Empresa (tenant_admin), Super Admin (super_admin), Roadmap (tenant_admin).
-- Mesma estrutura visual de navegação lateral já usada em `CadastrosPage`.
-- Título interno: "Configurações".
-- Aba ativa inicial: `integracao`.
-
----
-
-#### 2. `src/components/AppLayout.tsx` — ajustar navegação lateral
-
-- Renomear o link atual "Perfil" (`/cadastros`) para **"Cadastros"**, com ícone `Database` (ou `Users`).
-- Adicionar novo link **"Configurações"** apontando para `/configuracoes`, com ícone `Settings`, logo abaixo de "Cadastros".
-- Atualizar `pageTitles` no header: `/cadastros` → `"Cadastros"`, `/configuracoes` → `"Configurações"`.
-
-Ordem final do nav:
-```text
-Dashboard
-Gamificação
-Carteira
-[Contact Center]
-Cadastros        ← /cadastros (ícone Database ou Users)
-Configurações    ← /configuracoes (ícone Settings)
-```
-
----
-
-#### 3. `src/pages/ConfiguracoesPage.tsx` — reescrever com a navegação de Sistema
-
-O arquivo atual (`ConfiguracoesPage.tsx`) existe mas provavelmente está vazio ou com conteúdo legado. Será substituído por uma página com a mesma estrutura visual de `CadastrosPage`, porém carregando apenas os itens do grupo Sistema:
-
-- Integração → `<IntegracaoPage />`
-- Central Empresa → `<TenantSettingsPage />` (visível para tenant_admin)
-- Super Admin → `<SuperAdminPage />` (visível para super_admin)
-- Roadmap → `<RoadmapPage />` (visível para tenant_admin)
-
----
-
-### Resumo visual final
-
-| Rota | Conteúdo |
-|---|---|
-| `/cadastros` | Credores, Usuários, Equipes, Perfil do Devedor, Tipo de Dívida, Tipo de Status |
-| `/configuracoes` | Integração, Central Empresa, Super Admin, Roadmap |
-
-Nenhuma rota nova precisa ser criada — `/configuracoes` já existe no `App.tsx`.
+Nenhum outro arquivo precisa ser alterado.
