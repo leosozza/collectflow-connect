@@ -20,7 +20,7 @@ const ConfiguracoesPage = () => {
     if (tab) setActive(tab);
   }, [searchParams]);
 
-  const isMaxList = tenant?.slug === "maxfama" || tenant?.slug === "temis";
+  const isMaxList = tenant?.id === "39a450f8-7a40-46e5-8bc7-708da5043ec7";
 
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
