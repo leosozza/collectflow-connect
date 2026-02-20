@@ -164,21 +164,21 @@ Deno.serve(async (req) => {
           });
         }
 
-        // If response has no QR code (e.g. {"count":0}), do restart → wait → reconnect
+        // If response has no QR code (e.g. {"count":0}), force logout to clear session → wait → reconnect
         const hasQr = result?.base64 || result?.qrcode?.base64 || result?.code;
         if (!hasQr) {
-          // Restart the instance to wake it up
+          // Logout to clear the stale session — this is required to generate a new QR
           try {
-            await fetch(`${baseUrl}/instance/restart/${encodeURIComponent(instanceName)}`, {
-              method: "PUT",
-              headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+            await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+              method: "DELETE",
+              headers: { apikey: evolutionKey },
             });
-          } catch { /* ignore restart errors */ }
+          } catch { /* ignore logout errors */ }
 
-          // Wait 2 seconds for the instance to reinitialize
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          // Wait 1.5 seconds for the session to be cleared
+          await new Promise((resolve) => setTimeout(resolve, 1500));
 
-          // Retry connect
+          // Retry connect — should now return a fresh QR code
           const retryResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
             method: "GET",
             headers: { apikey: evolutionKey },
@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
           result = await retryResp.json();
 
           if (!retryResp.ok) {
-            return new Response(JSON.stringify({ error: result?.message || "Erro ao gerar QR Code após restart", details: result }), {
+            return new Response(JSON.stringify({ error: result?.message || "Erro ao gerar QR Code após logout", details: result }), {
               status: retryResp.status,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -205,16 +205,28 @@ Deno.serve(async (req) => {
           });
         }
 
-        const resp = await fetch(`${baseUrl}/instance/restart/${encodeURIComponent(instanceName)}`, {
-          method: "PUT",
-          headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+        // PUT /instance/restart is not supported on this Evolution API version.
+        // Use logout + connect as the effective restart mechanism.
+        try {
+          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+            method: "DELETE",
+            headers: { apikey: evolutionKey },
+          });
+        } catch { /* ignore logout errors */ }
+
+        // Wait for session to clear
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        const restartConnResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+          method: "GET",
+          headers: { apikey: evolutionKey },
         });
 
-        result = await resp.json().catch(() => ({ success: true }));
+        result = await restartConnResp.json().catch(() => ({ success: true }));
 
-        if (!resp.ok && resp.status !== 404) {
+        if (!restartConnResp.ok && restartConnResp.status !== 404) {
           return new Response(JSON.stringify({ error: result?.message || "Erro ao reiniciar instância", details: result }), {
-            status: resp.status,
+            status: restartConnResp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
