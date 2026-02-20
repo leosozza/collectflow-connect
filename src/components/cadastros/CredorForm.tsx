@@ -185,7 +185,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <SheetHeader>
           <SheetTitle>{editing ? "Editar Credor" : "Novo Credor"}</SheetTitle>
         </SheetHeader>
