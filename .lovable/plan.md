@@ -1,119 +1,102 @@
 
-## Sistema de Tipos de Usuário com Permissões Granulares
+## Análise Completa e Plano de Correção
 
-### Contexto e Análise
+### Problemas Identificados
 
-O sistema hoje possui apenas dois papéis funcionais na tabela `profiles`: `admin` e `operador`, com um terceiro via `tenant_users`: `super_admin`. O pedido é expandir para quatro tipos dentro de um tenant:
+**1. Menu lateral com itens inesperados (Auditoria, Automação, Financeiro, Relatórios)**
 
-- **Admin** — acesso total dentro do tenant
-- **Gerente** — visão gerencial: relatórios, analytics, acordos, aprovações, gamificação (gerenciamento), sem acesso a configurações/integrações/cadastros de sistema
-- **Supervisor** — como o Gerente, mas com acesso ao Contact Center administrativo (Agente IA, Etiquetas, Respostas Rápidas) e à Carteira completa
-- **Operador** — acesso operacional básico: Dashboard (próprio), Carteira (ver/editar negociações), Contact Center (conversas), Gamificação (ver), Acordos (criar/ver)
+A causa raiz está em `src/hooks/useTenant.tsx`, linha 105:
 
-### Mapeamento de Permissões por Módulo
-
-```text
-Módulo / Função             | Admin | Gerente | Supervisor | Operador
-----------------------------+-------+---------+------------+---------
-Dashboard (próprio)         |  ✅   |   ✅    |    ✅      |   ✅
-Dashboard (todos operadores)|  ✅   |   ✅    |    ✅      |   ❌
-Gamificação (ver)           |  ✅   |   ✅    |    ✅      |   ✅
-Gamificação (gerenciar)     |  ✅   |   ✅    |    ❌      |   ❌
-Carteira (ver)              |  ✅   |   ✅    |    ✅      |   ✅
-Carteira (criar/importar)   |  ✅   |   ✅    |    ✅      |   ❌
-Carteira (excluir)          |  ✅   |   ❌    |    ❌      |   ❌
-Acordos (ver/criar)         |  ✅   |   ✅    |    ✅      |   ✅
-Acordos (aprovar/rejeitar)  |  ✅   |   ✅    |    ✅      |   ❌
-Relatórios                  |  ✅   |   ✅    |    ✅      |   ❌
-Analytics                   |  ✅   |   ✅    |    ✅      |   ✅ (filtrado)
-Automação                   |  ✅   |   ❌    |    ❌      |   ❌
-Contact Center - Conversas  |  ✅   |   ❌    |    ✅      |   ✅
-Contact Center - Agente IA  |  ✅   |   ❌    |    ✅      |   ❌
-Contact Center - Etiquetas  |  ✅   |   ❌    |    ✅      |   ❌
-Contact Center - Resp. Ráp. |  ✅   |   ❌    |    ✅      |   ❌
-Telefonia                   |  ✅   |   ❌    |    ✅      |   ✅
-Cadastros - Credores        |  ✅   |   ❌    |    ❌      |   ❌
-Cadastros - Usuários        |  ✅   |   ❌    |    ❌      |   ❌
-Cadastros - Equipes         |  ✅   |   ❌    |    ❌      |   ❌
-Cadastros - Tipos           |  ✅   |   ❌    |    ❌      |   ❌
-Cadastros - Permissões      |  ✅   |   ❌    |    ❌      |   ❌
-Financeiro                  |  ✅   |   ✅    |    ❌      |   ❌
-Integrações                 |  ✅   |   ❌    |    ❌      |   ❌
-Configurações               |  ✅   |   ❌    |    ❌      |   ❌
-Central Empresa             |  ✅   |   ❌    |    ❌      |   ❌
-Auditoria                   |  ✅   |   ✅    |    ❌      |   ❌
-Painel Super Admin          |  ❌   |   ❌    |    ❌      |   ❌
+```ts
+const userRole = isSA ? "super_admin" : isTA ? "admin" : "operador";
 ```
 
-### Abordagem Técnica
+O hook usa apenas duas RPCs (`is_super_admin` e `is_tenant_admin`) e nunca consulta o papel real do usuário na tabela `tenant_users`. Quando o usuário é Admin, ele recebe `"admin"` — e com as permissões padrão do Admin no `usePermissions`, todos os itens de menu (Auditoria, Financeiro, Automação, Relatórios) aparecem. Isso é **tecnicamente correto** segundo o plano aprovado, mas o usuário confirma que não esperava esses itens antes da implementação.
 
-#### 1. Banco de Dados — Nova tabela `user_permissions`
+A correção é: chamar `get_my_tenant_role()` para ler o papel real armazenado em `tenant_users` (que pode ser `gerente`, `supervisor`, etc.), mas manter a lógica de segurança via RPCs de admin.
 
-Em vez de hardcodar permissões, a solução usa uma tabela de permissões granulares que o Admin pode customizar por usuário. Isso permite criar um perfil "Supervisor" com acesso a alguns módulos, mas bloquear outros se necessário.
+**2. Apenas 2 perfis no dropdown "Tipo de Usuário"**
 
-A nova tabela `user_permissions` armazena permissões no formato `{module: string, actions: string[]}` por `profile_id`. O papel (`role`) ainda define o template padrão, mas o Admin pode ajustar individualmente via a nova aba "Permissões".
+Em `src/pages/UsersPage.tsx`, linhas 352-355, o Select só tem `operador` e `admin`. Precisam ser adicionados `gerente` e `supervisor`.
 
-Adicionamos os novos papéis ao enum existente `tenant_role` no banco: `gerente` e `supervisor`.
+Também: o `updateMutation` envia `role: editRole as "admin" | "operador"` — o tipo precisa ser expandido para incluir os novos papéis.
 
-#### 2. Hook `usePermissions` — Controle centralizado
+**3. Grade de Comissão em /Cadastros**
 
-Criamos um hook `usePermissions()` que:
-- Lê o papel do `tenantUser`
-- Retorna booleans como `canManageUsers`, `canViewReports`, `canApproveAgreements`, etc.
-- Respeita customizações individuais via `user_permissions`
-- Usado em todas as páginas para mostrar/ocultar elementos
+A tabela `commission_grades` já existe no banco (2 registros confirmados). Falta criar:
+- O componente `CommissionGradesTab` para CRUD de grades (criar, editar tiers, excluir)
+- Adicionar a entrada no menu lateral de `CadastrosPage` abaixo de "Permissões"
 
-#### 3. Aba "Permissões do Usuário" em Cadastros
+**4. Botão "Novo Usuário" em Usuários**
 
-Nova aba dentro de `CadastrosPage` (visível apenas para Admin) chamada "Permissões". Interface com:
-- Lista de usuários do tenant
-- Card por usuário mostrando seu papel (template base)
-- Checkboxes organizados por módulo para customizar permissões individuais
-- Botão "Restaurar Padrão" que volta ao template do papel
+Atualmente só existe "Convidar por Link". Precisamos de um botão "Novo Usuário" que abre um dialog com campos: Nome, Email, Senha temporária, Cargo — e cria o usuário via Supabase Admin (edge function) ou via convite direto.
 
-#### 4. Ajustes nas páginas existentes
+---
 
-Cada página/componente usa o novo hook para controlar acesso:
-- `AppLayout` — menu lateral adaptado por papel
-- `AutomacaoPage` — acesso bloqueado para Gerente/Supervisor/Operador
-- `ContactCenterPage` — tabs administrativas visíveis para Admin e Supervisor
-- `CadastrosPage` — visível apenas para Admin
-- `RelatoriosPage` — visível para Admin, Gerente, Supervisor
-- `FinanceiroPage` — visível para Admin e Gerente
-- `CarteiraPage` — botões de criar/importar por papel
-- `AcordosPage` — botão aprovar/rejeitar por papel
-- `UsersPage` — select de papel com 4 opções: Operador, Supervisor, Gerente, Admin
+### Solução Técnica
 
-### Arquivos a Criar/Modificar
+#### Fix 1 — `useTenant.tsx`: ler o papel real via `get_my_tenant_role()`
 
-**Banco de Dados (1 migração):**
-- Adicionar `gerente` e `supervisor` ao enum `tenant_role`
-- Criar tabela `user_permissions` com RLS
-- Criar função `get_user_permissions()` SECURITY DEFINER
+Substituir a lógica de `userRole` para chamar também `get_my_tenant_role()`:
 
-**Novos Arquivos:**
-- `src/hooks/usePermissions.ts` — hook centralizado de permissões
-- `src/components/cadastros/UserPermissionsTab.tsx` — aba de gerenciamento de permissões
+```ts
+const [{ data: isSA }, { data: isTA }, { data: realRole }] = await Promise.all([
+  supabase.rpc("is_super_admin", { _user_id: user.id }),
+  supabase.rpc("is_tenant_admin", { _user_id: user.id, _tenant_id: tenantId }),
+  supabase.rpc("get_my_tenant_role"),
+]);
 
-**Arquivos Modificados:**
-- `src/hooks/useTenant.tsx` — expor `userRole` tipado com os 4 papéis
-- `src/components/AppLayout.tsx` — menu por papel (Relatórios, Financeiro, Automação só para Admin/Gerente)
-- `src/pages/CadastrosPage.tsx` — adicionar aba "Permissões"
-- `src/pages/UsersPage.tsx` — select com 4 papéis + convite com 4 opções
-- `src/pages/AutomacaoPage.tsx` — bloquear para não-admin
-- `src/pages/RelatoriosPage.tsx` — liberar para Gerente/Supervisor
-- `src/pages/FinanceiroPage.tsx` — liberar para Gerente
-- `src/pages/ContactCenterPage.tsx` — tabs por papel
-- `src/pages/AcordosPage.tsx` — aprovar/rejeitar por papel
-- `src/pages/CarteiraPage.tsx` — criar/importar por papel
-- `src/pages/AuditoriaPage.tsx` — liberar para Gerente
+const userRole = isSA 
+  ? "super_admin" 
+  : isTA 
+    ? "admin" 
+    : (realRole as TenantRole) || "operador";
+```
 
-### Ordem de Execução
+Isso garante que Gerentes e Supervisores recebam seus papéis reais, e `usePermissions` calcule as permissões corretamente para eles. O Admin continua vendo Auditoria, Financeiro, etc., pois são suas permissões corretas.
 
-1. Migração SQL: enum + tabela `user_permissions` + RLS + função RPC
-2. Hook `usePermissions` centralizado
-3. Atualizar `useTenant` para incluir os novos papéis no tipo
-4. Componente `UserPermissionsTab`
-5. Adaptar todas as páginas usando o novo hook
-6. Ajustar `UsersPage` com os 4 papéis
-7. Ajustar `AppLayout` para menu dinâmico por papel
+#### Fix 2 — `UsersPage.tsx`: adicionar todos os 4 papéis
+
+Atualizar o Select de edição e o de convite para incluir todos os papéis:
+- Operador, Supervisor, Gerente, Admin
+- Expandir o tipo do `updateMutation` de `"admin" | "operador"` para todos os papéis válidos
+
+#### Fix 3 — `CommissionGradesTab`: novo componente em Cadastros
+
+Criar `src/components/cadastros/CommissionGradesTab.tsx` com:
+- Lista de grades existentes em cards
+- Cada card mostra: nome da grade, tipo (Fixa ou Escalonada), tabela de tiers
+- Botão "Nova Grade" abre um dialog com:
+  - Nome da grade
+  - Tipo: Fixa (1 tier com % direto) ou Escalonada (múltiplos tiers com faixas de valor)
+  - Para Escalonada: adicionar/remover faixas com campos Min, Max, % Comissão
+- Botão de excluir por grade
+- Usar a tabela `commission_grades` já existente (campo `tiers` é jsonb)
+
+Adicionar em `CadastrosPage.tsx`:
+- Novo grupo "Comissionamento" (ou adicionar em "Acesso") com item "Grade de Comissão"
+- Ícone: `TrendingUp` ou `Percent`
+- Renderizar `<CommissionGradesTab />` quando ativo
+
+#### Fix 4 — Botão "Novo Usuário" em `UsersPage.tsx`
+
+Adicionar botão ao lado de "Convidar por Link". Ao clicar, abre um Dialog com:
+- Nome completo
+- Email
+- Cargo (operador/supervisor/gerente/admin)
+- Opção: Enviar convite por email (gera invite link igual ao existente mas envia o link diretamente para o email digitado, usando a funcionalidade de invite já implementada)
+
+Como a criação direta de usuário via Supabase Admin API requer uma edge function, a abordagem mais simples e segura é reutilizar o sistema de convite existente: o "Novo Usuário" gera um link de convite e exibe para copiar/compartilhar — diferente do "Convidar por Link" que requer o Admin gerar manualmente. O novo botão terá um formulário mais completo (com nome e email preenchidos).
+
+---
+
+### Arquivos a Modificar
+
+| Arquivo | Mudança |
+|---|---|
+| `src/hooks/useTenant.tsx` | Chamar `get_my_tenant_role()` para obter papel real |
+| `src/pages/UsersPage.tsx` | Adicionar 4 papéis no select + botão "Novo Usuário" |
+| `src/pages/CadastrosPage.tsx` | Adicionar entrada "Grade de Comissão" no menu |
+| `src/components/cadastros/CommissionGradesTab.tsx` | Novo componente (criar) |
+
+Nenhuma migração de banco necessária — a tabela `commission_grades` já existe com RLS correto.
