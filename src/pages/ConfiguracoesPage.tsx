@@ -1,130 +1,123 @@
 import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Building2, Cloud, ShieldCheck, Map, Settings, Search } from "lucide-react";
+import IntegracaoPage from "@/pages/IntegracaoPage";
+import TenantSettingsPage from "@/pages/TenantSettingsPage";
+import SuperAdminPage from "@/pages/SuperAdminPage";
+import RoadmapPage from "@/pages/RoadmapPage";
+import { cn } from "@/lib/utils";
+import { useTenant } from "@/hooks/useTenant";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { toast } from "sonner";
-import { Settings, User, Bell, Shield, Palette } from "lucide-react";
+
+interface NavItem {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
 
 const ConfiguracoesPage = () => {
-  const { profile } = useAuth();
-  const queryClient = useQueryClient();
+  const [active, setActive] = useState("integracao");
+  const [search, setSearch] = useState("");
+  const { isTenantAdmin, isSuperAdmin } = useTenant();
 
-  // Profile editing
-  const [fullName, setFullName] = useState(profile?.full_name || "");
-  const [saving, setSaving] = useState(false);
+  const groups: NavGroup[] = [
+    {
+      title: "Sistema",
+      items: [
+        { key: "integracao", label: "Integração", icon: Cloud },
+        ...(isTenantAdmin ? [{ key: "tenant_config", label: "Central Empresa", icon: Building2 }] : []),
+        ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
+        ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
+      ],
+    },
+  ];
 
-  // Preferences (local state, could be persisted)
-  const [darkMode, setDarkMode] = useState(false);
-  const [notifications, setNotifications] = useState(true);
-  const [autoBreak, setAutoBreak] = useState(true);
+  const filteredGroups = groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        item.label.toLowerCase().includes(search.toLowerCase())
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
 
-  const handleSaveProfile = async () => {
-    if (!profile) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ full_name: fullName })
-        .eq("id", profile.id);
-      if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Perfil atualizado!");
-    } catch {
-      toast.error("Erro ao atualizar perfil");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (profile?.role !== "admin") {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        Acesso restrito a administradores.
-      </div>
-    );
-  }
+  const activeLabel = groups
+    .flatMap((g) => g.items)
+    .find((i) => i.key === active)?.label;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
-        <p className="text-muted-foreground text-sm">Gerencie as configurações do sistema</p>
-      </div>
-
-      {/* Perfil */}
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <User className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-card-foreground">Meu Perfil</h2>
-        </div>
-        <Separator />
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label>Nome Completo</Label>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Tipo de Usuário</Label>
-            <Input value={profile?.role || ""} disabled className="capitalize" />
-          </div>
-          <Button onClick={handleSaveProfile} disabled={saving} size="sm">
-            {saving ? "Salvando..." : "Salvar Perfil"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Notificações */}
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Bell className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-card-foreground">Notificações</h2>
-        </div>
-        <Separator />
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-card-foreground">Notificações de vencimento</p>
-            <p className="text-xs text-muted-foreground">Receba alertas sobre parcelas vencendo</p>
-          </div>
-          <Switch checked={notifications} onCheckedChange={setNotifications} />
-        </div>
-      </div>
-
-      {/* Sistema */}
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="flex items-center gap-3">
+    <div className="flex gap-6 animate-fade-in">
+      {/* Sub-navegação lateral */}
+      <div className="w-56 flex-shrink-0">
+        <div className="flex items-center gap-2 mb-4">
           <Settings className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-card-foreground">Sistema</h2>
+          <h1 className="text-lg font-bold text-foreground">Configurações</h1>
         </div>
-        <Separator />
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-card-foreground">Quebra automática</p>
-            <p className="text-xs text-muted-foreground">Marcar automaticamente parcelas vencidas como quebradas</p>
-          </div>
-          <Switch checked={autoBreak} onCheckedChange={setAutoBreak} />
+
+        {/* Busca rápida */}
+        <div className="relative mb-4">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Buscar seção..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
         </div>
+
+        {/* Grupos de navegação */}
+        <nav className="space-y-4">
+          {filteredGroups.map((group, groupIndex) => (
+            <div key={group.title}>
+              {groupIndex > 0 && <Separator className="mb-3" />}
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-1.5">
+                {group.title}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = active === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => setActive(item.key)}
+                      className={cn(
+                        "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative",
+                        isActive
+                          ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-[calc(0.75rem-3px)]"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground border-l-[3px] border-transparent pl-[calc(0.75rem-3px)]"
+                      )}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      <span className="flex-1 text-left">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {filteredGroups.length === 0 && (
+            <p className="text-xs text-muted-foreground px-3 py-2">
+              Nenhuma seção encontrada.
+            </p>
+          )}
+        </nav>
       </div>
 
-      {/* Segurança */}
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Shield className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-card-foreground">Segurança</h2>
+      {/* Conteúdo */}
+      <div className="flex-1 min-w-0">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
         </div>
-        <Separator />
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Para alterar sua senha, utilize a opção de recuperação de senha na tela de login.
-          </p>
-          <Button variant="outline" size="sm" disabled>
-            Alterar Senha (em breve)
-          </Button>
-        </div>
+        {active === "integracao" && <IntegracaoPage />}
+        {active === "tenant_config" && <TenantSettingsPage />}
+        {active === "super_admin" && <SuperAdminPage />}
+        {active === "roadmap" && <RoadmapPage />}
       </div>
     </div>
   );
