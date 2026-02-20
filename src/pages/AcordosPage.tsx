@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, createAgreement, approveAgreement, rejectAgreement, cancelAgreement, Agreement, AgreementFormData } from "@/services/agreementService";
 import AgreementForm from "@/components/acordos/AgreementForm";
@@ -14,7 +15,8 @@ import { formatCurrency } from "@/lib/formatters";
 const AcordosPage = () => {
   const { trackAction } = useActivityTracker();
   const { user, profile } = useAuth();
-  const { tenant, isTenantAdmin } = useTenant();
+  const { tenant } = useTenant();
+  const permissions = usePermissions();
   const { toast } = useToast();
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +107,7 @@ const AcordosPage = () => {
       ) : (
         <AgreementsList
           agreements={agreements}
-          isAdmin={isTenantAdmin}
+          isAdmin={permissions.canApproveAcordos}
           onApprove={handleApprove}
           onReject={handleReject}
           onCancel={handleCancel}

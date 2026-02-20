@@ -32,7 +32,7 @@ interface TenantUser {
   id: string;
   tenant_id: string;
   user_id: string;
-  role: "super_admin" | "admin" | "operador";
+  role: "super_admin" | "admin" | "gerente" | "supervisor" | "operador";
   created_at: string;
 }
 

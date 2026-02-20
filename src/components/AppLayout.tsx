@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import rivoLogo from "@/assets/rivo_connect.png";
 import { 
   LayoutDashboard, 
@@ -20,6 +21,10 @@ import {
   BarChart3,
   Building2,
   BookUser,
+  FileText,
+  DollarSign,
+  Zap,
+  ClipboardList,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -35,6 +40,7 @@ interface AppLayoutProps {
 const AppLayout = ({ children }: AppLayoutProps) => {
   const { profile, signOut } = useAuth();
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
+  const permissions = usePermissions();
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,22 +48,27 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  const isAdmin = isTenantAdmin;
+  const ROLE_LABEL: Record<string, string> = {
+    super_admin: "Super Admin",
+    admin: "Admin",
+    gerente: "Gerente",
+    supervisor: "Supervisor",
+    operador: "Operador",
+  };
 
   const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-    { label: "Gamificação", icon: Trophy, path: "/gamificacao" },
-    { label: "Carteira", icon: Wallet, path: "/carteira" },
+    ...(permissions.canViewGamificacao ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
+    ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
   ];
-
-  // Icon replacement for Cadastros — using BookUser instead of Users
 
   const contactCenterItems = [
-    { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
-    { label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" },
+    ...(permissions.canViewTelefonia ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
+    ...(permissions.canViewContactCenter ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
   ];
 
-  const isContactCenterRoute = contactCenterItems.some(item => location.pathname === item.path);
+  const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
+  const showContactCenter = contactCenterItems.length > 0;
 
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
 
@@ -116,23 +127,103 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             );
           })}
 
-          <Link
-            to="/cadastros"
-            onClick={() => setSidebarOpen(false)}
-            title={collapsed ? "Cadastros" : undefined}
-            className={`
-              flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${location.pathname === "/cadastros"
-                ? "bg-primary text-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }
-            `}
-          >
-            <BookUser className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && "Cadastros"}
-          </Link>
+          {/* Acordos */}
+          {permissions.canViewAcordos && (
+            <Link
+              to="/acordos"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Acordos" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/acordos"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <ClipboardList className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Acordos"}
+            </Link>
+          )}
 
-          {contactCenterItems.length > 0 && (
+          {/* Relatórios */}
+          {permissions.canViewRelatorios && (
+            <Link
+              to="/relatorios"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Relatórios" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/relatorios"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <FileText className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Relatórios"}
+            </Link>
+          )}
+
+          {/* Financeiro */}
+          {permissions.canViewFinanceiro && (
+            <Link
+              to="/financeiro"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Financeiro" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/financeiro"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <DollarSign className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Financeiro"}
+            </Link>
+          )}
+
+          {/* Automação */}
+          {permissions.canViewAutomacao && (
+            <Link
+              to="/automacao"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Automação" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/automacao"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <Zap className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Automação"}
+            </Link>
+          )}
+
+          {/* Cadastros */}
+          {permissions.canViewCadastros && (
+            <Link
+              to="/cadastros"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Cadastros" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/cadastros"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <BookUser className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Cadastros"}
+            </Link>
+          )}
+
+          {/* Contact Center */}
+          {showContactCenter && contactCenterItems.length > 0 && (
             <Collapsible open={contactCenterOpen} onOpenChange={setContactCenterOpen}>
               <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors ${isContactCenterRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
                 <div className="flex items-center gap-3">
@@ -167,16 +258,35 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </Collapsible>
           )}
 
+          {/* Auditoria */}
+          {permissions.canViewAuditoria && (
+            <Link
+              to="/auditoria"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Auditoria" : undefined}
+              className={`
+                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                ${location.pathname === "/auditoria"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                }
+              `}
+            >
+              <BarChart3 className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Auditoria"}
+            </Link>
+          )}
+
         </nav>
 
         <div className="px-2 py-4 border-t border-sidebar-border">
-          {!collapsed && isTenantAdmin && (
+          {!collapsed && (
             <div className="px-4 py-2 mb-2">
               <p className="text-sm font-medium text-sidebar-foreground truncate">{profile?.full_name || "Usuário"}</p>
-              <p className="text-xs text-sidebar-foreground/60 capitalize">{tenantUser?.role || "operador"}</p>
+              <p className="text-xs text-sidebar-foreground/60 capitalize">{ROLE_LABEL[tenantUser?.role || "operador"] || tenantUser?.role || "Operador"}</p>
             </div>
           )}
-          {isTenantAdmin && (
+          {permissions.canViewCentralEmpresa && (
             <Link
               to="/central-empresa"
               onClick={() => setSidebarOpen(false)}
@@ -191,7 +301,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "Central Empresa"}
             </Link>
           )}
-          {isTenantAdmin && (
+          {permissions.canViewConfiguracoes && (
             <Link
               to="/configuracoes"
               onClick={() => setSidebarOpen(false)}
@@ -294,7 +404,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               </Avatar>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-medium text-foreground leading-tight truncate max-w-[120px]">{profile?.full_name || "Usuário"}</p>
-                <p className="text-[10px] text-muted-foreground capitalize">{isSuperAdmin ? "Super Admin" : isTenantAdmin ? "Admin" : "Operador"}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{ROLE_LABEL[isSuperAdmin ? "super_admin" : tenantUser?.role || "operador"] || "Operador"}</p>
               </div>
             </button>
           </div>
