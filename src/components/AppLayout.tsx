@@ -21,6 +21,7 @@ import {
   Code2,
   BarChart3,
   FileSpreadsheet,
+  Building2,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -169,6 +170,17 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </nav>
 
         <div className="px-2 py-4 border-t border-sidebar-border">
+          {isTenantAdmin && (
+            <Link
+              to="/configuracoes"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Central Empresa" : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
+            >
+              <Building2 className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Central Empresa"}
+            </Link>
+          )}
           {!collapsed && (
             <div className="px-4 py-2 mb-2">
               <p className="text-sm font-medium text-sidebar-foreground truncate">{profile?.full_name || "Usuário"}</p>
