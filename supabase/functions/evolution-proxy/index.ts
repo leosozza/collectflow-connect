@@ -285,6 +285,12 @@ Deno.serve(async (req) => {
 
         result = await resp.json().catch(() => ({ success: true }));
 
+        // Treat 404 as success — instance already deleted on remote
+        if (resp.status === 404) {
+          result = { success: true, message: "Instância não encontrada na API remota (já deletada)." };
+          break;
+        }
+
         if (!resp.ok) {
           // Extract readable error message (message may be array of strings or objects)
           const rawMsg = result?.message;
