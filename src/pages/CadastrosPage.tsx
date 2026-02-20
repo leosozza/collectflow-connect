@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
 import TipoStatusList from "@/components/cadastros/TipoStatusList";
+import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -74,6 +75,12 @@ const CadastrosPage = () => {
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
+      ],
+    },
+    {
+      title: "Acesso",
+      items: [
+        { key: "permissoes", label: "Permissões", icon: Shield },
       ],
     },
   ];
@@ -169,6 +176,7 @@ const CadastrosPage = () => {
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
+        {active === "permissoes" && <UserPermissionsTab />}
       </div>
     </div>
   );

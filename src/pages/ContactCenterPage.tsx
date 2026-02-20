@@ -1,5 +1,4 @@
-import { useAuth } from "@/hooks/useAuth";
-import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { MessageSquare, Bot, Tag, Zap } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
@@ -14,11 +13,8 @@ interface ContactCenterPageProps {
 }
 
 const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
-  const { profile } = useAuth();
-  const { isTenantAdmin } = useTenant();
+  const permissions = usePermissions();
   const [activeTab, setActiveTab] = useState("conversas");
-
-  // Telefonia is now accessible to all users
 
   if (channel === "telefonia") {
     return (
@@ -33,7 +29,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
     { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true },
     { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true },
     { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true },
-  ].filter((tab) => !tab.adminOnly || isTenantAdmin);
+  ].filter((tab) => !tab.adminOnly || permissions.canManageContactCenterAdmin);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -65,17 +61,17 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === "conversas" && <WhatsAppChatLayout />}
-        {activeTab === "agente" && isTenantAdmin && (
+        {activeTab === "agente" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <AIAgentTab />
           </div>
         )}
-        {activeTab === "etiquetas" && isTenantAdmin && (
+        {activeTab === "etiquetas" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <TagsManagementTab />
           </div>
         )}
-        {activeTab === "respostas" && isTenantAdmin && (
+        {activeTab === "respostas" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <QuickRepliesTab />
           </div>

@@ -2604,6 +2604,51 @@ export type Database = {
           },
         ]
       }
+      user_permissions: {
+        Row: {
+          actions: string[]
+          created_at: string
+          id: string
+          module: string
+          profile_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          actions?: string[]
+          created_at?: string
+          id?: string
+          module: string
+          profile_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          actions?: string[]
+          created_at?: string
+          id?: string
+          module?: string
+          profile_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_permissions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           api_key: string
@@ -2785,8 +2830,16 @@ export type Database = {
         }
         Returns: string
       }
+      get_my_permissions: {
+        Args: never
+        Returns: {
+          actions: string[]
+          module: string
+        }[]
+      }
       get_my_profile_id: { Args: never; Returns: string }
       get_my_tenant_id: { Args: never; Returns: string }
+      get_my_tenant_role: { Args: never; Returns: string }
       get_user_emails: {
         Args: never
         Returns: {
@@ -2831,7 +2884,12 @@ export type Database = {
     Enums: {
       app_role: "admin" | "operador"
       client_status: "pendente" | "pago" | "quebrado"
-      tenant_role: "super_admin" | "admin" | "operador"
+      tenant_role:
+        | "super_admin"
+        | "admin"
+        | "operador"
+        | "gerente"
+        | "supervisor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2961,7 +3019,13 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "operador"],
       client_status: ["pendente", "pago", "quebrado"],
-      tenant_role: ["super_admin", "admin", "operador"],
+      tenant_role: [
+        "super_admin",
+        "admin",
+        "operador",
+        "gerente",
+        "supervisor",
+      ],
     },
   },
 } as const

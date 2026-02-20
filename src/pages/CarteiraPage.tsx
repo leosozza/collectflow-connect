@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchTiposStatus } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,8 +48,8 @@ import {
 
 const CarteiraPage = () => {
   const { profile } = useAuth();
-  const { tenant, isTenantAdmin, isSuperAdmin } = useTenant();
-  const isAdmin = isTenantAdmin || isSuperAdmin;
+  const { tenant } = useTenant();
+  const permissions = usePermissions();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchCollectionRules,
@@ -20,7 +21,8 @@ import WorkflowListTab from "@/components/automacao/workflow/WorkflowListTab";
 import GatilhosTab from "@/components/automacao/GatilhosTab";
 
 const AutomacaoPage = () => {
-  const { tenant, isTenantAdmin } = useTenant();
+  const { tenant } = useTenant();
+  const permissions = usePermissions();
   const { toast } = useToast();
   const [rules, setRules] = useState<CollectionRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,7 @@ const AutomacaoPage = () => {
     loadRules();
   }, [loadRules]);
 
-  if (!isTenantAdmin) {
+  if (!permissions.canViewAutomacao) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <p className="text-muted-foreground">Acesso restrito a administradores.</p>
