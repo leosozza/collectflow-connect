@@ -164,32 +164,46 @@ Deno.serve(async (req) => {
           });
         }
 
-        // If response has no QR code (e.g. {"count":0}), force logout to clear session → wait → reconnect
-        const hasQr = result?.base64 || result?.qrcode?.base64 || result?.code;
-        if (!hasQr) {
-          // Logout to clear the stale session — this is required to generate a new QR
-          try {
-            await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
-              method: "DELETE",
-              headers: { apikey: evolutionKey },
-            });
-          } catch { /* ignore logout errors */ }
+        // If response has no QR code (e.g. {"count":0}), force logout → try /qrcode/base64 endpoint
+        const getQr = (r: any) => r?.base64 || r?.qrcode?.base64 || r?.code;
+        console.log(`[connect] hasQr=${!!getQr(result)}`);
 
-          // Wait 1.5 seconds for the session to be cleared
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (!getQr(result)) {
+          // Logout to clear the stale session
+          const logoutResp = await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+            method: "DELETE",
+            headers: { apikey: evolutionKey },
+          });
+          console.log(`[connect] logout status=${logoutResp.status}`);
+          await logoutResp.text();
 
-          // Retry connect — should now return a fresh QR code
-          const retryResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+          // Trigger connect to start QR generation
+          await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
             method: "GET",
             headers: { apikey: evolutionKey },
           });
-          result = await retryResp.json();
 
-          if (!retryResp.ok) {
-            return new Response(JSON.stringify({ error: result?.message || "Erro ao gerar QR Code após logout", details: result }), {
-              status: retryResp.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+          // Poll /qrcode/base64 endpoint — this is the correct way to get QR on this API version
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            const qrResp = await fetch(`${baseUrl}/instance/qrcode/${encodeURIComponent(instanceName)}`, {
+              method: "GET",
+              headers: { apikey: evolutionKey, "Content-Type": "application/json" },
             });
+
+            if (qrResp.ok) {
+              const qrResult = await qrResp.json();
+              console.log(`[connect] qrcode attempt=${attempt} keys=${Object.keys(qrResult || {}).join(",")}`);
+              if (getQr(qrResult)) {
+                result = qrResult;
+                console.log(`[connect] QR obtained via /qrcode endpoint on attempt ${attempt}`);
+                break;
+              }
+            } else {
+              console.log(`[connect] qrcode attempt=${attempt} status=${qrResp.status}`);
+              await qrResp.text();
+            }
           }
         }
 
