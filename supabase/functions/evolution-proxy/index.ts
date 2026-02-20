@@ -79,7 +79,11 @@ Deno.serve(async (req) => {
         result = await resp.json();
 
         if (!resp.ok) {
-          return new Response(JSON.stringify({ error: result?.message || "Erro ao criar instância na Evolution API", details: result }), {
+          const rawMsg = result?.message;
+          const errMsg = Array.isArray(rawMsg)
+            ? rawMsg.map((m: any) => (typeof m === "string" ? m : JSON.stringify(m))).join("; ")
+            : rawMsg || "Erro ao criar instância na Evolution API";
+          return new Response(JSON.stringify({ error: errMsg, details: result }), {
             status: resp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -146,15 +150,33 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Try logout first (graceful disconnect), then delete
+        try {
+          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+            method: "DELETE",
+            headers: { apikey: evolutionKey },
+          });
+        } catch {
+          // ignore logout errors
+        }
+
         const resp = await fetch(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
           method: "DELETE",
-          headers: { apikey: evolutionKey },
+          headers: {
+            apikey: evolutionKey,
+            "Content-Type": "application/json",
+          },
         });
 
         result = await resp.json().catch(() => ({ success: true }));
 
         if (!resp.ok) {
-          return new Response(JSON.stringify({ error: result?.message || "Erro ao deletar instância", details: result }), {
+          // Extract readable error message (message may be array of strings or objects)
+          const rawMsg = result?.message;
+          const errMsg = Array.isArray(rawMsg)
+            ? rawMsg.map((m: any) => (typeof m === "string" ? m : JSON.stringify(m))).join("; ")
+            : rawMsg || "Erro ao deletar instância";
+          return new Response(JSON.stringify({ error: errMsg, details: result }), {
             status: resp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
