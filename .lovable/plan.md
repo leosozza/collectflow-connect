@@ -1,93 +1,34 @@
 
 
-# Pagina de Importacao MaxList dentro do CollectFlow
+## Problema Identificado
 
-## O que sera feito
-Criar uma pagina dedicada dentro do sistema para importar listas diretamente do MaxSystem, substituindo a aplicacao MaxList externa. A pagina tera filtros de data, preview dos dados, e envio direto para a base de clientes -- tudo com acesso restrito a um tenant especifico.
+Os 3 registros **foram importados com sucesso** no banco de dados (credor "YBRASIL", vencimento 18/02/2026). Porem estao sem `status_cobranca_id` (null), o que pode dificultar a localizacao na Carteira dependendo dos filtros ativos.
 
-## Funcionalidades
+## Solucao
 
-1. **Filtros de busca** - Campos de data para Vencimento (de/ate), Pagamento (de/ate) e Registro (de/ate), igual ao MaxList atual
-2. **Consulta ao MaxSystem** - Busca via API do MaxSystem com contagem de resultados
-3. **Preview dos dados** - Tabela mostrando os registros encontrados antes de importar
-4. **Importacao em lote** - Envio via edge function para a base de clientes com upsert por external_id
-5. **Download Excel** - Opcao de baixar a planilha como no MaxList atual
-6. **Controle de acesso** - Apenas o tenant autorizado (configuravel) tera acesso a essa pagina
+### 1. Adicionar seletor de Status de Cobranca na pagina MaxList
 
-## Fluxo
+Antes do botao "Enviar para CRM", adicionar um `Select` que permita escolher qual status de cobranca sera atribuido aos registros importados. O padrao sera **"Aguardando acionamento"**.
 
-```text
-+------------------+     +------------------+     +------------------+
-| Filtros de Data  | --> | Consulta API     | --> | Preview Tabela   |
-| (Venc/Pag/Reg)   |     | MaxSystem        |     | com contagem     |
-+------------------+     +------------------+     +------------------+
-                                                          |
-                                              +-----------+-----------+
-                                              |                       |
-                                     +--------v--------+    +--------v--------+
-                                     | Enviar para CRM |    | Download Excel  |
-                                     | (clients/bulk)  |    | (.xlsx)         |
-                                     +-----------------+    +-----------------+
-```
+### 2. Incluir `status_cobranca_id` no upsert
 
-## Controle de Acesso
-
-- Rota `/maxlist` acessivel apenas para tenants autorizados
-- Verificacao feita no componente via `useTenant()` comparando o `tenant.id` ou `tenant.slug` com uma lista permitida
-- Se o tenant nao tiver acesso, redireciona para o dashboard
+Na funcao `handleSendToCRM`, incluir o campo `status_cobranca_id` selecionado em cada registro do batch, garantindo que os devedores importados ja entrem com o status correto.
 
 ---
 
-## Detalhes Tecnicos
+### Detalhes Tecnicos
 
-### Arquivos a criar
+**Arquivo:** `src/pages/MaxListPage.tsx`
 
-**`src/pages/MaxListPage.tsx`** (~400 linhas)
-- Pagina React com filtros de data (Vencimento DE/ATE, Pagamento DE/ATE, Registro DE/ATE)
-- Botao "Buscar" que consulta o MaxSystem via edge function proxy
-- Tabela de preview com scroll usando componentes UI existentes (Table, ScrollArea)
-- Botao "Enviar para CRM" que faz POST para `clients-api/clients/bulk` em lotes de 500
-- Botao "Download Excel" usando a lib `xlsx` ja instalada
-- Barra de progresso durante importacao
-- Verificacao de tenant autorizado no mount
+**Alteracoes:**
 
-**`supabase/functions/maxsystem-proxy/index.ts`** (~80 linhas)
-- Edge function proxy para evitar CORS ao chamar `https://maxsystem.azurewebsites.net/api/Installment`
-- Recebe os filtros de data como query params
-- Retorna os Items e Count do MaxSystem
-- Autenticacao via JWT (usuario logado) + verificacao de tenant
+1. **Novo estado** `selectedStatusCobrancaId` inicializado com o UUID de "Aguardando acionamento" (buscado dinamicamente via query na tabela `tipos_status`).
 
-### Alteracoes em arquivos existentes
+2. **Query dos tipos_status** usando `useQuery` + `fetchTiposStatus` (ja usado em outras paginas) para popular o select.
 
-**`src/App.tsx`**
-- Adicionar rota `/maxlist` protegida com `ProtectedRoute requireTenant`
+3. **Select de Status** renderizado junto aos controles de importacao (proximo ao botao "Enviar para CRM"), com as opcoes vindas de `tipos_status`.
 
-**`src/components/AppLayout.tsx`**
-- Adicionar link "MaxList" no menu lateral (visivel apenas para o tenant autorizado)
+4. **No `handleSendToCRM`**, adicionar `status_cobranca_id: selectedStatusCobrancaId` nos objetos `rows` enviados no upsert.
 
-**`supabase/config.toml`** (nao editavel diretamente, mas a function sera registrada automaticamente)
+5. O default "Aguardando acionamento" sera identificado pelo nome ao carregar os tipos, setando automaticamente o estado inicial.
 
-### Mapeamento de campos MaxSystem -> CollectFlow
-
-| MaxSystem API Field | Campo Intermediario | Campo clients |
-|---|---|---|
-| ResponsibleName | NOME_DEVEDOR | nome_completo |
-| ResponsibleCPF | CNPJ_CPF | cpf |
-| ContractNumber | COD_CONTRATO | cod_contrato |
-| Id (titulo) | TITULO | external_id |
-| Number | PARCELA | numero_parcela |
-| Value | VL_TITULO | valor_parcela |
-| PaymentDateQuery | DT_VENCIMENTO | data_vencimento |
-| PaymentDateEffected | DT_PAGAMENTO | data_pagamento |
-| IsCancelled | STATUS | status (pendente/pago/quebrado) |
-| CellPhone1 | FONE_1 | phone |
-| CellPhone2 | FONE_2 | phone2 |
-| HomePhone | FONE_3 | phone3 |
-
-### Logica de status
-- Se tem `DT_PAGAMENTO` -> "pago"
-- Se `IsCancelled === true` -> "quebrado"
-- Caso contrario -> "pendente"
-
-### Tenant autorizado
-O controle de acesso sera feito comparando o slug do tenant. Inicialmente configurado como constante no codigo, podendo futuramente ser movido para uma tabela de configuracao.
