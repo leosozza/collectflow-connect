@@ -419,7 +419,7 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
-              {isAdmin && selectedIds.size === displayClients.length && displayClients.length > 0 && (
+              {permissions.canDeleteCarteira && selectedIds.size === displayClients.length && displayClients.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
