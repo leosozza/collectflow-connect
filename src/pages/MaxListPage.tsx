@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,29 @@ const MaxListPage = () => {
   const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
+
+  const { data: tiposStatus } = useQuery({
+    queryKey: ["tipos_status", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tipos_status")
+        .select("id, nome")
+        .eq("tenant_id", tenant!.id)
+        .order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenant?.id,
+  });
+
+  useEffect(() => {
+    if (tiposStatus && !selectedStatusCobrancaId) {
+      const aguardando = tiposStatus.find((t) => t.nome.toLowerCase().includes("aguardando"));
+      if (aguardando) setSelectedStatusCobrancaId(aguardando.id);
+      else if (tiposStatus.length > 0) setSelectedStatusCobrancaId(tiposStatus[0].id);
+    }
+  }, [tiposStatus, selectedStatusCobrancaId]);
 
   const visibleData = data.slice(0, 500);
   const allVisibleSelected = visibleData.length > 0 && visibleData.every((_, i) => selectedIndexes.has(i));
@@ -303,6 +327,7 @@ const MaxListPage = () => {
           phone2: r.phone2,
           phone3: r.phone3,
           updated_at: new Date().toISOString(),
+          status_cobranca_id: selectedStatusCobrancaId || null,
         }));
 
         const { data: result, error } = await supabase
@@ -438,7 +463,20 @@ const MaxListPage = () => {
               </Select>
             </div>
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap items-end gap-4 mt-4">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Status de Cobrança</Label>
+              <Select value={selectedStatusCobrancaId} onValueChange={setSelectedStatusCobrancaId}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tiposStatus?.map((ts) => (
+                    <SelectItem key={ts.id} value={ts.id}>{ts.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={handleSearch} disabled={searching}>
               {searching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
               Buscar
