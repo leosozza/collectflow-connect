@@ -441,8 +441,17 @@ const BaylersInstancesList = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover instância?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A instância "{deleteTarget?.name || deleteTarget?.instance_name}" será removida do sistema e da Evolution API.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  A instância <strong>"{deleteTarget?.name || deleteTarget?.instance_name}"</strong> será removida do sistema e da Evolution API.
+                </p>
+                {deleteTarget && (conversationCounts[deleteTarget.id] || 0) > 0 && (
+                  <p className="text-amber-600 dark:text-amber-400 font-medium">
+                    ⚠️ Esta instância possui {conversationCounts[deleteTarget.id]} conversa{conversationCounts[deleteTarget.id] > 1 ? "s" : ""} ativa{conversationCounts[deleteTarget.id] > 1 ? "s" : ""}. As conversas serão preservadas, mas desvinculadas da instância.
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -956,7 +956,7 @@ export type Database = {
           client_id: string | null
           created_at: string
           id: string
-          instance_id: string
+          instance_id: string | null
           last_message_at: string | null
           remote_name: string
           remote_phone: string
@@ -972,7 +972,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           id?: string
-          instance_id: string
+          instance_id?: string | null
           last_message_at?: string | null
           remote_name?: string
           remote_phone: string
@@ -988,7 +988,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           id?: string
-          instance_id?: string
+          instance_id?: string | null
           last_message_at?: string | null
           remote_name?: string
           remote_phone?: string
