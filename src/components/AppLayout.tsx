@@ -21,10 +21,7 @@ import {
   BarChart3,
   Building2,
   BookUser,
-  FileText,
-  DollarSign,
   Zap,
-  ClipboardList,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -127,63 +124,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             );
           })}
 
-          {/* Acordos */}
-          {permissions.canViewAcordos && (
-            <Link
-              to="/acordos"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Acordos" : undefined}
-              className={`
-                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname === "/acordos"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }
-              `}
-            >
-              <ClipboardList className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Acordos"}
-            </Link>
-          )}
-
-          {/* Relatórios */}
-          {permissions.canViewRelatorios && (
-            <Link
-              to="/relatorios"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Relatórios" : undefined}
-              className={`
-                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname === "/relatorios"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }
-              `}
-            >
-              <FileText className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Relatórios"}
-            </Link>
-          )}
-
-          {/* Financeiro */}
-          {permissions.canViewFinanceiro && (
-            <Link
-              to="/financeiro"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Financeiro" : undefined}
-              className={`
-                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname === "/financeiro"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }
-              `}
-            >
-              <DollarSign className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Financeiro"}
-            </Link>
-          )}
-
           {/* Automação */}
           {permissions.canViewAutomacao && (
             <Link
@@ -256,25 +196,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 })}
               </CollapsibleContent>
             </Collapsible>
-          )}
-
-          {/* Auditoria */}
-          {permissions.canViewAuditoria && (
-            <Link
-              to="/auditoria"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Auditoria" : undefined}
-              className={`
-                flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname === "/auditoria"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }
-              `}
-            >
-              <BarChart3 className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Auditoria"}
-            </Link>
           )}
 
         </nav>

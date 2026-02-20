@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { Cloud, Map, Settings, Code2, FileSpreadsheet } from "lucide-react";
+import { Cloud, Map, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import RoadmapPage from "@/pages/RoadmapPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
+import AuditoriaPage from "@/pages/AuditoriaPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useSearchParams } from "react-router-dom";
 
 
@@ -14,6 +16,7 @@ const ConfiguracoesPage = () => {
   const defaultTab = searchParams.get("tab") || "integracao";
   const [active, setActive] = useState(defaultTab);
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
+  const permissions = usePermissions();
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -24,6 +27,7 @@ const ConfiguracoesPage = () => {
 
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
+    ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
     ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
     ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
     ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
@@ -68,6 +72,7 @@ const ConfiguracoesPage = () => {
           <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
         </div>
         {active === "integracao" && <IntegracaoPage />}
+        {active === "auditoria" && <AuditoriaPage />}
         {active === "roadmap" && <RoadmapPage />}
         {active === "api_docs" && <ApiDocsPage />}
         {active === "maxlist" && <MaxListPage />}
