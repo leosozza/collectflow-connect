@@ -1866,6 +1866,47 @@ export type Database = {
           },
         ]
       }
+      permission_profiles: {
+        Row: {
+          base_role: string
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          permissions: Json
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_role?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          permissions?: Json
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_role?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          permissions?: Json
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permission_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           created_at: string | null
@@ -1960,6 +2001,7 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          permission_profile_id: string | null
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string | null
           threecplus_agent_id: number | null
@@ -1975,6 +2017,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          permission_profile_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null
@@ -1990,6 +2033,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          permission_profile_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null
@@ -2002,6 +2046,13 @@ export type Database = {
             columns: ["commission_grade_id"]
             isOneToOne: false
             referencedRelation: "commission_grades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_permission_profile_id_fkey"
+            columns: ["permission_profile_id"]
+            isOneToOne: false
+            referencedRelation: "permission_profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2830,6 +2881,16 @@ export type Database = {
         }
         Returns: string
       }
+      get_my_permission_profile: {
+        Args: never
+        Returns: {
+          base_role: string
+          id: string
+          is_default: boolean
+          name: string
+          permissions: Json
+        }[]
+      }
       get_my_permissions: {
         Args: never
         Returns: {
@@ -2879,6 +2940,10 @@ export type Database = {
       onboard_tenant: {
         Args: { _name: string; _plan_id: string; _slug: string }
         Returns: string
+      }
+      seed_default_permission_profiles: {
+        Args: { _tenant_id: string }
+        Returns: undefined
       }
     }
     Enums: {
