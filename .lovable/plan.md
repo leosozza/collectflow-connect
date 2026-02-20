@@ -1,61 +1,55 @@
 
-## Root Cause
+## Diagnóstico Confirmado com Testes ao Vivo
 
-The error is **not** from the Evolution API — it is a PostgreSQL foreign key constraint violation. The `conversations` table has a column `instance_id` with a foreign key referencing `whatsapp_instances(id)`, defined without `ON DELETE CASCADE`. When attempting to delete a `whatsapp_instances` row that still has associated conversations, Postgres blocks the operation.
+### Causa Raiz (Testado diretamente na Evolution API)
+
+**Teste 1 — `connect` com instância `close`:**
+```json
+Resposta: {"count": 0}
+```
+A instância está em estado `close`. O `/instance/connect` retorna `{"count":0}` sem QR.
+
+**Teste 2 — `restart` via `PUT /instance/restart/{name}`:**
+```json
+Resposta: {"error":"Not Found","response":{"message":["Cannot PUT /instance/restart/..."]}}
+```
+O endpoint de restart **não é suportado** nessa versão/instância da Evolution API hospedada em `evolution.ybrasil.com.br`. O código atual tenta restart e falha silenciosamente (`try/catch` ignora o erro), depois faz o segundo `connect` que também retorna `{"count":0}`, e o frontend exibe "Instância já conectada ou QR indisponível".
+
+### Por que `{"count":0}` sem QR?
+
+Quando uma instância WhatsApp está em estado `close` (sessão encerrada/desconectada), a Evolution API mantém o contexto da sessão anterior. Para gerar um novo QR Code, é necessário primeiro **fazer logout** da sessão antiga via `DELETE /instance/logout/{name}`, que limpa a sessão e permite que um novo QR seja gerado via `connect`.
+
+### Solução
+
+#### Mudança na `evolution-proxy` — action `connect`
+
+Substituir a tentativa de `restart` pelo fluxo correto:
 
 ```
-update or delete on table "whatsapp_instances" violates foreign key constraint
-"conversations_instance_id_fkey" on table "conversations"
+Fluxo corrigido:
+  1. GET /instance/connect/{name}
+  2. Se retornar base64/qrcode → retornar QR ✓
+  3. Se retornar {"count":0} ou sem base64:
+     a. DELETE /instance/logout/{name}   ← força limpeza da sessão
+     b. Aguardar 1.5 segundos
+     c. GET /instance/connect/{name}     ← agora gera QR novo
+     d. Retornar resultado com QR
 ```
 
-The UI already shows a conversation count badge (💬 N ativas), confirming conversations are linked. The `handleDelete` function in `BaylersInstancesList.tsx` tries to call `deleteWhatsAppInstance(deleteTarget.id)` directly, which hits this constraint.
+O `logout` (`DELETE /instance/logout`) já é usado com sucesso no action `delete`, confirmando que funciona nessa versão da API.
 
-## Solution
+#### Mudança no action `restart`
 
-Two complementary fixes:
+O `restart` via `PUT` não funciona nessa API. Trocar o método para usar `logout` + `connect` em sequência como forma de "reiniciar" a conexão.
 
-### 1. Database Migration — Alter foreign key to ON DELETE SET NULL
+### Arquivos a Modificar
 
-The safest approach for a messaging system is to use `ON DELETE SET NULL` on `conversations.instance_id`. This allows deleting an instance while preserving conversation history (messages remain visible but the instance reference becomes null). Using `ON DELETE CASCADE` would delete ALL conversations and messages when an instance is deleted, which is destructive and irreversible.
-
-Migration SQL:
-```sql
--- Drop old constraint
-ALTER TABLE public.conversations
-  DROP CONSTRAINT conversations_instance_id_fkey;
-
--- Re-add with ON DELETE SET NULL
-ALTER TABLE public.conversations
-  ADD CONSTRAINT conversations_instance_id_fkey
-  FOREIGN KEY (instance_id)
-  REFERENCES public.whatsapp_instances(id)
-  ON DELETE SET NULL;
-```
-
-`instance_id` in `conversations` is already `NOT NULL` based on the schema — it needs to also become nullable for `SET NULL` to work. So the migration must also:
-```sql
-ALTER TABLE public.conversations
-  ALTER COLUMN instance_id DROP NOT NULL;
-```
-
-### 2. UI Improvement — Warn user about linked conversations in the delete dialog
-
-Update `BaylersInstancesList.tsx` to show a stronger warning in the `AlertDialogDescription` when the instance has active conversations, informing the user that conversations will be preserved but unlinked from the instance.
-
-The current alert dialog description is generic. It should display something like:
-> "Esta instância possui 3 conversa(s) ativa(s). As conversas serão preservadas mas desvinculadas da instância."
-
-This uses the existing `conversationCounts[deleteTarget.id]` data already loaded by the component.
-
-## Files to Modify
-
-| File | Change |
+| Arquivo | Mudança |
 |---|---|
-| `supabase/migrations/[new].sql` | Drop and recreate FK as `ON DELETE SET NULL`; make `instance_id` nullable |
-| `src/components/integracao/BaylersInstancesList.tsx` | Improve delete dialog warning to show conversation count |
+| `supabase/functions/evolution-proxy/index.ts` | No action `connect`: substituir `PUT /instance/restart` por `DELETE /instance/logout`; no action `restart`: usar logout como alternativa |
 
-## Why SET NULL instead of CASCADE?
+### Impacto
 
-- `ON DELETE CASCADE` would **permanently destroy** all conversations and messages when an instance is removed — unacceptable for a CRM/collections platform where message history is critical evidence.
-- `ON DELETE SET NULL` preserves all history; conversations without an instance simply show no instance attribution, which is a graceful degradation.
-- The `instance_id` column in `conversations` must become nullable (currently `NOT NULL`) to support `SET NULL`.
+- Ao clicar "QR Code" em instância desconectada (`close`): o sistema faz logout da sessão antiga e conecta novamente, gerando o QR
+- O processo leva ~2-3 segundos (já há indicador de loading no botão)
+- Nenhuma mudança necessária no frontend — apenas na edge function
