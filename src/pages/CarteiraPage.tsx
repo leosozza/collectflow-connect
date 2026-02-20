@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchTiposStatus } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   fetchClients,
   createClient,
@@ -25,7 +27,7 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -72,6 +74,10 @@ const CarteiraPage = () => {
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [sortField, setSortField] = useState<"created_at" | "data_vencimento" | "status_cobranca" | null>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
@@ -336,6 +342,41 @@ const CarteiraPage = () => {
 
   const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
 
+  const handleBulkDelete = async () => {
+    setPasswordError("");
+    setBulkDeleting(true);
+    try {
+      // Verify admin password by re-authenticating with Supabase
+      const { error } = await supabase.auth.signInWithPassword({
+        email: profile?.user_id
+          ? (await supabase.auth.getUser()).data.user?.email ?? ""
+          : "",
+        password: adminPassword,
+      });
+      if (error) {
+        setPasswordError("Senha incorreta. Tente novamente.");
+        setBulkDeleting(false);
+        return;
+      }
+      // Delete all selected clients
+      const ids = Array.from(selectedIds);
+      const { error: deleteError } = await supabase
+        .from("clients")
+        .delete()
+        .in("id", ids);
+      if (deleteError) throw deleteError;
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success(`${ids.length} cliente(s) excluído(s) com sucesso!`);
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      setAdminPassword("");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir clientes");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -376,6 +417,17 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
+              {isAdmin && selectedIds.size === displayClients.length && displayClients.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setAdminPassword(""); setPasswordError(""); setBulkDeleteOpen(true); }}
+                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Excluir Todos</span> ({selectedIds.size})
+                </Button>
+              )}
             </>
           )}
           <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} size="sm" className="gap-1.5">
@@ -602,6 +654,53 @@ const CarteiraPage = () => {
         onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
         selectedClients={selectedClients}
       />
+
+      {/* Bulk delete with admin password */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <ShieldAlert className="w-5 h-5" />
+              Excluir {selectedIds.size} cliente(s)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Esta ação é <strong>irreversível</strong>. Todos os {selectedIds.size} registros selecionados serão permanentemente excluídos.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Para confirmar, insira sua senha de administrador:
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-password">Senha</Label>
+              <Input
+                id="admin-password"
+                type="password"
+                placeholder="Digite sua senha"
+                value={adminPassword}
+                onChange={(e) => { setAdminPassword(e.target.value); setPasswordError(""); }}
+                onKeyDown={(e) => e.key === "Enter" && adminPassword && handleBulkDelete()}
+                autoFocus
+              />
+              {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={!adminPassword || bulkDeleting}
+              className="gap-1.5"
+            >
+              {bulkDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {bulkDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
