@@ -171,8 +171,18 @@ Deno.serve(async (req) => {
 
         result = await resp.json();
 
+        // Treat 404 (instance deleted on remote) as disconnected — don't surface as an error
+        if (resp.status === 404) {
+          result = { instance: { instanceName, state: "close" } };
+          break;
+        }
+
         if (!resp.ok) {
-          return new Response(JSON.stringify({ error: result?.message || "Erro ao consultar status", details: result }), {
+          const rawMsg = result?.response?.message ?? result?.message;
+          const errMsg = Array.isArray(rawMsg)
+            ? rawMsg.map((m: any) => (typeof m === "string" ? m : JSON.stringify(m))).join("; ")
+            : rawMsg || "Erro ao consultar status";
+          return new Response(JSON.stringify({ error: errMsg, details: result }), {
             status: resp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
