@@ -1,91 +1,48 @@
 
-## Diagnóstico e Correções
+## Correção: Criar Profile Faltante para Maria Eduarda
 
-### Bug 1: Perfil criado não aparece para o Admin
+### Problema Identificado
 
-**Causa identificada:** O usuário `madusousa070@gmail.com` tem cargo `operador` na tabela `tenant_users`. A RLS da tabela `permission_profiles` para INSERT/UPDATE/DELETE exige `is_tenant_admin(auth.uid(), tenant_id)`. Um operador **não pode criar perfis** — a tentativa é bloqueada silenciosamente pelo banco.
+A usuária `madusousa070@gmail.com` (Maria Eduarda De Sousa Torres) possui:
+- Conta de autenticação ativa e confirmada desde 06/02/2026
+- Registro em `tenant_users` com role `operador` no tenant `39a450f8`
+- **Ausência total de registro na tabela `profiles`** — o que faz ela ser invisível para todos os listagens do sistema
 
-Porém, o problema relatado é diferente: o Admin diz que um novo perfil **não aparece** para ele. Verificando o banco, só existem os **4 perfis padrão** (`created_at: 2026-02-20 19:01:48`). Nenhum perfil adicional foi criado com sucesso.
+O trigger `handle_new_user` que deveria criar automaticamente o profile no momento do cadastro não funcionou para ela (provavelmente foi adicionada via outra rota, como convite manual sem o fluxo normal).
 
-A causa real é que o botão "Novo Perfil" no `UserPermissionsTab.tsx` chama diretamente `supabase.from("permission_profiles").insert(...)` sem tratamento de erro adequado para mostrar a mensagem de falha ao usuário. Quando um operador tenta criar, o banco rejeita mas a UI mostra "Perfil criado!" sem verificar corretamente, ou falha silenciosamente.
+### Correção via Migração SQL
 
-**Adicionalmente:** O Admin precisaria estar logado com o perfil correto (role `admin` em `tenant_users`). A consulta mostra que o Admin `Raul Seixas` (`0e5a460b`) tem role `admin` no tenant — portanto a criação pelo Admin deveria funcionar. O problema pode ser um **erro de cache ou query** no `onError` não exibindo o toast.
-
-**Correção:** Melhorar o tratamento de erro no `createMutation` para exibir a mensagem real do Supabase, e garantir que o `queryClient.invalidateQueries` seja acionado corretamente após criação.
-
-### Bug 2: Campos CPF e Telefone não existem na tabela `profiles`
-
-**Confirmado pelo banco:** A tabela `profiles` não tem colunas `cpf` ou `phone`. Precisamos adicioná-las via migração SQL antes de usá-las no formulário e na edge function.
-
-Campos existentes em `profiles`: `id`, `user_id`, `full_name`, `role`, `commission_rate`, `created_at`, `updated_at`, `commission_grade_id`, `tenant_id`, `threecplus_agent_id`, `avatar_url`, `birthday`, `bio`, `permission_profile_id`.
-
----
-
-### Solução Completa
-
-#### Parte 1 — Migração SQL: adicionar CPF e Telefone à tabela `profiles`
+Será criada uma migração cirúrgica que insere o registro faltante em `profiles` para ela:
 
 ```sql
-ALTER TABLE public.profiles 
-  ADD COLUMN IF NOT EXISTS cpf text,
-  ADD COLUMN IF NOT EXISTS phone text;
+INSERT INTO public.profiles (user_id, full_name, role, tenant_id)
+VALUES (
+  '64853b95-8200-46a3-9387-9e7d685eb476',
+  'Maria Eduarda De Sousa Torres',
+  'operador',
+  '39a450f8-7a40-46e5-8bc7-708da5043ec7'
+)
+ON CONFLICT (user_id) DO NOTHING;
 ```
 
-#### Parte 2 — Atualizar Edge Function `create-user`
+O `ON CONFLICT DO NOTHING` garante que, se por algum motivo o registro já existir, a migração não causará erro.
 
-Adicionar suporte aos campos `cpf` e `phone` no body da requisição e no `profileUpdate`.
+### Melhoria Preventiva: Trigger Mais Robusto
 
-```typescript
-// Adicionar ao destructuring do body
-const { full_name, email, password, role, cpf, phone, ... } = body;
+Para evitar que isso aconteça com futuros usuários adicionados via convite ou outras rotas, será adicionada uma verificação extra na edge function `create-user` que já existe: caso o profile não seja encontrado após a criação (`UPDATE` retornar 0 linhas), ela fará um `INSERT` direto em vez de apenas um UPDATE.
 
-// Adicionar ao profileUpdate
-if (cpf) profileUpdate.cpf = cpf;
-if (phone) profileUpdate.phone = phone;
-```
+Isso garante que mesmo se o trigger falhar, a edge function cobre o caso.
 
-A edge function já usa `email_confirm: true` — confirmação por email já está desabilitada.
-
-#### Parte 3 — Atualizar formulário "Novo Usuário" em `UsersPage.tsx`
-
-Adicionar campos obrigatórios na ordem solicitada:
-
-```
-1. Nome Completo (já existe)
-2. CPF (novo — com máscara 000.000.000-00)
-3. Telefone (novo — com máscara (00) 00000-0000)
-4. E-mail (já existe)
-5. Senha (já existe)
-6. Cargo (já existe)
-7. Grade de Comissão (já existe)
-8. Perfil de Permissão (já existe)
-9. Agente Discador (já existe como "Agente 3CPlus")
-10. Instância WhatsApp (já existe)
-```
-
-Adicionar state para `newCpf` e `newPhone`, passar ao `handleCreateUser`, que os envia na chamada da edge function.
-
-#### Parte 4 — Corrigir visibilidade de perfis no `UserPermissionsTab.tsx`
-
-O bug de "perfil criado não aparece" tem como causa mais provável o `onError` genérico que não exibe a mensagem real. Melhorar para:
-
-```typescript
-onError: (err: any) => toast.error(err.message || "Erro ao criar perfil"),
-```
-
-E garantir que o `invalidateQueries` é chamado com a query key correta após sucesso.
-
----
-
-### Arquivos a Modificar/Criar
+### Arquivos a Modificar
 
 | Arquivo | Tipo | Mudança |
 |---|---|---|
-| Nova migração SQL | SQL | Adicionar colunas `cpf` e `phone` à tabela `profiles` |
-| `supabase/functions/create-user/index.ts` | Edge Function | Aceitar e salvar `cpf` e `phone` |
-| `src/pages/UsersPage.tsx` | Modificar | Adicionar campos CPF e Telefone no formulário "Novo Usuário" |
-| `src/components/cadastros/UserPermissionsTab.tsx` | Modificar | Melhorar tratamento de erro no `createMutation` |
+| Nova migração SQL | SQL | Inserir profile faltante de Maria Eduarda |
+| `supabase/functions/create-user/index.ts` | Edge Function | Usar `upsert` em vez de `update` para profiles, garantindo criação mesmo se trigger falhou |
 
-### Ordem dos campos no formulário (final)
+### Resultado Esperado
 
-Nome → CPF → Telefone → E-mail → Senha → Cargo → Grade de Comissão → Perfil do Usuário → Agente Discador → Instância WhatsApp
+Após a migração:
+- Maria Eduarda aparecerá na listagem de usuários em Cadastros
+- O Admin poderá vincular um Perfil de Permissão a ela
+- Ela poderá ser visualizada, editada e gerenciada normalmente
