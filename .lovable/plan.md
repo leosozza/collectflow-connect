@@ -1,48 +1,55 @@
 
-## Correção: Criar Profile Faltante para Maria Eduarda
+## Análise e Correção: QR Code não sendo gerado na Evolution API
 
-### Problema Identificado
+### Diagnóstico Técnico (Confirmado com testes ao vivo)
 
-A usuária `madusousa070@gmail.com` (Maria Eduarda De Sousa Torres) possui:
-- Conta de autenticação ativa e confirmada desde 06/02/2026
-- Registro em `tenant_users` com role `operador` no tenant `39a450f8`
-- **Ausência total de registro na tabela `profiles`** — o que faz ela ser invisível para todos os listagens do sistema
+Após testar diretamente os endpoints da Evolution API, foram identificados **3 problemas distintos**:
 
-O trigger `handle_new_user` que deveria criar automaticamente o profile no momento do cadastro não funcionou para ela (provavelmente foi adicionada via outra rota, como convite manual sem o fluxo normal).
+**Problema 1 — `connect` retorna `{"count": 0}` sem QR Code**
+A instância "Maria Eduarda" está em estado `close`. Quando se chama `/instance/connect` em uma instância `close`, a Evolution API às vezes retorna `{"count": 0}` ao invés do QR Code. Isso ocorre porque a instância precisa ser **reiniciada** (`/instance/restart`) antes de gerar um novo QR. O frontend procura `result?.base64 || result?.qrcode?.base64` mas nenhum desses campos existe quando a resposta é `{"count":0}`.
 
-### Correção via Migração SQL
+**Problema 2 — Instância "TEMIS - Cobrança 01" deletada na Evolution API mas existe no banco**
+Esta instância retorna 404 na API remota. Ela já está sendo tratada como `close` no status (corrigido anteriormente), mas ao tentar gerar QR Code ela vai falhar com 404.
 
-Será criada uma migração cirúrgica que insere o registro faltante em `profiles` para ela:
+**Problema 3 — Fluxo incompleto de geração de QR**
+O fluxo atual é: `connect` → exibe QR. Mas quando o estado é `close`, o fluxo correto é: `restart` → `connect` → exibe QR. Além disso, após o `restart`, o QR pode demorar alguns segundos para ficar disponível.
 
-```sql
-INSERT INTO public.profiles (user_id, full_name, role, tenant_id)
-VALUES (
-  '64853b95-8200-46a3-9387-9e7d685eb476',
-  'Maria Eduarda De Sousa Torres',
-  'operador',
-  '39a450f8-7a40-46e5-8bc7-708da5043ec7'
-)
-ON CONFLICT (user_id) DO NOTHING;
+### Solução Proposta
+
+#### 1. Novo action `restart` no `evolution-proxy`
+Adicionar um caso `restart` que chama `/instance/restart/{instanceName}` na Evolution API. Isso "acorda" a instância `close` para que passe ao estado `connecting`, habilitando a geração do QR.
+
+#### 2. Lógica de auto-restart no `connect`
+No action `connect` do proxy: se o status retornado for `{"count":0}` (sem QR), fazer automaticamente um `restart` e tentar o `connect` novamente após um pequeno delay (1 segundo), para garantir que o QR seja gerado.
+
+```
+Fluxo corrigido no evolution-proxy (action: connect):
+  1. Chamar /instance/connect/{instanceName}
+  2. Se retornar base64/qrcode -> retornar QR ✓
+  3. Se retornar {"count":0} ou sem base64:
+     a. Chamar /instance/restart/{instanceName}
+     b. Aguardar 1.5 segundos
+     c. Chamar /instance/connect/{instanceName} novamente
+     d. Retornar resultado com QR (ou "indisponível")
 ```
 
-O `ON CONFLICT DO NOTHING` garante que, se por algum motivo o registro já existir, a migração não causará erro.
+#### 3. Tratamento de 404 no `connect`
+Se `/instance/connect` retornar 404 (instância deletada remotamente, como "TEMIS - Cobrança 01"), retornar resposta clara informando que a instância não existe mais na API remota, com sugestão de recriar.
 
-### Melhoria Preventiva: Trigger Mais Robusto
-
-Para evitar que isso aconteça com futuros usuários adicionados via convite ou outras rotas, será adicionada uma verificação extra na edge function `create-user` que já existe: caso o profile não seja encontrado após a criação (`UPDATE` retornar 0 linhas), ela fará um `INSERT` direto em vez de apenas um UPDATE.
-
-Isso garante que mesmo se o trigger falhar, a edge function cobre o caso.
+#### 4. Melhoria no frontend: indicador de loading no QR
+No `BaylersInstancesList`, ao clicar em QR Code, mostrar um estado de "Carregando QR..." enquanto a requisição está em andamento. Atualmente o usuário não tem feedback visual durante a espera.
 
 ### Arquivos a Modificar
 
 | Arquivo | Tipo | Mudança |
 |---|---|---|
-| Nova migração SQL | SQL | Inserir profile faltante de Maria Eduarda |
-| `supabase/functions/create-user/index.ts` | Edge Function | Usar `upsert` em vez de `update` para profiles, garantindo criação mesmo se trigger falhou |
+| `supabase/functions/evolution-proxy/index.ts` | Edge Function | Adicionar restart automático quando connect retorna sem QR; adicionar action `restart`; tratar 404 no connect |
+| `src/services/whatsappInstanceService.ts` | Service | Adicionar função `restartEvolutionInstance` |
+| `src/components/integracao/BaylersInstancesList.tsx` | Componente | Adicionar estado de loading no botão de QR Code durante geração |
 
 ### Resultado Esperado
 
-Após a migração:
-- Maria Eduarda aparecerá na listagem de usuários em Cadastros
-- O Admin poderá vincular um Perfil de Permissão a ela
-- Ela poderá ser visualizada, editada e gerenciada normalmente
+- Ao clicar no botão QR Code de uma instância desconectada (`close`), o sistema fará restart + connect automaticamente e exibirá o QR Code
+- O usuário verá um indicador de loading enquanto aguarda
+- Instâncias com 404 remoto mostrarão mensagem clara ("instância não existe na API, recrie-a")
+- O fluxo de criação de nova instância já retorna QR automaticamente (funcionando) e permanece sem alterações
