@@ -54,6 +54,7 @@ const BaylersInstancesList = () => {
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [loadingStatus, setLoadingStatus] = useState<Record<string, boolean>>({});
+  const [loadingQr, setLoadingQr] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
@@ -147,24 +148,28 @@ const BaylersInstancesList = () => {
   };
 
   const handleConnect = async (inst: WhatsAppInstance) => {
+    setLoadingQr((prev) => ({ ...prev, [inst.id]: true }));
     try {
       const result = await connectEvolutionInstance(inst.instance_name);
-      const qr = result?.base64 || result?.qrcode?.base64;
+      const qr = result?.base64 || result?.qrcode?.base64 || result?.code;
       if (qr) {
         setQrCodeData(qr);
         setQrDialogOpen(true);
+      } else if (result?.not_found) {
+        toast({ title: "Instância não encontrada", description: "Remova e recrie esta instância.", variant: "destructive" });
       } else {
         toast({ title: "Instância já conectada ou QR indisponível" });
       }
       // Auto-configure webhook after connect
       try {
         await setEvolutionWebhook(inst.instance_name);
-        toast({ title: "Webhook configurado!" });
       } catch {
         // silent — user can configure manually
       }
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao gerar QR Code", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingQr((prev) => ({ ...prev, [inst.id]: false }));
     }
   };
 
@@ -356,8 +361,9 @@ const BaylersInstancesList = () => {
                       className="h-8 w-8"
                       onClick={() => handleConnect(inst)}
                       title="QR Code / Conectar"
+                      disabled={loadingQr[inst.id]}
                     >
-                      <QrCode className="w-4 h-4" />
+                      {loadingQr[inst.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
                     </Button>
                     <Button
                       variant="ghost"

@@ -139,15 +139,81 @@ Deno.serve(async (req) => {
           });
         }
 
-        const resp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+        const connectResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
           method: "GET",
           headers: { apikey: evolutionKey },
         });
 
-        result = await resp.json();
+        // Handle 404: instance deleted remotely
+        if (connectResp.status === 404) {
+          return new Response(JSON.stringify({
+            error: "Instância não encontrada na API remota. Remova e recrie esta instância.",
+            not_found: true,
+          }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
-        if (!resp.ok) {
+        result = await connectResp.json();
+
+        if (!connectResp.ok) {
           return new Response(JSON.stringify({ error: result?.message || "Erro ao conectar instância", details: result }), {
+            status: connectResp.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // If response has no QR code (e.g. {"count":0}), do restart → wait → reconnect
+        const hasQr = result?.base64 || result?.qrcode?.base64 || result?.code;
+        if (!hasQr) {
+          // Restart the instance to wake it up
+          try {
+            await fetch(`${baseUrl}/instance/restart/${encodeURIComponent(instanceName)}`, {
+              method: "PUT",
+              headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+            });
+          } catch { /* ignore restart errors */ }
+
+          // Wait 2 seconds for the instance to reinitialize
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          // Retry connect
+          const retryResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+            method: "GET",
+            headers: { apikey: evolutionKey },
+          });
+          result = await retryResp.json();
+
+          if (!retryResp.ok) {
+            return new Response(JSON.stringify({ error: result?.message || "Erro ao gerar QR Code após restart", details: result }), {
+              status: retryResp.status,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        break;
+      }
+
+      case "restart": {
+        const { instanceName } = body;
+        if (!instanceName) {
+          return new Response(JSON.stringify({ error: "instanceName é obrigatório" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const resp = await fetch(`${baseUrl}/instance/restart/${encodeURIComponent(instanceName)}`, {
+          method: "PUT",
+          headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+        });
+
+        result = await resp.json().catch(() => ({ success: true }));
+
+        if (!resp.ok && resp.status !== 404) {
+          return new Response(JSON.stringify({ error: result?.message || "Erro ao reiniciar instância", details: result }), {
             status: resp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -314,7 +380,7 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, status, delete, sendMessage, setWebhook" }), {
+        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, restart, status, delete, sendMessage, setWebhook" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
