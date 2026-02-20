@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3 } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { markAsPaid, markAsBroken } from "@/services/clientService";
@@ -16,6 +16,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useNavigate } from "react-router-dom";
 import MiniRanking from "@/components/dashboard/MiniRanking";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useGamification } from "@/hooks/useGamification";
 
 const generateYearOptions = () => {
@@ -36,6 +37,7 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const now = new Date();
   const { checkAndGrantAchievements } = useGamification();
+  const permissions = usePermissions();
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -137,6 +139,17 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {permissions.canViewRelatorios && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-primary text-primary hover:bg-primary/10"
+              onClick={() => navigate("/relatorios")}
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Relatórios</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
