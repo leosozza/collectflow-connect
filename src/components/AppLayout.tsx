@@ -6,7 +6,6 @@ import { useTenant } from "@/hooks/useTenant";
 import rivoLogo from "@/assets/rivo_connect.png";
 import { 
   LayoutDashboard, 
-  Users, 
   LogOut, 
   Menu, 
   Wallet,
@@ -20,6 +19,7 @@ import {
   Trophy,
   BarChart3,
   Building2,
+  BookUser,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -49,6 +49,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Gamificação", icon: Trophy, path: "/gamificacao" },
     { label: "Carteira", icon: Wallet, path: "/carteira" },
   ];
+
+  // Icon replacement for Cadastros — using BookUser instead of Users
 
   const contactCenterItems = [
     { label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" },
@@ -161,7 +163,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               }
             `}
           >
-            <Users className="w-5 h-5 flex-shrink-0" />
+            <BookUser className="w-5 h-5 flex-shrink-0" />
             {!collapsed && "Cadastros"}
           </Link>
 
@@ -176,7 +178,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           )}
           {isTenantAdmin && (
             <Link
-              to="/configuracoes"
+              to="/configuracoes?tab=central_empresa"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Central Empresa" : undefined}
               className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}

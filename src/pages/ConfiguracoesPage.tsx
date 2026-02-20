@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Cloud, Map, Settings, Search, Code2, FileSpreadsheet } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Cloud, Map, Settings, Search, Code2, FileSpreadsheet, Building2 } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import TenantSettingsPage from "@/pages/TenantSettingsPage";
 import RoadmapPage from "@/pages/RoadmapPage";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { useSearchParams } from "react-router-dom";
 
 interface NavItem {
   key: string;
@@ -22,13 +23,26 @@ interface NavGroup {
 }
 
 const ConfiguracoesPage = () => {
-  const [active, setActive] = useState("integracao");
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get("tab") || "integracao";
+  const [active, setActive] = useState(defaultTab);
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) setActive(tab);
+  }, [searchParams]);
 
   const isMaxList = tenant?.slug === "maxfama" || tenant?.slug === "temis";
 
   const groups: NavGroup[] = [
+    {
+      title: "Empresa",
+      items: [
+        ...(isTenantAdmin ? [{ key: "central_empresa", label: "Central Empresa", icon: Building2 }] : []),
+      ],
+    },
     {
       title: "Sistema",
       items: [
@@ -117,6 +131,7 @@ const ConfiguracoesPage = () => {
         <div className="mb-4">
           <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
         </div>
+        {active === "central_empresa" && <TenantSettingsPage />}
         {active === "integracao" && <IntegracaoPage />}
         {active === "roadmap" && <RoadmapPage />}
         {active === "api_docs" && <ApiDocsPage />}
