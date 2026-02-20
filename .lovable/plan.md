@@ -1,165 +1,91 @@
-## Reformulação Completa: Criação de Usuário Direto + Permissões por Perfil
 
-### Contexto e Análise
+## Diagnóstico e Correções
 
-**O que existe hoje:**
+### Bug 1: Perfil criado não aparece para o Admin
 
-- "Novo Usuário" apenas gera um link de convite — o usuário precisa acessar o link e preencher seus próprios dados.
-- "Permissões" mostra todos os usuários e permite customizar cada um individualmente.
-- "Tipo de Usuário" tem 4 papéis base (Operador, Supervisor, Gerente, Admin).
+**Causa identificada:** O usuário `madusousa070@gmail.com` tem cargo `operador` na tabela `tenant_users`. A RLS da tabela `permission_profiles` para INSERT/UPDATE/DELETE exige `is_tenant_admin(auth.uid(), tenant_id)`. Um operador **não pode criar perfis** — a tentativa é bloqueada silenciosamente pelo banco.
 
-**O que o usuário quer:**
+Porém, o problema relatado é diferente: o Admin diz que um novo perfil **não aparece** para ele. Verificando o banco, só existem os **4 perfis padrão** (`created_at: 2026-02-20 19:01:48`). Nenhum perfil adicional foi criado com sucesso.
 
-1. Admin cria usuário completo diretamente (nome, email, senha, cargo) — usuário não precisa fazer nada. 
-2. Permissões gerenciadas **por perfil** (ex: "Operador Padrão", "Supervisor Comercial", etc.) — não por usuário individual.
-3. Capacidade de criar **perfis customizados** além dos 4 padrões.
-4. Ao cadastrar/editar usuário, escolher qual **Perfil** ele pertence.
+A causa real é que o botão "Novo Perfil" no `UserPermissionsTab.tsx` chama diretamente `supabase.from("permission_profiles").insert(...)` sem tratamento de erro adequado para mostrar a mensagem de falha ao usuário. Quando um operador tenta criar, o banco rejeita mas a UI mostra "Perfil criado!" sem verificar corretamente, ou falha silenciosamente.
 
----
+**Adicionalmente:** O Admin precisaria estar logado com o perfil correto (role `admin` em `tenant_users`). A consulta mostra que o Admin `Raul Seixas` (`0e5a460b`) tem role `admin` no tenant — portanto a criação pelo Admin deveria funcionar. O problema pode ser um **erro de cache ou query** no `onError` não exibindo o toast.
 
-### Parte 1 — Criação Direta de Usuário (Edge Function)
+**Correção:** Melhorar o tratamento de erro no `createMutation` para exibir a mensagem real do Supabase, e garantir que o `queryClient.invalidateQueries` seja acionado corretamente após criação.
 
-A criação de usuário sem envio de link requer o uso da API Admin do Supabase (`supabase.auth.admin.createUser`), que só pode ser chamada server-side com a chave de serviço. Será criada uma nova Edge Function `create-user`.
+### Bug 2: Campos CPF e Telefone não existem na tabela `profiles`
 
-**Fluxo:**
+**Confirmado pelo banco:** A tabela `profiles` não tem colunas `cpf` ou `phone`. Precisamos adicioná-las via migração SQL antes de usá-las no formulário e na edge function.
 
-1. Admin preenche: Nome, Email, Senha, Cargo, Perfil de Permissão.
-2. O frontend chama a Edge Function `create-user`.
-3. A Edge Function cria o usuário em `auth.users` com `email_confirm: true` (já confirmado, sem email de verificação).
-4. A Edge Function insere em `tenant_users` com o cargo selecionado.
-5. A Edge Function atualiza `profiles` com `tenant_id` e `full_name`.
-6. O usuário fica ativo imediatamente e pode fazer login.
-
-**Edge Function `supabase/functions/create-user/index.ts`:**
-
-```typescript
-// Recebe: { full_name, email, password, role, tenant_id }
-const { data, error } = await supabaseAdmin.auth.admin.createUser({
-  email,
-  password,
-  email_confirm: true,
-  user_metadata: { full_name },
-});
-// Depois insere em tenant_users e profiles
-```
+Campos existentes em `profiles`: `id`, `user_id`, `full_name`, `role`, `commission_rate`, `created_at`, `updated_at`, `commission_grade_id`, `tenant_id`, `threecplus_agent_id`, `avatar_url`, `birthday`, `bio`, `permission_profile_id`.
 
 ---
 
-### Parte 2 — Nova Estrutura: Perfis de Permissão
+### Solução Completa
 
-**Novo conceito:** Em vez de gerenciar permissões por usuário, o admin cria "Perfis de Permissão" reutilizáveis. Cada usuário é vinculado a um perfil.
-
-**Nova tabela no banco: `permission_profiles**`
+#### Parte 1 — Migração SQL: adicionar CPF e Telefone à tabela `profiles`
 
 ```sql
-CREATE TABLE permission_profiles (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL,
-  name text NOT NULL,               -- Ex: "Operador Padrão", "Supervisor Comercial"
-  base_role tenant_role NOT NULL,   -- papel base (operador, supervisor, gerente, admin)
-  permissions jsonb NOT NULL DEFAULT '{}', -- { module: actions[] }
-  is_default boolean NOT NULL DEFAULT false, -- perfis padrão do sistema
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+ALTER TABLE public.profiles 
+  ADD COLUMN IF NOT EXISTS cpf text,
+  ADD COLUMN IF NOT EXISTS phone text;
 ```
 
-**RLS:**
+#### Parte 2 — Atualizar Edge Function `create-user`
 
-- SELECT: qualquer usuário do tenant pode ver
-- INSERT/UPDATE/DELETE: apenas admins do tenant
+Adicionar suporte aos campos `cpf` e `phone` no body da requisição e no `profileUpdate`.
 
-**Vincular usuário a perfil:**
-Nova coluna `permission_profile_id uuid` na tabela `profiles`, referenciando `permission_profiles(id)`.
+```typescript
+// Adicionar ao destructuring do body
+const { full_name, email, password, role, cpf, phone, ... } = body;
 
-**Lógica de permissões (atualizada em `usePermissions.ts`):**
-
-```
-1. Pega o papel base do tenant_users (operador, supervisor, gerente, admin)
-2. Se o usuário tem um permission_profile vinculado → usa as permissões do perfil
-3. Caso contrário → usa os defaults do papel base (ROLE_DEFAULTS)
+// Adicionar ao profileUpdate
+if (cpf) profileUpdate.cpf = cpf;
+if (phone) profileUpdate.phone = phone;
 ```
 
----
+A edge function já usa `email_confirm: true` — confirmação por email já está desabilitada.
 
-### Parte 3 — Nova UI: Aba "Permissões" em Cadastros
+#### Parte 3 — Atualizar formulário "Novo Usuário" em `UsersPage.tsx`
 
-**Substituição completa do `UserPermissionsTab`:**
+Adicionar campos obrigatórios na ordem solicitada:
 
-A nova interface terá duas seções:
+```
+1. Nome Completo (já existe)
+2. CPF (novo — com máscara 000.000.000-00)
+3. Telefone (novo — com máscara (00) 00000-0000)
+4. E-mail (já existe)
+5. Senha (já existe)
+6. Cargo (já existe)
+7. Grade de Comissão (já existe)
+8. Perfil de Permissão (já existe)
+9. Agente Discador (já existe como "Agente 3CPlus")
+10. Instância WhatsApp (já existe)
+```
 
-**3.1 — Gerenciador de Perfis de Permissão**
+Adicionar state para `newCpf` e `newPhone`, passar ao `handleCreateUser`, que os envia na chamada da edge function.
 
-- Cards para os 4 perfis padrão (Operador, Supervisor, Gerente, Admin) — não deletáveis
-- Botão "+ Novo Perfil" para criar perfis customizados
-- Ao clicar em um perfil, abre um painel lateral com checkboxes por módulo (igual ao layout atual)
-- Perfis customizados podem ser deletados se não houver usuários vinculados
-- Botão "Salvar" por perfil
+#### Parte 4 — Corrigir visibilidade de perfis no `UserPermissionsTab.tsx`
 
-**3.2 — Usuários vinculados ao perfil**
+O bug de "perfil criado não aparece" tem como causa mais provável o `onError` genérico que não exibe a mensagem real. Melhorar para:
 
-- Cada card de perfil mostra quantos usuários estão vinculados (badge)
-- Ao expandir, lista os usuários com opção de desvincular / trocar de perfil
+```typescript
+onError: (err: any) => toast.error(err.message || "Erro ao criar perfil"),
+```
 
----
-
-### Parte 4 — Atualização do Formulário de Usuário
-
-No dialog de "Novo Usuário" e "Editar Usuário" em `UsersPage.tsx`:
-
-**Campos de "Novo Usuário" (criação direta):**
-
-- Nome Completo
-- Email
-- Senha temporária (o admin define)
-- Cargo (papel base): Operador / Supervisor / Gerente / Admin
-- Perfil de Permissão (select com os perfis criados em Permissões)
-- Grade de Comissão
-- Agente 3CPlus
-- Instâncias WhatsApp
-
-**Campos de "Editar Usuário":**
-
-- Mesmos campos, sem campo de senha
-- Campo "Perfil de Permissão" adicionado
+E garantir que o `invalidateQueries` é chamado com a query key correta após sucesso.
 
 ---
 
-### Arquivos a Criar/Modificar
+### Arquivos a Modificar/Criar
 
+| Arquivo | Tipo | Mudança |
+|---|---|---|
+| Nova migração SQL | SQL | Adicionar colunas `cpf` e `phone` à tabela `profiles` |
+| `supabase/functions/create-user/index.ts` | Edge Function | Aceitar e salvar `cpf` e `phone` |
+| `src/pages/UsersPage.tsx` | Modificar | Adicionar campos CPF e Telefone no formulário "Novo Usuário" |
+| `src/components/cadastros/UserPermissionsTab.tsx` | Modificar | Melhorar tratamento de erro no `createMutation` |
 
-| Arquivo                                                | Tipo          | Mudança                                            |
-| ------------------------------------------------------ | ------------- | -------------------------------------------------- |
-| `supabase/migrations/YYYYMMDD_permission_profiles.sql` | SQL           | Criar tabela + coluna + RLS + dados iniciais       |
-| `supabase/functions/create-user/index.ts`              | Edge Function | Criar usuário diretamente via Admin API            |
-| `src/components/cadastros/UserPermissionsTab.tsx`      | Modificar     | Reformular para gerenciar perfis                   |
-| `src/pages/UsersPage.tsx`                              | Modificar     | "Novo Usuário" com campos completos + campo Perfil |
-| `src/hooks/usePermissions.ts`                          | Modificar     | Ler permissões do perfil vinculado                 |
+### Ordem dos campos no formulário (final)
 
-
----
-
-### Ordem de Execução
-
-1. **Migração SQL**: criar `permission_profiles`, adicionar `permission_profile_id` em `profiles`, RLS, dados iniciais (4 perfis padrão por tenant)
-2. **Edge Function `create-user**`: recebe dados do admin, cria usuário autenticado, associa ao tenant
-3. `**usePermissions.ts**`: adicionar leitura do perfil vinculado via nova RPC ou query
-4. `**UserPermissionsTab.tsx**`: reformular para CRUD de perfis de permissão
-5. `**UsersPage.tsx**`: atualizar "Novo Usuário" (formulário completo) e "Editar Usuário" (campo Perfil)
-
----
-
-### Dados Iniciais (Perfis Padrão)
-
-Quando um tenant é criado, 4 perfis padrão serão automaticamente disponibilizados. Para tenants existentes, a migração insere os perfis iniciais via trigger ou seção de dados.
-
-Os 4 perfis padrão terão `is_default = true` e usarão os mesmos defaults que o `ROLE_DEFAULTS` atual. O admin pode editar as permissões desses perfis padrão mas não deletá-los.
-
----
-
-### Impacto na Segurança
-
-- A Edge Function `create-user` valida que o usuário chamador é admin do tenant antes de criar qualquer usuário
-- A senha criada pelo admin é temporária — o usuário pode trocá-la pelo perfil
-- `email_confirm: true` evita email de confirmação desnecessário
-- Roles continuam armazenadas em `tenant_users`, nunca em `profiles` (conforme diretriz de segurança)
+Nome → CPF → Telefone → E-mail → Senha → Cargo → Grade de Comissão → Perfil do Usuário → Agente Discador → Instância WhatsApp
