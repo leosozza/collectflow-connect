@@ -1,4 +1,3 @@
-import { useAuth } from "@/hooks/useAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CobCloudTab from "@/components/integracao/CobCloudTab";
 import NegociarieTab from "@/components/integracao/NegociarieTab";
@@ -6,11 +5,12 @@ import ThreeCPlusTab from "@/components/integracao/ThreeCPlusTab";
 import WhatsAppIntegrationTab from "@/components/integracao/WhatsAppIntegrationTab";
 import ProtestoTab from "@/components/integracao/ProtestoTab";
 import { Phone, MessageCircle, ShieldAlert } from "lucide-react";
+import { useTenant } from "@/hooks/useTenant";
 
 const IntegracaoPage = () => {
-  const { profile } = useAuth();
+  const { isTenantAdmin } = useTenant();
 
-  if (profile?.role !== "admin") {
+  if (!isTenantAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Acesso restrito a administradores</p>
