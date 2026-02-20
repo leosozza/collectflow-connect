@@ -1,54 +1,35 @@
 
-## Mover "Central Empresa" para Rota Própria no Menu Principal
+## Problema: Formulário de Credor fecha ao sair da janela
 
-### Problema atual
-"Central Empresa" está dentro de `/configuracoes` como uma aba interna. O usuário quer que seja uma **página própria** no menu principal da sidebar, e que dentro de `/configuracoes` reste apenas o grupo **Sistema** (Integração, Roadmap, API REST, MaxList).
+### Causa raiz
+O componente `<Sheet>` (Radix UI Dialog) fecha automaticamente quando detecta um clique ou interação **fora** da sua área. Isso é o comportamento padrão do Radix UI.
 
----
+Quando o usuário:
+1. Abre o formulário de Credor
+2. Clica fora do navegador (ex: para copiar dados de outro app ou aba)
+3. Retorna ao sistema
 
-### O que será feito
+O foco volta ao documento e o Radix interpreta isso como "interação fora do dialog" → fecha o Sheet, perdendo todos os dados digitados.
 
-#### 1. Nova rota `/central-empresa` — `src/App.tsx`
-Adicionar uma rota dedicada que renderiza `<TenantSettingsPage />` dentro do `AppLayout`, acessível via `/central-empresa`.
+### Solução
+Adicionar `onInteractOutside={(e) => e.preventDefault()}` no `<SheetContent>` do `CredorForm.tsx`. Isso impede que qualquer clique ou interação fora do painel o feche.
 
-#### 2. Sidebar — `src/components/AppLayout.tsx`
-- Alterar o link **"Central Empresa"** no rodapé da sidebar para apontar para `/central-empresa` (rota própria) em vez de `/configuracoes?tab=central_empresa`.
-- Adicionar active state correto: highlight quando `location.pathname === "/central-empresa"`.
-- Adicionar `/central-empresa` ao mapa de títulos do header.
+### Arquivo alterado
 
-#### 3. Configurações — `src/pages/ConfiguracoesPage.tsx`
-- Remover o grupo **"Empresa"** (que continha "Central Empresa").
-- Remover a renderização `{active === "central_empresa" && <TenantSettingsPage />}`.
-- Remover o import de `TenantSettingsPage` e o ícone `Building2` (não mais necessários).
-- O `defaultTab` passa a ser `"integracao"` (primeiro item do grupo Sistema).
+**`src/components/cadastros/CredorForm.tsx` — linha 188:**
 
----
+```tsx
+// ANTES
+<SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
 
-### Estrutura final
-
-**Menu lateral (rodapé) — Admin / Super Admin:**
-```
-Nome do Admin
-Central Empresa  →  /central-empresa  (página própria)
-Configurações    →  /configuracoes    (apenas Sistema: Integração, Roadmap, API REST, MaxList)
-[Painel Super Admin  →  /admin/tenants  (somente Super Admin)]
-Sair
+// DEPOIS
+<SheetContent
+  className="w-full sm:max-w-2xl overflow-y-auto"
+  onInteractOutside={(e) => e.preventDefault()}
+>
 ```
 
-**Dentro de `/configuracoes` — grupo Sistema:**
-```
-Integração
-Roadmap
-API REST
-MaxList  (apenas tenants maxfama/temis)
-```
+- 1 linha alterada
+- O usuário ainda pode fechar o formulário pelos botões **Cancelar** ou **Salvar**, ou pelo **X** no canto superior direito
+- Nenhum dado será perdido ao alternar entre aplicativos/abas
 
----
-
-### Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/App.tsx` | Adicionar rota `/central-empresa` com `<TenantSettingsPage />` |
-| `src/components/AppLayout.tsx` | Atualizar link "Central Empresa" para `/central-empresa` + active state + título no header |
-| `src/pages/ConfiguracoesPage.tsx` | Remover grupo "Empresa", remover renderização de `central_empresa`, limpar imports |
