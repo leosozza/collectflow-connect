@@ -27,7 +27,7 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -78,6 +78,7 @@ const CarteiraPage = () => {
   const [adminPassword, setAdminPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
@@ -656,7 +657,7 @@ const CarteiraPage = () => {
       />
 
       {/* Bulk delete with admin password */}
-      <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); } }}>
+      <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); setShowPassword(false); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -673,15 +674,26 @@ const CarteiraPage = () => {
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="admin-password">Senha</Label>
-              <Input
-                id="admin-password"
-                type="password"
-                placeholder="Digite sua senha"
-                value={adminPassword}
-                onChange={(e) => { setAdminPassword(e.target.value); setPasswordError(""); }}
-                onKeyDown={(e) => e.key === "Enter" && adminPassword && handleBulkDelete()}
-                autoFocus
-              />
+              <div className="relative">
+                <Input
+                  id="admin-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Digite sua senha"
+                  value={adminPassword}
+                  onChange={(e) => { setAdminPassword(e.target.value); setPasswordError(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && adminPassword && handleBulkDelete()}
+                  autoFocus
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
             </div>
           </div>
