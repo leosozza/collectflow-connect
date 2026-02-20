@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, Loader2, Save, Phone } from "lucide-react";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 const ThreeCPlusTab = () => {
@@ -18,6 +18,7 @@ const ThreeCPlusTab = () => {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [showToken, setShowToken] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
 
   const handleSave = async () => {
@@ -104,13 +105,24 @@ const ThreeCPlusTab = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="apiToken">Token de API (Gestor)</Label>
-              <Input
-                id="apiToken"
-                type="password"
-                placeholder="Token do gestor 3CPlus"
-                value={apiToken}
-                onChange={(e) => setApiToken(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="apiToken"
+                  type={showToken ? "text" : "password"}
+                  placeholder="Token do gestor 3CPlus"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Obtenha em Configurações → Usuários → Opções Avançadas
               </p>
