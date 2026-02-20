@@ -1,34 +1,117 @@
 
+## Alterações de Navegação e Configurações
 
-## Problema Identificado
+### Resumo das mudanças
 
-Os 3 registros **foram importados com sucesso** no banco de dados (credor "YBRASIL", vencimento 18/02/2026). Porem estao sem `status_cobranca_id` (null), o que pode dificultar a localizacao na Carteira dependendo dos filtros ativos.
-
-## Solucao
-
-### 1. Adicionar seletor de Status de Cobranca na pagina MaxList
-
-Antes do botao "Enviar para CRM", adicionar um `Select` que permita escolher qual status de cobranca sera atribuido aos registros importados. O padrao sera **"Aguardando acionamento"**.
-
-### 2. Incluir `status_cobranca_id` no upsert
-
-Na funcao `handleSendToCRM`, incluir o campo `status_cobranca_id` selecionado em cada registro do batch, garantindo que os devedores importados ja entrem com o status correto.
+**5 ajustes em 2 arquivos:**
 
 ---
 
-### Detalhes Tecnicos
+### 1. Arquivo: `src/components/AppLayout.tsx`
 
-**Arquivo:** `src/pages/MaxListPage.tsx`
+**Mudança A — Gamificação abaixo do Dashboard**
 
-**Alteracoes:**
+Atualmente a ordem no sidebar é:
+```text
+Dashboard
+Carteira
+[Contact Center]
+Gamificação   ← está em postContactItems (após Contact Center)
+```
 
-1. **Novo estado** `selectedStatusCobrancaId` inicializado com o UUID de "Aguardando acionamento" (buscado dinamicamente via query na tabela `tipos_status`).
+A nova ordem será:
+```text
+Dashboard
+Gamificação   ← sobe para preContactItems, logo abaixo de Dashboard
+Carteira
+[Contact Center]
+```
 
-2. **Query dos tipos_status** usando `useQuery` + `fetchTiposStatus` (ja usado em outras paginas) para popular o select.
+Gamificação passa de `postContactItems` para `preContactItems`, inserida na segunda posição.
 
-3. **Select de Status** renderizado junto aos controles de importacao (proximo ao botao "Enviar para CRM"), com as opcoes vindas de `tipos_status`.
+---
 
-4. **No `handleSendToCRM`**, adicionar `status_cobranca_id: selectedStatusCobrancaId` nos objetos `rows` enviados no upsert.
+**Mudança B — "Perfil" (Cadastros) como item fixo no menu lateral principal, abaixo de Contact Center**
 
-5. O default "Aguardando acionamento" sera identificado pelo nome ao carregar os tipos, setando automaticamente o estado inicial.
+Atualmente "Configurações" (`/cadastros`) fica no rodapé do sidebar, visível apenas para Admin.
 
+A nova ordem de itens principais será:
+```text
+Dashboard
+Gamificação
+Carteira
+[Contact Center] (Telefonia / WhatsApp)
+Perfil           ← novo item fixo na área de navegação principal
+```
+
+O item "Perfil" (com ícone `UserCircle` ou `User`) apontará para `/cadastros`, mas ficará no bloco `<nav>` do sidebar (área scrollável), logo após o Collapsible do Contact Center — visível para todos os usuários autenticados (ou mantendo a restrição de Admin conforme regra atual).
+
+O link "Configurações" no rodapé será removido do bloco `{isAdmin && ...}` para evitar duplicidade, pois o acesso passará a ser pelo item "Perfil" no nav principal.
+
+---
+
+### 2. Arquivo: `src/pages/CadastrosPage.tsx`
+
+**Mudança C — Usuários abaixo de Credores (ainda dentro da seção Cadastros)**
+
+Atualmente o grupo "Cadastros" tem:
+```text
+Credores
+Equipes
+Perfil do Devedor
+Tipo de Dívida
+Tipo de Status
+```
+
+E "Pessoas" (grupo separado) tem:
+```text
+Usuários
+```
+
+A mudança move "Usuários" para dentro do grupo "Cadastros", logo abaixo de "Credores", e remove o grupo "Pessoas":
+```text
+CADASTROS
+  Credores
+  Usuários   ← sobe aqui
+  Equipes
+  Perfil do Devedor
+  Tipo de Dívida
+  Tipo de Status
+```
+
+O grupo "Pessoas" deixa de existir como seção separada.
+
+---
+
+**Mudança D — Renomear "Config. Empresa" para "Central Empresa" dentro de Sistema**
+
+Na seção SISTEMA da `CadastrosPage`, a label do item `tenant_config` muda de:
+```
+"Config. Empresa"
+```
+para:
+```
+"Central Empresa"
+```
+
+---
+
+**Mudança E — Manter seção "Sistema" no /Configurações**
+
+Nenhuma remoção é feita na seção Sistema. Ela continua com seus itens (Integração, Central Empresa, Super Admin, Roadmap). Confirmado que não há alteração aqui além do rename acima.
+
+---
+
+### Detalhes Técnicos
+
+**`src/components/AppLayout.tsx`:**
+- Mover `{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }` de `postContactItems` para `preContactItems` na segunda posição (índice 1, entre Dashboard e Carteira).
+- Remover o array `postContactItems` e seu bloco de renderização (ficará vazio após mover Gamificação).
+- Adicionar item "Perfil" com ícone `UserCircle` (importado do lucide-react) dentro do `<nav>` scrollável, logo após o `<Collapsible>` do Contact Center — substituindo o link "Configurações" que estava no rodapé.
+- Remover o link "Configurações" (`/cadastros`) do bloco `{isAdmin && ...}` no rodapé para evitar duplicidade.
+- Atualizar `pageTitles` no header para manter o título correto ao navegar para `/cadastros`.
+
+**`src/pages/CadastrosPage.tsx`:**
+- No array `groups`, mover o item `{ key: "usuarios", ... }` para dentro do grupo "Cadastros", na segunda posição (após Credores).
+- Remover o grupo "Pessoas" inteiramente.
+- Alterar label do item `tenant_config` de `"Config. Empresa"` para `"Central Empresa"`.
