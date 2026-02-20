@@ -54,10 +54,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState, useMemo, useEffect } from "react";
-import { Edit, Trash2, ChevronsUpDown, Check, X, Phone, Loader2, MessageSquare, Link2, Copy, UserPlus } from "lucide-react";
+import {
+  Edit,
+  Trash2,
+  ChevronsUpDown,
+  Check,
+  X,
+  Phone,
+  Loader2,
+  MessageSquare,
+  UserPlus,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
-import { fetchWhatsAppInstances, type WhatsAppInstance } from "@/services/whatsappInstanceService";
+import { fetchWhatsAppInstances } from "@/services/whatsappInstanceService";
 
 interface ThreeCAgent {
   id: number;
@@ -74,30 +86,54 @@ interface Profile {
   commission_rate: number;
   commission_grade_id: string | null;
   threecplus_agent_id: number | null;
+  permission_profile_id?: string | null;
 }
+
+interface PermissionProfile {
+  id: string;
+  name: string;
+  base_role: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  operador: "Operador",
+  supervisor: "Supervisor",
+  gerente: "Gerente",
+  admin: "Admin",
+};
 
 const UsersPage = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
+
+  // Edit state
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [editRole, setEditRole] = useState<string>("operador");
   const [editGradeId, setEditGradeId] = useState<string>("none");
   const [editName, setEditName] = useState<string>("");
   const [editAgentId, setEditAgentId] = useState<number | null>(null);
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
-  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
   const [editInstanceIds, setEditInstanceIds] = useState<string[]>([]);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState<string>("operador");
-  const [inviteExpiry, setInviteExpiry] = useState<string>("7");
-  const [generatedLink, setGeneratedLink] = useState<string>("");
-  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [editProfileId, setEditProfileId] = useState<string>("none");
+
+  // Delete state
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+
+  // New user state
   const [newUserOpen, setNewUserOpen] = useState(false);
-  const [newUserRole, setNewUserRole] = useState<string>("operador");
-  const [newUserExpiry, setNewUserExpiry] = useState<string>("7");
-  const [newUserLink, setNewUserLink] = useState<string>("");
-  const [generatingNewUser, setGeneratingNewUser] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [newRole, setNewRole] = useState<string>("operador");
+  const [newProfileId, setNewProfileId] = useState<string>("none");
+  const [newGradeId, setNewGradeId] = useState<string>("none");
+  const [newAgentId, setNewAgentId] = useState<number | null>(null);
+  const [newAgentPopoverOpen, setNewAgentPopoverOpen] = useState(false);
+  const [newInstanceIds, setNewInstanceIds] = useState<string[]>([]);
+  const [creatingUser, setCreatingUser] = useState(false);
+
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
@@ -117,15 +153,13 @@ const UsersPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Map agentId -> name for display
   const agentNameMap = useMemo(() => {
     const m = new Map<number, string>();
-    for (const a of threecAgents) {
-      m.set(a.id, a.name);
-    }
+    for (const a of threecAgents) m.set(a.id, a.name);
     return m;
   }, [threecAgents]);
 
+  // Fetch users
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: async () => {
@@ -140,16 +174,46 @@ const UsersPage = () => {
     enabled: profile?.role === "admin",
   });
 
+  // Fetch tenant_users for roles
+  const { data: tenantUsers = [] } = useQuery({
+    queryKey: ["tenant-users-roles", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("user_id, role")
+        .eq("tenant_id", tenant!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!tenant?.id,
+  });
+
+  const tenantRoleMap = new Map(tenantUsers.map((tu: any) => [tu.user_id, tu.role]));
+
+  // Fetch commission grades
   const { data: grades = [] } = useQuery({
     queryKey: ["commission-grades"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("commission_grades")
-        .select("*")
-        .order("name");
+      const { data, error } = await supabase.from("commission_grades").select("*").order("name");
       if (error) throw error;
       return (data || []).map((d) => ({ ...d, tiers: d.tiers as unknown as CommissionTier[] })) as CommissionGrade[];
     },
+  });
+
+  // Fetch permission profiles
+  const { data: permissionProfiles = [] } = useQuery({
+    queryKey: ["permission-profiles", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("permission_profiles" as any)
+        .select("id, name, base_role")
+        .eq("tenant_id", tenant!.id)
+        .order("is_default", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return (data as unknown as PermissionProfile[]) || [];
+    },
+    enabled: !!tenant?.id,
   });
 
   // Fetch WhatsApp instances
@@ -173,43 +237,64 @@ const UsersPage = () => {
     enabled: !!editUser?.id,
   });
 
-  // Sync editInstanceIds when operator instances load
   useEffect(() => {
     if (editUser && currentOperatorInstances.length > 0) {
       setEditInstanceIds(currentOperatorInstances);
     }
   }, [editUser?.id, currentOperatorInstances.join(",")]);
 
+  // Update mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, role, commission_grade_id, full_name, threecplus_agent_id, instanceIds }: { id: string; role: string; commission_grade_id: string | null; full_name: string; threecplus_agent_id: number | null; instanceIds: string[] }) => {
+    mutationFn: async ({
+      id,
+      role,
+      commission_grade_id,
+      full_name,
+      threecplus_agent_id,
+      instanceIds,
+      permission_profile_id,
+    }: {
+      id: string;
+      role: string;
+      commission_grade_id: string | null;
+      full_name: string;
+      threecplus_agent_id: number | null;
+      instanceIds: string[];
+      permission_profile_id: string | null;
+    }) => {
+      // Update profile
       const { error } = await supabase
         .from("profiles")
-        .update({ role, commission_grade_id, full_name, threecplus_agent_id } as any)
+        .update({ commission_grade_id, full_name, threecplus_agent_id, permission_profile_id } as any)
         .eq("id", id);
       if (error) throw error;
 
+      // Update tenant_users role
+      const profileRecord = users.find((u) => u.id === id);
+      if (profileRecord && tenant?.id) {
+        await supabase
+          .from("tenant_users")
+          .update({ role } as any)
+          .eq("user_id", profileRecord.user_id)
+          .eq("tenant_id", tenant.id);
+      }
+
       // Sync operator_instances
       if (tenant?.id) {
-        await supabase
-          .from("operator_instances" as any)
-          .delete()
-          .eq("profile_id", id);
-
+        await supabase.from("operator_instances" as any).delete().eq("profile_id", id);
         if (instanceIds.length > 0) {
           const rows = instanceIds.map((instId) => ({
             profile_id: id,
             instance_id: instId,
             tenant_id: tenant.id,
           }));
-          const { error: insErr } = await supabase
-            .from("operator_instances" as any)
-            .insert(rows as any);
-          if (insErr) throw insErr;
+          await supabase.from("operator_instances" as any).insert(rows as any);
         }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-users-roles"] });
       queryClient.invalidateQueries({ queryKey: ["operator-instances"] });
       toast.success("Usuário atualizado!");
       setEditUser(null);
@@ -217,12 +302,10 @@ const UsersPage = () => {
     onError: () => toast.error("Erro ao atualizar usuário"),
   });
 
+  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("profiles").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -235,11 +318,60 @@ const UsersPage = () => {
 
   const handleEdit = (user: Profile) => {
     setEditUser(user);
-    setEditRole(user.role);
+    setEditRole(tenantRoleMap.get(user.user_id) || "operador");
     setEditGradeId(user.commission_grade_id || "none");
     setEditName(user.full_name);
     setEditAgentId(user.threecplus_agent_id);
     setEditInstanceIds([]);
+    setEditProfileId((user as any).permission_profile_id || "none");
+  };
+
+  const resetNewUser = () => {
+    setNewName("");
+    setNewEmail("");
+    setNewPassword("");
+    setShowPassword(false);
+    setNewRole("operador");
+    setNewProfileId("none");
+    setNewGradeId("none");
+    setNewAgentId(null);
+    setNewInstanceIds([]);
+  };
+
+  const handleCreateUser = async () => {
+    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
+      toast.error("Preencha nome, email e senha");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("A senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+    setCreatingUser(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-user", {
+        body: {
+          full_name: newName.trim(),
+          email: newEmail.trim().toLowerCase(),
+          password: newPassword,
+          role: newRole,
+          permission_profile_id: newProfileId === "none" ? null : newProfileId,
+          commission_grade_id: newGradeId === "none" ? null : newGradeId,
+          threecplus_agent_id: newAgentId,
+          instance_ids: newInstanceIds,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Usuário ${newName} criado com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setNewUserOpen(false);
+      resetNewUser();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar usuário");
+    } finally {
+      setCreatingUser(false);
+    }
   };
 
   const getGradeName = (gradeId: string | null) => {
@@ -253,16 +385,21 @@ const UsersPage = () => {
     return name ? `${name} (#${agentId})` : `#${agentId}`;
   };
 
-  // IDs already assigned to other users
   const assignedAgentIds = useMemo(() => {
     const set = new Set<number>();
     for (const u of users) {
-      if (u.threecplus_agent_id && u.id !== editUser?.id) {
-        set.add(u.threecplus_agent_id);
-      }
+      if (u.threecplus_agent_id && u.id !== editUser?.id) set.add(u.threecplus_agent_id);
     }
     return set;
   }, [users, editUser?.id]);
+
+  const assignedNewAgentIds = useMemo(() => {
+    const set = new Set<number>();
+    for (const u of users) {
+      if (u.threecplus_agent_id) set.add(u.threecplus_agent_id);
+    }
+    return set;
+  }, [users]);
 
   if (profile?.role !== "admin") {
     return (
@@ -272,7 +409,89 @@ const UsersPage = () => {
     );
   }
 
-  const selectedAgentName = editAgentId ? agentNameMap.get(editAgentId) : null;
+  const AgentPicker = ({
+    value,
+    onChange,
+    open,
+    onOpenChange,
+    assignedIds,
+    excludeId,
+  }: {
+    value: number | null;
+    onChange: (v: number | null) => void;
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    assignedIds: Set<number>;
+    excludeId?: number | null;
+  }) => (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+            {value ? (
+              <span className="truncate">{agentNameMap.get(value) || `Agente #${value}`}</span>
+            ) : (
+              <span className="text-muted-foreground">Selecionar agente...</span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[320px] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Buscar agente por nome..." />
+            <CommandList>
+              <CommandEmpty>
+                {agentsLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Carregando agentes...</span>
+                  </div>
+                ) : "Nenhum agente encontrado"}
+              </CommandEmpty>
+              <CommandGroup>
+                {threecAgents.map((agent) => {
+                  const isAssigned = assignedIds.has(agent.id) && agent.id !== excludeId;
+                  const isSelected = value === agent.id;
+                  return (
+                    <CommandItem
+                      key={agent.id}
+                      value={`${agent.name} ${agent.id}`}
+                      onSelect={() => {
+                        if (!isAssigned || isSelected) {
+                          onChange(isSelected ? null : agent.id);
+                          onOpenChange(false);
+                        }
+                      }}
+                      disabled={isAssigned && !isSelected}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Check className={cn("h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{agent.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            ID: {agent.id}{agent.extension ? ` · Ramal: ${agent.extension}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      {isAssigned && !isSelected && (
+                        <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">Vinculado</Badge>
+                      )}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {value && (
+        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => onChange(null)}>
+          <X className="w-3 h-3" /> Remover vínculo
+        </Button>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -281,14 +500,9 @@ const UsersPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setNewUserOpen(true); setNewUserLink(""); }} className="gap-2">
-            <UserPlus className="w-4 h-4" /> Novo Usuário
-          </Button>
-          <Button onClick={() => { setInviteOpen(true); setGeneratedLink(""); }} className="gap-2">
-            <Link2 className="w-4 h-4" /> Convidar por Link
-          </Button>
-        </div>
+        <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
+          <UserPlus className="w-4 h-4" /> Novo Usuário
+        </Button>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -297,7 +511,7 @@ const UsersPage = () => {
             <TableRow className="bg-muted/50">
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Tipo</TableHead>
+              <TableHead>Cargo</TableHead>
               <TableHead>Grade de Comissão</TableHead>
               <TableHead>Agente 3CPlus</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -308,43 +522,46 @@ const UsersPage = () => {
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">Carregando...</TableCell>
               </TableRow>
-            ) : users.map((u) => (
-              <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
-                <TableCell className="font-medium text-card-foreground">{u.full_name || "Sem nome"}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">{u.email}</TableCell>
-                <TableCell className="capitalize text-muted-foreground">{u.role}</TableCell>
-                <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
-                <TableCell>
-                  {u.threecplus_agent_id ? (
-                    <Badge variant="outline" className="gap-1.5 font-normal">
-                      <Phone className="w-3 h-3" />
-                      {getAgentDisplay(u.threecplus_agent_id)}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    {u.id !== profile?.id && (
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+            ) : users.map((u) => {
+              const tenantRole = tenantRoleMap.get(u.user_id) || u.role;
+              return (
+                <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
+                  <TableCell className="font-medium text-card-foreground">{u.full_name || "Sem nome"}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{(u as any).email}</TableCell>
+                  <TableCell className="capitalize text-muted-foreground">{ROLE_LABELS[tenantRole] || tenantRole}</TableCell>
+                  <TableCell className="text-muted-foreground">{getGradeName(u.commission_grade_id)}</TableCell>
+                  <TableCell>
+                    {u.threecplus_agent_id ? (
+                      <Badge variant="outline" className="gap-1.5 font-normal">
+                        <Phone className="w-3 h-3" />
+                        {getAgentDisplay(u.threecplus_agent_id)}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
                     )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(u)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      {u.id !== profile?.id && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
       {/* Edit Dialog */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
@@ -354,11 +571,9 @@ const UsersPage = () => {
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome do usuário" />
             </div>
             <div className="space-y-2">
-              <Label>Tipo de Usuário</Label>
+              <Label>Cargo</Label>
               <Select value={editRole} onValueChange={setEditRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="operador">Operador</SelectItem>
                   <SelectItem value="supervisor">Supervisor</SelectItem>
@@ -368,11 +583,21 @@ const UsersPage = () => {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Perfil de Permissão</Label>
+              <Select value={editProfileId} onValueChange={setEditProfileId}>
+                <SelectTrigger><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (usar padrão do cargo)</SelectItem>
+                  {permissionProfiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Grade de Comissão</Label>
               <Select value={editGradeId} onValueChange={setEditGradeId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhuma</SelectItem>
                   {grades.map((g) => (
@@ -381,105 +606,23 @@ const UsersPage = () => {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* 3CPlus Agent Picker */}
-            <div className="space-y-2">
-              <Label>Agente 3CPlus</Label>
-              {!domain || !apiToken ? (
-                <p className="text-xs text-muted-foreground">Configure o domínio e token 3CPlus nas configurações da empresa para vincular agentes.</p>
-              ) : (
-                <div className="space-y-2">
-                  <Popover open={agentPopoverOpen} onOpenChange={setAgentPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={agentPopoverOpen}
-                        className="w-full justify-between font-normal"
-                      >
-                        {editAgentId ? (
-                          <span className="truncate">
-                            {selectedAgentName || `Agente #${editAgentId}`}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">Selecionar agente...</span>
-                        )}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[320px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Buscar agente por nome..." />
-                        <CommandList>
-                          <CommandEmpty>
-                            {agentsLoading ? (
-                              <div className="flex items-center justify-center gap-2 py-4">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span className="text-sm">Carregando agentes...</span>
-                              </div>
-                            ) : (
-                              "Nenhum agente encontrado"
-                            )}
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {threecAgents.map((agent) => {
-                              const isAssigned = assignedAgentIds.has(agent.id);
-                              const isSelected = editAgentId === agent.id;
-                              return (
-                                <CommandItem
-                                  key={agent.id}
-                                  value={`${agent.name} ${agent.id}`}
-                                  onSelect={() => {
-                                    if (!isAssigned || isSelected) {
-                                      setEditAgentId(isSelected ? null : agent.id);
-                                      setAgentPopoverOpen(false);
-                                    }
-                                  }}
-                                  disabled={isAssigned && !isSelected}
-                                  className="flex items-center justify-between"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <Check className={cn("h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")} />
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium truncate">{agent.name}</p>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        ID: {agent.id}
-                                        {agent.extension ? ` · Ramal: ${agent.extension}` : ""}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {isAssigned && !isSelected && (
-                                    <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">Vinculado</Badge>
-                                  )}
-                                </CommandItem>
-                              );
-                            })}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  {editAgentId && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1 text-muted-foreground"
-                      onClick={() => setEditAgentId(null)}
-                    >
-                      <X className="w-3 h-3" /> Remover vínculo
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* WhatsApp Instances */}
+            {domain && apiToken && (
+              <div className="space-y-2">
+                <Label>Agente 3CPlus</Label>
+                <AgentPicker
+                  value={editAgentId}
+                  onChange={setEditAgentId}
+                  open={agentPopoverOpen}
+                  onOpenChange={setAgentPopoverOpen}
+                  assignedIds={assignedAgentIds}
+                  excludeId={editUser?.threecplus_agent_id}
+                />
+              </div>
+            )}
             {whatsappInstances.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
-                  <MessageSquare className="w-4 h-4" />
-                  Instâncias WhatsApp
+                  <MessageSquare className="w-4 h-4" /> Instâncias WhatsApp
                 </Label>
                 <div className="space-y-2 rounded-md border p-3">
                   {whatsappInstances.map((inst) => (
@@ -488,22 +631,14 @@ const UsersPage = () => {
                         checked={editInstanceIds.includes(inst.id)}
                         onCheckedChange={(checked) => {
                           setEditInstanceIds((prev) =>
-                            checked
-                              ? [...prev, inst.id]
-                              : prev.filter((id) => id !== inst.id)
+                            checked ? [...prev, inst.id] : prev.filter((id) => id !== inst.id)
                           );
                         }}
                       />
                       <span className="text-sm">{inst.name || inst.instance_name}</span>
-                      {inst.is_default && (
-                        <Badge variant="outline" className="text-[10px]">Padrão</Badge>
-                      )}
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Selecione quais instâncias este operador terá acesso às conversas.
-                </p>
               </div>
             )}
           </div>
@@ -519,6 +654,7 @@ const UsersPage = () => {
                     full_name: editName,
                     threecplus_agent_id: editAgentId,
                     instanceIds: editInstanceIds,
+                    permission_profile_id: editProfileId === "none" ? null : editProfileId,
                   });
                 }
               }}
@@ -551,106 +687,52 @@ const UsersPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Invite Link Dialog */}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Convidar por Link</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Cargo</Label>
-              <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="operador">Operador</SelectItem>
-                <SelectItem value="supervisor">Supervisor</SelectItem>
-                <SelectItem value="gerente">Gerente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Validade</Label>
-              <Select value={inviteExpiry} onValueChange={setInviteExpiry}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">24 horas</SelectItem>
-                  <SelectItem value="7">7 dias</SelectItem>
-                  <SelectItem value="30">30 dias</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {generatedLink ? (
-              <div className="space-y-2">
-                <Label>Link gerado</Label>
-                <div className="flex gap-2">
-                  <Input value={generatedLink} readOnly className="text-xs" />
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedLink);
-                      toast.success("Link copiado!");
-                    }}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                className="w-full"
-                disabled={generatingInvite}
-                onClick={async () => {
-                  if (!tenant?.id || !profile?.user_id) return;
-                  setGeneratingInvite(true);
-                  try {
-                    const expiresAt = new Date();
-                    expiresAt.setDate(expiresAt.getDate() + parseInt(inviteExpiry));
-
-                    const { data, error } = await supabase
-                      .from("invite_links")
-                      .insert({
-                        tenant_id: tenant.id,
-                        role: inviteRole as any,
-                        created_by: profile.user_id,
-                        expires_at: expiresAt.toISOString(),
-                      } as any)
-                      .select("token")
-                      .single();
-
-                    if (error) throw error;
-                    const link = `${window.location.origin}/auth?invite=${(data as any).token}`;
-                    setGeneratedLink(link);
-                    toast.success("Link de convite gerado!");
-                  } catch {
-                    toast.error("Erro ao gerar link");
-                  } finally {
-                    setGeneratingInvite(false);
-                  }
-                }}
-              >
-                {generatingInvite ? "Gerando..." : "Gerar Link"}
-              </Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
       {/* Novo Usuário Dialog */}
-      <Dialog open={newUserOpen} onOpenChange={(o) => { setNewUserOpen(o); if (!o) setNewUserLink(""); }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={newUserOpen} onOpenChange={(o) => { setNewUserOpen(o); if (!o) resetNewUser(); }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo Usuário</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Selecione o cargo e a validade do convite. Um link será gerado para o usuário se cadastrar.
-            </p>
+            <div className="space-y-2">
+              <Label>Nome Completo <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="João da Silva"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input
+                type="email"
+                placeholder="joao@empresa.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Senha <span className="text-destructive">*</span></Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Cargo</Label>
-              <Select value={newUserRole} onValueChange={setNewUserRole}>
+              <Select value={newRole} onValueChange={setNewRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="operador">Operador</SelectItem>
@@ -661,72 +743,80 @@ const UsersPage = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Validade do convite</Label>
-              <Select value={newUserExpiry} onValueChange={setNewUserExpiry}>
+              <Label>Perfil de Permissão</Label>
+              <Select value={newProfileId} onValueChange={setNewProfileId}>
+                <SelectTrigger><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (usar padrão do cargo)</SelectItem>
+                  {permissionProfiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Os perfis são configurados em Cadastros → Permissões.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Grade de Comissão</Label>
+              <Select value={newGradeId} onValueChange={setNewGradeId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">24 horas</SelectItem>
-                  <SelectItem value="7">7 dias</SelectItem>
-                  <SelectItem value="30">30 dias</SelectItem>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {grades.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {newUserLink ? (
+            {domain && apiToken && (
               <div className="space-y-2">
-                <Label>Link de acesso gerado</Label>
-                <div className="flex gap-2">
-                  <Input value={newUserLink} readOnly className="text-xs" />
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(newUserLink);
-                      toast.success("Link copiado!");
-                    }}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Compartilhe este link com o novo usuário para que ele possa criar sua conta.</p>
+                <Label>Agente 3CPlus</Label>
+                <AgentPicker
+                  value={newAgentId}
+                  onChange={setNewAgentId}
+                  open={newAgentPopoverOpen}
+                  onOpenChange={setNewAgentPopoverOpen}
+                  assignedIds={assignedNewAgentIds}
+                />
               </div>
-            ) : (
-              <Button
-                className="w-full"
-                disabled={generatingNewUser}
-                onClick={async () => {
-                  if (!tenant?.id || !profile?.user_id) return;
-                  setGeneratingNewUser(true);
-                  try {
-                    const expiresAt = new Date();
-                    expiresAt.setDate(expiresAt.getDate() + parseInt(newUserExpiry));
-
-                    const { data, error } = await supabase
-                      .from("invite_links")
-                      .insert({
-                        tenant_id: tenant.id,
-                        role: newUserRole as any,
-                        created_by: profile.user_id,
-                        expires_at: expiresAt.toISOString(),
-                      } as any)
-                      .select("token")
-                      .single();
-
-                    if (error) throw error;
-                    const link = `${window.location.origin}/auth?invite=${(data as any).token}`;
-                    setNewUserLink(link);
-                    toast.success("Link gerado! Compartilhe com o novo usuário.");
-                  } catch {
-                    toast.error("Erro ao gerar link");
-                  } finally {
-                    setGeneratingNewUser(false);
-                  }
-                }}
-              >
-                {generatingNewUser ? "Gerando..." : "Gerar Link de Acesso"}
-              </Button>
+            )}
+            {whatsappInstances.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <MessageSquare className="w-4 h-4" /> Instâncias WhatsApp
+                </Label>
+                <div className="space-y-2 rounded-md border p-3">
+                  {whatsappInstances.map((inst) => (
+                    <label key={inst.id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={newInstanceIds.includes(inst.id)}
+                        onCheckedChange={(checked) => {
+                          setNewInstanceIds((prev) =>
+                            checked ? [...prev, inst.id] : prev.filter((id) => id !== inst.id)
+                          );
+                        }}
+                      />
+                      <span className="text-sm">{inst.name || inst.instance_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNewUserOpen(false); resetNewUser(); }}>Cancelar</Button>
+            <Button onClick={handleCreateUser} disabled={creatingUser || !newName || !newEmail || !newPassword}>
+              {creatingUser ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                "Criar Usuário"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
