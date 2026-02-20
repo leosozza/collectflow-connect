@@ -25,7 +25,7 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2 } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -70,6 +70,22 @@ const CarteiraPage = () => {
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [calculatingScore, setCalculatingScore] = useState(false);
+  const [sortField, setSortField] = useState<"created_at" | "data_vencimento" | "status_cobranca" | null>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir(field === "created_at" ? "desc" : "asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
+  };
 
   const handleCalculateScore = async () => {
     setCalculatingScore(true);
@@ -145,10 +161,21 @@ const CarteiraPage = () => {
     if (filters.statusCobrancaId) {
       filtered = filtered.filter((c: any) => c.status_cobranca_id === filters.statusCobrancaId);
     }
-    return [...filtered].sort(
-      (a, b) => a.data_vencimento.localeCompare(b.data_vencimento)
-    );
-  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, agreementCpfs]);
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "created_at") {
+        cmp = (a.created_at || "").localeCompare(b.created_at || "");
+      } else if (sortField === "data_vencimento") {
+        cmp = a.data_vencimento.localeCompare(b.data_vencimento);
+      } else if (sortField === "status_cobranca") {
+        const nameA = a.status_cobranca_id && statusMap.has(a.status_cobranca_id) ? statusMap.get(a.status_cobranca_id)!.nome : "zzz";
+        const nameB = b.status_cobranca_id && statusMap.has(b.status_cobranca_id) ? statusMap.get(b.status_cobranca_id)!.nome : "zzz";
+        cmp = nameA.localeCompare(nameB);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, agreementCpfs, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
@@ -409,15 +436,27 @@ const CarteiraPage = () => {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead>Nome</TableHead>
+                    <TableHead>
+                      <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("created_at")}>
+                        Nome <SortIcon field="created_at" />
+                      </button>
+                    </TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Credor</TableHead>
                     <TableHead className="text-center">Parcela</TableHead>
-                    <TableHead>Vencimento</TableHead>
+                    <TableHead>
+                      <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("data_vencimento")}>
+                        Vencimento <SortIcon field="data_vencimento" />
+                      </button>
+                    </TableHead>
                     <TableHead className="text-right">Valor da Parcela</TableHead>
                     <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-center">Pagamento</TableHead>
-                    <TableHead className="text-center">Status Cobrança</TableHead>
+                    <TableHead className="text-center">
+                      <button className="flex items-center gap-0.5 hover:text-foreground transition-colors mx-auto" onClick={() => toggleSort("status_cobranca")}>
+                        Status Cobrança <SortIcon field="status_cobranca" />
+                      </button>
+                    </TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
