@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Cloud, Map, Settings, Search, Code2, FileSpreadsheet, Building2 } from "lucide-react";
+import { Cloud, Map, Settings, Search, Code2, FileSpreadsheet } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
-import TenantSettingsPage from "@/pages/TenantSettingsPage";
 import RoadmapPage from "@/pages/RoadmapPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
@@ -37,12 +36,6 @@ const ConfiguracoesPage = () => {
   const isMaxList = tenant?.slug === "maxfama" || tenant?.slug === "temis";
 
   const groups: NavGroup[] = [
-    {
-      title: "Empresa",
-      items: [
-        ...(isTenantAdmin ? [{ key: "central_empresa", label: "Central Empresa", icon: Building2 }] : []),
-      ],
-    },
     {
       title: "Sistema",
       items: [
@@ -131,7 +124,6 @@ const ConfiguracoesPage = () => {
         <div className="mb-4">
           <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
         </div>
-        {active === "central_empresa" && <TenantSettingsPage />}
         {active === "integracao" && <IntegracaoPage />}
         {active === "roadmap" && <RoadmapPage />}
         {active === "api_docs" && <ApiDocsPage />}
