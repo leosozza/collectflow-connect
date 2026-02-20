@@ -70,6 +70,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
 import { fetchWhatsAppInstances } from "@/services/whatsappInstanceService";
+import { formatCPF, formatPhone } from "@/lib/formatters";
+
 
 interface ThreeCAgent {
   id: number;
@@ -123,6 +125,8 @@ const UsersPage = () => {
   // New user state
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newCpf, setNewCpf] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -328,6 +332,8 @@ const UsersPage = () => {
 
   const resetNewUser = () => {
     setNewName("");
+    setNewCpf("");
+    setNewPhone("");
     setNewEmail("");
     setNewPassword("");
     setShowPassword(false);
@@ -352,6 +358,8 @@ const UsersPage = () => {
       const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
           full_name: newName.trim(),
+          cpf: newCpf.replace(/\D/g, "") || null,
+          phone: newPhone.replace(/\D/g, "") || null,
           email: newEmail.trim().toLowerCase(),
           password: newPassword,
           role: newRole,
@@ -703,6 +711,24 @@ const UsersPage = () => {
               />
             </div>
             <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input
+                placeholder="000.000.000-00"
+                value={newCpf}
+                onChange={(e) => setNewCpf(formatCPF(e.target.value))}
+                maxLength={14}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input
+                placeholder="(00) 00000-0000"
+                value={newPhone}
+                onChange={(e) => setNewPhone(formatPhone(e.target.value))}
+                maxLength={15}
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Email <span className="text-destructive">*</span></Label>
               <Input
                 type="email"
@@ -731,33 +757,6 @@ const UsersPage = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Cargo</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="operador">Operador</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="gerente">Gerente</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Perfil de Permissão</Label>
-              <Select value={newProfileId} onValueChange={setNewProfileId}>
-                <SelectTrigger><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum (usar padrão do cargo)</SelectItem>
-                  {permissionProfiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Os perfis são configurados em Cadastros → Permissões.
-              </p>
-            </div>
-            <div className="space-y-2">
               <Label>Grade de Comissão</Label>
               <Select value={newGradeId} onValueChange={setNewGradeId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -769,9 +768,21 @@ const UsersPage = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Perfil do Usuário</Label>
+              <Select value={newProfileId} onValueChange={setNewProfileId}>
+                <SelectTrigger><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (usar padrão do cargo)</SelectItem>
+                  {permissionProfiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {domain && apiToken && (
               <div className="space-y-2">
-                <Label>Agente 3CPlus</Label>
+                <Label>Agente Discador</Label>
                 <AgentPicker
                   value={newAgentId}
                   onChange={setNewAgentId}
@@ -784,7 +795,7 @@ const UsersPage = () => {
             {whatsappInstances.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
-                  <MessageSquare className="w-4 h-4" /> Instâncias WhatsApp
+                  <MessageSquare className="w-4 h-4" /> Instância WhatsApp
                 </Label>
                 <div className="space-y-2 rounded-md border p-3">
                   {whatsappInstances.map((inst) => (

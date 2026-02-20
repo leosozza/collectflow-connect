@@ -183,12 +183,13 @@ export default function UserPermissionsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["permission-profiles", tenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["permission-profiles"] });
       setCreateOpen(false);
       setNewProfileName("");
       setNewProfileRole("operador");
-      toast.success("Perfil criado!");
+      toast.success("Perfil criado com sucesso!");
     },
-    onError: () => toast.error("Erro ao criar perfil"),
+    onError: (err: any) => toast.error(err?.message || "Erro ao criar perfil — verifique se você tem permissão de Admin"),
   });
 
   // Delete profile

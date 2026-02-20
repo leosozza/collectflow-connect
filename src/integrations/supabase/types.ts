@@ -1998,10 +1998,12 @@ export type Database = {
           birthday: string | null
           commission_grade_id: string | null
           commission_rate: number
+          cpf: string | null
           created_at: string
           full_name: string
           id: string
           permission_profile_id: string | null
+          phone: string | null
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string | null
           threecplus_agent_id: number | null
@@ -2014,10 +2016,12 @@ export type Database = {
           birthday?: string | null
           commission_grade_id?: string | null
           commission_rate?: number
+          cpf?: string | null
           created_at?: string
           full_name?: string
           id?: string
           permission_profile_id?: string | null
+          phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null
@@ -2030,10 +2034,12 @@ export type Database = {
           birthday?: string | null
           commission_grade_id?: string | null
           commission_rate?: number
+          cpf?: string | null
           created_at?: string
           full_name?: string
           id?: string
           permission_profile_id?: string | null
+          phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null

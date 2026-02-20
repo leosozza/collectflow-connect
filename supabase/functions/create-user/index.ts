@@ -73,6 +73,8 @@ Deno.serve(async (req) => {
       email,
       password,
       role = "operador",
+      cpf = null,
+      phone = null,
       permission_profile_id = null,
       commission_grade_id = null,
       threecplus_agent_id = null,
@@ -123,6 +125,8 @@ Deno.serve(async (req) => {
       tenant_id: tenantId,
       role: "operador", // app_role - operador is the base for profile table
     };
+    if (cpf) profileUpdate.cpf = cpf;
+    if (phone) profileUpdate.phone = phone;
     if (commission_grade_id) profileUpdate.commission_grade_id = commission_grade_id;
     if (threecplus_agent_id) profileUpdate.threecplus_agent_id = threecplus_agent_id;
     if (permission_profile_id) profileUpdate.permission_profile_id = permission_profile_id;
