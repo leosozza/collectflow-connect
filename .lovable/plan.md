@@ -1,117 +1,92 @@
 
-## Alterações de Navegação e Configurações
+## Separar Cadastros da Configurações
 
-### Resumo das mudanças
+### O que o usuário quer
 
-**5 ajustes em 2 arquivos:**
+Criar duas entradas distintas no menu lateral:
 
----
+1. **Cadastros** (novo item no nav principal, abaixo de Contact Center) — contém apenas as 6 abas operacionais: Credores, Usuários, Equipes, Perfil do Devedor, Tipo de Dívida, Tipo de Status.
 
-### 1. Arquivo: `src/components/AppLayout.tsx`
-
-**Mudança A — Gamificação abaixo do Dashboard**
-
-Atualmente a ordem no sidebar é:
-```text
-Dashboard
-Carteira
-[Contact Center]
-Gamificação   ← está em postContactItems (após Contact Center)
-```
-
-A nova ordem será:
-```text
-Dashboard
-Gamificação   ← sobe para preContactItems, logo abaixo de Dashboard
-Carteira
-[Contact Center]
-```
-
-Gamificação passa de `postContactItems` para `preContactItems`, inserida na segunda posição.
+2. **Configurações** (item já existente, renomeado/reorganizado) — mantém apenas a seção Sistema com: Integração, Central Empresa, Super Admin e Roadmap.
 
 ---
 
-**Mudança B — "Perfil" (Cadastros) como item fixo no menu lateral principal, abaixo de Contact Center**
+### Estrutura atual vs. estrutura desejada
 
-Atualmente "Configurações" (`/cadastros`) fica no rodapé do sidebar, visível apenas para Admin.
-
-A nova ordem de itens principais será:
+**Sidebar atual:**
 ```text
 Dashboard
 Gamificação
 Carteira
-[Contact Center] (Telefonia / WhatsApp)
-Perfil           ← novo item fixo na área de navegação principal
+[Contact Center]
+Perfil → /cadastros  (mostra tudo junto: Cadastros + Sistema)
 ```
 
-O item "Perfil" (com ícone `UserCircle` ou `User`) apontará para `/cadastros`, mas ficará no bloco `<nav>` do sidebar (área scrollável), logo após o Collapsible do Contact Center — visível para todos os usuários autenticados (ou mantendo a restrição de Admin conforme regra atual).
-
-O link "Configurações" no rodapé será removido do bloco `{isAdmin && ...}` para evitar duplicidade, pois o acesso passará a ser pelo item "Perfil" no nav principal.
-
----
-
-### 2. Arquivo: `src/pages/CadastrosPage.tsx`
-
-**Mudança C — Usuários abaixo de Credores (ainda dentro da seção Cadastros)**
-
-Atualmente o grupo "Cadastros" tem:
+**Sidebar desejada:**
 ```text
-Credores
-Equipes
-Perfil do Devedor
-Tipo de Dívida
-Tipo de Status
+Dashboard
+Gamificação
+Carteira
+[Contact Center]
+Cadastros → /cadastros     ← só as 6 abas de cadastro
+Configurações → /configuracoes   ← só Sistema (Integração, Central Empresa, etc.)
 ```
 
-E "Pessoas" (grupo separado) tem:
+---
+
+### Plano de implementação — 3 arquivos alterados
+
+---
+
+#### 1. `src/pages/CadastrosPage.tsx` — dividir em dois componentes
+
+**A) Manter** `CadastrosPage` com apenas o grupo "Cadastros":
+- Remove o grupo "Sistema" inteiramente deste arquivo.
+- O título interno muda de "Configurações" para "Cadastros".
+- Aba ativa inicial permanece `credores`.
+
+**B) Criar** `src/pages/ConfiguracoesPage.tsx` (já existe como rota `/configuracoes`, mas atualmente não tem conteúdo relevante — será reaproveitado) com o grupo "Sistema":
+- Itens: Integração, Central Empresa (tenant_admin), Super Admin (super_admin), Roadmap (tenant_admin).
+- Mesma estrutura visual de navegação lateral já usada em `CadastrosPage`.
+- Título interno: "Configurações".
+- Aba ativa inicial: `integracao`.
+
+---
+
+#### 2. `src/components/AppLayout.tsx` — ajustar navegação lateral
+
+- Renomear o link atual "Perfil" (`/cadastros`) para **"Cadastros"**, com ícone `Database` (ou `Users`).
+- Adicionar novo link **"Configurações"** apontando para `/configuracoes`, com ícone `Settings`, logo abaixo de "Cadastros".
+- Atualizar `pageTitles` no header: `/cadastros` → `"Cadastros"`, `/configuracoes` → `"Configurações"`.
+
+Ordem final do nav:
 ```text
-Usuários
-```
-
-A mudança move "Usuários" para dentro do grupo "Cadastros", logo abaixo de "Credores", e remove o grupo "Pessoas":
-```text
-CADASTROS
-  Credores
-  Usuários   ← sobe aqui
-  Equipes
-  Perfil do Devedor
-  Tipo de Dívida
-  Tipo de Status
-```
-
-O grupo "Pessoas" deixa de existir como seção separada.
-
----
-
-**Mudança D — Renomear "Config. Empresa" para "Central Empresa" dentro de Sistema**
-
-Na seção SISTEMA da `CadastrosPage`, a label do item `tenant_config` muda de:
-```
-"Config. Empresa"
-```
-para:
-```
-"Central Empresa"
+Dashboard
+Gamificação
+Carteira
+[Contact Center]
+Cadastros        ← /cadastros (ícone Database ou Users)
+Configurações    ← /configuracoes (ícone Settings)
 ```
 
 ---
 
-**Mudança E — Manter seção "Sistema" no /Configurações**
+#### 3. `src/pages/ConfiguracoesPage.tsx` — reescrever com a navegação de Sistema
 
-Nenhuma remoção é feita na seção Sistema. Ela continua com seus itens (Integração, Central Empresa, Super Admin, Roadmap). Confirmado que não há alteração aqui além do rename acima.
+O arquivo atual (`ConfiguracoesPage.tsx`) existe mas provavelmente está vazio ou com conteúdo legado. Será substituído por uma página com a mesma estrutura visual de `CadastrosPage`, porém carregando apenas os itens do grupo Sistema:
+
+- Integração → `<IntegracaoPage />`
+- Central Empresa → `<TenantSettingsPage />` (visível para tenant_admin)
+- Super Admin → `<SuperAdminPage />` (visível para super_admin)
+- Roadmap → `<RoadmapPage />` (visível para tenant_admin)
 
 ---
 
-### Detalhes Técnicos
+### Resumo visual final
 
-**`src/components/AppLayout.tsx`:**
-- Mover `{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }` de `postContactItems` para `preContactItems` na segunda posição (índice 1, entre Dashboard e Carteira).
-- Remover o array `postContactItems` e seu bloco de renderização (ficará vazio após mover Gamificação).
-- Adicionar item "Perfil" com ícone `UserCircle` (importado do lucide-react) dentro do `<nav>` scrollável, logo após o `<Collapsible>` do Contact Center — substituindo o link "Configurações" que estava no rodapé.
-- Remover o link "Configurações" (`/cadastros`) do bloco `{isAdmin && ...}` no rodapé para evitar duplicidade.
-- Atualizar `pageTitles` no header para manter o título correto ao navegar para `/cadastros`.
+| Rota | Conteúdo |
+|---|---|
+| `/cadastros` | Credores, Usuários, Equipes, Perfil do Devedor, Tipo de Dívida, Tipo de Status |
+| `/configuracoes` | Integração, Central Empresa, Super Admin, Roadmap |
 
-**`src/pages/CadastrosPage.tsx`:**
-- No array `groups`, mover o item `{ key: "usuarios", ... }` para dentro do grupo "Cadastros", na segunda posição (após Credores).
-- Remover o grupo "Pessoas" inteiramente.
-- Alterar label do item `tenant_config` de `"Config. Empresa"` para `"Central Empresa"`.
+Nenhuma rota nova precisa ser criada — `/configuracoes` já existe no `App.tsx`.
