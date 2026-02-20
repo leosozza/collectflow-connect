@@ -79,11 +79,50 @@ Deno.serve(async (req) => {
         result = await resp.json();
 
         if (!resp.ok) {
-          const rawMsg = result?.message;
-          const errMsg = Array.isArray(rawMsg)
+          const rawMsg = result?.response?.message ?? result?.message;
+          const rawMsgStr = Array.isArray(rawMsg)
             ? rawMsg.map((m: any) => (typeof m === "string" ? m : JSON.stringify(m))).join("; ")
-            : rawMsg || "Erro ao criar instância na Evolution API";
-          return new Response(JSON.stringify({ error: errMsg, details: result }), {
+            : String(rawMsg || "");
+
+          // Auto-recover: if the name is already in use, delete the orphaned remote instance and retry
+          if (resp.status === 403 && rawMsgStr.toLowerCase().includes("already in use")) {
+            // Graceful logout first
+            try {
+              await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+                method: "DELETE",
+                headers: { apikey: evolutionKey },
+              });
+            } catch { /* ignore */ }
+
+            // Delete the orphaned instance
+            const delResp = await fetch(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
+              method: "DELETE",
+              headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+            });
+            await delResp.json().catch(() => null);
+
+            // Retry creation
+            const retryResp = await fetch(`${baseUrl}/instance/create`, {
+              method: "POST",
+              headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+              body: JSON.stringify({ instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
+            });
+            result = await retryResp.json();
+
+            if (!retryResp.ok) {
+              const retryMsg = result?.response?.message ?? result?.message;
+              const retryErrMsg = Array.isArray(retryMsg)
+                ? retryMsg.map((m: any) => (typeof m === "string" ? m : JSON.stringify(m))).join("; ")
+                : retryMsg || "Erro ao criar instância na Evolution API";
+              return new Response(JSON.stringify({ error: retryErrMsg, details: result }), {
+                status: retryResp.status,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+            break;
+          }
+
+          return new Response(JSON.stringify({ error: rawMsgStr || "Erro ao criar instância na Evolution API", details: result }), {
             status: resp.status,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
