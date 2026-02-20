@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Building2, Cloud, ShieldCheck, Map, Settings, Search } from "lucide-react";
+import { Building2, Cloud, Map, Settings, Search } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import TenantSettingsPage from "@/pages/TenantSettingsPage";
-import SuperAdminPage from "@/pages/SuperAdminPage";
 import RoadmapPage from "@/pages/RoadmapPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -31,7 +30,7 @@ const ConfiguracoesPage = () => {
       items: [
         { key: "integracao", label: "Integração", icon: Cloud },
         ...(isTenantAdmin ? [{ key: "tenant_config", label: "Central Empresa", icon: Building2 }] : []),
-        ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
+        
         ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
       ],
     },
@@ -116,7 +115,7 @@ const ConfiguracoesPage = () => {
         </div>
         {active === "integracao" && <IntegracaoPage />}
         {active === "tenant_config" && <TenantSettingsPage />}
-        {active === "super_admin" && <SuperAdminPage />}
+        
         {active === "roadmap" && <RoadmapPage />}
       </div>
     </div>
