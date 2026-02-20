@@ -119,22 +119,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update profile (auto-created by trigger) with full_name, tenant_id, role, permission_profile_id
-    const profileUpdate: Record<string, unknown> = {
+    // Upsert profile — covers cases where the trigger failed (invite flow, etc.)
+    const profileUpsert: Record<string, unknown> = {
+      user_id: newUserId,
       full_name,
       tenant_id: tenantId,
       role: "operador", // app_role - operador is the base for profile table
     };
-    if (cpf) profileUpdate.cpf = cpf;
-    if (phone) profileUpdate.phone = phone;
-    if (commission_grade_id) profileUpdate.commission_grade_id = commission_grade_id;
-    if (threecplus_agent_id) profileUpdate.threecplus_agent_id = threecplus_agent_id;
-    if (permission_profile_id) profileUpdate.permission_profile_id = permission_profile_id;
+    if (cpf) profileUpsert.cpf = cpf;
+    if (phone) profileUpsert.phone = phone;
+    if (commission_grade_id) profileUpsert.commission_grade_id = commission_grade_id;
+    if (threecplus_agent_id) profileUpsert.threecplus_agent_id = threecplus_agent_id;
+    if (permission_profile_id) profileUpsert.permission_profile_id = permission_profile_id;
 
     const { data: profileData, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update(profileUpdate)
-      .eq("user_id", newUserId)
+      .upsert(profileUpsert, { onConflict: "user_id" })
       .select("id")
       .single();
 
