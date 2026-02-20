@@ -178,10 +178,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           )}
           {isTenantAdmin && (
             <Link
-              to="/configuracoes?tab=central_empresa"
+              to="/central-empresa"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Central Empresa" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                location.pathname === "/central-empresa"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
             >
               <Building2 className="w-5 h-5 flex-shrink-0" />
               {!collapsed && "Central Empresa"}
@@ -261,6 +265,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/analytics": "Analytics",
                 "/cadastros": "Cadastros",
                 "/configuracoes": "Configurações",
+                "/central-empresa": "Central Empresa",
                 "/signs": "Assinatura Digital",
                 "/roadmap": "Roadmap do Produto",
                 "/gamificacao": "Gamificação",

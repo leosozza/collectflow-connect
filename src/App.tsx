@@ -16,9 +16,9 @@ import CadastrosPage from "./pages/CadastrosPage";
 import UsersPage from "./pages/UsersPage";
 import IntegracaoPage from "./pages/IntegracaoPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
+import TenantSettingsPage from "./pages/TenantSettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
-import TenantSettingsPage from "./pages/TenantSettingsPage";
 import SignsPage from "./pages/SignsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
@@ -307,6 +307,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <MaxListPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/central-empresa"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <TenantSettingsPage />
                   </AppLayout>
                 </ProtectedRoute>
               }
