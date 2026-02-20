@@ -153,7 +153,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           <Link
             to="/cadastros"
             onClick={() => setSidebarOpen(false)}
-            title={collapsed ? "Perfil" : undefined}
+            title={collapsed ? "Cadastros" : undefined}
             className={`
               flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
               ${location.pathname === "/cadastros"
@@ -162,8 +162,24 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               }
             `}
           >
+            <Users className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && "Cadastros"}
+          </Link>
+
+          <Link
+            to="/configuracoes"
+            onClick={() => setSidebarOpen(false)}
+            title={collapsed ? "Configurações" : undefined}
+            className={`
+              flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${location.pathname === "/configuracoes"
+                ? "bg-primary text-primary-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }
+            `}
+          >
             <Settings className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && "Perfil"}
+            {!collapsed && "Configurações"}
           </Link>
         </nav>
 
@@ -261,7 +277,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 "/acordos": "Acordos",
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
-                "/cadastros": "Configurações",
+                "/cadastros": "Cadastros",
+                "/configuracoes": "Configurações",
                 "/signs": "Assinatura Digital",
                 "/roadmap": "Roadmap do Produto",
                 "/gamificacao": "Gamificação",

@@ -1,15 +1,11 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Cloud, Tags, ShieldCheck, Map, Search } from "lucide-react";
-import RoadmapPage from "@/pages/RoadmapPage";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
 import TipoStatusList from "@/components/cadastros/TipoStatusList";
 import UsersPage from "@/pages/UsersPage";
-import IntegracaoPage from "@/pages/IntegracaoPage";
-import TenantSettingsPage from "@/pages/TenantSettingsPage";
-import SuperAdminPage from "@/pages/SuperAdminPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { Badge } from "@/components/ui/badge";
@@ -80,15 +76,6 @@ const CadastrosPage = () => {
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
       ],
     },
-    {
-      title: "Sistema",
-      items: [
-        { key: "integracao", label: "Integração", icon: Cloud },
-        ...(isTenantAdmin ? [{ key: "tenant_config", label: "Central Empresa", icon: Building2 }] : []),
-        ...(isSuperAdmin ? [{ key: "super_admin", label: "Super Admin", icon: ShieldCheck }] : []),
-        ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
-      ],
-    },
   ];
 
   const filteredGroups = groups
@@ -110,7 +97,7 @@ const CadastrosPage = () => {
       <div className="w-56 flex-shrink-0">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-bold text-foreground">Configurações</h1>
+          <h1 className="text-lg font-bold text-foreground">Cadastros</h1>
         </div>
 
         {/* Busca rápida */}
@@ -182,13 +169,10 @@ const CadastrosPage = () => {
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
-        {active === "integracao" && <IntegracaoPage />}
-        {active === "tenant_config" && <TenantSettingsPage />}
-        {active === "super_admin" && <SuperAdminPage />}
-        {active === "roadmap" && <RoadmapPage />}
       </div>
     </div>
   );
 };
+
 
 export default CadastrosPage;
