@@ -116,6 +116,22 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             );
           })}
 
+          <Link
+            to="/cadastros"
+            onClick={() => setSidebarOpen(false)}
+            title={collapsed ? "Cadastros" : undefined}
+            className={`
+              flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${location.pathname === "/cadastros"
+                ? "bg-primary text-primary-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }
+            `}
+          >
+            <BookUser className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && "Cadastros"}
+          </Link>
+
           {contactCenterItems.length > 0 && (
             <Collapsible open={contactCenterOpen} onOpenChange={setContactCenterOpen}>
               <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors ${isContactCenterRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
@@ -150,22 +166,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               </CollapsibleContent>
             </Collapsible>
           )}
-
-          <Link
-            to="/cadastros"
-            onClick={() => setSidebarOpen(false)}
-            title={collapsed ? "Cadastros" : undefined}
-            className={`
-              flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${location.pathname === "/cadastros"
-                ? "bg-primary text-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }
-            `}
-          >
-            <BookUser className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && "Cadastros"}
-          </Link>
 
         </nav>
 
