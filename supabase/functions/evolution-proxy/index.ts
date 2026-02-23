@@ -139,6 +139,17 @@ Deno.serve(async (req) => {
           });
         }
 
+        // SEMPRE fazer logout primeiro para limpar sessão stale
+        try {
+          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+            method: "DELETE",
+            headers: { apikey: evolutionKey },
+          });
+        } catch { /* ignore */ }
+
+        // Aguardar sessão ser liberada
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
         const connectResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
           method: "GET",
           headers: { apikey: evolutionKey },
