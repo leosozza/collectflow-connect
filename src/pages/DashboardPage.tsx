@@ -242,16 +242,15 @@ const DashboardPage = () => {
       </div>
 
       {/* Stat cards row + Mini Ranking */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-5 gap-4">
-          <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
-          <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-          <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
-          <StatCard title="Acordos do Dia" value={String(acordosDia)} icon="agreement" />
-          <StatCard title="Acordos do Mês" value={String(acordosMes)} icon="agreement" />
-        </div>
-        <MiniRanking />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
+        <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
+        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
+        <StatCard title="Acordos do Dia" value={String(acordosDia)} icon="agreement" />
+        <StatCard title="Acordos do Mês" value={String(acordosMes)} icon="agreement" />
       </div>
+
+      <MiniRanking />
 
       {/* Meus Clientes table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
