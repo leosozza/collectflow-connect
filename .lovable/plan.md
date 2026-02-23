@@ -1,74 +1,67 @@
 
 
-## Correcao da Conexao WhatsApp - Tratamento de connection.update
+## Correcao: Forcar logout antes de conectar via QR Code
 
-### Problema identificado
+### Problema raiz
 
 Os logs mostram que:
-- O QR Code e gerado corretamente
-- O webhook recebe eventos `connection.update` com estado "connecting"
-- O evento `connection.update` NAO e tratado pelo webhook (so `messages.upsert` e `messages.update` sao processados)
-- Resultado: o status da instancia nunca e atualizado no banco, e a UI nunca reflete a conexao
+- O QR Code e gerado com sucesso (`hasQr=true`)
+- O webhook recebe `connection.update` com `state: "connecting"` mas **nunca** chega `state: "open"`
+- O celular exibe "Tente novamente mais tarde"
+
+Isso acontece porque a instancia na Evolution API mantem uma sessao anterior corrompida/stale. Quando o QR Code e escaneado, o WhatsApp rejeita por conflito de sessao.
 
 ### Solucao
 
-**1. Webhook (`supabase/functions/whatsapp-webhook/index.ts`)**
-
-Adicionar tratamento para o evento `connection.update`:
-- Quando receber `state: "open"`: atualizar o campo `status` da instancia para "connected" e salvar o numero de telefone do `sender`
-- Quando receber `state: "close"`: atualizar status para "disconnected"
-- Logar o estado para facilitar debug futuro
-
-**2. UI - Polling apos QR scan (`src/components/integracao/BaylersInstancesList.tsx`)**
-
-Apos exibir o QR Code, iniciar polling automatico (a cada 5 segundos, por ate 2 minutos) para verificar o status da instancia via Evolution API. Quando detectar estado `"open"`:
-- Fechar o dialog do QR Code automaticamente
-- Mostrar toast de sucesso
-- Atualizar o badge de status
-
-**3. Dialog do QR Code - Feedback visual**
-
-Adicionar mensagem no dialog do QR indicando que o sistema esta aguardando a leitura, e um spinner enquanto espera a conexao. Se a conexao for confirmada, mostrar icone de sucesso e fechar apos 2 segundos.
+Alterar o fluxo de conexao (`connect`) na Edge Function `evolution-proxy` para **sempre fazer logout antes de gerar o QR Code**, garantindo uma sessao limpa.
 
 ### Detalhes tecnicos
 
-**Webhook - novo bloco `connection.update`:**
+**`supabase/functions/evolution-proxy/index.ts` - action "connect"**
 
-Antes do `return` final do webhook, adicionar:
+Antes de chamar `/instance/connect/`, adicionar:
+
+1. Chamar `DELETE /instance/logout/{instanceName}` para limpar qualquer sessao stale
+2. Aguardar 1.5 segundos para a sessao ser liberada
+3. Entao chamar `/instance/connect/` para obter o QR Code fresco
+
+Isso e analogo ao que ja e feito no caso de "no QR" (linha 172-178), mas aplicado SEMPRE, nao apenas quando o QR esta ausente.
 
 ```text
-if (event === "connection.update") {
-  const state = body.data?.state;
-  const sender = body.sender;
+case "connect": {
+  const { instanceName } = body;
 
-  // Atualizar status da instancia
-  const statusValue = state === "open" ? "connected" : "disconnected";
-  await supabase
-    .from("whatsapp_instances")
-    .update({
-      status: statusValue,
-      phone_number: state === "open" && sender
-        ? sender.replace("@s.whatsapp.net", "")
-        : undefined
-    })
-    .eq("instance_name", instanceName);
+  // SEMPRE fazer logout primeiro para limpar sessao stale
+  try {
+    await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+      method: "DELETE",
+      headers: { apikey: evolutionKey },
+    });
+  } catch { /* ignore */ }
 
-  return response { ok: true, state };
+  // Aguardar sessao ser liberada
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // Agora conectar com sessao limpa
+  const connectResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+    method: "GET",
+    headers: { apikey: evolutionKey },
+  });
+
+  // ... resto do fluxo existente (404 handling, QR polling fallback)
 }
 ```
 
-**UI - Polling no BaylersInstancesList:**
-
-Na funcao `handleConnect`, apos exibir o QR Code, iniciar um intervalo:
-- Chamar `getEvolutionInstanceStatus(inst.instance_name)` a cada 5s
-- Se `state === "open"`: parar polling, fechar dialog, atualizar statusMap, mostrar toast de sucesso
-- Timeout de 120s: parar polling, mostrar mensagem pedindo nova tentativa
-- Limpar intervalo ao fechar o dialog
-
-### Arquivos modificados
+### Arquivo modificado
 
 | Arquivo | Mudanca |
 |---|---|
-| `supabase/functions/whatsapp-webhook/index.ts` | Tratar evento `connection.update` para atualizar status e telefone da instancia |
-| `src/components/integracao/BaylersInstancesList.tsx` | Polling automatico apos QR scan, feedback visual no dialog, auto-fechar ao conectar |
+| `supabase/functions/evolution-proxy/index.ts` | Adicionar logout forcado antes de toda tentativa de conexao no case "connect" |
+
+### Por que isso resolve
+
+- Ao fazer logout antes de conectar, a Evolution API descarta a sessao anterior
+- O novo QR Code gerado corresponde a uma sessao fresca
+- Quando o usuario escaneia, o WhatsApp aceita a conexao normalmente
+- O webhook recebera `state: "open"` e o polling da UI detectara a conexao
 
