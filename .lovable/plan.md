@@ -1,59 +1,83 @@
 
 
-## Adicionar cards de Acordos no Dashboard
+## Melhorias nos Filtros da Carteira e Exclusao de Quitados com Envio por E-mail
 
-### Objetivo
-Adicionar dois novos StatCards ao Dashboard: **Acordos do Dia** (quantidade) e **Acordos do Mes** (quantidade), com filtragem por perfil:
-- **Admin/Gerente/Supervisor** (view_all): mostra total de todos os operadores
-- **Operador** (view_own): mostra apenas os acordos criados por ele
+### Resumo das alteracoes
 
-### Layout final dos cards
-```text
-Total Recebido | Total de Quebra | Pendentes | Acordos do Dia | Acordos do Mes
+1. Renomear "Status de Cobranca" para "Status de Carteira" no filtro
+2. Adicionar filtro por Data de Cadastro (De/Ate)
+3. Adicionar filtro por Data de Quitacao (De/Ate)
+4. Adicionar checkbox "Quitados" (filtra clientes com status "pago")
+5. Ao excluir clientes quitados, perguntar e-mail para envio da planilha
+6. Criar campo `data_quitacao` na tabela `clients`
+
+---
+
+### Detalhes tecnicos
+
+**1. Migracao de banco de dados**
+
+Adicionar coluna `data_quitacao` (tipo `date`, nullable) na tabela `clients`:
+```sql
+ALTER TABLE public.clients ADD COLUMN data_quitacao date;
 ```
 
-### Alteracoes tecnicas
+**2. `src/services/clientService.ts`**
 
-**1. `src/pages/DashboardPage.tsx`**
+- Atualizar a interface `Client` para incluir `data_quitacao: string | null`
+- Na funcao `markAsPaid`, setar `data_quitacao` com a data atual quando o status muda para "pago"
 
-- Importar `fetchAgreements` do `agreementService` (ou fazer query direta ao Supabase na tabela `agreements`)
-- Adicionar um `useQuery` para buscar acordos da tabela `agreements`
-- Calcular:
-  - **Acordos do Dia**: filtrar por `created_at` = hoje. Se `canViewAllDashboard`, contar todos; senao, filtrar por `created_by === profile?.user_id`
-  - **Acordos do Mes**: filtrar por `created_at` no mes/ano atual (ou respeitando filtros de ano/mes selecionados). Mesma logica de perfil
-- Atualizar o grid de StatCards de 3 para 5 colunas (`sm:grid-cols-5`)
-- Adicionar dois novos `StatCard` com `icon` adequado
+**3. `src/components/clients/ClientFilters.tsx`**
 
-**2. `src/components/StatCard.tsx`**
+- Renomear label "Status de Cobranca" para **"Status de Carteira"**
+- Adicionar ao estado de filtros (interface `Filters`):
+  - `cadastroDe: string` e `cadastroAte: string` (Data de Cadastro)
+  - `quitacaoDe: string` e `quitacaoAte: string` (Data de Quitacao)
+  - `quitados: boolean` (checkbox Quitados)
+- Adicionar no grid de filtros avancados:
+  - Dois campos de data para "Cadastro De" / "Cadastro Ate"
+  - Dois campos de data para "Quitacao De" / "Quitacao Ate"
+  - Checkbox "Quitados" ao lado do existente "Sem acordo"
 
-- Adicionar novo tipo de icone `"agreement"` nos mapas `iconMap`, `colorMap` e `bgMap`
-- Usar o icone `FileText` (ja importado no DashboardPage) ou `Handshake` do lucide-react
+**4. `src/pages/CarteiraPage.tsx`**
 
-### Detalhes da query de acordos
+- Atualizar estado `filters` com os novos campos
+- Adicionar logica de filtragem no `displayClients`:
+  - `cadastroDe/cadastroAte`: filtrar por `created_at`
+  - `quitacaoDe/quitacaoAte`: filtrar por `data_quitacao`
+  - `quitados`: filtrar clientes com `status === "pago"`
+- Criar dialog de exclusao de quitados:
+  - Mostra campo para digitar e-mail adicional
+  - Ao confirmar: gera planilha Excel, envia via edge function, exclui os registros
+  - Titulo da planilha: "Clientes Quitados excluidos do Sistema RIVO CONNECT"
 
-A tabela `agreements` ja possui RLS por tenant. A query sera:
-```typescript
-const { data: agreements = [] } = useQuery({
-  queryKey: ["dashboard-agreements"],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("agreements")
-      .select("id, created_at, created_by, status");
-    if (error) throw error;
-    return data || [];
-  },
-});
-```
+**5. Edge Function `send-quitados-report`**
 
-Filtragem no frontend:
-- **Dia**: `agreements.filter(a => a.created_at comeca com hoje)`
-- **Mes**: `agreements.filter(a => created_at no mes atual)`
-- **Perfil**: se `!canViewAllDashboard`, filtrar por `created_by === user.id`
+- Recebe: lista de clientes (JSON), e-mail do destinatario, e-mail do admin
+- Gera arquivo Excel (usando biblioteca no Deno)
+- Envia o e-mail com a planilha anexada via Resend
+- Requer configuracao da chave `RESEND_API_KEY`
 
-### Resumo dos arquivos modificados
+**6. Configuracao necessaria**
+
+Para o envio de e-mail funcionar, sera necessario:
+- Cadastrar uma conta no Resend (https://resend.com)
+- Validar o dominio de e-mail no Resend
+- Criar uma API Key e configurar como secret no projeto
+
+---
+
+### Arquivos modificados
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/pages/DashboardPage.tsx` | Query de agreements, calculo dos contadores, dois novos StatCards |
-| `src/components/StatCard.tsx` | Novo tipo de icone "agreement" |
+| Migracao SQL | Adicionar coluna `data_quitacao` |
+| `src/components/clients/ClientFilters.tsx` | Renomear label, novos filtros de data e checkbox Quitados |
+| `src/pages/CarteiraPage.tsx` | Novos filtros no state, logica de filtragem, dialog de exclusao com e-mail |
+| `src/services/clientService.ts` | Campo `data_quitacao` na interface e no `markAsPaid` |
+| `supabase/functions/send-quitados-report/index.ts` | Edge function para gerar e enviar planilha por e-mail |
+
+### Proximos passos apos aprovacao
+
+Antes de implementar, sera solicitada a configuracao da **RESEND_API_KEY** para habilitar o envio de e-mails.
 
