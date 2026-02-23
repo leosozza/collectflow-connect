@@ -152,6 +152,29 @@ Deno.serve(async (req) => {
       return assignee;
     };
 
+    // Handle connection state changes
+    if (event === "connection.update") {
+      const state = body.data?.state;
+      const sender = body.sender;
+      console.log("connection.update:", instanceName, "state:", state, "sender:", sender);
+
+      const statusValue = state === "open" ? "connected" : state === "close" ? "disconnected" : state;
+      const updateData: Record<string, any> = { status: statusValue };
+
+      if (state === "open" && sender) {
+        updateData.phone_number = sender.replace("@s.whatsapp.net", "");
+      }
+
+      await supabase
+        .from("whatsapp_instances")
+        .update(updateData)
+        .eq("instance_name", instanceName);
+
+      return new Response(JSON.stringify({ ok: true, state }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Handle message events
     if (event === "messages.upsert") {
       const msgData = body.data;
