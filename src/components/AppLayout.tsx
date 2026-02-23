@@ -93,11 +93,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         transform transition-all duration-200 ease-in-out
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>
-        <div className={`flex items-center justify-center ${collapsed ? "px-2" : "px-4"} py-5 border-b border-sidebar-border`}>
+        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-start px-4"} py-5 border-b border-sidebar-border`}>
           {collapsed ? (
-            <img src={rivoLogo} alt="RIVO" className="h-6 w-auto object-contain" />
+            <img src={rivoLogo} alt="RIVO" className="h-7 w-auto object-contain" />
           ) : (
-            <img src={rivoLogo} alt="RIVO CONNECT" className="h-[5.25rem] w-auto object-contain" />
+            <img src={rivoLogo} alt="RIVO CONNECT" className="h-24 w-auto object-contain" />
           )}
         </div>
 
