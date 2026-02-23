@@ -26,6 +26,11 @@ interface Filters {
   tipoDividaId: string;
   statusCobrancaId: string;
   semAcordo: boolean;
+  cadastroDe: string;
+  cadastroAte: string;
+  quitacaoDe: string;
+  quitacaoAte: string;
+  quitados: boolean;
 }
 
 interface ClientFiltersProps {
@@ -125,7 +130,7 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Status de Cobrança</Label>
+              <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
               <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -186,6 +191,42 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Cadastro De</Label>
+              <Input
+                type="date"
+                value={filters.cadastroDe || ""}
+                onChange={(e) => update("cadastroDe", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Cadastro Até</Label>
+              <Input
+                type="date"
+                value={filters.cadastroAte || ""}
+                onChange={(e) => update("cadastroAte", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Quitação De</Label>
+              <Input
+                type="date"
+                value={filters.quitacaoDe || ""}
+                onChange={(e) => update("quitacaoDe", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Quitação Até</Label>
+              <Input
+                type="date"
+                value={filters.quitacaoAte || ""}
+                onChange={(e) => update("quitacaoAte", e.target.value)}
+              />
+            </div>
+
             <div className="space-y-1.5 flex items-end">
               <label className="flex items-center gap-2 cursor-pointer py-2">
                 <Checkbox
@@ -193,6 +234,16 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
                   onCheckedChange={(checked) => update("semAcordo", !!checked)}
                 />
                 <span className="text-sm text-foreground">Sem acordo</span>
+              </label>
+            </div>
+
+            <div className="space-y-1.5 flex items-end">
+              <label className="flex items-center gap-2 cursor-pointer py-2">
+                <Checkbox
+                  checked={filters.quitados || false}
+                  onCheckedChange={(checked) => update("quitados", !!checked)}
+                />
+                <span className="text-sm text-foreground">Quitados</span>
               </label>
             </div>
           </div>

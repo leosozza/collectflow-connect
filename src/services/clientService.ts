@@ -34,6 +34,7 @@ export interface Client {
   status_cobranca_id: string | null;
   status_cobranca_locked_by: string | null;
   status_cobranca_locked_at: string | null;
+  data_quitacao: string | null;
 }
 
 export interface ClientFormData {
@@ -160,7 +161,11 @@ export const markAsPaid = async (client: Client, valorPago: number, dataPagament
   const isPaid = valorPago >= client.valor_parcela;
   const status = isPaid ? "pago" : "quebrado";
 
-  await updateClient(client.id, { valor_pago: valorPago, status });
+  const updateData: any = { valor_pago: valorPago, status };
+  if (isPaid) {
+    updateData.data_quitacao = new Date().toISOString().split("T")[0];
+  }
+  await updateClient(client.id, updateData);
   logAction({ action: "payment", entity_type: "client", entity_id: client.id, details: { nome: client.nome_completo, valor: valorPago, status } });
 
   if (!isPaid) {

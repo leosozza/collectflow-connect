@@ -45,6 +45,11 @@ const ClientsPage = () => {
     tipoDividaId: "",
     statusCobrancaId: "",
     semAcordo: false,
+    cadastroDe: "",
+    cadastroAte: "",
+    quitacaoDe: "",
+    quitacaoAte: "",
+    quitados: false,
   });
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);

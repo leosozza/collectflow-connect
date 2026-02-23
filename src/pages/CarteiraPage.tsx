@@ -28,7 +28,7 @@ import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -63,6 +63,11 @@ const CarteiraPage = () => {
     tipoDividaId: "",
     statusCobrancaId: "",
     semAcordo: false,
+    cadastroDe: "",
+    cadastroAte: "",
+    quitacaoDe: "",
+    quitacaoAte: "",
+    quitados: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -80,6 +85,9 @@ const CarteiraPage = () => {
   const [passwordError, setPasswordError] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [quitadosDeleteOpen, setQuitadosDeleteOpen] = useState(false);
+  const [quitadosEmail, setQuitadosEmail] = useState("");
+  const [quitadosDeleting, setQuitadosDeleting] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
@@ -160,6 +168,9 @@ const CarteiraPage = () => {
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
+    if (filters.quitados) {
+      filtered = filtered.filter(c => c.status === "pago");
+    }
     if (filters.tipoDevedorId) {
       filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
     }
@@ -168,6 +179,18 @@ const CarteiraPage = () => {
     }
     if (filters.statusCobrancaId) {
       filtered = filtered.filter((c: any) => c.status_cobranca_id === filters.statusCobrancaId);
+    }
+    if (filters.cadastroDe) {
+      filtered = filtered.filter(c => c.created_at >= filters.cadastroDe);
+    }
+    if (filters.cadastroAte) {
+      filtered = filtered.filter(c => c.created_at <= filters.cadastroAte + "T23:59:59");
+    }
+    if (filters.quitacaoDe) {
+      filtered = filtered.filter(c => (c as any).data_quitacao && (c as any).data_quitacao >= filters.quitacaoDe);
+    }
+    if (filters.quitacaoAte) {
+      filtered = filtered.filter(c => (c as any).data_quitacao && (c as any).data_quitacao <= filters.quitacaoAte);
     }
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -183,7 +206,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.search, filters.semAcordo, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, agreementCpfs, sortField, sortDir, statusMap]);
+  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, filters.quitacaoDe, filters.quitacaoAte, agreementCpfs, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
@@ -379,6 +402,52 @@ const CarteiraPage = () => {
     }
   };
 
+  const handleDeleteQuitados = async () => {
+    setQuitadosDeleting(true);
+    try {
+      const quitadosList = displayClients.filter(c => c.status === "pago");
+      if (quitadosList.length === 0) {
+        toast.error("Nenhum cliente quitado para excluir");
+        setQuitadosDeleting(false);
+        return;
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      const adminEmail = user?.email || "";
+      const { error: sendError } = await supabase.functions.invoke("send-quitados-report", {
+        body: {
+          clients: quitadosList.map(c => ({
+            nome_completo: c.nome_completo, cpf: c.cpf, credor: c.credor,
+            numero_parcela: c.numero_parcela, valor_parcela: c.valor_parcela,
+            valor_pago: c.valor_pago, data_vencimento: c.data_vencimento,
+            data_quitacao: (c as any).data_quitacao, status: c.status,
+          })),
+          recipientEmail: quitadosEmail,
+          adminEmail,
+        },
+      });
+      if (sendError) {
+        console.error("Erro ao enviar relatório:", sendError);
+        toast.error("Erro ao enviar relatório por e-mail, mas a exclusão continuará.");
+      }
+      const ids = quitadosList.map(c => c.id);
+      const batchSize = 100;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { error: deleteError } = await supabase.from("clients").delete().in("id", batch);
+        if (deleteError) throw deleteError;
+      }
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success(`${quitadosList.length} cliente(s) quitado(s) excluído(s). Relatório enviado por e-mail.`);
+      setSelectedIds(new Set());
+      setQuitadosDeleteOpen(false);
+      setQuitadosEmail("");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir clientes quitados");
+    } finally {
+      setQuitadosDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -428,6 +497,17 @@ const CarteiraPage = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                   <span className="hidden sm:inline">Excluir Todos</span> ({selectedIds.size})
+                </Button>
+              )}
+              {permissions.canDeleteCarteira && filters.quitados && displayClients.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setQuitadosEmail(""); setQuitadosDeleteOpen(true); }}
+                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Excluir Quitados</span> ({displayClients.length})
                 </Button>
               )}
             </>
@@ -710,6 +790,52 @@ const CarteiraPage = () => {
             >
               {bulkDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               {bulkDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete quitados with email dialog */}
+      <Dialog open={quitadosDeleteOpen} onOpenChange={(open) => { if (!open) { setQuitadosDeleteOpen(false); setQuitadosEmail(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Mail className="w-5 h-5" />
+              Excluir Clientes Quitados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Serão excluídos <strong>{displayClients.filter(c => c.status === "pago").length}</strong> cliente(s) quitado(s). 
+              Uma planilha com os dados será enviada por e-mail antes da exclusão.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              O relatório será enviado automaticamente para o e-mail do administrador logado. 
+              Informe um e-mail adicional se desejar:
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="quitados-email">E-mail adicional (opcional)</Label>
+              <Input
+                id="quitados-email"
+                type="email"
+                placeholder="email@exemplo.com"
+                value={quitadosEmail}
+                onChange={(e) => setQuitadosEmail(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setQuitadosDeleteOpen(false)} disabled={quitadosDeleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteQuitados}
+              disabled={quitadosDeleting}
+              className="gap-1.5"
+            >
+              {quitadosDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {quitadosDeleting ? "Excluindo..." : "Excluir e Enviar Relatório"}
             </Button>
           </div>
         </DialogContent>
