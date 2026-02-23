@@ -1,55 +1,59 @@
 
-## Diagnóstico Confirmado com Testes ao Vivo
 
-### Causa Raiz (Testado diretamente na Evolution API)
+## Adicionar cards de Acordos no Dashboard
 
-**Teste 1 — `connect` com instância `close`:**
-```json
-Resposta: {"count": 0}
-```
-A instância está em estado `close`. O `/instance/connect` retorna `{"count":0}` sem QR.
+### Objetivo
+Adicionar dois novos StatCards ao Dashboard: **Acordos do Dia** (quantidade) e **Acordos do Mes** (quantidade), com filtragem por perfil:
+- **Admin/Gerente/Supervisor** (view_all): mostra total de todos os operadores
+- **Operador** (view_own): mostra apenas os acordos criados por ele
 
-**Teste 2 — `restart` via `PUT /instance/restart/{name}`:**
-```json
-Resposta: {"error":"Not Found","response":{"message":["Cannot PUT /instance/restart/..."]}}
-```
-O endpoint de restart **não é suportado** nessa versão/instância da Evolution API hospedada em `evolution.ybrasil.com.br`. O código atual tenta restart e falha silenciosamente (`try/catch` ignora o erro), depois faz o segundo `connect` que também retorna `{"count":0}`, e o frontend exibe "Instância já conectada ou QR indisponível".
-
-### Por que `{"count":0}` sem QR?
-
-Quando uma instância WhatsApp está em estado `close` (sessão encerrada/desconectada), a Evolution API mantém o contexto da sessão anterior. Para gerar um novo QR Code, é necessário primeiro **fazer logout** da sessão antiga via `DELETE /instance/logout/{name}`, que limpa a sessão e permite que um novo QR seja gerado via `connect`.
-
-### Solução
-
-#### Mudança na `evolution-proxy` — action `connect`
-
-Substituir a tentativa de `restart` pelo fluxo correto:
-
-```
-Fluxo corrigido:
-  1. GET /instance/connect/{name}
-  2. Se retornar base64/qrcode → retornar QR ✓
-  3. Se retornar {"count":0} ou sem base64:
-     a. DELETE /instance/logout/{name}   ← força limpeza da sessão
-     b. Aguardar 1.5 segundos
-     c. GET /instance/connect/{name}     ← agora gera QR novo
-     d. Retornar resultado com QR
+### Layout final dos cards
+```text
+Total Recebido | Total de Quebra | Pendentes | Acordos do Dia | Acordos do Mes
 ```
 
-O `logout` (`DELETE /instance/logout`) já é usado com sucesso no action `delete`, confirmando que funciona nessa versão da API.
+### Alteracoes tecnicas
 
-#### Mudança no action `restart`
+**1. `src/pages/DashboardPage.tsx`**
 
-O `restart` via `PUT` não funciona nessa API. Trocar o método para usar `logout` + `connect` em sequência como forma de "reiniciar" a conexão.
+- Importar `fetchAgreements` do `agreementService` (ou fazer query direta ao Supabase na tabela `agreements`)
+- Adicionar um `useQuery` para buscar acordos da tabela `agreements`
+- Calcular:
+  - **Acordos do Dia**: filtrar por `created_at` = hoje. Se `canViewAllDashboard`, contar todos; senao, filtrar por `created_by === profile?.user_id`
+  - **Acordos do Mes**: filtrar por `created_at` no mes/ano atual (ou respeitando filtros de ano/mes selecionados). Mesma logica de perfil
+- Atualizar o grid de StatCards de 3 para 5 colunas (`sm:grid-cols-5`)
+- Adicionar dois novos `StatCard` com `icon` adequado
 
-### Arquivos a Modificar
+**2. `src/components/StatCard.tsx`**
 
-| Arquivo | Mudança |
+- Adicionar novo tipo de icone `"agreement"` nos mapas `iconMap`, `colorMap` e `bgMap`
+- Usar o icone `FileText` (ja importado no DashboardPage) ou `Handshake` do lucide-react
+
+### Detalhes da query de acordos
+
+A tabela `agreements` ja possui RLS por tenant. A query sera:
+```typescript
+const { data: agreements = [] } = useQuery({
+  queryKey: ["dashboard-agreements"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("agreements")
+      .select("id, created_at, created_by, status");
+    if (error) throw error;
+    return data || [];
+  },
+});
+```
+
+Filtragem no frontend:
+- **Dia**: `agreements.filter(a => a.created_at comeca com hoje)`
+- **Mes**: `agreements.filter(a => created_at no mes atual)`
+- **Perfil**: se `!canViewAllDashboard`, filtrar por `created_by === user.id`
+
+### Resumo dos arquivos modificados
+
+| Arquivo | Mudanca |
 |---|---|
-| `supabase/functions/evolution-proxy/index.ts` | No action `connect`: substituir `PUT /instance/restart` por `DELETE /instance/logout`; no action `restart`: usar logout como alternativa |
+| `src/pages/DashboardPage.tsx` | Query de agreements, calculo dos contadores, dois novos StatCards |
+| `src/components/StatCard.tsx` | Novo tipo de icone "agreement" |
 
-### Impacto
-
-- Ao clicar "QR Code" em instância desconectada (`close`): o sistema faz logout da sessão antiga e conecta novamente, gerando o QR
-- O processo leva ~2-3 segundos (já há indicador de loading no botão)
-- Nenhuma mudança necessária no frontend — apenas na edge function
