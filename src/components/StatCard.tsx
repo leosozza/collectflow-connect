@@ -1,9 +1,9 @@
-import { TrendingUp, TrendingDown, DollarSign, AlertTriangle, Percent, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, AlertTriangle, Percent, Wallet, FileText } from "lucide-react";
 
 interface StatCardProps {
   title: string;
   value: string;
-  icon: "projected" | "received" | "broken" | "commission" | "receivable" | "percent";
+  icon: "projected" | "received" | "broken" | "commission" | "receivable" | "percent" | "agreement";
   trend?: string;
 }
 
@@ -14,6 +14,7 @@ const iconMap = {
   commission: Wallet,
   receivable: DollarSign,
   percent: Percent,
+  agreement: FileText,
 };
 
 const colorMap = {
@@ -23,6 +24,7 @@ const colorMap = {
   commission: "text-warning",
   receivable: "text-primary",
   percent: "text-muted-foreground",
+  agreement: "text-accent-foreground",
 };
 
 const bgMap = {
@@ -32,6 +34,7 @@ const bgMap = {
   commission: "bg-warning/10",
   receivable: "bg-primary/10",
   percent: "bg-muted",
+  agreement: "bg-accent",
 };
 
 const StatCard = ({ title, value, icon, trend }: StatCardProps) => {
