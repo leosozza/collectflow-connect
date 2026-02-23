@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { updateTenant } from "@/services/tenantService";
@@ -57,6 +57,9 @@ const BaylersInstancesList = () => {
   const [loadingQr, setLoadingQr] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [qrConnected, setQrConnected] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingInstanceRef = useRef<string | null>(null);
 
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ["whatsapp-instances", tenant?.id],
@@ -147,6 +150,62 @@ const BaylersInstancesList = () => {
     }
   };
 
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    pollingInstanceRef.current = null;
+  }, []);
+
+  const startPolling = useCallback((inst: WhatsAppInstance) => {
+    stopPolling();
+    setQrConnected(false);
+    pollingInstanceRef.current = inst.instance_name;
+    let elapsed = 0;
+    pollingRef.current = setInterval(async () => {
+      elapsed += 5000;
+      if (elapsed > 120000) {
+        stopPolling();
+        toast({ title: "Tempo esgotado", description: "Tente conectar novamente.", variant: "destructive" });
+        return;
+      }
+      try {
+        const result = await getEvolutionInstanceStatus(inst.instance_name);
+        const state = result?.instance?.state || result?.state || "unknown";
+        setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
+        if (state === "open") {
+          stopPolling();
+          setQrConnected(true);
+          const phone = result?.instance?.owner || result?.owner || null;
+          if (phone && phone !== inst.phone_number) {
+            await updateWhatsAppInstance(inst.id, { phone_number: phone } as any);
+            queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant?.id] });
+          }
+          toast({ title: "WhatsApp conectado com sucesso! ✅" });
+          setTimeout(() => {
+            setQrDialogOpen(false);
+            setQrConnected(false);
+          }, 2000);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 5000);
+  }, [stopPolling, toast, queryClient, tenant?.id]);
+
+  // Cleanup polling on unmount or dialog close
+  useEffect(() => {
+    if (!qrDialogOpen) {
+      stopPolling();
+      setQrConnected(false);
+    }
+  }, [qrDialogOpen, stopPolling]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
   const handleConnect = async (inst: WhatsAppInstance) => {
     setLoadingQr((prev) => ({ ...prev, [inst.id]: true }));
     try {
@@ -155,22 +214,21 @@ const BaylersInstancesList = () => {
       if (qr) {
         setQrCodeData(qr);
         setQrDialogOpen(true);
+        startPolling(inst);
       } else if (result?.not_found) {
         toast({ title: "Instância não encontrada", description: "Remova e recrie esta instância.", variant: "destructive" });
       } else {
-        // API generates QR asynchronously via webhook — session was reset, QR will arrive via webhook
         toast({
           title: "QR Code sendo gerado",
-          description: "A sessão foi reiniciada. Abra o WhatsApp no celular → Dispositivos conectados → Conectar dispositivo e escaneie o QR que aparecerá em instantes. Clique novamente neste botão se necessário.",
+          description: "A sessão foi reiniciada. Clique novamente neste botão se necessário.",
         });
-        // Refresh status after a moment to reflect new state
         setTimeout(() => handleCheckStatus(inst), 3000);
       }
       // Auto-configure webhook after connect
       try {
         await setEvolutionWebhook(inst.instance_name);
       } catch {
-        // silent — user can configure manually
+        // silent
       }
     } catch (err: any) {
       toast({ title: "Erro ao gerar QR Code", description: err.message, variant: "destructive" });
@@ -426,19 +484,32 @@ const BaylersInstancesList = () => {
       <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Escaneie o QR Code</DialogTitle>
+            <DialogTitle>{qrConnected ? "Conectado! ✅" : "Escaneie o QR Code"}</DialogTitle>
           </DialogHeader>
-          <div className="flex justify-center p-4">
-            {qrCodeData ? (
-              <img
-                src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
-                alt="QR Code WhatsApp"
-                className="w-64 h-64 object-contain"
-              />
-            ) : (
-              <p className="text-muted-foreground">QR Code indisponível</p>
-            )}
-          </div>
+          {qrConnected ? (
+            <div className="flex flex-col items-center gap-3 p-6">
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+                <Check className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="text-sm text-muted-foreground">WhatsApp conectado com sucesso!</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 p-4">
+              {qrCodeData ? (
+                <img
+                  src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
+                  alt="QR Code WhatsApp"
+                  className="w-64 h-64 object-contain"
+                />
+              ) : (
+                <p className="text-muted-foreground">QR Code indisponível</p>
+              )}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Aguardando leitura do QR Code...
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
