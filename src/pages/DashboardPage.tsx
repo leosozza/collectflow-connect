@@ -6,7 +6,8 @@ import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, startOfDay, startOfMonth, endOfMonth } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { markAsPaid, markAsBroken } from "@/services/clientService";
 import PaymentDialog from "@/components/clients/PaymentDialog";
@@ -48,6 +49,42 @@ const DashboardPage = () => {
     queryKey: ["clients"],
     queryFn: () => fetchClients(),
   });
+
+  const { data: agreements = [] } = useQuery({
+    queryKey: ["dashboard-agreements"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agreements")
+        .select("id, created_at, created_by, status");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const canViewAll = permissions.canViewAllDashboard;
+  const todayStr = format(now, "yyyy-MM-dd");
+
+  const filteredAgreements = useMemo(() => {
+    let items = agreements;
+    if (!canViewAll && profile?.user_id) {
+      items = items.filter(a => a.created_by === profile.user_id);
+    }
+    return items;
+  }, [agreements, canViewAll, profile?.user_id]);
+
+  const acordosDia = useMemo(() =>
+    filteredAgreements.filter(a => a.created_at.startsWith(todayStr)).length,
+    [filteredAgreements, todayStr]
+  );
+
+  const acordosMes = useMemo(() => {
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+    return filteredAgreements.filter(a => {
+      const d = new Date(a.created_at);
+      return d >= monthStart && d <= monthEnd;
+    }).length;
+  }, [filteredAgreements]);
 
   // Compute month stats for gamification context
   const computeMonthStats = () => {
@@ -206,10 +243,12 @@ const DashboardPage = () => {
 
       {/* Stat cards row + Mini Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-5 gap-4">
           <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
           <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
           <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
+          <StatCard title="Acordos do Dia" value={String(acordosDia)} icon="agreement" />
+          <StatCard title="Acordos do Mês" value={String(acordosMes)} icon="agreement" />
         </div>
         <MiniRanking />
       </div>
