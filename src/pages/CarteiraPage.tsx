@@ -66,6 +66,9 @@ const CarteiraPage = () => {
     cadastroDe: "",
     cadastroAte: "",
     quitados: false,
+    valorAbertoDe: 0,
+    valorAbertoAte: 0,
+    semContato: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -137,6 +140,27 @@ const CarteiraPage = () => {
     },
   });
 
+  // Fetch client IDs that have had contact (dispositions or conversations)
+  const { data: contactedClientIds = new Set<string>() } = useQuery({
+    queryKey: ["contacted-client-ids", tenant?.id],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      // 1. Client IDs from call_dispositions
+      const { data: dispositions } = await supabase
+        .from("call_dispositions")
+        .select("client_id");
+      (dispositions || []).forEach((d: any) => ids.add(d.client_id));
+      // 2. Client IDs from conversations (linked via client_id)
+      const { data: convos } = await supabase
+        .from("conversations" as any)
+        .select("client_id")
+        .not("client_id", "is", null);
+      (convos || []).forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
+      return ids;
+    },
+    enabled: !!tenant?.id,
+  });
+
   const { data: tiposStatus = [] } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
     queryFn: () => fetchTiposStatus(tenant!.id),
@@ -165,6 +189,15 @@ const CarteiraPage = () => {
     }
     if (filters.quitados) {
       filtered = filtered.filter(c => c.status === "pago");
+    }
+    if (filters.valorAbertoDe > 0) {
+      filtered = filtered.filter(c => (c.valor_parcela - c.valor_pago) >= filters.valorAbertoDe);
+    }
+    if (filters.valorAbertoAte > 0) {
+      filtered = filtered.filter(c => (c.valor_parcela - c.valor_pago) <= filters.valorAbertoAte);
+    }
+    if (filters.semContato) {
+      filtered = filtered.filter(c => !contactedClientIds.has(c.id));
     }
     if (filters.tipoDevedorId) {
       filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
@@ -195,7 +228,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, sortField, sortDir, statusMap]);
+  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),

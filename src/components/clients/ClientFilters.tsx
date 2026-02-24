@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Search, ChevronDown, ChevronUp, Filter } from "lucide-react";
 import {
   Select,
@@ -29,6 +30,9 @@ interface Filters {
   cadastroDe: string;
   cadastroAte: string;
   quitados: boolean;
+  valorAbertoDe: number;
+  valorAbertoAte: number;
+  semContato: boolean;
 }
 
 interface ClientFiltersProps {
@@ -181,7 +185,19 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
               </div>
             </div>
 
-            {/* Linha 3: Checkboxes lado a lado */}
+            {/* Linha 3: Valor em aberto */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Valor Aberto De</Label>
+                <CurrencyInput value={filters.valorAbertoDe || 0} onValueChange={(v) => update("valorAbertoDe", v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Valor Aberto Até</Label>
+                <CurrencyInput value={filters.valorAbertoAte || 0} onValueChange={(v) => update("valorAbertoAte", v)} />
+              </div>
+            </div>
+
+            {/* Linha 4: Checkboxes lado a lado */}
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
@@ -196,6 +212,13 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
                   onCheckedChange={(checked) => update("quitados", !!checked)}
                 />
                 <span className="text-sm text-foreground">Quitados</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.semContato || false}
+                  onCheckedChange={(checked) => update("semContato", !!checked)}
+                />
+                <span className="text-sm text-foreground">Sem contato</span>
               </label>
             </div>
           </div>
