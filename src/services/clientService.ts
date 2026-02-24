@@ -67,9 +67,7 @@ export const fetchClients = async (filters?: {
 }): Promise<Client[]> => {
   let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
 
-  if (filters?.status && filters.status !== "todos") {
-    query = query.eq("status", filters.status as "pendente" | "pago" | "quebrado");
-  }
+  // status filter removed – "Status de Acordo" now filters via agreements table in the frontend
   if (filters?.credor && filters.credor !== "todos") {
     query = query.eq("credor", filters.credor);
   }
