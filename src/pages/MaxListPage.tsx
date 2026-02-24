@@ -653,56 +653,58 @@ const MaxListPage = () => {
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[500px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={allVisibleSelected}
-                        onCheckedChange={toggleAll}
-                        aria-label="Selecionar todos"
-                      />
-                    </TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead>Parcela</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead>Vencimento</TableHead>
-                    <TableHead>Pagamento</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Fone 1</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleData.map((item, i) => (
-                    <TableRow key={i} className={selectedIndexes.has(i) ? "bg-accent/30" : ""}>
-                      <TableCell>
+              <div className="overflow-x-auto min-w-full">
+                <Table className="min-w-[1100px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10 sticky left-0 bg-background z-10">
                         <Checkbox
-                          checked={selectedIndexes.has(i)}
-                          onCheckedChange={() => toggleOne(i)}
-                          aria-label={`Selecionar ${item.NOME_DEVEDOR}`}
+                          checked={allVisibleSelected}
+                          onCheckedChange={toggleAll}
+                          aria-label="Selecionar todos"
                         />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{item.CNPJ_CPF}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{item.NOME_DEVEDOR}</TableCell>
-                      <TableCell>{item.COD_CONTRATO}</TableCell>
-                      <TableCell>{item.PARCELA}</TableCell>
-                      <TableCell className="text-right">
-                        {item.VL_TITULO.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </TableCell>
-                      <TableCell>{item.DT_VENCIMENTO}</TableCell>
-                      <TableCell>{item.DT_PAGAMENTO || "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.STATUS === "CANCELADO" ? "destructive" : "secondary"}>
-                          {item.STATUS}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs">{item.FONE_1}</TableCell>
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">CPF</TableHead>
+                      <TableHead className="whitespace-nowrap">Nome</TableHead>
+                      <TableHead className="whitespace-nowrap">Contrato</TableHead>
+                      <TableHead className="whitespace-nowrap">Parcela</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Valor</TableHead>
+                      <TableHead className="whitespace-nowrap">Vencimento</TableHead>
+                      <TableHead className="whitespace-nowrap">Pagamento</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Fone 1</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleData.map((item, i) => (
+                      <TableRow key={i} className={selectedIndexes.has(i) ? "bg-accent/30" : ""}>
+                        <TableCell className="sticky left-0 bg-background z-10">
+                          <Checkbox
+                            checked={selectedIndexes.has(i)}
+                            onCheckedChange={() => toggleOne(i)}
+                            aria-label={`Selecionar ${item.NOME_DEVEDOR}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{item.CNPJ_CPF}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{item.NOME_DEVEDOR}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.COD_CONTRATO}</TableCell>
+                        <TableCell>{item.PARCELA}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {item.VL_TITULO.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{item.DT_VENCIMENTO}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.DT_PAGAMENTO || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={item.STATUS === "CANCELADO" ? "destructive" : "secondary"}>
+                            {item.STATUS}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{item.FONE_1}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               {data.length > 500 && (
                 <p className="text-center text-sm text-muted-foreground py-4">
                   Mostrando 500 de {data.length.toLocaleString("pt-BR")} registros. Use "Download Excel" para ver todos.
