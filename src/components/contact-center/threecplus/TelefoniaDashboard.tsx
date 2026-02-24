@@ -11,13 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut,
+  RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
-import DialPad from "./DialPad";
 import ScriptPanel from "./ScriptPanel";
 
 interface TelefoniaDashboardProps {
@@ -61,6 +60,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [loggingIn, setLoggingIn] = useState(false);
   const [loggingOutSelf, setLoggingOutSelf] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Pause state
+  const [pauseIntervals, setPauseIntervals] = useState<any[]>([]);
+  const [pausingWith, setPausingWith] = useState<number | null>(null);
+  const [unpausing, setUnpausing] = useState(false);
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
 
@@ -108,17 +112,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     refetchInterval: 60000,
   });
 
-  // Build metrics map: threecplus_agent_id -> { contacts, agreements }
   const agentMetrics = useMemo(() => {
     const metrics: Record<number, { contacts: number; agreements: number }> = {};
-
     const profileIdToAgent = new Map<string, number>();
     const userIdToAgent = new Map<string, number>();
     for (const p of profileMappings) {
       profileIdToAgent.set(p.id, p.threecplus_agent_id);
       userIdToAgent.set(p.user_id, p.threecplus_agent_id);
     }
-
     for (const d of todayDispositions) {
       const agentId = profileIdToAgent.get(d.operator_id);
       if (agentId != null) {
@@ -126,7 +127,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         metrics[agentId].contacts++;
       }
     }
-
     for (const a of todayAgreements) {
       const agentId = userIdToAgent.get(a.created_by);
       if (agentId != null) {
@@ -134,7 +134,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         metrics[agentId].agreements++;
       }
     }
-
     return metrics;
   }, [profileMappings, todayDispositions, todayAgreements]);
 
@@ -251,21 +250,70 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+  // Load pause intervals when agent is online
+  const loadPauseIntervals = useCallback(async (campaignId: number) => {
+    try {
+      const data = await invoke("list_work_break_intervals", { campaign_id: campaignId });
+      const list = Array.isArray(data) ? data : data?.data || [];
+      setPauseIntervals(list);
+    } catch {
+      setPauseIntervals([]);
+    }
+  }, [invoke]);
+
+  const handlePause = async (intervalId: number) => {
+    if (!operatorAgentId) return;
+    setPausingWith(intervalId);
+    try {
+      await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
+      toast.success("Pausa ativada");
+      fetchAll();
+    } catch {
+      toast.error("Erro ao pausar");
+    } finally {
+      setPausingWith(null);
+    }
+  };
+
+  const handleUnpause = async () => {
+    if (!operatorAgentId) return;
+    setUnpausing(true);
+    try {
+      await invoke("unpause_agent", { agent_id: operatorAgentId });
+      toast.success("Pausa removida");
+      fetchAll();
+    } catch {
+      toast.error("Erro ao retomar");
+    } finally {
+      setUnpausing(false);
+    }
+  };
+
+  // Compute operator agent info at top level (before conditional return)
+  const myAgent = operatorAgentId
+    ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
+    : null;
+  const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
+  const myCampaignId = myAgent?.campaign_id || myAgent?.campaign?.id;
+
+  // Load intervals when agent comes online with a campaign (must be top-level hook)
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline && myCampaignId) {
+      loadPauseIntervals(Number(myCampaignId));
+    }
+  }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals]);
+
   // ── OPERATOR VIEW ──
   if (isOperatorView) {
-    const myAgent = operatorAgentId
-      ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
-      : null;
-    // Treat status 0 (offline) as not logged in — show campaign selector
-    const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
     const myMetrics = operatorAgentId ? agentMetrics[operatorAgentId] : undefined;
     const myStatusStr = statusLabel(myAgent?.status);
     const myStatusColor = statusColor(myAgent?.status);
     const myCampaign = myAgent?.campaign_name || myAgent?.campaign?.name || "—";
     const myExtension = myAgent?.extension || myAgent?.ramal || "—";
+    const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-foreground">Minha Telefonia</h2>
           <Badge
@@ -286,123 +334,149 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Enlarged operator card */}
-          <div className="lg:col-span-3">
-            {loading && !lastUpdate ? (
-              <Skeleton className="h-64 w-full rounded-xl" />
-            ) : !isAgentOnline ? (
-              /* Campaign selector when agent is offline */
-              <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-                {!operatorAgentId ? (
-                  <p className="text-sm text-muted-foreground text-center">
-                    Seu perfil não possui um ID de agente 3CPlus vinculado.
-                  </p>
-                ) : (
-                  <>
-                    <div>
-                      <h3 className="text-base font-semibold text-foreground">Entrar em uma Campanha</h3>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        Selecione a campanha e clique para iniciar seu turno.
-                      </p>
-                    </div>
-                    <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione uma campanha..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {campaigns
-                          .filter((c: any) => {
-                            const s = String(c.status ?? "").toLowerCase();
-                            return s === "running" || s === "paused" || !c.paused;
-                          })
-                          .map((c: any) => (
-                            <SelectItem key={c.id} value={String(c.id)}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      onClick={handleCampaignLogin}
-                      disabled={!selectedCampaign || loggingIn}
-                      className="w-full gap-2"
-                    >
-                      <LogIn className={`w-4 h-4 ${loggingIn ? "animate-spin" : ""}`} />
-                      {loggingIn ? "Entrando..." : "Entrar na Campanha"}
-                    </Button>
-                  </>
-                )}
-              </div>
+        {/* Operator card - full width, no DialPad */}
+        {loading && !lastUpdate ? (
+          <Skeleton className="h-64 w-full rounded-xl" />
+        ) : !isAgentOnline ? (
+          <div className="bg-card rounded-xl border border-border p-6 space-y-4 max-w-lg">
+            {!operatorAgentId ? (
+              <p className="text-sm text-muted-foreground text-center">
+                Seu perfil não possui um ID de agente 3CPlus vinculado.
+              </p>
             ) : (
-              <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
-                {/* Status bar */}
-                <div className={`h-2 ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
-                <div className="p-6 space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-foreground">
-                        {myAgent.name || myAgent.agent_name || "Agente"}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">Ramal: {myExtension}</p>
-                    </div>
-                    <Badge variant="outline" className="text-sm gap-1.5 px-3 py-1">
-                      <span className={`w-2 h-2 rounded-full ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
-                      {myStatusStr}
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Campanha</p>
-                      <p className="text-sm font-semibold text-foreground truncate mt-0.5">{myCampaign}</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Tempo no Status</p>
-                      <p className="text-sm font-semibold text-foreground mt-0.5">
-                        {myAgent.status_time || myAgent.time_in_status || "—"}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Contatos Hoje</p>
-                      <p className="text-sm font-semibold text-foreground mt-0.5">
-                        {myMetrics?.contacts ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Acordos Hoje</p>
-                      <p className="text-sm font-semibold text-foreground mt-0.5">
-                        {myMetrics?.agreements ?? 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCampaignLogout}
-                    disabled={loggingOutSelf}
-                    className="w-full gap-2 text-destructive hover:text-destructive"
-                  >
-                    <LogOut className={`w-4 h-4 ${loggingOutSelf ? "animate-spin" : ""}`} />
-                    {loggingOutSelf ? "Saindo..." : "Sair da Campanha"}
-                  </Button>
+              <>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Entrar em uma Campanha</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Selecione a campanha e clique para iniciar seu turno.
+                  </p>
                 </div>
-              </div>
+                <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione uma campanha..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campaigns
+                      .filter((c: any) => {
+                        const s = String(c.status ?? "").toLowerCase();
+                        return s === "running" || s === "paused" || !c.paused;
+                      })
+                      .map((c: any) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleCampaignLogin}
+                  disabled={!selectedCampaign || loggingIn}
+                  className="w-full gap-2"
+                >
+                  <LogIn className={`w-4 h-4 ${loggingIn ? "animate-spin" : ""}`} />
+                  {loggingIn ? "Entrando..." : "Entrar na Campanha"}
+                </Button>
+              </>
             )}
           </div>
+        ) : (
+          <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm max-w-2xl">
+            <div className={`h-2 ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
+            <div className="p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">
+                    {myAgent.name || myAgent.agent_name || "Agente"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Ramal: {myExtension}</p>
+                </div>
+                <Badge variant="outline" className="text-sm gap-1.5 px-3 py-1">
+                  <span className={`w-2 h-2 rounded-full ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
+                  {myStatusStr}
+                </Badge>
+              </div>
 
-          {/* Dial pad */}
-          <div className="lg:col-span-2">
-            <DialPad
-              domain={domain}
-              apiToken={apiToken}
-              agentId={operatorAgentId ?? undefined}
-            />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Campanha</p>
+                  <p className="text-sm font-semibold text-foreground truncate mt-0.5">{myCampaign}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Tempo no Status</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">
+                    {myAgent.status_time || myAgent.time_in_status || "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Contatos Hoje</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">
+                    {myMetrics?.contacts ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Acordos Hoje</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">
+                    {myMetrics?.agreements ?? 0}
+                  </p>
+                </div>
+              </div>
+
+              {/* Pause / Unpause controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {isPaused ? (
+                  <Button
+                    size="sm"
+                    onClick={handleUnpause}
+                    disabled={unpausing}
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Play className={`w-4 h-4 ${unpausing ? "animate-spin" : ""}`} />
+                    {unpausing ? "Retomando..." : "Retomar Atendimento"}
+                  </Button>
+                ) : (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <Pause className="w-4 h-4" />
+                        Pausar
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-2" align="start">
+                      <p className="text-xs font-medium text-muted-foreground px-2 py-1">Selecione o motivo:</p>
+                      {pauseIntervals.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-2 py-2">Nenhum intervalo disponível</p>
+                      ) : (
+                        pauseIntervals.map((pi: any) => (
+                          <button
+                            key={pi.id}
+                            onClick={() => handlePause(pi.id)}
+                            disabled={pausingWith === pi.id}
+                            className="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-accent transition-colors disabled:opacity-50"
+                          >
+                            <Coffee className="w-3.5 h-3.5 inline mr-2 text-amber-500" />
+                            {pausingWith === pi.id ? "Pausando..." : (pi.name || pi.description || `Intervalo ${pi.id}`)}
+                          </button>
+                        ))
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCampaignLogout}
+                  disabled={loggingOutSelf}
+                  className="gap-2 text-destructive hover:text-destructive ml-auto"
+                >
+                  <LogOut className={`w-4 h-4 ${loggingOutSelf ? "animate-spin" : ""}`} />
+                  {loggingOutSelf ? "Saindo..." : "Sair da Campanha"}
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Script Panel */}
         <ScriptPanel clientPhone={myAgent?.phone || myAgent?.remote_phone} />
       </div>
     );
@@ -423,12 +497,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     { label: "Em Pausa", value: pausedCount, icon: Coffee, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
     { label: "Ociosos", value: idleCount, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
     { label: "Ativas", value: activeCalls, icon: PhoneCall, bgClass: "bg-primary/10", iconClass: "text-primary" },
-    { label: "Completadas", value: completedCalls, icon: PhoneOff, bgClass: "bg-muted", iconClass: "text-muted-foreground" },
+    { label: "Completadas", value: completedCalls, icon: PhoneOff, bgClass: "bg-muted/50", iconClass: "text-muted-foreground" },
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Unified header bar */}
+    <div className="space-y-4 p-4">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {menuButton}
@@ -483,10 +557,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         </Popover>
       </div>
 
-      {/* Compact KPI row */}
+      {/* KPI row */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card p-2.5">
+          <div key={kpi.label} className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card p-2.5 hover:shadow-sm transition-shadow">
             {loading && !lastUpdate ? (
               <Skeleton className="h-9 w-full" />
             ) : (
@@ -507,7 +581,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       {/* Agent Status */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">Agentes ({agents.length})</h3>
+          <h3 className="text-sm font-semibold text-foreground">Agentes ({agents.length})</h3>
           <p className="text-[11px] text-muted-foreground">Clique para detalhes</p>
         </div>
         <AgentStatusTable
@@ -535,7 +609,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
       {/* Campaigns */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Campanhas</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-2">Campanhas</h3>
         <CampaignOverview
           campaigns={campaigns}
           loading={loading}
