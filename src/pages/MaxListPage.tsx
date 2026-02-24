@@ -365,7 +365,7 @@ const MaxListPage = () => {
     const token = session.data.session?.access_token || "";
 
     // Fetch addresses grouped by contract number
-    const uniqueContracts = [...new Set(filteredItems.map((item) => item.COD_CONTRATO.trim()).filter(Boolean))];
+    const uniqueContracts = [...new Set(filteredItems.map((item) => (item.COD_CONTRATO || "").trim()).filter(Boolean))];
     const addressCache = new Map<string, Record<string, string | null>>();
 
     toast.info(`Buscando endereços de ${uniqueContracts.length} contratos...`);
@@ -379,9 +379,9 @@ const MaxListPage = () => {
 
     // Build records with address data
     const records = filteredItems.map((item) => {
-      const addr = addressCache.get(item.COD_CONTRATO.trim()) || {};
+      const addr = addressCache.get((item.COD_CONTRATO || "").trim()) || {};
       return {
-        nome_completo: item.NOME_DEVEDOR.trim(),
+        nome_completo: (item.NOME_DEVEDOR || "").trim(),
         cpf: item.CNPJ_CPF.replace(/[^\d]/g, ""),
         credor: item.CREDOR,
         valor_parcela: item.VL_TITULO || 0,
