@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -119,11 +120,11 @@ function convertDateToISO(dateStr: string): string | null {
   return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
 }
 
-function buildFilter(filters: Record<string, string>): string {
+function buildFilter(filters: Record<string, string | string[]>): string {
   const parts: string[] = [];
 
-  const addDateFilter = (value: string, direction: "de" | "ate", type: string) => {
-    if (!value) return;
+  const addDateFilter = (value: string | string[], direction: "de" | "ate", type: string) => {
+    if (!value || Array.isArray(value)) return;
     const iso = `${value}T00:00:00`;
     const fieldMap: Record<string, string> = {
       vencimento: "PaymentDateQuery",
@@ -142,12 +143,14 @@ function buildFilter(filters: Record<string, string>): string {
   addDateFilter(filters.regDe, "de", "registro");
   addDateFilter(filters.regAte, "ate", "registro");
 
-  if (filters.cpf?.trim()) {
-    parts.push(`ResponsibleCPF+eq+'${filters.cpf.trim()}'`);
+  const cpf = filters.cpf;
+  if (cpf && typeof cpf === 'string' && cpf.trim()) {
+    parts.push(`ResponsibleCPF+eq+'${cpf.trim()}'`);
   }
 
-  if (filters.contrato?.trim()) {
-    parts.push(`ContractNumber+eq+'${filters.contrato.trim()}'`);
+  const contrato = filters.contrato;
+  if (contrato && typeof contrato === 'string' && contrato.trim()) {
+    parts.push(`ContractNumber+eq+'${contrato.trim()}'`);
   }
 
   if (filters.status === "ativo") {
@@ -156,8 +159,14 @@ function buildFilter(filters: Record<string, string>): string {
     parts.push(`IsCancelled+eq+true`);
   }
 
-  if (filters.agencia && filters.agencia !== "todas") {
-    parts.push(`IdAgency+eq+${filters.agencia}`);
+  const agencias = filters.agencias;
+  if (Array.isArray(agencias) && agencias.length > 0) {
+    const agencyParts = agencias.map((id: string) => `IdAgency+eq+${id}`);
+    if (agencyParts.length === 1) {
+      parts.push(agencyParts[0]);
+    } else {
+      parts.push(`(${agencyParts.join('+or+')})`);
+    }
   }
 
   return parts.join("+and+");
@@ -169,7 +178,7 @@ const MaxListPage = () => {
 
   const [filters, setFilters] = useState({
     vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "",
-    cpf: "", contrato: "", status: "todos", agencia: "todas",
+    cpf: "", contrato: "", status: "todos", agencias: [] as string[],
   });
   const [data, setData] = useState<MappedRecord[]>([]);
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
@@ -514,17 +523,15 @@ const MaxListPage = () => {
             </div>
             <div className="space-y-2">
               <Label className="font-semibold">Agência</Label>
-              <Select value={filters.agencia} onValueChange={(v) => updateFilter("agencia", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas as agências</SelectItem>
-                  {agencies?.map((ag) => (
-                    <SelectItem key={ag.Id} value={String(ag.Id)}>{ag.Name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={(agencies || []).map((ag) => ({ value: String(ag.Id), label: ag.Name }))}
+                selected={filters.agencias}
+                onChange={(v) => setFilters((prev) => ({ ...prev, agencias: v }))}
+                allLabel="Todas as agências"
+                className="w-full h-10"
+                searchable
+                searchPlaceholder="Buscar agência..."
+              />
             </div>
           </div>
           <div className="flex gap-2 mt-4">
