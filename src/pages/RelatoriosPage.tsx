@@ -18,6 +18,11 @@ const RelatoriosPage = () => {
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [selectedCredor, setSelectedCredor] = useState("todos");
   const [selectedOperator, setSelectedOperator] = useState("todos");
+  const [selectedStatus, setSelectedStatus] = useState("todos");
+  const [selectedTipoDivida, setSelectedTipoDivida] = useState("todos");
+  const [selectedTipoDevedor, setSelectedTipoDevedor] = useState("todos");
+  const [quitacaoDe, setQuitacaoDe] = useState("");
+  const [quitacaoAte, setQuitacaoAte] = useState("");
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
@@ -43,9 +48,14 @@ const RelatoriosPage = () => {
       if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
       if (selectedCredor !== "todos" && c.credor !== selectedCredor) return false;
       if (selectedOperator !== "todos" && c.operator_id !== selectedOperator) return false;
+      if (selectedStatus !== "todos" && c.status !== selectedStatus) return false;
+      if (selectedTipoDivida !== "todos" && (c as any).tipo_divida_id !== selectedTipoDivida) return false;
+      if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
+      if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
+      if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
       return true;
     });
-  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator]);
+  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedStatus, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte]);
 
   const exportExcel = () => {
     const rows = filteredClients.map((c) => ({
@@ -92,6 +102,16 @@ const RelatoriosPage = () => {
         setSelectedOperator={setSelectedOperator}
         credores={credores}
         operators={profiles}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        selectedTipoDivida={selectedTipoDivida}
+        setSelectedTipoDivida={setSelectedTipoDivida}
+        selectedTipoDevedor={selectedTipoDevedor}
+        setSelectedTipoDevedor={setSelectedTipoDevedor}
+        quitacaoDe={quitacaoDe}
+        setQuitacaoDe={setQuitacaoDe}
+        quitacaoAte={quitacaoAte}
+        setQuitacaoAte={setQuitacaoAte}
       />
 
       {/* Summary cards */}

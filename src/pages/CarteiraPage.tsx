@@ -65,8 +65,6 @@ const CarteiraPage = () => {
     semAcordo: false,
     cadastroDe: "",
     cadastroAte: "",
-    quitacaoDe: "",
-    quitacaoAte: "",
     quitados: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -186,12 +184,6 @@ const CarteiraPage = () => {
     if (filters.cadastroAte) {
       filtered = filtered.filter(c => c.created_at <= filters.cadastroAte + "T23:59:59");
     }
-    if (filters.quitacaoDe) {
-      filtered = filtered.filter(c => (c as any).data_quitacao && (c as any).data_quitacao >= filters.quitacaoDe);
-    }
-    if (filters.quitacaoAte) {
-      filtered = filtered.filter(c => (c as any).data_quitacao && (c as any).data_quitacao <= filters.quitacaoAte);
-    }
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortField === "created_at") {
@@ -206,7 +198,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, filters.quitacaoDe, filters.quitacaoAte, agreementCpfs, sortField, sortDir, statusMap]);
+  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),

@@ -28,8 +28,6 @@ interface Filters {
   semAcordo: boolean;
   cadastroDe: string;
   cadastroAte: string;
-  quitacaoDe: string;
-  quitacaoAte: string;
   quitados: boolean;
 }
 
@@ -102,143 +100,110 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
       {/* Level 2: Collapsible advanced filters */}
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-3 border-t border-border">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Status do Acordo</Label>
-              <Select value={filters.status} onValueChange={(v) => update("status", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="pago">Pago</SelectItem>
-                  <SelectItem value="quebrado">Quebrado</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-4 pt-3 border-t border-border">
+            {/* Linha 1: Selects */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Status do Acordo</Label>
+                <Select value={filters.status} onValueChange={(v) => update("status", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="pago">Pago</SelectItem>
+                    <SelectItem value="quebrado">Quebrado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
+                <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {tiposStatus.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.cor || "#6b7280" }} />
+                          {t.nome}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Credor</Label>
+                <Select value={filters.credor} onValueChange={(v) => update("credor", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {credores.map((c: any) => (
+                      <SelectItem key={c.id} value={c.razao_social}>{c.razao_social}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Perfil do Devedor</Label>
+                <Select value={filters.tipoDevedorId || "todos"} onValueChange={(v) => update("tipoDevedorId", v === "todos" ? "" : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {tiposDevedor.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Tipo de Dívida</Label>
+                <Select value={filters.tipoDividaId || "todos"} onValueChange={(v) => update("tipoDividaId", v === "todos" ? "" : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {tiposDivida.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Credor</Label>
-              <Select value={filters.credor} onValueChange={(v) => update("credor", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {credores.map((c: any) => (
-                    <SelectItem key={c.id} value={c.razao_social}>{c.razao_social}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Linha 2: Datas lado a lado */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Vencimento De</Label>
+                <Input type="date" value={filters.dateFrom} onChange={(e) => update("dateFrom", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Vencimento Até</Label>
+                <Input type="date" value={filters.dateTo} onChange={(e) => update("dateTo", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Cadastro De</Label>
+                <Input type="date" value={filters.cadastroDe || ""} onChange={(e) => update("cadastroDe", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Cadastro Até</Label>
+                <Input type="date" value={filters.cadastroAte || ""} onChange={(e) => update("cadastroAte", e.target.value)} />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
-              <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {tiposStatus.map((t: any) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.cor || "#6b7280" }} />
-                        {t.nome}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Perfil do Devedor</Label>
-              <Select value={filters.tipoDevedorId || "todos"} onValueChange={(v) => update("tipoDevedorId", v === "todos" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {tiposDevedor.map((t: any) => (
-                    <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Tipo de Dívida</Label>
-              <Select value={filters.tipoDividaId || "todos"} onValueChange={(v) => update("tipoDividaId", v === "todos" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {tiposDivida.map((t: any) => (
-                    <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Vencimento De</Label>
-              <Input
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) => update("dateFrom", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Vencimento Até</Label>
-              <Input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) => update("dateTo", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Cadastro De</Label>
-              <Input
-                type="date"
-                value={filters.cadastroDe || ""}
-                onChange={(e) => update("cadastroDe", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Cadastro Até</Label>
-              <Input
-                type="date"
-                value={filters.cadastroAte || ""}
-                onChange={(e) => update("cadastroAte", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Quitação De</Label>
-              <Input
-                type="date"
-                value={filters.quitacaoDe || ""}
-                onChange={(e) => update("quitacaoDe", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Quitação Até</Label>
-              <Input
-                type="date"
-                value={filters.quitacaoAte || ""}
-                onChange={(e) => update("quitacaoAte", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5 flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer py-2">
+            {/* Linha 3: Checkboxes lado a lado */}
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={filters.semAcordo || false}
                   onCheckedChange={(checked) => update("semAcordo", !!checked)}
                 />
                 <span className="text-sm text-foreground">Sem acordo</span>
               </label>
-            </div>
-
-            <div className="space-y-1.5 flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer py-2">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={filters.quitados || false}
                   onCheckedChange={(checked) => update("quitados", !!checked)}
