@@ -4,7 +4,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
 import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
@@ -384,28 +385,21 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} /></div>
                 <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? 0} onChange={e => set("juros_mes", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
                 <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? 0} onChange={e => set("multa", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
-                <div className="col-span-2">
-                  <Label>Prazo SLA de Atendimento (horas)</Label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    placeholder="Ex: 1 = 1h, 0.5 = 30min"
-                    value={form.sla_hours ?? ""}
-                    onChange={e => set("sla_hours", e.target.value ? parseFloat(e.target.value) : null)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Se vazio, usa o prazo padrão do tenant. Aceita decimais (ex: 0.5 = 30 minutos).</p>
-                </div>
               </div>
             </div>
 
-            {/* Item 4: Added Valor Fixo column to honorarios */}
-            <div className="border-t border-border pt-4">
+            {/* Grade de Honorários - Collapsible */}
+            <Collapsible defaultOpen={honorarios.length === 0} className="border-t border-border pt-4">
               <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Grade de Honorários</p>
-                  <p className="text-xs text-muted-foreground">Defina os honorários por percentual ou valor fixo.</p>
-                </div>
+                <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 cursor-pointer">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Grade de Honorários</p>
+                    <p className="text-xs text-muted-foreground">
+                      {honorarios.length > 0 ? `${honorarios.length} faixa(s) salva(s)` : "Defina os honorários por percentual ou valor fixo."}
+                    </p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </CollapsibleTrigger>
                 <div className="flex gap-2">
                   {editing?.id && (
                     <Button size="sm" variant="default" onClick={handleSaveGrade} disabled={savingGrade}>
@@ -415,37 +409,44 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                   <Button size="sm" variant="outline" onClick={addHonorario}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
                 </div>
               </div>
-              {honorarios.length > 0 && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Faixa Recuperada</TableHead>
-                      <TableHead>Honorários (%)</TableHead>
-                      <TableHead>Valor Fixo (R$)</TableHead>
-                      <TableHead className="w-12">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {honorarios.map((h, i) => (
-                      <TableRow key={i}>
-                        <TableCell><Input value={h.faixa} onChange={e => updateHonorario(i, "faixa", e.target.value)} placeholder="Ex: Até 50%" className="h-8" /></TableCell>
-                        <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
-                        <TableCell><Input type="number" value={h.valor_fixo || 0} onChange={e => updateHonorario(i, "valor_fixo", parseFloat(e.target.value) || 0)} className="h-8" placeholder="R$" /></TableCell>
-                        <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeHonorario(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
+              <CollapsibleContent>
+                {honorarios.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Faixa Recuperada</TableHead>
+                        <TableHead>Honorários (%)</TableHead>
+                        <TableHead>Valor Fixo (R$)</TableHead>
+                        <TableHead className="w-12">Ações</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {honorarios.map((h, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Input value={h.faixa} onChange={e => updateHonorario(i, "faixa", e.target.value)} placeholder="Ex: Até 50%" className="h-8" /></TableCell>
+                          <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                          <TableCell><Input type="number" value={h.valor_fixo || 0} onChange={e => updateHonorario(i, "valor_fixo", parseFloat(e.target.value) || 0)} className="h-8" placeholder="R$" /></TableCell>
+                          <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeHonorario(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
 
-            {/* Faixas de Desconto por Aging */}
-            <div className="border-t border-border pt-4">
+            {/* Faixas de Desconto por Aging - Collapsible */}
+            <Collapsible defaultOpen={agingTiers.length === 0} className="border-t border-border pt-4">
               <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Faixas de Desconto por Aging</p>
-                  <p className="text-xs text-muted-foreground">Defina descontos automáticos por tempo de atraso.</p>
-                </div>
+                <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 cursor-pointer">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Faixas de Desconto por Aging</p>
+                    <p className="text-xs text-muted-foreground">
+                      {agingTiers.length > 0 ? `${agingTiers.length} faixa(s) salva(s)` : "Defina descontos automáticos por tempo de atraso."}
+                    </p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </CollapsibleTrigger>
                 <div className="flex gap-2">
                   {editing?.id && (
                     <Button size="sm" variant="default" onClick={handleSaveAgingTiers} disabled={savingAging}>
@@ -455,29 +456,31 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                   <Button size="sm" variant="outline" onClick={addAgingTier}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
                 </div>
               </div>
-              {agingTiers.length > 0 && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>De (dias)</TableHead>
-                      <TableHead>Até (dias)</TableHead>
-                      <TableHead>Desconto (%)</TableHead>
-                      <TableHead className="w-12">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {agingTiers.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell><Input type="number" value={t.min_days} onChange={e => updateAgingTier(i, "min_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
-                        <TableCell><Input type="number" value={t.max_days} onChange={e => updateAgingTier(i, "max_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
-                        <TableCell><Input type="number" value={t.discount_percent} onChange={e => updateAgingTier(i, "discount_percent", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
-                        <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeAgingTier(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
+              <CollapsibleContent>
+                {agingTiers.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>De (dias)</TableHead>
+                        <TableHead>Até (dias)</TableHead>
+                        <TableHead>Desconto (%)</TableHead>
+                        <TableHead className="w-12">Ações</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {agingTiers.map((t, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Input type="number" value={t.min_days} onChange={e => updateAgingTier(i, "min_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
+                          <TableCell><Input type="number" value={t.max_days} onChange={e => updateAgingTier(i, "max_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
+                          <TableCell><Input type="number" value={t.discount_percent} onChange={e => updateAgingTier(i, "discount_percent", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                          <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeAgingTier(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Modelos de Documentos */}
             <div className="border-t border-border pt-4 space-y-3">

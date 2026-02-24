@@ -47,8 +47,6 @@ const ClientsPage = () => {
     semAcordo: false,
     cadastroDe: "",
     cadastroAte: "",
-    quitacaoDe: "",
-    quitacaoAte: "",
     quitados: false,
   });
   const [formOpen, setFormOpen] = useState(false);
