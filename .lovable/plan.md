@@ -1,13 +1,29 @@
 
 
-## ✅ Mover busca de endereco do MaxList para a formalizacao do acordo
+## Adicionar campo "ModelName" ao enriquecimento de endereco
 
-**Status: Implementado**
+### Problema
+O endpoint `model-details` no proxy MaxSystem filtra os campos retornados e nao inclui o nome do modelo (`ModelName`). Esse campo precisa ser retornado e salvo junto com os dados de endereco do cliente.
 
-### Mudanças realizadas
+### Mudancas
 
-1. **`src/services/addressEnrichmentService.ts`** (novo) - Serviço reutilizável com `enrichClientAddress(cpf, tenantId)` que busca endereço via MaxSystem API e atualiza a tabela `clients`.
+**1. Edge Function `supabase/functions/maxsystem-proxy/index.ts`**
+- No endpoint `model-details` (linha 150), adicionar `ModelName: details.ModelName || null` ao JSON de resposta
 
-2. **`src/pages/MaxListPage.tsx`** - Removida a fase de busca de endereços do `handleSendToCRM`. A importação agora salva apenas dados financeiros.
+**2. Servico `src/services/addressEnrichmentService.ts`**
+- Adicionar `model_name: string | null` na interface `AddressData`
+- Capturar `raw.ModelName` no retorno de `fetchAddressForContract`
+- Incluir `model_name` no `emptyAddress()`
+- No update do banco, incluir campo `observacoes` com o ModelName (ou um campo dedicado se existir na tabela `clients`)
 
-3. **`src/components/client-detail/AgreementCalculator.tsx`** - Ao clicar "Gerar Acordo", o sistema busca o endereço automaticamente antes de criar o acordo, com indicador de progresso.
+**3. Verificar tabela `clients`**
+- Checar se existe um campo para armazenar o nome do modelo
+- Se nao existir, criar uma migration adicionando coluna ou usar o campo `observacoes` existente
+
+### Detalhes tecnicos
+
+| Arquivo | Acao |
+|---|---|
+| `supabase/functions/maxsystem-proxy/index.ts` | Adicionar `ModelName` no retorno do endpoint `model-details` |
+| `src/services/addressEnrichmentService.ts` | Capturar e persistir `ModelName` junto ao endereco |
+| Migration (se necessario) | Adicionar coluna na tabela `clients` para o campo modelo |
