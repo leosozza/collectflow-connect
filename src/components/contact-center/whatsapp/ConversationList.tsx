@@ -2,12 +2,10 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Conversation } from "@/services/conversationService";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 interface ConversationTag {
   id: string;
@@ -27,6 +25,23 @@ interface ConversationListProps {
   instances: { id: string; name: string }[];
   tags?: ConversationTag[];
   tagAssignments?: TagAssignment[];
+  operators?: { id: string; name: string }[];
+  isAdmin?: boolean;
+}
+
+function formatCompactTime(dateStr: string): string {
+  const now = Date.now();
+  const diff = now - new Date(dateStr).getTime();
+  if (diff < 0) return "agora";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "agora";
+  if (mins < 60) return `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks}sem`;
 }
 
 function stringToColor(str: string): string {
@@ -73,11 +88,12 @@ function ConversationAvatar({ conv }: { conv: Conversation }) {
   );
 }
 
-const ConversationList = ({ conversations, selectedId, onSelect, instances, tags = [], tagAssignments = [] }: ConversationListProps) => {
+const ConversationList = ({ conversations, selectedId, onSelect, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
+  const [operatorFilter, setOperatorFilter] = useState<string>("all");
 
   // Build a set of conversation IDs that have the selected tag
   const taggedConvIds = useMemo(() => {
@@ -105,7 +121,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
-    return matchSearch && matchStatus && matchInstance && matchTag;
+    const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
+    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator;
   });
 
   const statusColors: Record<string, string> = {
@@ -115,7 +132,6 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
   };
 
   const statusPills = [
-    { key: "all", label: "Todas", count: conversations.length },
     { key: "open", label: "Aberta", count: statusCounts.open, color: "bg-[#25d366]" },
     { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
     { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
@@ -125,7 +141,28 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
     <div className="flex flex-col h-full border-r border-border bg-card">
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-border bg-[#f0f2f5] dark:bg-[#202c33]">
-        <h2 className="font-semibold text-base text-foreground mb-2">Conversas</h2>
+        {/* Row 1: Title + Operator filter (admin only) */}
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-base text-foreground">Conversas</h2>
+          {isAdmin && operators.length > 0 && (
+            <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+              <SelectTrigger className="h-7 text-[11px] w-[140px] bg-card">
+                <Users className="w-3 h-3 mr-1 shrink-0" />
+                <SelectValue placeholder="Operador" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {operators.map((op) => (
+                  <SelectItem key={op.id} value={op.id}>
+                    {op.name || "Sem nome"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Row 2: Search */}
         <div className="relative mb-2">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
           <Input
@@ -136,19 +173,19 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
           />
         </div>
 
-        {/* Status pills */}
-        <div className="flex gap-1 mb-2 flex-wrap">
+        {/* Row 3: Status pills */}
+        <div className="flex gap-1 mb-2">
           {statusPills.map((pill) => (
             <button
               key={pill.key}
-              onClick={() => setStatusFilter(pill.key)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+              onClick={() => setStatusFilter(statusFilter === pill.key ? "all" : pill.key)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex-1 justify-center ${
                 statusFilter === pill.key
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
             >
-              {pill.color && <span className={`w-1.5 h-1.5 rounded-full ${pill.color}`} />}
+              <span className={`w-1.5 h-1.5 rounded-full ${pill.color}`} />
               {pill.label}
               <span className={`font-bold ${statusFilter === pill.key ? "text-primary-foreground" : "text-foreground"}`}>
                 {pill.count}
@@ -157,7 +194,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
           ))}
         </div>
 
-        {/* Tag + Instance filters */}
+        {/* Row 4: Tag + Instance filters */}
         <div className="flex gap-1.5">
           {tags.length > 0 && (
             <Select value={tagFilter} onValueChange={setTagFilter}>
@@ -220,13 +257,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
                       <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
                         {displayName}
                       </span>
-                      <span className="text-[12px] text-muted-foreground whitespace-nowrap shrink-0">
-                        {conv.last_message_at
-                          ? formatDistanceToNow(new Date(conv.last_message_at), {
-                              addSuffix: false,
-                              locale: ptBR,
-                            })
-                          : ""}
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                        {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-[2px] gap-1">
