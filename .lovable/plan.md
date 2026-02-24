@@ -1,129 +1,74 @@
 
 
-## Otimizacoes do WhatsApp e Telefonia - Plano Detalhado
+## Ajustes no WhatsApp - Filtro por Operador + Correção de Texto Cortado
 
-Este plano aborda 7 melhorias solicitadas, divididas entre WhatsApp e Telefonia.
+### Problema identificado (pelo print)
 
----
+A lista de conversas mostra o texto de tempo relativo ("cerca de...") sendo cortado na lateral direita. Isso acontece porque o `formatDistanceToNow` em português gera textos longos como "cerca de 2 horas" que competem por espaço com o nome do contato.
 
-### 1. WhatsApp - Layout 100% na tela (sem scroll externo)
+### Mudanças planejadas
 
-**Problema**: A pagina WhatsApp tem `p-4 lg:p-6` no `<main>` do AppLayout, causando padding desnecessario e possivel scroll.
+**1. Filtro por Operador (Admin) - `ConversationList.tsx`**
 
-**Solucao**:
-- No `ContactCenterPage`, quando o canal e WhatsApp, remover o padding do container e usar `h-[calc(100vh-4rem)]` para ocupar toda a tela
-- Ajustar scrollbars para estilo "thin" discreto em `ConversationList` e `ContactSidebar`
+- Adicionar nova prop `operators` (lista de `{ id, name }`) e `isAdmin` (boolean)
+- Quando `isAdmin === true`, exibir um `Select` de operador no header, ao lado do título "Conversas" (canto direito)
+- Opções: "Todos operadores" + lista de operadores do tenant
+- Filtrar conversas pelo campo `assigned_to` que já existe na tabela `conversations`
+- Adicionar novo state `operatorFilter` e aplicar no filtro
 
-| Arquivo | Mudanca |
+**2. Carregar operadores - `WhatsAppChatLayout.tsx`**
+
+- Fazer query em `profiles` filtrando por `tenant_id` para obter lista de operadores (id=user_id, nome=full_name)
+- Passar como prop `operators` para o `ConversationList`
+- Usar `usePermissions` para determinar se é admin e passar `isAdmin`
+
+**3. Correção do texto cortado - `ConversationList.tsx`**
+
+Pelo print, o problema é o tempo relativo ("cerca de X") sendo truncado. A solução:
+- Remover o texto de tempo relativo da primeira linha (ao lado do nome)
+- Mover o indicador de tempo para a segunda linha, com formato compacto (ex: "2h", "3d", "5min") em vez do `formatDistanceToNow` verboso
+- Isso libera espaço para o nome do contato e o telefone aparecerem sem corte
+
+Alternativamente, mais simples: trocar o `formatDistanceToNow` por uma função compacta que retorne "2h", "3d", "1sem" em vez de "cerca de 2 horas".
+
+**4. Status pills (Aberta/Aguardando/Fechada)**
+
+Já estão implementados no header. Vou reorganizar o layout para:
+- Linha 1: "Conversas" (esquerda) + Select de Operador (direita, só admin)
+- Linha 2: Campo de pesquisa
+- Linha 3: Pills de status (Aberta / Aguardando / Fechada)
+- Linha 4: Filtros de etiqueta e instância
+
+### Detalhes técnicos
+
+**ConversationList.tsx - novas props e layout:**
+
+```text
+interface ConversationListProps {
+  // ... existentes
+  operators?: { id: string; name: string }[];
+  isAdmin?: boolean;
+}
+```
+
+Header reorganizado:
+- Título "Conversas" com Select de operador à direita (visível só para admin)
+- Função `formatCompactTime` para substituir `formatDistanceToNow`:
+  - < 1min → "agora"
+  - < 60min → "Xmin"  
+  - < 24h → "Xh"
+  - < 7d → "Xd"
+  - >= 7d → "Xsem"
+
+**WhatsAppChatLayout.tsx:**
+
+- Query: `SELECT user_id, full_name FROM profiles WHERE tenant_id = X`
+- Passar `operators` e `isAdmin` (baseado em `permissions.canManageContactCenterAdmin`)
+
+### Arquivos modificados
+
+| Arquivo | Mudança |
 |---|---|
-| `src/pages/ContactCenterPage.tsx` | Wrap WhatsApp em container sem padding, height 100% |
-| `src/components/AppLayout.tsx` | Condicionar padding do `<main>` para rotas de contact center (sem padding) |
-
----
-
-### 2. WhatsApp - Pesquisa por Etiqueta na lista de conversas
-
-**Problema**: O filtro atual permite busca por nome/telefone e status, mas nao por etiqueta.
-
-**Solucao**:
-- Adicionar um novo `Select` de filtro por etiqueta no header do `ConversationList`
-- Carregar tags do tenant via query em `conversation_tags`
-- Filtrar conversas que possuam a tag selecionada via `conversation_tag_assignments`
-- Passar as tags disponiveis e assignments como props desde o `WhatsAppChatLayout`
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Carregar tags e tag_assignments, passar como props |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Adicionar filtro Select de etiqueta, filtrar conversas por tag |
-
----
-
-### 3. WhatsApp - Notificacao no sininho para conversas em "Aguardando"
-
-**Problema**: Quando um cliente fica em status "waiting", o operador nao recebe notificacao.
-
-**Solucao**:
-- No `WhatsAppChatLayout`, quando o realtime detectar uma conversa mudando para status `waiting`, inserir uma notificacao na tabela `notifications` para o operador atribuido (ou todos os operadores da instancia)
-- O sistema de notificacoes existente (sininho + realtime) mostrara automaticamente
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | No listener realtime de conversations, ao detectar status "waiting", criar notificacao |
-
----
-
-### 4. WhatsApp - Menu Admin com filtros rapidos (Aberta/Aguardando/Fechada) + Operador
-
-**Problema**: O admin quer clicar no menu e ver rapidamente conversas por status. O operador deve ter a mesma funcionalidade.
-
-**Solucao**:
-- Adicionar pills/botoes de contagem (Aberta: X, Aguardando: X, Fechada: X) acima da lista de conversas
-- Clicar em um pill aplica o filtro de status automaticamente
-- Disponivel tanto para admin quanto para operador
-- Remover o Select de status e usar os pills como filtro visual
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Adicionar pills de contagem por status com filtro ao clicar, substituindo o Select |
-
----
-
-### 5. Telefonia - Remover DialPad (teclado numerico) da view do operador
-
-**Problema**: O usuario informou que nao e mais necessario o aparelho com numeros para ligacoes manuais.
-
-**Solucao**:
-- Remover o componente `DialPad` da view do operador no `TelefoniaDashboard`
-- Manter o card do operador ocupando toda a largura (remover o grid de 3+2 colunas)
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Remover DialPad da view operador, card em largura total |
-
----
-
-### 6. Telefonia - Pausas pre-definidas para o operador
-
-**Problema**: O operador precisa poder colocar pausas (intervalos de trabalho) direto no RIVO sem ir ao 3CPlus.
-
-**Solucao**:
-- Adicionar action `pause_agent` e `unpause_agent` no `threecplus-proxy` usando endpoints `POST /agent/pause` e `POST /agent/unpause` da API 3CPlus (usando token do agente resolvido via GET /users)
-- Adicionar action `list_work_break_intervals` que ja existe no proxy para buscar os intervalos disponiveis da campanha
-- No card do operador (`TelefoniaDashboard`), adicionar botao "Pausar" que abre um Popover com a lista de intervalos disponiveis (cafe, almoco, banheiro etc.)
-- Ao selecionar, chamar `pause_agent` com o `interval_id`
-- Quando em pausa, mostrar botao "Retomar" que chama `unpause_agent`
-
-| Arquivo | Mudanca |
-|---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar actions `pause_agent` e `unpause_agent` com resolucao de token do agente |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Adicionar botao de pausa com lista de intervalos no card do operador |
-
----
-
-### 7. Telefonia - Otimizar layout admin (limpo e funcional)
-
-**Problema**: A tela precisa ser mais limpa e bonita.
-
-**Solucao**:
-- Ajustar espacamentos e bordas no admin view
-- KPIs em cards mais compactos com hover sutil
-- Seção de agentes e campanhas com separadores visuais mais claros
-- Garantir que tudo cabe em 100% da tela sem scroll horizontal
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Refinar visual do admin view (spacing, shadows, hover states) |
-
----
-
-### Resumo de arquivos
-
-| Arquivo | Mudancas |
-|---|---|
-| `src/components/AppLayout.tsx` | Remover padding para rotas de contact center |
-| `src/pages/ContactCenterPage.tsx` | Ajustar container WhatsApp para fullscreen |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Pills de status + filtro por etiqueta |
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Carregar tags, notificacao "waiting" |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Remover DialPad operador, adicionar pausas, refinar layout admin |
-| `supabase/functions/threecplus-proxy/index.ts` | Actions pause_agent e unpause_agent |
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Filtro por operador (admin), tempo compacto, layout reorganizado |
+| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Carregar operadores, passar isAdmin |
 
