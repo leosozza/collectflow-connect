@@ -1,37 +1,56 @@
 
 
-## Analise da aba Negociacao - Problemas encontrados e correcoes
+## Plano: Reorganizacao de Filtros, Negociacao e Relatorios
 
-Apos revisar o codigo completo de `CredorForm.tsx`, identifiquei os seguintes problemas:
+### 1. Negociacao do Credor (`CredorForm.tsx`)
 
-### Problemas encontrados
+**Collapsible nas secoes de Grade e Aging:**
+- Envolver "Grade de Honorarios" e "Faixas de Desconto por Aging" em componentes `Collapsible` com seta para recolher/expandir
+- Quando ha dados salvos, iniciar recolhido com indicador de quantidade (ex: "3 faixas salvas")
+- Quando vazio, iniciar expandido
 
-1. **Grade de Honorarios sem botao "Salvar"**: O usuario adiciona/edita faixas mas so consegue persistir salvando o credor inteiro no botao "Salvar Credor" no rodape. Se trocar de aba sem salvar, perde as alteracoes. O usuario pede um botao dedicado.
+**Remover Prazo SLA de Atendimento:**
+- Remover o bloco completo do campo `sla_hours` (linhas 387-398) da aba Negociacao
 
-2. **Faixas de Aging sem botao "Salvar"**: Mesmo problema. As faixas ficam apenas no state local ate o "Salvar Credor" ser clicado.
+### 2. Filtros da Carteira (`ClientFilters.tsx`)
 
-3. **`template_notificacao_extrajudicial` ausente nos defaults de novo credor** (linha 136): Ao criar um novo credor, o template de Notificacao Extrajudicial nao e pre-preenchido com o modelo padrao, diferente dos outros 4 templates que sao inicializados.
+**Reorganizacao dos filtros avancados:**
 
-4. **Campo Desconto Maximo sem restricoes**: Faltam atributos `min={0}`, `max={100}`, `step={0.01}` no input, permitindo valores negativos ou acima de 100%.
+Linha 1 (selects lado a lado):
+- Status do Acordo | Status de Carteira | Credor | Perfil do Devedor | Tipo de Divida
 
-5. **Campos numericos de Juros e Multa sem restricoes**: Mesma situacao, sem `min={0}` e `step`.
+Linha 2 (datas lado a lado):
+- Vencimento De | Vencimento Ate | Cadastro De | Cadastro Ate
 
-### Plano de correcoes
+Linha 3 (checkboxes lado a lado):
+- Sem Acordo | Quitados
 
-**Arquivo: `src/components/cadastros/CredorForm.tsx`**
+**Remover filtros de Quitacao (De/Ate)** da pagina Carteira - serao movidos para Relatorios.
 
-| Correcao | Detalhe |
-|---|---|
-| Botao "Salvar Grade" | Adicionar botao ao lado de "Adicionar Faixa" nos honorarios. Ao clicar, faz upsert parcial do credor com `honorarios_grade` atualizado (somente quando editando um credor existente). |
-| Botao "Salvar Faixas" | Adicionar botao ao lado de "Adicionar Faixa" no aging. Ao clicar, faz upsert parcial com `aging_discount_tiers` atualizado (somente quando editando). |
-| Template notificacao no form novo | Adicionar `template_notificacao_extrajudicial: TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT` ao state inicial (linha 136). |
-| Restricoes desconto_maximo | Adicionar `min={0} max={100} step={0.01}` ao Input. |
-| Restricoes juros/multa | Adicionar `min={0} step={0.01}` aos Inputs de juros e multa. |
-| Feedback visual nos botoes salvar | Mostrar toast de sucesso apos salvar grade ou faixas individualmente. Botoes aparecem apenas quando ha um credor existente (editing). |
+**Logica de filtragem:**
+- "Status do Acordo" filtra por `status` (pendente/pago/quebrado) -- mostra apenas clientes que TEM acordo formalizado quando != "todos"
+- "Status de Carteira" filtra por `status_cobranca_id` -- filtra toda a carteira independente de acordo
+- Sao filtros independentes e complementares
+
+### 3. Relatorios (`RelatoriosPage.tsx` + `ReportFilters.tsx`)
+
+**Adicionar novos filtros em ReportFilters:**
+- Filtro de Quitacao De / Quitacao Ate (movido da Carteira)
+- Filtro de Status do Acordo (pendente/pago/quebrado)
+- Filtro de Tipo de Divida
+- Filtro de Perfil do Devedor
+
+**Atualizar ReportFilters props** para receber os novos estados e callbacks.
+
+**Atualizar RelatoriosPage** para aplicar os novos filtros no `filteredClients`.
 
 ### Detalhes tecnicos
 
-Os botoes "Salvar Grade" e "Salvar Faixas" farao chamadas independentes ao `upsertCredor` passando apenas `{ id, tenant_id, honorarios_grade }` ou `{ id, tenant_id, aging_discount_tiers }`, sem precisar reenviar todos os campos do credor. Isso garante salvamento parcial seguro.
-
-Para novos credores (sem `editing.id`), os botoes nao aparecem -- as grades sao salvas junto com o "Salvar Credor" como ja funciona hoje.
+| Arquivo | Mudanca |
+|---|---|
+| `CredorForm.tsx` | Collapsible em Grade + Aging; remover SLA |
+| `ClientFilters.tsx` | Remover quitacaoDe/Ate; reorganizar grid; Sem Acordo + Quitados lado a lado |
+| `CarteiraPage.tsx` | Remover refs a quitacaoDe/Ate do state inicial e displayClients |
+| `ReportFilters.tsx` | Adicionar filtros de quitacao, status acordo, tipo divida, perfil devedor |
+| `RelatoriosPage.tsx` | Novos states + logica de filtragem para os filtros adicionados |
 
