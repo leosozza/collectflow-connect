@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -35,6 +36,7 @@ interface TagAssignment {
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
+  const { canManageContactCenterAdmin } = usePermissions();
   const tenantId = tenant?.id || profile?.tenant_id;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -46,11 +48,12 @@ const WhatsAppChatLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tags, setTags] = useState<ConversationTag[]>([]);
   const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
+  const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
 
   // Track known waiting conversation IDs to avoid duplicate notifications
   const knownWaitingRef = useRef<Set<string>>(new Set());
 
-  // Load instances + quick replies + tags
+  // Load instances + quick replies + tags + operators
   useEffect(() => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
@@ -68,6 +71,17 @@ const WhatsAppChatLayout = () => {
       .from("conversation_tag_assignments")
       .select("conversation_id, tag_id")
       .then(({ data }) => setTagAssignments((data as TagAssignment[]) || []));
+
+    // Load operators for admin filter
+    supabase
+      .from("profiles")
+      .select("user_id, full_name")
+      .eq("tenant_id", tenantId)
+      .then(({ data }) => {
+        if (data) {
+          setOperators(data.map((p: any) => ({ id: p.user_id, name: p.full_name || "" })));
+        }
+      });
   }, [tenantId]);
 
   // Load conversations
@@ -334,6 +348,8 @@ const WhatsAppChatLayout = () => {
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
             tags={tags}
             tagAssignments={tagAssignments}
+            operators={operators}
+            isAdmin={canManageContactCenterAdmin}
           />
         </div>
         <ChatPanel
