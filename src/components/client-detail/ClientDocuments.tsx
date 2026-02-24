@@ -1,4 +1,4 @@
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -80,6 +80,14 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     toast.success(`${label} gerado com sucesso!`);
   };
 
+  const isConfigured = (key: string) => {
+    if (!credor) return false;
+    const val = credor[key as keyof typeof credor] as string;
+    return !!val?.trim();
+  };
+
+  const configuredCount = DOCUMENT_TYPES.filter(d => isConfigured(d.key)).length;
+
   return (
     <Card>
       <CardContent className="p-6">
@@ -87,21 +95,54 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
         <p className="text-sm text-muted-foreground mb-6">
           Gere e baixe os documentos com os dados preenchidos automaticamente. Os modelos são definidos no cadastro do credor.
         </p>
-        <div className="flex flex-col gap-4">
-          {DOCUMENT_TYPES.map((doc) => (
-            <button
-              key={doc.key}
-              onClick={() => handleDownload(doc.key, doc.label)}
-              className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left group cursor-pointer"
-            >
-              <span className="text-2xl">{doc.icon}</span>
-              <div className="flex-1">
-                <p className="font-medium text-foreground">{doc.label}</p>
-                <p className="text-xs text-muted-foreground">Clique para gerar e baixar</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Lista de documentos para download */}
+          <div className="lg:col-span-2 flex flex-col gap-3">
+            {DOCUMENT_TYPES.map((doc) => (
+              <button
+                key={doc.key}
+                onClick={() => handleDownload(doc.key, doc.label)}
+                className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left group cursor-pointer"
+              >
+                <span className="text-2xl">{doc.icon}</span>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">{doc.label}</p>
+                  <p className="text-xs text-muted-foreground">Clique para gerar e baixar</p>
+                </div>
+                <Download className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </button>
+            ))}
+          </div>
+
+          {/* Painel lateral de status */}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <p className="text-sm font-semibold text-foreground">Status dos Modelos</p>
               </div>
-              <Download className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-            </button>
-          ))}
+              <p className="text-xs text-muted-foreground mb-4">
+                {configuredCount}/{DOCUMENT_TYPES.length} configurados
+              </p>
+              <div className="space-y-2.5">
+                {DOCUMENT_TYPES.map((doc) => {
+                  const configured = isConfigured(doc.key);
+                  return (
+                    <div key={doc.key} className="flex items-center gap-2.5">
+                      {configured ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                      )}
+                      <span className={`text-xs ${configured ? "text-foreground" : "text-muted-foreground"}`}>
+                        {doc.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
