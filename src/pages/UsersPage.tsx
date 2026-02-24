@@ -66,6 +66,7 @@ import {
   UserPlus,
   Eye,
   EyeOff,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
@@ -121,6 +122,12 @@ const UsersPage = () => {
 
   // Delete state
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+
+  // Change password state
+  const [pwUser, setPwUser] = useState<Profile | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
 
   // New user state
   const [newUserOpen, setNewUserOpen] = useState(false);
@@ -382,6 +389,32 @@ const UsersPage = () => {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!pwUser) return;
+    if (newPw.length < 6) {
+      toast.error("A senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast.error("As senhas não conferem");
+      return;
+    }
+    setChangingPw(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-user", {
+        body: { action: "update_password", user_id: pwUser.user_id, password: newPw },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Senha de ${pwUser.full_name} alterada com sucesso!`);
+      setPwUser(null);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao trocar senha");
+    } finally {
+      setChangingPw(false);
+    }
+  };
+
   const getGradeName = (gradeId: string | null) => {
     if (!gradeId) return "Nenhuma";
     return grades.find((g) => g.id === gradeId)?.name || "—";
@@ -554,6 +587,11 @@ const UsersPage = () => {
                         <Edit className="w-4 h-4" />
                       </Button>
                       {u.id !== profile?.id && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8" title="Trocar Senha" onClick={() => { setPwUser(u); setNewPw(""); setConfirmPw(""); }}>
+                          <KeyRound className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {u.id !== profile?.id && (
                         <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -694,6 +732,46 @@ const UsersPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={!!pwUser} onOpenChange={() => setPwUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Trocar Senha</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Definir nova senha para <strong>{pwUser?.full_name}</strong>
+          </p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nova Senha</Label>
+              <Input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirmar Senha</Label>
+              <Input
+                type="password"
+                placeholder="Repita a nova senha"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPwUser(null)}>Cancelar</Button>
+            <Button onClick={handleChangePassword} disabled={changingPw || !newPw || !confirmPw}>
+              {changingPw ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
+              ) : "Salvar Senha"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Novo Usuário Dialog */}
       <Dialog open={newUserOpen} onOpenChange={(o) => { setNewUserOpen(o); if (!o) resetNewUser(); }}>

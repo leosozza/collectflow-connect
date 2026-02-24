@@ -35,6 +35,7 @@ import NotFound from "./pages/NotFound";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 
 const queryClient = new QueryClient();
@@ -49,6 +50,7 @@ const App = () => (
           <TenantProvider>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route
               path="/onboarding"
               element={
