@@ -74,8 +74,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Build MaxSystem URL from query params
     const url = new URL(req.url);
+    const action = url.searchParams.get("action") || "installments";
+
+    // === Agencies endpoint ===
+    if (action === "agencies") {
+      const agenciesUrl = "https://maxsystem.azurewebsites.net/api/Agencies?%24inlinecount=allpages";
+      const agResp = await fetch(agenciesUrl);
+      if (!agResp.ok) {
+        const text = await agResp.text();
+        return new Response(JSON.stringify({ error: "MaxSystem agencies error", details: text }), {
+          status: agResp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const agData = await agResp.json();
+      return new Response(JSON.stringify({ Items: agData.Items }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === Installments endpoint (existing) ===
     const filter = url.searchParams.get("filter") || "";
     const top = url.searchParams.get("top") || "50000";
 

@@ -156,6 +156,10 @@ function buildFilter(filters: Record<string, string>): string {
     parts.push(`IsCancelled+eq+true`);
   }
 
+  if (filters.agencia && filters.agencia !== "todas") {
+    parts.push(`IdAgency+eq+${filters.agencia}`);
+  }
+
   return parts.join("+and+");
 }
 
@@ -165,7 +169,7 @@ const MaxListPage = () => {
 
   const [filters, setFilters] = useState({
     vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "",
-    cpf: "", contrato: "", status: "todos",
+    cpf: "", contrato: "", status: "todos", agencia: "todas",
   });
   const [data, setData] = useState<MappedRecord[]>([]);
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
@@ -187,6 +191,22 @@ const MaxListPage = () => {
       return data;
     },
     enabled: !!tenant?.id,
+  });
+
+  const { data: agencies } = useQuery({
+    queryKey: ["maxsystem-agencies"],
+    queryFn: async () => {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/maxsystem-proxy?action=agencies`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      if (!resp.ok) throw new Error("Erro ao carregar agências");
+      const json = await resp.json();
+      return (json.Items || []) as { Id: number; Name: string }[];
+    },
+    enabled: !!tenant?.id && ALLOWED_SLUGS.includes(tenant.slug),
   });
 
   useEffect(() => {
@@ -462,7 +482,7 @@ const MaxListPage = () => {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4">
             <div className="space-y-2">
               <Label className="font-semibold">CPF/CNPJ</Label>
               <Input
@@ -489,6 +509,20 @@ const MaxListPage = () => {
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="ativo">Ativo</SelectItem>
                   <SelectItem value="cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Agência</Label>
+              <Select value={filters.agencia} onValueChange={(v) => updateFilter("agencia", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as agências</SelectItem>
+                  {agencies?.map((ag) => (
+                    <SelectItem key={ag.Id} value={String(ag.Id)}>{ag.Name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
