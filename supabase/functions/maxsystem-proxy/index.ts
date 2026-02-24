@@ -154,6 +154,7 @@ Deno.serve(async (req: Request) => {
         City: details.City || null,
         State: details.State != null ? (STATE_TO_UF[details.State] || null) : null,
         Email: details.Email || null,
+        ModelName: details.ModelName || null,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
