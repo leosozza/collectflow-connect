@@ -1039,6 +1039,7 @@ export type Database = {
       credores: {
         Row: {
           agencia: string | null
+          aging_discount_tiers: Json | null
           bairro: string | null
           banco: string | null
           cep: string | null
@@ -1080,6 +1081,7 @@ export type Database = {
           telefone: string | null
           template_acordo: string | null
           template_descricao_divida: string | null
+          template_notificacao_extrajudicial: string | null
           template_quitacao: string | null
           template_recibo: string | null
           tenant_id: string
@@ -1089,6 +1091,7 @@ export type Database = {
         }
         Insert: {
           agencia?: string | null
+          aging_discount_tiers?: Json | null
           bairro?: string | null
           banco?: string | null
           cep?: string | null
@@ -1130,6 +1133,7 @@ export type Database = {
           telefone?: string | null
           template_acordo?: string | null
           template_descricao_divida?: string | null
+          template_notificacao_extrajudicial?: string | null
           template_quitacao?: string | null
           template_recibo?: string | null
           tenant_id: string
@@ -1139,6 +1143,7 @@ export type Database = {
         }
         Update: {
           agencia?: string | null
+          aging_discount_tiers?: Json | null
           bairro?: string | null
           banco?: string | null
           cep?: string | null
@@ -1180,6 +1185,7 @@ export type Database = {
           telefone?: string | null
           template_acordo?: string | null
           template_descricao_divida?: string | null
+          template_notificacao_extrajudicial?: string | null
           template_quitacao?: string | null
           template_recibo?: string | null
           tenant_id?: string
