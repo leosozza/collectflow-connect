@@ -142,6 +142,7 @@ const ClientDetailPage = () => {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>Parcela</TableHead>
+                      <TableHead>Modelo</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
@@ -161,7 +162,10 @@ const ClientDetailPage = () => {
                         : "bg-warning/10 text-warning border-warning/30";
                       return (
                         <TableRow key={c.id}>
-                          <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                        <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {c.observacoes?.replace(/^Modelo:\s*/i, '') || '—'}
+                          </TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
