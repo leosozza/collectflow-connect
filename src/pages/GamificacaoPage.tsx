@@ -11,10 +11,11 @@ import { formatCurrency } from "@/lib/formatters";
 import { Trophy, Star, BarChart3, Target, Flame, Settings } from "lucide-react";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
-import PointsHistoryTab from "@/components/gamificacao/PointsHistoryTab";
 import CampaignsTab from "@/components/gamificacao/CampaignsTab";
+import GoalsTab from "@/components/gamificacao/GoalsTab";
 import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
 import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
+import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
 
@@ -121,7 +122,7 @@ const GamificacaoPage = () => {
         </Card>
       )}
 
-      {/* Tabs — role-based */}
+      {/* Tabs */}
       <Tabs defaultValue="ranking">
         <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
@@ -133,16 +134,11 @@ const GamificacaoPage = () => {
           <TabsTrigger value="achievements" className="flex-1 sm:flex-none gap-1.5">
             <Star className="w-3.5 h-3.5" /> Conquistas
           </TabsTrigger>
-          {isTenantAdmin && (
-            <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
-              <Target className="w-3.5 h-3.5" /> Metas
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-            <BarChart3 className="w-3.5 h-3.5" /> Histórico
+          <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
+            <Target className="w-3.5 h-3.5" /> Metas
           </TabsTrigger>
           {isTenantAdmin && (
-            <TabsTrigger value="manage-achievements" className="flex-1 sm:flex-none gap-1.5">
+            <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
               <Settings className="w-3.5 h-3.5" /> Gerenciar
             </TabsTrigger>
           )}
@@ -157,22 +153,40 @@ const GamificacaoPage = () => {
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab />
+          <AchievementsTab isAdmin={isTenantAdmin} />
+        </TabsContent>
+
+        <TabsContent value="goals" className="mt-4">
+          <GoalsTab />
         </TabsContent>
 
         {isTenantAdmin && (
-          <TabsContent value="goals" className="mt-4">
-            <GoalsManagementTab />
-          </TabsContent>
-        )}
+          <TabsContent value="manage" className="mt-4">
+            <Tabs defaultValue="manage-campaigns">
+              <TabsList>
+                <TabsTrigger value="manage-campaigns" className="gap-1.5">
+                  <Flame className="w-3.5 h-3.5" /> Campanhas
+                </TabsTrigger>
+                <TabsTrigger value="manage-achievements" className="gap-1.5">
+                  <Star className="w-3.5 h-3.5" /> Conquistas
+                </TabsTrigger>
+                <TabsTrigger value="manage-goals" className="gap-1.5">
+                  <Target className="w-3.5 h-3.5" /> Metas
+                </TabsTrigger>
+              </TabsList>
 
-        <TabsContent value="history" className="mt-4">
-          <PointsHistoryTab />
-        </TabsContent>
+              <TabsContent value="manage-campaigns" className="mt-4">
+                <CampaignsManagementTab />
+              </TabsContent>
 
-        {isTenantAdmin && (
-          <TabsContent value="manage-achievements" className="mt-4">
-            <AchievementsManagementTab />
+              <TabsContent value="manage-achievements" className="mt-4">
+                <AchievementsManagementTab />
+              </TabsContent>
+
+              <TabsContent value="manage-goals" className="mt-4">
+                <GoalsManagementTab />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         )}
       </Tabs>
