@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,26 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck, Loader2 } from "lucide-react";
+import { Calculator, FileCheck, Loader2, Zap, CreditCard, Banknote } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
+import { supabase } from "@/integrations/supabase/client";
+
+interface AgingTier {
+  min_days: number;
+  max_days: number;
+  discount_percent: number;
+}
+
+interface CredorRules {
+  desconto_maximo: number;
+  juros_mes: number;
+  multa: number;
+  parcelas_max: number;
+  parcelas_min: number;
+  entrada_minima_valor: number;
+  entrada_minima_tipo: string;
+  aging_discount_tiers: AgingTier[];
+}
 
 interface AgreementCalculatorProps {
   clients: any[];
@@ -39,12 +57,62 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [submitting, setSubmitting] = useState(false);
   const [enrichingAddress, setEnrichingAddress] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
+  const [credorRules, setCredorRules] = useState<CredorRules | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+
+  // Fetch credor rules
+  useEffect(() => {
+    if (!profile?.tenant_id || !credor) return;
+    const fetchCredor = async () => {
+      const { data } = await supabase
+        .from("credores" as any)
+        .select("desconto_maximo, juros_mes, multa, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, aging_discount_tiers")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("razao_social", credor)
+        .maybeSingle();
+      if (data) {
+        setCredorRules({
+          desconto_maximo: Number((data as any).desconto_maximo) || 0,
+          juros_mes: Number((data as any).juros_mes) || 0,
+          multa: Number((data as any).multa) || 0,
+          parcelas_max: Number((data as any).parcelas_max) || 12,
+          parcelas_min: Number((data as any).parcelas_min) || 1,
+          entrada_minima_valor: Number((data as any).entrada_minima_valor) || 0,
+          entrada_minima_tipo: (data as any).entrada_minima_tipo || "percent",
+          aging_discount_tiers: ((data as any).aging_discount_tiers as AgingTier[]) || [],
+        });
+      }
+    };
+    fetchCredor();
+  }, [profile?.tenant_id, credor]);
 
   const originalTotal = useMemo(() => {
     return pendentes
       .filter((c) => selectedIds.has(c.id))
       .reduce((sum, c) => sum + Number(c.valor_parcela), 0);
   }, [pendentes, selectedIds]);
+
+  // Calculate aging days from oldest selected parcela
+  const agingDays = useMemo(() => {
+    const selected = pendentes.filter(c => selectedIds.has(c.id));
+    if (selected.length === 0) return 0;
+    const oldest = selected.reduce((min, c) => {
+      const d = new Date(c.data_vencimento);
+      return d < min ? d : min;
+    }, new Date(selected[0].data_vencimento));
+    const diff = Math.floor((Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  }, [pendentes, selectedIds]);
+
+  const getAgingDiscount = () => {
+    if (!credorRules || credorRules.aging_discount_tiers.length === 0) {
+      return credorRules?.desconto_maximo || 0;
+    }
+    const tier = credorRules.aging_discount_tiers.find(
+      t => agingDays >= t.min_days && agingDays <= t.max_days
+    );
+    return tier ? tier.discount_percent : credorRules.desconto_maximo || 0;
+  };
 
   const proposedTotal = useMemo(() => {
     return Math.max(0, originalTotal - discountValue);
@@ -88,6 +156,46 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
+  // Model 1: À vista com desconto aging
+  const applyModel1 = () => {
+    const disc = getAgingDiscount();
+    handleDiscountPercent(disc);
+    setEntradaValue(0);
+    setEntradaDate("");
+    setNumParcelas(1);
+    setActiveModel("avista");
+    setNotes("Modelo: À Vista com desconto");
+  };
+
+  // Model 2: Entrada 30% + 5 parcelas
+  const applyModel2 = () => {
+    const disc = getAgingDiscount();
+    handleDiscountPercent(disc);
+    const proposedAfterDiscount = Math.max(0, originalTotal - Number(((originalTotal * disc) / 100).toFixed(2)));
+    const entrada = Number((proposedAfterDiscount * 0.3).toFixed(2));
+    setEntradaValue(entrada);
+    setNumParcelas(5);
+    setActiveModel("entrada");
+    setNotes("Modelo: Entrada 30% + 5 parcelas");
+  };
+
+  // Model 3: Cartão - sem juros/multa, parcelado máximo
+  const applyModel3 = () => {
+    if (!credorRules) return;
+    // Remove juros e multa do total
+    const jurosMulta = originalTotal * ((credorRules.juros_mes + credorRules.multa) / 100);
+    const valorSemJurosMulta = Math.max(0, originalTotal - jurosMulta);
+    const discVal = originalTotal - valorSemJurosMulta;
+    const discPct = originalTotal > 0 ? Number(((discVal / originalTotal) * 100).toFixed(2)) : 0;
+    setDiscountPercent(discPct);
+    setDiscountValue(Number(discVal.toFixed(2)));
+    setEntradaValue(0);
+    setEntradaDate("");
+    setNumParcelas(credorRules.parcelas_max || 12);
+    setActiveModel("cartao");
+    setNotes("Modelo: Cartão sem juros/multa");
+  };
+
   const handleSubmit = async () => {
     if (!user || !profile?.tenant_id) {
       toast.error("Usuário não autenticado");
@@ -106,7 +214,6 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setEnrichingAddress(true);
     setAddressStatus("Buscando endereço...");
     try {
-      // Enrich address before creating agreement
       await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
       setEnrichingAddress(false);
       setAddressStatus("");
@@ -184,6 +291,52 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           )}
         </CardContent>
       </Card>
+
+      {/* Preset Models */}
+      {credorRules && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Modelos de Acordo</CardTitle>
+            {agingDays > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Aging: {agingDays} dias em aberto • Desconto sugerido: {getAgingDiscount()}%
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-3">
+            <Button
+              variant={activeModel === "avista" ? "default" : "outline"}
+              className="flex flex-col items-center gap-1 h-auto py-3"
+              onClick={applyModel1}
+              type="button"
+            >
+              <Banknote className="w-5 h-5" />
+              <span className="text-xs font-medium">À Vista</span>
+              <span className="text-[10px] text-muted-foreground">{getAgingDiscount()}% desconto</span>
+            </Button>
+            <Button
+              variant={activeModel === "entrada" ? "default" : "outline"}
+              className="flex flex-col items-center gap-1 h-auto py-3"
+              onClick={applyModel2}
+              type="button"
+            >
+              <Zap className="w-5 h-5" />
+              <span className="text-xs font-medium">Entrada + Parcelas</span>
+              <span className="text-[10px] text-muted-foreground">30% + 5x</span>
+            </Button>
+            <Button
+              variant={activeModel === "cartao" ? "default" : "outline"}
+              className="flex flex-col items-center gap-1 h-auto py-3"
+              onClick={applyModel3}
+              type="button"
+            >
+              <CreditCard className="w-5 h-5" />
+              <span className="text-xs font-medium">Cartão</span>
+              <span className="text-[10px] text-muted-foreground">Sem juros/multa</span>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Calculator */}
       <Card>

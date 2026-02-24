@@ -47,11 +47,41 @@ Colocamo-nos à disposição para negociação e regularização do débito.
 {razao_social_credor}
 CNPJ: {cnpj_credor}`;
 
+const TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT = `NOTIFICAÇÃO EXTRAJUDICIAL
+
+À(Ao)
+{nome_devedor}
+CPF: {cpf_devedor}
+
+NOTIFICANTE: {razao_social_credor}, inscrita no CNPJ sob o nº {cnpj_credor}, vem, por meio desta, NOTIFICAR Vossa Senhoria acerca do débito abaixo discriminado:
+
+VALOR DO DÉBITO: R$ {valor_divida}
+DATA DE VENCIMENTO: {data_vencimento}
+PARCELA: {numero_parcela}/{total_parcelas}
+VALOR DA PARCELA: R$ {valor_parcela}
+
+Informamos que, apesar das tentativas de contato anteriores, o débito acima referido permanece em aberto, encontrando-se vencido e não quitado até a presente data ({data_atual}).
+
+Pelo presente instrumento, NOTIFICAMOS Vossa Senhoria para que proceda ao pagamento integral do débito no prazo de 05 (cinco) dias úteis, contados do recebimento desta notificação, sob pena de adoção das medidas legais cabíveis, incluindo, mas não se limitando a:
+
+1. Inclusão do nome nos órgãos de proteção ao crédito (SERASA/SPC);
+2. Protesto do título em Cartório competente;
+3. Propositura de ação judicial de cobrança, com acréscimo de juros moratórios, multa contratual, correção monetária e honorários advocatícios.
+
+Ressaltamos que estamos à disposição para negociação amigável do débito, podendo ser contatados através dos canais de atendimento da empresa.
+
+A presente notificação tem caráter extrajudicial e visa à composição amigável da dívida, nos termos dos artigos 397 e 398 do Código Civil Brasileiro.
+
+{razao_social_credor}
+CNPJ: {cnpj_credor}
+Data: {data_atual}`;
+
 const TEMPLATE_DEFAULTS: Record<string, string> = {
   template_acordo: TEMPLATE_ACORDO_DEFAULT,
   template_recibo: TEMPLATE_RECIBO_DEFAULT,
   template_quitacao: TEMPLATE_QUITACAO_DEFAULT,
   template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT,
+  template_notificacao_extrajudicial: TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT,
 };
 
 const VARIAVEIS = [
@@ -135,6 +165,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
       ...form,
       cnpj: form.cnpj?.replace(/\D/g, ""),
       honorarios_grade: honorarios,
+      aging_discount_tiers: agingTiers,
     });
   };
 
@@ -176,11 +207,26 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     }, 0);
   };
 
+  const [agingTiers, setAgingTiers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (open && editing) {
+      setAgingTiers(editing.aging_discount_tiers || []);
+    } else if (open) {
+      setAgingTiers([]);
+    }
+  }, [open, editing]);
+
+  const addAgingTier = () => setAgingTiers(prev => [...prev, { min_days: 0, max_days: 59, discount_percent: 0 }]);
+  const removeAgingTier = (i: number) => setAgingTiers(prev => prev.filter((_, idx) => idx !== i));
+  const updateAgingTier = (i: number, key: string, val: any) => setAgingTiers(prev => prev.map((t, idx) => idx === i ? { ...t, [key]: val } : t));
+
   const TEMPLATES = [
     { key: "template_acordo", label: "Carta de Acordo" },
     { key: "template_recibo", label: "Recibo de Pagamento" },
     { key: "template_quitacao", label: "Carta de Quitação" },
     { key: "template_descricao_divida", label: "Descrição de Dívida" },
+    { key: "template_notificacao_extrajudicial", label: "Notificação Extrajudicial" },
   ];
 
   return (
@@ -355,7 +401,40 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               )}
             </div>
 
-            {/* Item 2: Enlarged dialog with formatting toolbar */}
+            {/* Faixas de Desconto por Aging */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Faixas de Desconto por Aging</p>
+                  <p className="text-xs text-muted-foreground">Defina descontos automáticos por tempo de atraso.</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={addAgingTier}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
+              </div>
+              {agingTiers.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>De (dias)</TableHead>
+                      <TableHead>Até (dias)</TableHead>
+                      <TableHead>Desconto (%)</TableHead>
+                      <TableHead className="w-12">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agingTiers.map((t, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Input type="number" value={t.min_days} onChange={e => updateAgingTier(i, "min_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
+                        <TableCell><Input type="number" value={t.max_days} onChange={e => updateAgingTier(i, "max_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
+                        <TableCell><Input type="number" value={t.discount_percent} onChange={e => updateAgingTier(i, "discount_percent", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                        <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeAgingTier(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+
+            {/* Modelos de Documentos */}
             <div className="border-t border-border pt-4 space-y-3">
               <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
               {TEMPLATES.map(t => (
