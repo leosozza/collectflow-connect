@@ -1,44 +1,37 @@
 
 
-## Plano: 3 Mudancas no Cadastro de Credores e Calculadora de Acordos
+## Analise da aba Negociacao - Problemas encontrados e correcoes
 
-### 1. Faixas de Aging por Credor (aba Negociacao)
+Apos revisar o codigo completo de `CredorForm.tsx`, identifiquei os seguintes problemas:
 
-**Banco de dados:**
-- Adicionar coluna `aging_discount_tiers` (jsonb, default `'[]'`) na tabela `credores`
-- Estrutura: `[{ min_days: 0, max_days: 59, discount_percent: 10 }, { min_days: 60, max_days: 120, discount_percent: 20 }, ...]`
+### Problemas encontrados
 
-**Frontend (`CredorForm.tsx` - aba Negociacao):**
-- Adicionar secao "Faixas de Desconto por Aging" abaixo das regras de acordo existentes
-- Interface com botao "Adicionar Faixa" e tabela editavel com colunas: De (dias), Ate (dias), Desconto (%)
-- Salvar no campo `aging_discount_tiers` junto com os demais dados do credor
+1. **Grade de Honorarios sem botao "Salvar"**: O usuario adiciona/edita faixas mas so consegue persistir salvando o credor inteiro no botao "Salvar Credor" no rodape. Se trocar de aba sem salvar, perde as alteracoes. O usuario pede um botao dedicado.
 
-### 2. Modelo de Documento "Notificacao Extrajudicial"
+2. **Faixas de Aging sem botao "Salvar"**: Mesmo problema. As faixas ficam apenas no state local ate o "Salvar Credor" ser clicado.
 
-**Banco de dados:**
-- Adicionar coluna `template_notificacao_extrajudicial` (text, default `''`) na tabela `credores`
+3. **`template_notificacao_extrajudicial` ausente nos defaults de novo credor** (linha 136): Ao criar um novo credor, o template de Notificacao Extrajudicial nao e pre-preenchido com o modelo padrao, diferente dos outros 4 templates que sao inicializados.
 
-**Frontend (`CredorForm.tsx`):**
-- Adicionar entrada "Notificacao Extrajudicial" ao array `TEMPLATES`
-- Criar constante `TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT` com texto validado juridicamente (notificacao formal com variaveis dinamicas como `{nome_devedor}`, `{cpf_devedor}`, `{valor_divida}`, `{data_vencimento}`, `{razao_social_credor}`, `{cnpj_credor}`, `{data_atual}`)
+4. **Campo Desconto Maximo sem restricoes**: Faltam atributos `min={0}`, `max={100}`, `step={0.01}` no input, permitindo valores negativos ou acima de 100%.
 
-### 3. Modelos Pre-fixados na Calculadora de Acordos
+5. **Campos numericos de Juros e Multa sem restricoes**: Mesma situacao, sem `min={0}` e `step`.
 
-**Frontend (`AgreementCalculator.tsx`):**
-- Buscar dados do credor (desconto maximo, juros, multa, parcelas, entrada minima, aging tiers) via query ao Supabase
-- Adicionar 3 botoes de modelo acima dos campos manuais:
-  - **Modelo 1 - A vista**: Aplica desconto baseado na faixa de aging do credor (ou desconto maximo se nao houver faixa). Parcelas = 1, sem entrada.
-  - **Modelo 2 - Entrada + Parcelas**: Entrada de 30% + 5 parcelas do saldo restante, com desconto da faixa de aging.
-  - **Modelo 3 - Cartao (sem juros/multa)**: Valor total sem juros e multa, parcelado no maximo de parcelas do credor.
-- Ao clicar num modelo, preenche automaticamente os campos (desconto, entrada, parcelas) respeitando as regras do credor.
-- O operador pode ajustar manualmente apos selecionar o modelo.
+### Plano de correcoes
+
+**Arquivo: `src/components/cadastros/CredorForm.tsx`**
+
+| Correcao | Detalhe |
+|---|---|
+| Botao "Salvar Grade" | Adicionar botao ao lado de "Adicionar Faixa" nos honorarios. Ao clicar, faz upsert parcial do credor com `honorarios_grade` atualizado (somente quando editando um credor existente). |
+| Botao "Salvar Faixas" | Adicionar botao ao lado de "Adicionar Faixa" no aging. Ao clicar, faz upsert parcial com `aging_discount_tiers` atualizado (somente quando editando). |
+| Template notificacao no form novo | Adicionar `template_notificacao_extrajudicial: TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT` ao state inicial (linha 136). |
+| Restricoes desconto_maximo | Adicionar `min={0} max={100} step={0.01}` ao Input. |
+| Restricoes juros/multa | Adicionar `min={0} step={0.01}` aos Inputs de juros e multa. |
+| Feedback visual nos botoes salvar | Mostrar toast de sucesso apos salvar grade ou faixas individualmente. Botoes aparecem apenas quando ha um credor existente (editing). |
 
 ### Detalhes tecnicos
 
-| Componente | Acao |
-|---|---|
-| Migration SQL | Adicionar `aging_discount_tiers jsonb DEFAULT '[]'` e `template_notificacao_extrajudicial text DEFAULT ''` em `credores` |
-| `CredorForm.tsx` | Secao de aging tiers na aba Negociacao + template notificacao nos Documentos |
-| `AgreementCalculator.tsx` | 3 botoes de modelo que consultam regras do credor e preenchem campos |
-| `cadastrosService.ts` | Garantir que novos campos sao persistidos no upsert |
+Os botoes "Salvar Grade" e "Salvar Faixas" farao chamadas independentes ao `upsertCredor` passando apenas `{ id, tenant_id, honorarios_grade }` ou `{ id, tenant_id, aging_discount_tiers }`, sem precisar reenviar todos os campos do credor. Isso garante salvamento parcial seguro.
+
+Para novos credores (sem `editing.id`), os botoes nao aparecem -- as grades sao salvas junto com o "Salvar Credor" como ja funciona hoje.
 
