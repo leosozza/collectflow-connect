@@ -15,6 +15,7 @@ import {
 import type { ImportedRow } from "@/services/importService";
 import { fetchTiposStatus } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
+import { supabase } from "@/integrations/supabase/client";
 import ClientTable from "@/components/clients/ClientTable";
 import ClientForm from "@/components/clients/ClientForm";
 import ClientFilters from "@/components/clients/ClientFilters";
@@ -57,6 +58,24 @@ const ClientsPage = () => {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filters],
     queryFn: () => fetchClients(filters),
+  });
+
+  const agreementStatusFilter = filters.status !== "todos" ? filters.status : null;
+
+  const { data: agreementCpfs = new Set<string>() } = useQuery({
+    queryKey: ["agreement-cpfs-clients", agreementStatusFilter],
+    queryFn: async () => {
+      let query = supabase.from("agreements").select("client_cpf");
+      if (agreementStatusFilter) {
+        query = query.eq("status", agreementStatusFilter);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const cpfSet = new Set<string>();
+      (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
+      return cpfSet;
+    },
+    enabled: !!agreementStatusFilter,
   });
 
   const { data: tiposStatus = [] } = useQuery({
@@ -148,6 +167,10 @@ const ClientsPage = () => {
     setFormOpen(false);
     setEditingClient(null);
   };
+  const displayClients = useMemo(() => {
+    if (!agreementStatusFilter) return clients;
+    return clients.filter(c => agreementCpfs.has(c.cpf.replace(/\D/g, "")));
+  }, [clients, agreementStatusFilter, agreementCpfs]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -171,7 +194,7 @@ const ClientsPage = () => {
       <ClientFilters filters={filters} onChange={setFilters} />
 
       <ClientTable
-        clients={clients}
+        clients={displayClients}
         loading={isLoading}
         onEdit={handleEdit}
         onDelete={(id) => deleteMutation.mutate(id)}

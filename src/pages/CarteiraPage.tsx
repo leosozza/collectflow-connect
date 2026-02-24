@@ -126,13 +126,18 @@ const CarteiraPage = () => {
     queryFn: () => fetchClients(filtersWithOperator),
   });
 
+  const agreementStatusFilter = filters.status !== "todos" ? filters.status : null;
+
   const { data: agreementCpfs = new Set<string>() } = useQuery({
-    queryKey: ["agreement-cpfs"],
+    queryKey: ["agreement-cpfs", agreementStatusFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agreements")
-        .select("client_cpf")
-        .in("status", ["pending", "approved"]);
+      let query = supabase.from("agreements").select("client_cpf");
+      if (agreementStatusFilter) {
+        query = query.eq("status", agreementStatusFilter);
+      } else {
+        query = query.in("status", ["pending", "approved"]);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       const cpfSet = new Set<string>();
       (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
@@ -162,6 +167,9 @@ const CarteiraPage = () => {
           normalize(c.nome_completo).includes(term) ||
           c.cpf.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
       );
+    }
+    if (agreementStatusFilter) {
+      filtered = filtered.filter(c => agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
@@ -198,7 +206,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, sortField, sortDir, statusMap]);
+  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, agreementStatusFilter, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
