@@ -1,94 +1,62 @@
 
 
-## Plano: Reestruturar pagina de Gamificacao
+## Plano: Corrigir campos de entrada de valores monetarios (R$)
 
-### Resumo das mudancas
+### Problema
 
-Reorganizar a pagina `/gamificacao` para separar visualizacao de gerenciamento, ajustar permissoes por cargo (admin vs operador), remover aba "Templates" desnecessaria do Gerenciar, e melhorar o seletor de operadores nas campanhas.
+O campo "Meta Mensal (R$)" em Equipes usa `<Input type="number">`, que nao aceita formatacao brasileira (ponto como separador de milhar, virgula como decimal). Ao digitar "100.000,00", o navegador interpreta incorretamente e o valor salvo fica errado (ex: 100,00 em vez de 100.000,00).
 
----
+O mesmo problema existe em outros campos monetarios do sistema.
 
-### 1. Reestruturar abas da pagina principal
+### Solucao
 
-**Abas visiveis para TODOS (admin + operador):**
-- Ranking -- visualizacao (todos veem tudo)
-- Campanhas -- visualizacao (todos veem tudo)
-- Conquistas -- admin ve tudo, operador ve apenas as suas
-- Metas -- admin ve tudo, operador ve apenas a sua
+Criar um componente reutilizavel `CurrencyInput` que:
+- Usa `type="text"` (nao `number`)
+- Formata automaticamente enquanto o usuario digita (ex: "100000" → "100.000,00")
+- Retorna o valor numerico real via callback `onValueChange(number)`
+- Exibe prefixo "R$" visual
 
-**Abas visiveis apenas para ADMIN:**
-- Gerenciar -- contem sub-abas: Campanhas, Conquistas (templates + concessao), Metas
+### Arquivos afetados
 
-**Remover:**
-- Aba "Historico" (PointsHistoryTab) -- manter ou mover para dentro do perfil (vou manter como sub-informacao no card hero)
-- Aba separada "Templates" dentro de Gerenciar
+**Criar: `src/components/ui/currency-input.tsx`**
+- Componente que aceita `value: number`, `onValueChange: (val: number) => void`
+- Internamente usa `type="text"` com mascara de formatacao pt-BR
+- Ao digitar, formata com pontos de milhar e virgula decimal
+- Ao sair do campo (blur), garante formato completo
 
-### 2. Mudancas por arquivo
+**Editar: `src/components/cadastros/EquipeList.tsx`** (linha 126)
+- Trocar `<Input type="number">` por `<CurrencyInput>`
+- Estado `metaMensal` passa de string para number
+- Ajustar `handleSave` para usar o valor numerico direto
 
-**`src/pages/GamificacaoPage.tsx`**
-- Aba "Metas" visivel para todos (nao so admin)
-- Operador: na aba Conquistas, filtrar para mostrar apenas as dele
-- Operador: na aba Metas, mostrar apenas a meta dele
-- Admin: nas abas Conquistas e Metas, mostrar tudo
-- Manter aba "Gerenciar" apenas para admin
-- Remover aba "Historico" separada (mover para hero ou manter inline)
+**Editar: `src/components/acordos/AgreementForm.tsx`** (linhas 91, 95)
+- Trocar inputs de "Valor Original" e "Valor Proposto" por `CurrencyInput`
 
-**`src/components/gamificacao/AchievementsTab.tsx`**
-- Receber prop `isAdmin` 
-- Se admin: buscar conquistas de todos os operadores do tenant (usando query direto na tabela achievements com tenant_id)
-- Se operador: manter comportamento atual (apenas do usuario logado)
+**Editar: `src/components/cadastros/CredorForm.tsx`** (linhas 371-373, 429)
+- Trocar input de "entrada_minima_valor" e "valor_fixo" dos honorarios por `CurrencyInput`
 
-**`src/components/gamificacao/GoalsManagementTab.tsx`** (renomear conceito para GoalsViewTab ou adaptar)
-- Criar uma versao read-only para operadores que mostra apenas a meta deles
-- Ou: criar um novo componente `GoalsTab.tsx` para visualizacao
-  - Admin: ve tabela com todas as metas dos operadores (sem edicao, apenas leitura)
-  - Operador: ve apenas a propria meta com progresso
+**Editar: `src/components/portal/PortalCheckout.tsx`** (linha 303)
+- Trocar input de valor por `CurrencyInput`
 
-**`src/components/gamificacao/AchievementsManagementTab.tsx`**
-- Remover sub-aba "Templates" -- mostrar templates e concedidas tudo junto, sem abas internas
-- Manter: lista de templates com CRUD + botao "Conceder Conquista" + lista de concedidas, tudo em uma unica view
+**Editar: `src/components/gamificacao/GoalsManagementTab.tsx`** e `CampaignForm.tsx`
+- Verificar e corrigir campos de meta/premio que usem `type="number"` para valores em R$
 
-**`src/components/gamificacao/CampaignsTab.tsx`**
-- Remover botoes de editar/excluir dos cards (fica apenas visualizacao)
-- Remover botao "Nova Campanha"
-- Edicao/criacao vai para dentro da aba "Gerenciar"
-
-**Criar `src/components/gamificacao/CampaignsManagementTab.tsx`** (novo)
-- Mover a logica de criacao/edicao/exclusao de campanhas para ca
-- Admin gerencia campanhas aqui dentro do "Gerenciar"
-
-**`src/components/gamificacao/CampaignForm.tsx`**
-- No MultiSelect de operadores: adicionar `searchable` prop e aumentar `max-h` do popover para permitir rolagem
-- Ou: usar ScrollArea com altura maior para ver todos os operadores
-
-### 3. Aba Gerenciar (admin only) -- nova estrutura interna
-
-Sub-abas dentro de Gerenciar:
-- **Campanhas** -- criar/editar/excluir campanhas (CampaignsManagementTab)
-- **Conquistas** -- templates + concessao (AchievementsManagementTab sem sub-tabs)
-- **Metas** -- definir metas por operador (GoalsManagementTab atual)
-
-### 4. Correcao do MultiSelect de operadores
-
-**`src/components/ui/multi-select.tsx`**
-- Aumentar `max-h-[200px]` para `max-h-[280px]` no container de scroll
-- Habilitar `searchable` por padrao no CampaignForm para filtrar operadores
-
-**`src/components/gamificacao/CampaignForm.tsx`**
-- Passar `searchable={true}` e `searchPlaceholder="Buscar operador..."` no MultiSelect de operadores
-
-### 5. Novo GoalsTab.tsx (visualizacao)
-
-- Admin: tabela read-only com operador, meta, valor recebido, % progresso
-- Operador: card unico mostrando sua meta e progresso
-
----
+**Nota:** Campos que representam percentuais (%) ou quantidades inteiras (parcelas, dias) continuam com `type="number"` -- apenas campos monetarios (R$) serao migrados.
 
 ### Detalhes tecnicos
 
-- Nenhuma mudanca de banco de dados necessaria
-- Nenhuma migracao SQL
-- Conquistas do operador ja sao filtradas por `profile_id` no service
-- Para admin ver todas conquistas: usar query com `tenant_id` (ja existe `allAchievements` query no AchievementsManagementTab)
-- Para operador ver sua meta: usar `fetchMyGoal` que ja existe
+Logica do `CurrencyInput`:
+```text
+Entrada do usuario: "100000"
+Formatacao visual:  "100.000,00"
+Valor retornado:    100000.00
+
+Entrada do usuario: "1500,5"
+Formatacao visual:  "1.500,50"
+Valor retornado:    1500.50
+```
+
+- No `onChange`: remove tudo exceto digitos e virgula, reformata com pontos de milhar
+- No `onBlur`: garante 2 casas decimais
+- Converte internamente: substitui pontos por nada, virgula por ponto, `parseFloat`
 
