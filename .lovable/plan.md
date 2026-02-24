@@ -1,64 +1,78 @@
 
 
-## Filtro por Agencia (IdAgency) na MaxList
+## Recuperacao de Senha + Admin Trocar Senha do Operador
 
-### O que sera feito
+### Escopo
 
-Adicionar um filtro por Agencia na pagina MaxList, carregando a lista de agencias da API MaxSystem e permitindo filtrar os resultados por `IdAgency`.
+Duas funcionalidades:
 
-### Mudancas
+1. **"Esqueci minha senha"** na tela de login - envia email de recuperacao via sistema de autenticacao nativo
+2. **Admin trocar senha do operador** na pagina de usuarios - botao na tabela que permite o admin definir nova senha
 
-**1. Edge Function `supabase/functions/maxsystem-proxy/index.ts`**
+---
 
-- Aceitar um novo query param `action` (default: `installments`)
-- Quando `action=agencies`, fazer proxy para `https://maxsystem.azurewebsites.net/api/Agencies?%24inlinecount=allpages` e retornar a lista de agencias
-- No fluxo normal de installments, aceitar um param `agencyId` e adicionar `IdAgency+eq+{agencyId}` ao filtro OData
+### 1. Esqueci minha senha (AuthPage)
 
-**2. Frontend `src/pages/MaxListPage.tsx`**
+**Arquivo:** `src/pages/AuthPage.tsx`
 
-- Adicionar state `agencia` ao objeto `filters` (valor padrao: `"todas"`)
-- Carregar lista de agencias via `useQuery` chamando o proxy com `action=agencies`
-- Adicionar um `Select` de "Agencia" na area de filtros (ao lado de CPF/Contrato/Status)
-- Na funcao `buildFilter`, quando `filters.agencia` nao for `"todas"`, adicionar `IdAgency+eq+{valor}` ao filtro OData
-- Na funcao `handleSearch`, passar o `agencyId` como query param para o proxy
+- Adicionar estado `isForgotPassword` (boolean)
+- Quando ativo, exibir apenas o campo de email + botao "Enviar link de recuperacao"
+- Chamar `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`
+- Exibir toast de sucesso: "Link de recuperacao enviado para seu email"
+- Link "Voltar ao login" para retornar ao formulario normal
 
-### Detalhes tecnicos
+**Layout no modo "esqueci a senha":**
+- Titulo: "Recuperar Senha"
+- Subtitulo: "Digite seu email para receber o link de recuperacao"
+- Campo: Email
+- Botao: "Enviar link"
+- Link: "Voltar ao login"
 
-**Edge Function - novo fluxo de agencias:**
+### 2. Pagina /reset-password
 
+**Novo arquivo:** `src/pages/ResetPasswordPage.tsx`
+
+- Rota publica (nao protegida)
+- Detecta `type=recovery` no hash da URL (o Supabase redireciona com isso)
+- Exibe formulario com "Nova senha" e "Confirmar senha"
+- Chama `supabase.auth.updateUser({ password })` para atualizar
+- Apos sucesso, redireciona para `/auth`
+
+**Arquivo:** `src/App.tsx`
+- Adicionar rota: `<Route path="/reset-password" element={<ResetPasswordPage />} />`
+
+### 3. Admin trocar senha do operador
+
+**Arquivo:** `src/pages/UsersPage.tsx`
+
+- Adicionar botao "Trocar Senha" na linha de cada usuario (ao lado de Editar/Excluir)
+- Ao clicar, abre um Dialog com campo de nova senha + confirmacao
+- Chama edge function `create-user` (ou nova action) que usa `supabaseAdmin.auth.admin.updateUserById(userId, { password })`
+
+**Arquivo:** `supabase/functions/create-user/index.ts`
+
+- Adicionar suporte a `action: "update_password"` no body
+- Quando `action === "update_password"`, receber `user_id` e `password`
+- Verificar que o caller e admin do mesmo tenant
+- Chamar `supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })`
+- Retornar sucesso
+
+**Fluxo do body:**
 ```text
-const action = url.searchParams.get("action") || "installments";
+// Criar usuario (existente):
+{ full_name, email, password, ... }
 
-if (action === "agencies") {
-  const agenciesUrl = "https://maxsystem.azurewebsites.net/api/Agencies?%24inlinecount=allpages";
-  const resp = await fetch(agenciesUrl);
-  const data = await resp.json();
-  return new Response(JSON.stringify({ Items: data.Items }), { headers: ... });
-}
-
-// Fluxo existente de installments continua igual
-// mas o filter agora pode incluir IdAgency
+// Trocar senha (novo):
+{ action: "update_password", user_id: "xxx", password: "nova_senha" }
 ```
-
-**Frontend - filtro OData:**
-
-Na funcao `buildFilter`, adicionar:
-```text
-if (filters.agencia && filters.agencia !== "todas") {
-  parts.push(`IdAgency+eq+${filters.agencia}`);
-}
-```
-
-**Frontend - Select de agencia:**
-
-Novo `Select` na grid de filtros com opcoes carregadas dinamicamente:
-- "Todas as agencias" (valor: `"todas"`)
-- Lista de agencias retornadas pela API (valor: `Id`, label: `Name`)
 
 ### Arquivos modificados
 
 | Arquivo | Mudanca |
 |---|---|
-| `supabase/functions/maxsystem-proxy/index.ts` | Suporte a `action=agencies` e param `agencyId` |
-| `src/pages/MaxListPage.tsx` | Filtro Select de agencia com dados da API |
+| `src/pages/AuthPage.tsx` | Adicionar fluxo "Esqueci minha senha" |
+| `src/pages/ResetPasswordPage.tsx` | Nova pagina para redefinir senha |
+| `src/App.tsx` | Rota `/reset-password` |
+| `src/pages/UsersPage.tsx` | Botao + Dialog para admin trocar senha |
+| `supabase/functions/create-user/index.ts` | Suporte a `action: "update_password"` |
 
