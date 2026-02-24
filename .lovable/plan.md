@@ -1,41 +1,52 @@
 
 
-## Fix: Inserting Missing Profile Records
+## Mover busca de endereco do MaxList para a formalizacao do acordo
 
-### Root Cause
-The `handle_new_user` trigger should create a profile row when a user signs up, but it failed for these two users. They exist in `auth.users` and `tenant_users` but have no row in `profiles`. Since the Users page queries `profiles`, they don't appear.
+### Resumo
+Atualmente, ao importar registros do MaxList, o sistema busca o endereco de cada contrato via MaxSystem API antes de salvar. A mudanca move essa busca para o momento em que o operador clica em "Gerar Acordo" na tela de detalhe do cliente (`/carteira/:cpf`), garantindo que os dados de endereco estejam atualizados no momento da formalizacao.
 
-### Solution
-Run a database migration to insert the missing profile records for both users using data from `auth.users` and `tenant_users`.
+### Mudancas
 
-### Steps
+**1. Remover busca de endereco do MaxList (`src/pages/MaxListPage.tsx`)**
+- Remover a fase de busca de enderecos (linhas 367-378 com `fetchAddressForContract`)
+- Remover os campos `endereco`, `cep`, `bairro`, `cidade`, `uf`, `email` do mapeamento de registros na importacao
+- Manter a funcao `fetchAddressForContract` no arquivo (sera reutilizada) OU mover para um service
 
-1. **Database migration** -- Insert two rows into `profiles`:
+**2. Criar servico de enriquecimento de endereco (`src/services/addressEnrichmentService.ts`)**
+- Extrair a funcao `fetchAddressForContract` do MaxListPage para um servico reutilizavel
+- Criar funcao `enrichClientAddress(cpf, tenantId)` que:
+  1. Busca todos os registros `clients` com o CPF dado
+  2. Identifica os `cod_contrato` unicos
+  3. Chama `fetchAddressForContract` para cada contrato
+  4. Atualiza os registros na tabela `clients` com os dados de endereco obtidos
+  5. Retorna os dados de endereco para uso no acordo
 
-```sql
-INSERT INTO public.profiles (user_id, full_name, tenant_id, role)
-SELECT 
-  au.id,
-  COALESCE(au.raw_user_meta_data->>'full_name', ''),
-  tu.tenant_id,
-  'operador'::app_role
-FROM auth.users au
-JOIN public.tenant_users tu ON tu.user_id = au.id
-WHERE au.id IN (
-  '2fbda0e8-5f80-4c5d-80f3-39ddc7307a1a',
-  'fbdc8c39-f14f-4775-8b88-6b50c6721096'
-)
-AND NOT EXISTS (
-  SELECT 1 FROM public.profiles p WHERE p.user_id = au.id
-);
+**3. Integrar no AgreementCalculator (`src/components/client-detail/AgreementCalculator.tsx`)**
+- Ao clicar em "Gerar Acordo", antes de chamar `createAgreement`:
+  1. Verificar se o cliente ja tem endereco preenchido
+  2. Se nao, buscar via `enrichClientAddress`
+  3. Exibir indicador de progresso "Buscando endereco..."
+  4. Atualizar os registros na tabela `clients` com os dados obtidos
+  5. Prosseguir com a criacao do acordo normalmente
+
+### Fluxo atualizado
+
+```text
+Importacao MaxList          Formalizacao do Acordo
++-------------------+      +----------------------------+
+| Busca parcelas    |      | Operador clica "Gerar"     |
+| Salva no CRM      | ---> | Sistema busca endereco     |
+| SEM endereco      |      | via MaxSystem API          |
++-------------------+      | Atualiza clients no banco  |
+                            | Cria o acordo              |
+                            +----------------------------+
 ```
 
-No code changes needed -- after the migration, both users will appear on the Users page immediately.
+### Detalhes tecnicos
 
-### Technical Details
-
-| User | auth.users ID | tenant_users | profiles |
-|---|---|---|---|
-| abadegustavo54@gmail.com | `2fbda0e8-...` | exists (operador) | **missing** |
-| sabrinagoncalvesprofissional@gmail.com | `fbdc8c39-...` | exists (operador) | **missing** |
+| Arquivo | Acao |
+|---|---|
+| `src/services/addressEnrichmentService.ts` | Novo - funcao `enrichClientAddress` extraida do MaxListPage |
+| `src/pages/MaxListPage.tsx` | Remover busca de endereco no `handleSendToCRM`; remover campos de endereco do mapeamento |
+| `src/components/client-detail/AgreementCalculator.tsx` | Chamar `enrichClientAddress` antes de `createAgreement`, com loading state |
 
