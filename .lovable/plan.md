@@ -1,46 +1,74 @@
 
 
-## Plano: Corrigir filtro "Status de Acordo" na Carteira
+## Plano: Remover Status do Acordo da Carteira, ajustar em Relatorios, e adicionar campo de prazo no credor
 
-### Problema identificado
+### Resumo
 
-O filtro "Status de Acordo" esta filtrando pelo campo `clients.status` (pendente/pago/quebrado), que e o status de pagamento da parcela. Isso mostra TODOS os clientes, independente de terem acordo formalizado ou nao.
-
-O correto e filtrar pelo campo `agreements.status` (pending/approved/rejected/cancelled), mostrando APENAS clientes que possuem acordos registrados na tabela `agreements`.
+O usuario quer:
+1. Remover o filtro "Status do Acordo" da Carteira e Clientes -- manter apenas em Relatorios
+2. Em Relatorios, o "Status do Acordo" deve refletir o status real do acordo: Pago (em dia), Pendente (dentro do prazo do credor), Quebra (passou o prazo)
+3. Adicionar campo no cadastro do credor para definir "prazo maximo de dias para pagamento do acordo"
+4. A logica de Relatórios deve cruzar agreements com esse prazo para determinar se o acordo esta Pago, Pendente ou Quebra
 
 ### Mudancas
 
-**Arquivo: `src/components/clients/ClientFilters.tsx`**
+**1. Nova coluna na tabela `credores`** (migration)
 
-Alterar as opcoes do select "Status do Acordo" para refletir os status reais da tabela `agreements`:
-- Todos (nao filtra)
-- Pendente (pending)
-- Aprovado (approved)
-- Rejeitado (rejected)
-- Cancelado (cancelled)
+Adicionar `prazo_dias_acordo integer DEFAULT 30` -- quantos dias o acordo pode ficar em aberto aguardando pagamento.
 
-**Arquivo: `src/pages/CarteiraPage.tsx`**
+**2. `src/components/cadastros/CredorForm.tsx`**
 
-1. Alterar a query `agreement-cpfs` para ser dinamica: quando `filters.status` != "todos", buscar apenas acordos com aquele status especifico. Quando "todos", nao filtrar por status.
+Adicionar campo "Prazo para pagamento do acordo (dias)" na aba Negociacao, input numerico com `min={1}`.
 
-2. No `displayClients`, quando `filters.status` != "todos", filtrar clientes para mostrar APENAS aqueles cujo CPF aparece na lista de CPFs retornados pela query de agreements com o status selecionado.
+**3. `src/lib/validations.ts`**
 
-3. Remover o filtro atual em `fetchClients` que usa `filters.status` como `clients.status` -- o campo `status` do filtro agora se refere exclusivamente a acordos.
+Adicionar `prazo_dias_acordo` ao schema Zod do credor (para nao ser removido no strip).
 
-**Arquivo: `src/services/clientService.ts`**
+**4. `src/components/clients/ClientFilters.tsx`**
 
-Remover o filtro por `status` da funcao `fetchClients`, pois esse campo agora e tratado no frontend via a query de agreements.
+Remover o bloco do select "Status do Acordo" (linhas 106-118). Ajustar o grid de `lg:grid-cols-5` para `lg:grid-cols-4`.
 
-**Arquivo: `src/pages/ClientsPage.tsx`**
+Remover `status` da interface `Filters` (ou mante-lo mas sem uso na Carteira).
 
-Aplicar a mesma logica: quando "Status de Acordo" esta ativo, buscar CPFs da tabela agreements e filtrar localmente.
+**5. `src/pages/CarteiraPage.tsx`**
+
+- Remover o state `filters.status` e toda a logica de `agreementStatusFilter` / `agreementCpfs` query
+- Remover o filtro `if (agreementStatusFilter)` do `displayClients`
+- Simplificar: o filtro "Sem Acordo" continua usando a query de agreements (sem filtro por status)
+
+**6. `src/pages/ClientsPage.tsx`**
+
+- Remover a logica de `agreementStatusFilter` / `agreementCpfs`
+- Remover o filtro `displayClients` baseado em agreement CPFs
+
+**7. `src/components/relatorios/ReportFilters.tsx`**
+
+Alterar as opcoes do "Status do Acordo" para:
+- Todos
+- Pago (parcelas do acordo todas pagas)
+- Pendente (dentro do prazo do credor)
+- Quebra (passou o prazo sem pagamento)
+
+**8. `src/pages/RelatoriosPage.tsx`**
+
+Implementar a logica real de Status do Acordo:
+- Buscar agreements com seus credores (para pegar `prazo_dias_acordo`)
+- Para cada agreement, calcular o status derivado:
+  - **Pago**: todas as parcelas geradas pelo acordo estao com status "pago"
+  - **Pendente**: ha parcelas pendentes mas ainda dentro do prazo (first_due_date + prazo_dias_acordo > hoje)
+  - **Quebra**: ha parcelas pendentes e o prazo ja expirou
+- Quando o filtro "Status do Acordo" esta ativo, filtrar `filteredClients` por CPFs que tem acordos naquele status derivado
 
 ### Detalhes tecnicos
 
 | Arquivo | Mudanca |
 |---|---|
-| `ClientFilters.tsx` | Opcoes: pending/approved/rejected/cancelled em vez de pendente/pago/quebrado |
-| `CarteiraPage.tsx` | Query de agreements dinamica por status; filtrar displayClients por CPFs com acordo |
-| `clientService.ts` | Remover filtro `status` de `fetchClients` |
-| `ClientsPage.tsx` | Adicionar query de agreements e filtro por CPF |
+| Migration SQL | `ALTER TABLE credores ADD COLUMN prazo_dias_acordo integer DEFAULT 30` |
+| `CredorForm.tsx` | Campo numerico "Prazo para pagamento do acordo (dias)" na aba Negociacao |
+| `validations.ts` | Adicionar `prazo_dias_acordo` ao schema |
+| `ClientFilters.tsx` | Remover select "Status do Acordo"; grid 5->4 colunas |
+| `CarteiraPage.tsx` | Remover agreementStatusFilter, agreementCpfs query, e filtro relacionado |
+| `ClientsPage.tsx` | Remover agreementStatusFilter, agreementCpfs query, e displayClients filter |
+| `ReportFilters.tsx` | Opcoes: Pago/Pendente/Quebra |
+| `RelatoriosPage.tsx` | Query de agreements + credores para calcular status derivado; filtrar por CPF |
 
