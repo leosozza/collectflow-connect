@@ -13,7 +13,8 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck } from "lucide-react";
+import { Calculator, FileCheck, Loader2 } from "lucide-react";
+import { enrichClientAddress } from "@/services/addressEnrichmentService";
 
 interface AgreementCalculatorProps {
   clients: any[];
@@ -36,6 +37,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [firstDueDate, setFirstDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [enrichingAddress, setEnrichingAddress] = useState(false);
+  const [addressStatus, setAddressStatus] = useState("");
 
   const originalTotal = useMemo(() => {
     return pendentes
@@ -100,7 +103,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
 
     setSubmitting(true);
+    setEnrichingAddress(true);
+    setAddressStatus("Buscando endereço...");
     try {
+      // Enrich address before creating agreement
+      await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
+      setEnrichingAddress(false);
+      setAddressStatus("");
+
       const totalInstallments = entradaValue > 0 ? numParcelas + 1 : numParcelas;
       const data: AgreementFormData = {
         client_cpf: cpf,
@@ -122,6 +132,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       toast.error(err.message || "Erro ao gerar acordo");
     } finally {
       setSubmitting(false);
+      setEnrichingAddress(false);
+      setAddressStatus("");
     }
   };
 
@@ -284,14 +296,21 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
           </div>
 
+          {enrichingAddress && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {addressStatus}
+            </div>
+          )}
+
           <Button
             onClick={handleSubmit}
             disabled={submitting || selectedIds.size === 0 || !firstDueDate}
             className="w-full gap-2"
             size="lg"
           >
-            <FileCheck className="w-4 h-4" />
-            {submitting ? "Gerando..." : "Gerar Acordo"}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
+            {enrichingAddress ? addressStatus : submitting ? "Gerando..." : "Gerar Acordo"}
           </Button>
         </CardContent>
       </Card>

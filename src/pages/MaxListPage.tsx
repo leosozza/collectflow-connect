@@ -364,22 +364,8 @@ const MaxListPage = () => {
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token || "";
 
-    // Fetch addresses grouped by contract number
-    const uniqueContracts = [...new Set(filteredItems.map((item) => (item.COD_CONTRATO || "").trim()).filter(Boolean))];
-    const addressCache = new Map<string, Record<string, string | null>>();
-
-    toast.info(`Buscando endereços de ${uniqueContracts.length} contratos...`);
-
-    // Fetch in parallel batches of 5
-    for (let i = 0; i < uniqueContracts.length; i += 5) {
-      const batch = uniqueContracts.slice(i, i + 5);
-      await Promise.all(batch.map((c) => fetchAddressForContract(c, token, addressCache)));
-      setImportProgress(Math.round((i / (uniqueContracts.length + filteredItems.length)) * 100));
-    }
-
-    // Build records with address data
+    // Build records WITHOUT address data (address is fetched at agreement time)
     const records = filteredItems.map((item) => {
-      const addr = addressCache.get((item.COD_CONTRATO || "").trim()) || {};
       return {
         nome_completo: (item.NOME_DEVEDOR || "").trim(),
         cpf: item.CNPJ_CPF.replace(/[^\d]/g, ""),
@@ -397,20 +383,13 @@ const MaxListPage = () => {
         phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
         phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
         phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
-        endereco: addr.Address || null,
-        cep: addr.CEP || null,
-        bairro: addr.Neighborhood || null,
-        cidade: addr.City || null,
-        uf: addr.State || null,
-        email: addr.Email || null,
       };
     });
 
     let totalInserted = 0;
     let totalSkipped = 0;
 
-    const addressPhaseOffset = uniqueContracts.length;
-    const totalSteps = addressPhaseOffset + records.length;
+    const totalSteps = records.length;
 
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       const batch = records.slice(i, i + BATCH_SIZE);
@@ -433,12 +412,6 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
-          endereco: r.endereco,
-          cep: r.cep,
-          bairro: r.bairro,
-          cidade: r.cidade,
-          uf: r.uf,
-          email: r.email,
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
@@ -459,7 +432,7 @@ const MaxListPage = () => {
         totalSkipped += batch.length;
       }
 
-      setImportProgress(Math.round(((addressPhaseOffset + i + BATCH_SIZE) / totalSteps) * 100));
+      setImportProgress(Math.round(((i + BATCH_SIZE) / totalSteps) * 100));
       await new Promise((r) => setTimeout(r, 300));
     }
 
