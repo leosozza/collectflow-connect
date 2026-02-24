@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchGoals, upsertGoal } from "@/services/goalService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/formatters";
@@ -137,19 +138,16 @@ const GoalsManagementTab = () => {
                 <TableCell className="font-medium">{op.full_name || "Sem nome"}</TableCell>
                 <TableCell className="text-muted-foreground">{formatCurrency(current)}</TableCell>
                 <TableCell>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={100}
-                    placeholder={String(current)}
-                    value={editedGoals[op.id] ?? ""}
-                    onChange={(e) =>
+                  <CurrencyInput
+                    value={editedGoals[op.id] ?? 0}
+                    onValueChange={(v) =>
                       setEditedGoals((prev) => ({
                         ...prev,
-                        [op.id]: Number(e.target.value),
+                        [op.id]: v,
                       }))
                     }
-                    className="h-8 w-32"
+                    className="h-8 w-40"
+                    placeholder={String(current)}
                   />
                 </TableCell>
               </TableRow>
