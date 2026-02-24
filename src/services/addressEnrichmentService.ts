@@ -14,6 +14,7 @@ export interface AddressData {
   cidade: string | null;
   uf: string | null;
   email: string | null;
+  model_name: string | null;
 }
 
 async function fetchAddressForContract(
@@ -50,6 +51,7 @@ async function fetchAddressForContract(
       cidade: raw.City || null,
       uf: typeof raw.State === "number" ? (UF_MAP[raw.State] || null) : (raw.State || null),
       email: raw.Email || null,
+      model_name: raw.ModelName || null,
     };
     cache.set(contractNumber, addr);
     return addr;
@@ -60,7 +62,7 @@ async function fetchAddressForContract(
 }
 
 function emptyAddress(): AddressData {
-  return { endereco: null, cep: null, bairro: null, cidade: null, uf: null, email: null };
+  return { endereco: null, cep: null, bairro: null, cidade: null, uf: null, email: null, model_name: null };
 }
 
 /**
@@ -138,6 +140,7 @@ export async function enrichClientAddress(
       cidade: bestAddress.cidade,
       uf: bestAddress.uf,
       email: bestAddress.email,
+      observacoes: bestAddress.model_name ? `Modelo: ${bestAddress.model_name}` : undefined,
     } as any)
     .in("id", clientIds);
 
