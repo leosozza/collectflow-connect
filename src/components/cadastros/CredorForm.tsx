@@ -115,6 +115,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
   const [openTemplateDialog, setOpenTemplateDialog] = useState<string | null>(null);
+  const [enderecoOpen, setEnderecoOpen] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -130,6 +131,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         });
         setForm(editData);
         setHonorarios(editing.honorarios_grade || []);
+        setEnderecoOpen(!!(editing.cep || editing.endereco || editing.numero || editing.bairro || editing.cidade || editing.uf));
       } else {
         setForm({
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
@@ -291,18 +293,27 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <div><Label>E-mail *</Label><Input type="email" value={form.email || ""} onChange={e => set("email", e.target.value)} /></div>
               <div><Label>Telefone *</Label><Input value={applyMask(form.telefone || "", "phone")} onChange={e => set("telefone", e.target.value)} placeholder="(00) 00000-0000" /></div>
             </div>
-            <div className="border-t border-border pt-4">
-              <p className="text-sm font-medium text-foreground mb-3">Endereço</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div><Label>CEP</Label><Input value={form.cep || ""} onChange={e => set("cep", e.target.value)} /></div>
-                <div className="col-span-2"><Label>Rua</Label><Input value={form.endereco || ""} onChange={e => set("endereco", e.target.value)} /></div>
-                <div><Label>Número</Label><Input value={form.numero || ""} onChange={e => set("numero", e.target.value)} /></div>
-                <div><Label>Complemento</Label><Input value={form.complemento || ""} onChange={e => set("complemento", e.target.value)} /></div>
-                <div><Label>Bairro</Label><Input value={form.bairro || ""} onChange={e => set("bairro", e.target.value)} /></div>
-                <div><Label>Cidade</Label><Input value={form.cidade || ""} onChange={e => set("cidade", e.target.value)} /></div>
-                <div><Label>UF</Label><Input value={form.uf || ""} onChange={e => set("uf", e.target.value)} maxLength={2} /></div>
-              </div>
-            </div>
+            <Collapsible
+              open={enderecoOpen}
+              onOpenChange={setEnderecoOpen}
+              className="border-t border-border pt-4"
+            >
+              <CollapsibleTrigger className="flex items-center gap-2 w-full cursor-pointer group">
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${enderecoOpen ? "rotate-0" : "-rotate-90"}`} />
+                <p className="text-sm font-medium text-foreground">Endereço</p>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="grid grid-cols-3 gap-4">
+                  <div><Label>CEP</Label><Input value={form.cep || ""} onChange={e => set("cep", e.target.value)} /></div>
+                  <div className="col-span-2"><Label>Rua</Label><Input value={form.endereco || ""} onChange={e => set("endereco", e.target.value)} /></div>
+                  <div><Label>Número</Label><Input value={form.numero || ""} onChange={e => set("numero", e.target.value)} /></div>
+                  <div><Label>Complemento</Label><Input value={form.complemento || ""} onChange={e => set("complemento", e.target.value)} /></div>
+                  <div><Label>Bairro</Label><Input value={form.bairro || ""} onChange={e => set("bairro", e.target.value)} /></div>
+                  <div><Label>Cidade</Label><Input value={form.cidade || ""} onChange={e => set("cidade", e.target.value)} /></div>
+                  <div><Label>UF</Label><Input value={form.uf || ""} onChange={e => set("uf", e.target.value)} maxLength={2} /></div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </TabsContent>
 
           {/* ABA 2 - BANCÁRIO / GATEWAY - Item 9: removed footer message */}
