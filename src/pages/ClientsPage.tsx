@@ -49,6 +49,9 @@ const ClientsPage = () => {
     cadastroDe: "",
     cadastroAte: "",
     quitados: false,
+    valorAbertoDe: 0,
+    valorAbertoAte: 0,
+    semContato: false,
   });
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
