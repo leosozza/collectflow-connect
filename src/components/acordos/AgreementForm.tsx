@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -88,11 +89,11 @@ const AgreementForm = ({ onSubmit }: AgreementFormProps) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Valor Original (R$)</Label>
-              <Input type="number" step="0.01" min="0" required value={form.original_total || ""} onChange={e => handleOriginalChange(Number(e.target.value))} />
+              <CurrencyInput value={form.original_total} onValueChange={handleOriginalChange} required />
             </div>
             <div>
               <Label>Valor Proposto (R$)</Label>
-              <Input type="number" step="0.01" min="0" required value={form.proposed_total || ""} onChange={e => handleProposedChange(Number(e.target.value))} />
+              <CurrencyInput value={form.proposed_total} onValueChange={handleProposedChange} required />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">

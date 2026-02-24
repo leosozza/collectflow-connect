@@ -10,6 +10,7 @@ import CredorReguaTab from "./CredorReguaTab";
 import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -367,12 +368,20 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div className="col-span-2">
                   <Label>Entrada Mínima</Label>
                   <div className="flex items-center gap-3 mt-1">
-                    <Input
-                      type="number"
-                      value={form.entrada_minima_valor ?? 0}
-                      onChange={e => set("entrada_minima_valor", parseFloat(e.target.value) || 0)}
-                      className="flex-1"
-                    />
+                    {form.entrada_minima_tipo === "fixed" ? (
+                      <CurrencyInput
+                        value={form.entrada_minima_valor ?? 0}
+                        onValueChange={v => set("entrada_minima_valor", v)}
+                        className="flex-1"
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        value={form.entrada_minima_valor ?? 0}
+                        onChange={e => set("entrada_minima_valor", parseFloat(e.target.value) || 0)}
+                        className="flex-1"
+                      />
+                    )}
                     <Select value={form.entrada_minima_tipo || "percent"} onValueChange={v => set("entrada_minima_tipo", v)}>
                       <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -426,7 +435,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                         <TableRow key={i}>
                           <TableCell><Input value={h.faixa} onChange={e => updateHonorario(i, "faixa", e.target.value)} placeholder="Ex: Até 50%" className="h-8" /></TableCell>
                           <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
-                          <TableCell><Input type="number" value={h.valor_fixo || 0} onChange={e => updateHonorario(i, "valor_fixo", parseFloat(e.target.value) || 0)} className="h-8" placeholder="R$" /></TableCell>
+                          <TableCell><CurrencyInput value={h.valor_fixo || 0} onValueChange={v => updateHonorario(i, "valor_fixo", v)} className="h-8" /></TableCell>
                           <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeHonorario(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
                         </TableRow>
                       ))}

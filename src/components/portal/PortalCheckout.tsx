@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -299,13 +300,9 @@ const PortalCheckout = ({ checkoutToken }: PortalCheckoutProps) => {
                     </div>
                     <div className="flex-1">
                       <Label className="text-xs">Valor (R$)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={sp.amount}
-                        onChange={(e) => updateSplitAmount(i, e.target.value)}
-                        placeholder="0,00"
+                      <CurrencyInput
+                        value={parseFloat(sp.amount) || 0}
+                        onValueChange={(v) => updateSplitAmount(i, v.toFixed(2))}
                       />
                     </div>
                     {splits.length > 2 && (

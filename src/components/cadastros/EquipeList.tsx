@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +24,7 @@ const EquipeList = () => {
   const [editing, setEditing] = useState<any>(null);
   const [nome, setNome] = useState("");
   const [liderId, setLiderId] = useState("");
-  const [metaMensal, setMetaMensal] = useState("");
+  const [metaMensal, setMetaMensal] = useState(0);
   const [status, setStatus] = useState("ativa");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
@@ -59,16 +60,16 @@ const EquipeList = () => {
     onError: () => toast.error("Erro ao excluir"),
   });
 
-  const openNew = () => { setEditing(null); setNome(""); setLiderId(""); setMetaMensal(""); setStatus("ativa"); setSelectedMembers([]); setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setNome(""); setLiderId(""); setMetaMensal(0); setStatus("ativa"); setSelectedMembers([]); setDialogOpen(true); };
   const openEdit = async (eq: any) => {
-    setEditing(eq); setNome(eq.nome); setLiderId(eq.lider_id || ""); setMetaMensal(String(eq.meta_mensal || "")); setStatus(eq.status);
+    setEditing(eq); setNome(eq.nome); setLiderId(eq.lider_id || ""); setMetaMensal(Number(eq.meta_mensal || 0)); setStatus(eq.status);
     try { const membros = await fetchEquipeMembros(eq.id); setSelectedMembers(membros.map((m: any) => m.profile_id)); } catch { setSelectedMembers([]); }
     setDialogOpen(true);
   };
 
   const handleSave = () => {
     if (!nome.trim()) { toast.error("Nome obrigatório"); return; }
-    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), lider_id: liderId || null, meta_mensal: parseFloat(metaMensal) || 0, status });
+    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), lider_id: liderId || null, meta_mensal: metaMensal, status });
   };
 
   const toggleMember = (id: string) => setSelectedMembers(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -123,7 +124,7 @@ const EquipeList = () => {
                 <SelectContent>{profiles.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Meta Mensal (R$)</Label><Input type="number" value={metaMensal} onChange={e => setMetaMensal(e.target.value)} /></div>
+            <div><Label>Meta Mensal (R$)</Label><CurrencyInput value={metaMensal} onValueChange={setMetaMensal} /></div>
             <div><Label>Status</Label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
