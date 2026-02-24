@@ -1,74 +1,34 @@
 
 
-## Plano: Remover Status do Acordo da Carteira, ajustar em Relatorios, e adicionar campo de prazo no credor
+## Plano: Limpar dados residuais para lançamento oficial
 
-### Resumo
+### Problema
 
-O usuario quer:
-1. Remover o filtro "Status do Acordo" da Carteira e Clientes -- manter apenas em Relatorios
-2. Em Relatorios, o "Status do Acordo" deve refletir o status real do acordo: Pago (em dia), Pendente (dentro do prazo do credor), Quebra (passou o prazo)
-3. Adicionar campo no cadastro do credor para definir "prazo maximo de dias para pagamento do acordo"
-4. A logica de Relatórios deve cruzar agreements com esse prazo para determinar se o acordo esta Pago, Pendente ou Quebra
+O sistema está quase zerado (0 clientes, 0 dispositions, 0 achievements), mas ainda há dados residuais de testes que fazem "RAUL JOSE SEIXAS JUNIOR" aparecer no ranking da gamificação.
 
-### Mudancas
+### Dados residuais encontrados
 
-**1. Nova coluna na tabela `credores`** (migration)
+| Tabela | Registros | Conteúdo |
+|---|---|---|
+| `operator_points` | 1 | Raul com 0 pontos (fev/2026) |
+| `agreements` | 1 | Acordo cancelado (GIOVANNA) |
+| `negociarie_cobrancas` | 1 | Cobrança de teste |
+| `gamification_campaigns` | 1 | Campanha de teste |
+| `clients` | 0 | Já limpo |
+| `achievements` | 0 | Já limpo |
+| `call_dispositions` | 0 | Já limpo |
+| `operator_goals` | 0 | Já limpo |
 
-Adicionar `prazo_dias_acordo integer DEFAULT 30` -- quantos dias o acordo pode ficar em aberto aguardando pagamento.
+### Ações
 
-**2. `src/components/cadastros/CredorForm.tsx`**
+1. **Limpar `operator_points`** -- remove o registro de Raul que causa ele aparecer no ranking
+2. **Limpar `agreements`** -- remove o acordo cancelado de teste
+3. **Limpar `negociarie_cobrancas`** -- remove cobrança de teste
+4. **Limpar `gamification_campaigns`** -- remove campanha de teste (opcional, manter se quiser)
 
-Adicionar campo "Prazo para pagamento do acordo (dias)" na aba Negociacao, input numerico com `min={1}`.
+Após a limpeza, a gamificação ficará completamente zerada -- sem ranking, sem pontos, sem conquistas. Quando a carteira real for importada e os operadores começarem a atuar, os dados serão gerados organicamente.
 
-**3. `src/lib/validations.ts`**
+### Detalhes técnicos
 
-Adicionar `prazo_dias_acordo` ao schema Zod do credor (para nao ser removido no strip).
-
-**4. `src/components/clients/ClientFilters.tsx`**
-
-Remover o bloco do select "Status do Acordo" (linhas 106-118). Ajustar o grid de `lg:grid-cols-5` para `lg:grid-cols-4`.
-
-Remover `status` da interface `Filters` (ou mante-lo mas sem uso na Carteira).
-
-**5. `src/pages/CarteiraPage.tsx`**
-
-- Remover o state `filters.status` e toda a logica de `agreementStatusFilter` / `agreementCpfs` query
-- Remover o filtro `if (agreementStatusFilter)` do `displayClients`
-- Simplificar: o filtro "Sem Acordo" continua usando a query de agreements (sem filtro por status)
-
-**6. `src/pages/ClientsPage.tsx`**
-
-- Remover a logica de `agreementStatusFilter` / `agreementCpfs`
-- Remover o filtro `displayClients` baseado em agreement CPFs
-
-**7. `src/components/relatorios/ReportFilters.tsx`**
-
-Alterar as opcoes do "Status do Acordo" para:
-- Todos
-- Pago (parcelas do acordo todas pagas)
-- Pendente (dentro do prazo do credor)
-- Quebra (passou o prazo sem pagamento)
-
-**8. `src/pages/RelatoriosPage.tsx`**
-
-Implementar a logica real de Status do Acordo:
-- Buscar agreements com seus credores (para pegar `prazo_dias_acordo`)
-- Para cada agreement, calcular o status derivado:
-  - **Pago**: todas as parcelas geradas pelo acordo estao com status "pago"
-  - **Pendente**: ha parcelas pendentes mas ainda dentro do prazo (first_due_date + prazo_dias_acordo > hoje)
-  - **Quebra**: ha parcelas pendentes e o prazo ja expirou
-- Quando o filtro "Status do Acordo" esta ativo, filtrar `filteredClients` por CPFs que tem acordos naquele status derivado
-
-### Detalhes tecnicos
-
-| Arquivo | Mudanca |
-|---|---|
-| Migration SQL | `ALTER TABLE credores ADD COLUMN prazo_dias_acordo integer DEFAULT 30` |
-| `CredorForm.tsx` | Campo numerico "Prazo para pagamento do acordo (dias)" na aba Negociacao |
-| `validations.ts` | Adicionar `prazo_dias_acordo` ao schema |
-| `ClientFilters.tsx` | Remover select "Status do Acordo"; grid 5->4 colunas |
-| `CarteiraPage.tsx` | Remover agreementStatusFilter, agreementCpfs query, e filtro relacionado |
-| `ClientsPage.tsx` | Remover agreementStatusFilter, agreementCpfs query, e displayClients filter |
-| `ReportFilters.tsx` | Opcoes: Pago/Pendente/Quebra |
-| `RelatoriosPage.tsx` | Query de agreements + credores para calcular status derivado; filtrar por CPF |
+Serão executados DELETEs nas tabelas `operator_points`, `agreements`, e `negociarie_cobrancas` para zerar completamente o sistema. Nenhuma alteração de código é necessária -- apenas limpeza de dados.
 
