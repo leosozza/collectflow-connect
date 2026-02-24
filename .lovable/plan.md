@@ -1,58 +1,71 @@
 
+## Buscar Endereco do MaxSystem para Importacao
 
-## Filtro Multi-Agencia com Busca Dinamica
-
-### O que sera feito
-
-Substituir o Select simples de agencia por um componente multi-select com busca por texto, permitindo:
-- Digitar texto para filtrar agencias (ex: "Pinheiros" filtra todas que contem esse texto)
-- Selecionar multiplas agencias simultaneamente
-- Gerar filtro OData com OR entre as agencias selecionadas: `(IdAgency+eq+1+or+IdAgency+eq+8)`
+### Problema
+A Negociarie nao emite boleto sem endereco. Os dados de parcelas (Installments) do MaxSystem nao incluem endereco. E preciso buscar o endereco em dois passos:
+1. Buscar o Id do modelo pelo ContractNumber via `/api/NewModelSearch`
+2. Buscar os detalhes (endereco) via `/api/NewModelSearch/Details/{id}`
 
 ### Mudancas
 
-**Arquivo:** `src/pages/MaxListPage.tsx`
+**1. Migracao de banco: adicionar coluna `bairro` na tabela `clients`**
 
-1. **State `agencia`**: Mudar de `string` para `string[]` (array de IDs selecionados). Valor padrao: `[]` (todas)
+A tabela `clients` ja tem `endereco`, `cep`, `cidade` e `uf`, mas falta `bairro`. Adicionar:
 
-2. **Componente de filtro**: Substituir o `Select` simples por um Popover customizado com:
-   - Campo de busca (Input) que filtra a lista de agencias por texto (Name)
-   - Lista de checkboxes para selecao multipla
-   - Opcao "Todas" que limpa a selecao
-   - Label dinamico: "Todas", nome da unica selecionada, ou "X selecionadas"
-
-3. **Funcao `buildFilter`**: Atualizar para gerar filtro com OR quando multiplas agencias selecionadas:
-   - 1 agencia: `IdAgency+eq+1`
-   - Multiplas: `(IdAgency+eq+1+or+IdAgency+eq+8+or+IdAgency+eq+10)`
-   - Nenhuma (todas): nao adiciona filtro
-
-### Detalhes tecnicos
-
-**Novo state:**
 ```text
-// Antes
-agencia: "todas"
-
-// Depois  
-agencias: [] as string[]   // vazio = todas
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS bairro text DEFAULT null;
 ```
 
-**Filtro OData multi-agencia:**
+**2. Edge Function `supabase/functions/maxsystem-proxy/index.ts`**
+
+Adicionar duas novas actions:
+
+- `action=model-search`: Recebe `contractNumber` como query param, chama `https://maxsystem.azurewebsites.net/api/NewModelSearch?$top=1&$filter=(ContractNumber+eq+{contractNumber})` e retorna o primeiro item (com o `Id`)
+
+- `action=model-details`: Recebe `modelId` como query param, chama `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/{modelId}` e retorna os campos de endereco: `Address`, `CEP`, `Neighborhood`, `City`, `State`
+
+**3. Frontend `src/pages/MaxListPage.tsx`**
+
+Alterar o fluxo de importacao (`handleSendToCRM`):
+
+- Antes de inserir cada batch no banco, agrupar os registros por `COD_CONTRATO` (numero do contrato)
+- Para cada contrato unico, fazer duas chamadas ao proxy:
+  1. `action=model-search&contractNumber={contrato}` para obter o `Id`
+  2. `action=model-details&modelId={id}` para obter o endereco
+- Cachear os enderecos por contrato para nao repetir chamadas
+- Incluir os campos `endereco`, `cep`, `cidade`, `uf`, `bairro` no upsert para o banco
+
+Mapeamento dos campos:
+| MaxSystem | Clients |
+|---|---|
+| Address | endereco |
+| CEP | cep |
+| Neighborhood | bairro |
+| City | cidade |
+| State (numero) | uf (converter para sigla) |
+
+- Adicionar tambem o `Email` retornado nos detalhes ao campo `email` do cliente (se disponivel)
+
+**Mapa de State (numero para sigla UF):**
+O MaxSystem retorna `State` como numero (ex: 26 = SP). Sera criado um mapa de conversao no edge function para retornar a sigla diretamente.
+
+### Fluxo de importacao atualizado
+
 ```text
-// buildFilter - trecho novo
-if (filters.agencias.length > 0) {
-  const agencyParts = filters.agencias.map(id => `IdAgency+eq+${id}`);
-  if (agencyParts.length === 1) {
-    parts.push(agencyParts[0]);
-  } else {
-    parts.push(`(${agencyParts.join('+or+')})`);
-  }
-}
+1. Usuario clica "Enviar para CRM"
+2. Agrupar registros por COD_CONTRATO
+3. Para cada contrato unico:
+   a. GET proxy?action=model-search&contractNumber=202548
+   b. Se encontrou Id: GET proxy?action=model-details&modelId=309486
+   c. Cachear endereco para esse contrato
+4. Montar rows com endereco preenchido
+5. Upsert no banco (igual ao fluxo atual, mas com campos de endereco)
 ```
 
-**Componente de selecao**: Usar um Popover com Input de busca + lista de Checkboxes, filtrando `agencies` pelo texto digitado contra `ag.Name.toLowerCase()`.
+### Arquivos modificados
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/pages/MaxListPage.tsx` | Multi-select com busca para agencias, filtro OData com OR |
-
+| Migracao SQL | Adicionar coluna `bairro` na tabela `clients` |
+| `supabase/functions/maxsystem-proxy/index.ts` | Actions `model-search` e `model-details` |
+| `src/pages/MaxListPage.tsx` | Buscar endereco por contrato antes de importar |
