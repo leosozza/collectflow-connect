@@ -36,41 +36,36 @@ const ConfiguracoesPage = () => {
   const activeLabel = items.find((i) => i.key === active)?.label;
 
   return (
-    <div className="flex gap-6 animate-fade-in">
-      {/* Sub-navegação lateral */}
-      <div className="w-56 flex-shrink-0">
-        <div className="flex items-center gap-2 mb-4">
-          <Settings className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-bold text-foreground">Configurações</h1>
-        </div>
-
-        <nav className="space-y-0.5">
-          {items.map((item) => {
-            const isActive = active === item.key;
-            return (
-              <button
-                key={item.key}
-                onClick={() => setActive(item.key)}
-                className={cn(
-                  "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-[calc(0.75rem-3px)]"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground border-l-[3px] border-transparent pl-[calc(0.75rem-3px)]"
-                )}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1 text-left">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+    <div className="animate-fade-in space-y-4">
+      {/* Cabeçalho + menu superior */}
+      <div className="flex items-center gap-3">
+        <Settings className="w-5 h-5 text-primary" />
+        <h1 className="text-lg font-bold text-foreground">Configurações</h1>
       </div>
 
+      <nav className="flex items-center gap-1 border-b border-border">
+        {items.map((item) => {
+          const isActive = active === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setActive(item.key)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 border-b-2 -mb-px",
+                isActive
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+              )}
+            >
+              <item.icon className="w-4 h-4 shrink-0" />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Conteúdo */}
-      <div className="flex-1 min-w-0">
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
-        </div>
+      <div>
         {active === "integracao" && <IntegracaoPage />}
         {active === "auditoria" && <AuditoriaPage />}
         {active === "roadmap" && <RoadmapPage />}
