@@ -68,6 +68,52 @@ Deno.serve(async (req) => {
     const tenantId = callerTenantUser.tenant_id;
 
     const body = await req.json();
+    const { action } = body;
+
+    // ── Update password flow ──
+    if (action === "update_password") {
+      const { user_id, password } = body;
+      if (!user_id || !password) {
+        return new Response(JSON.stringify({ error: "user_id and password are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (password.length < 6) {
+        return new Response(JSON.stringify({ error: "Password must be at least 6 characters" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: targetTU } = await supabaseAdmin
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user_id)
+        .single();
+
+      if (!targetTU || targetTU.tenant_id !== tenantId) {
+        return new Response(JSON.stringify({ error: "User not found in your tenant" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password });
+      if (pwError) {
+        return new Response(JSON.stringify({ error: pwError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Create user flow (existing) ──
     const {
       full_name,
       email,
