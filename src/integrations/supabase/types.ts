@@ -1073,6 +1073,7 @@ export type Database = {
           portal_hero_title: string | null
           portal_logo_url: string | null
           portal_primary_color: string | null
+          prazo_dias_acordo: number | null
           razao_social: string
           signature_enabled: boolean | null
           signature_type: string | null
@@ -1125,6 +1126,7 @@ export type Database = {
           portal_hero_title?: string | null
           portal_logo_url?: string | null
           portal_primary_color?: string | null
+          prazo_dias_acordo?: number | null
           razao_social: string
           signature_enabled?: boolean | null
           signature_type?: string | null
@@ -1177,6 +1179,7 @@ export type Database = {
           portal_hero_title?: string | null
           portal_logo_url?: string | null
           portal_primary_color?: string | null
+          prazo_dias_acordo?: number | null
           razao_social?: string
           signature_enabled?: boolean | null
           signature_type?: string | null

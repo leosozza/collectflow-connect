@@ -1,0 +1,1 @@
+ALTER TABLE public.credores ADD COLUMN prazo_dias_acordo integer DEFAULT 30;

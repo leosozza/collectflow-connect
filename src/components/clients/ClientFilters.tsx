@@ -102,21 +102,7 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
         <CollapsibleContent>
           <div className="space-y-4 pt-3 border-t border-border">
             {/* Linha 1: Selects */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Status do Acordo</Label>
-                <Select value={filters.status} onValueChange={(v) => update("status", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="approved">Aprovado</SelectItem>
-                    <SelectItem value="rejected">Rejeitado</SelectItem>
-                    <SelectItem value="cancelled">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
                 <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>

@@ -129,9 +129,9 @@ const ReportFilters = ({
             <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="pendente">Pendente</SelectItem>
               <SelectItem value="pago">Pago</SelectItem>
-              <SelectItem value="quebrado">Quebrado</SelectItem>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="quebra">Quebra</SelectItem>
             </SelectContent>
           </Select>
         </div>

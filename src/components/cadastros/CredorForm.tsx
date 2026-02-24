@@ -385,6 +385,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} /></div>
                 <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? 0} onChange={e => set("juros_mes", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
                 <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? 0} onChange={e => set("multa", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
+                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="number" min={1} value={form.prazo_dias_acordo ?? 30} onChange={e => set("prazo_dias_acordo", Math.max(1, parseInt(e.target.value) || 30))} /></div>
               </div>
             </div>
 

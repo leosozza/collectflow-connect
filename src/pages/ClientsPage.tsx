@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,23 +60,7 @@ const ClientsPage = () => {
     queryFn: () => fetchClients(filters),
   });
 
-  const agreementStatusFilter = filters.status !== "todos" ? filters.status : null;
-
-  const { data: agreementCpfs = new Set<string>() } = useQuery({
-    queryKey: ["agreement-cpfs-clients", agreementStatusFilter],
-    queryFn: async () => {
-      let query = supabase.from("agreements").select("client_cpf");
-      if (agreementStatusFilter) {
-        query = query.eq("status", agreementStatusFilter);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      const cpfSet = new Set<string>();
-      (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
-      return cpfSet;
-    },
-    enabled: !!agreementStatusFilter,
-  });
+  
 
   const { data: tiposStatus = [] } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
@@ -167,10 +151,7 @@ const ClientsPage = () => {
     setFormOpen(false);
     setEditingClient(null);
   };
-  const displayClients = useMemo(() => {
-    if (!agreementStatusFilter) return clients;
-    return clients.filter(c => agreementCpfs.has(c.cpf.replace(/\D/g, "")));
-  }, [clients, agreementStatusFilter, agreementCpfs]);
+  const displayClients = clients;
 
   return (
     <div className="space-y-6 animate-fade-in">
