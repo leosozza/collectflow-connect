@@ -310,6 +310,42 @@ const MaxListPage = () => {
     toast.success("Excel baixado com sucesso");
   };
 
+  const fetchAddressForContract = async (
+    contractNumber: string,
+    token: string,
+    cache: Map<string, Record<string, string | null>>
+  ): Promise<Record<string, string | null> | null> => {
+    if (cache.has(contractNumber)) return cache.get(contractNumber)!;
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+    try {
+      // Step 1: get model Id by contract number
+      const searchResp = await fetch(
+        `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-search&contractNumber=${contractNumber}`,
+        { headers }
+      );
+      if (!searchResp.ok) { cache.set(contractNumber, {}); return null; }
+      const searchJson = await searchResp.json();
+      const modelId = searchJson.item?.Id;
+      if (!modelId) { cache.set(contractNumber, {}); return null; }
+
+      // Step 2: get details (address)
+      const detResp = await fetch(
+        `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-details&modelId=${modelId}`,
+        { headers }
+      );
+      if (!detResp.ok) { cache.set(contractNumber, {}); return null; }
+      const addr = await detResp.json();
+      cache.set(contractNumber, addr);
+      return addr;
+    } catch {
+      cache.set(contractNumber, {});
+      return null;
+    }
+  };
+
   const handleSendToCRM = async () => {
     const sourceData = someSelected
       ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
@@ -323,9 +359,28 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(0);
 
-    const records = sourceData
-      .filter((item) => item.CNPJ_CPF && item.NOME_DEVEDOR && item.TITULO)
-      .map((item) => ({
+    const filteredItems = sourceData.filter((item) => item.CNPJ_CPF && item.NOME_DEVEDOR && item.TITULO);
+
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token || "";
+
+    // Fetch addresses grouped by contract number
+    const uniqueContracts = [...new Set(filteredItems.map((item) => item.COD_CONTRATO.trim()).filter(Boolean))];
+    const addressCache = new Map<string, Record<string, string | null>>();
+
+    toast.info(`Buscando endereços de ${uniqueContracts.length} contratos...`);
+
+    // Fetch in parallel batches of 5
+    for (let i = 0; i < uniqueContracts.length; i += 5) {
+      const batch = uniqueContracts.slice(i, i + 5);
+      await Promise.all(batch.map((c) => fetchAddressForContract(c, token, addressCache)));
+      setImportProgress(Math.round((i / (uniqueContracts.length + filteredItems.length)) * 100));
+    }
+
+    // Build records with address data
+    const records = filteredItems.map((item) => {
+      const addr = addressCache.get(item.COD_CONTRATO.trim()) || {};
+      return {
         nome_completo: item.NOME_DEVEDOR.trim(),
         cpf: item.CNPJ_CPF.replace(/[^\d]/g, ""),
         credor: item.CREDOR,
@@ -342,31 +397,24 @@ const MaxListPage = () => {
         phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
         phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
         phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
-      }));
+        endereco: addr.Address || null,
+        cep: addr.CEP || null,
+        bairro: addr.Neighborhood || null,
+        cidade: addr.City || null,
+        uf: addr.State || null,
+        email: addr.Email || null,
+      };
+    });
 
-    const totalBatches = Math.ceil(records.length / BATCH_SIZE);
     let totalInserted = 0;
     let totalSkipped = 0;
 
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-
-    // Get API key for this tenant
-    const { data: apiKeys } = await supabase
-      .from("api_keys")
-      .select("key_prefix")
-      .eq("is_active", true)
-      .limit(1);
-
-    // Use the clients-api via supabase functions invoke with service role
-    // Actually, we send through the proxy using the user's JWT
-    // But clients-api requires X-API-Key... Let's send directly using edge function
+    const addressPhaseOffset = uniqueContracts.length;
+    const totalSteps = addressPhaseOffset + records.length;
 
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       const batch = records.slice(i, i + BATCH_SIZE);
       try {
-        // Insert directly using Supabase client with upsert
         const rows = batch.map((r) => ({
           tenant_id: tenant.id,
           nome_completo: r.nome_completo,
@@ -385,13 +433,19 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
+          endereco: r.endereco,
+          cep: r.cep,
+          bairro: r.bairro,
+          cidade: r.cidade,
+          uf: r.uf,
+          email: r.email,
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
 
         const { data: result, error } = await supabase
           .from("clients")
-          .upsert(rows, { onConflict: "external_id,tenant_id" })
+          .upsert(rows as any, { onConflict: "external_id,tenant_id" })
           .select("id");
 
         if (error) {
@@ -405,7 +459,7 @@ const MaxListPage = () => {
         totalSkipped += batch.length;
       }
 
-      setImportProgress(Math.round(((i + BATCH_SIZE) / records.length) * 100));
+      setImportProgress(Math.round(((addressPhaseOffset + i + BATCH_SIZE) / totalSteps) * 100));
       await new Promise((r) => setTimeout(r, 300));
     }
 

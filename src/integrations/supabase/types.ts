@@ -642,6 +642,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          bairro: string | null
           cep: string | null
           cidade: string | null
           cod_contrato: string | null
@@ -681,6 +682,7 @@ export type Database = {
           valor_saldo: number | null
         }
         Insert: {
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cod_contrato?: string | null
@@ -720,6 +722,7 @@ export type Database = {
           valor_saldo?: number | null
         }
         Update: {
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cod_contrato?: string | null

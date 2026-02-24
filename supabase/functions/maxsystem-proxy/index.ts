@@ -9,6 +9,14 @@ const corsHeaders = {
 // Allowed tenant slugs
 const ALLOWED_SLUGS = ["maxfama", "temis"];
 
+// State number to UF abbreviation map
+const STATE_TO_UF: Record<number, string> = {
+  1: "AC", 2: "AL", 3: "AP", 4: "AM", 5: "BA", 6: "CE", 7: "DF", 8: "ES",
+  9: "GO", 10: "MA", 11: "MT", 12: "MS", 13: "MG", 14: "PA", 15: "PB",
+  16: "PR", 17: "PE", 18: "PI", 19: "RJ", 20: "RN", 21: "RS", 22: "RO",
+  23: "RR", 24: "SC", 25: "SE", 26: "SP", 27: "TO",
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -90,6 +98,63 @@ Deno.serve(async (req: Request) => {
       }
       const agData = await agResp.json();
       return new Response(JSON.stringify({ Items: agData.Items }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === Model Search endpoint ===
+    if (action === "model-search") {
+      const contractNumber = url.searchParams.get("contractNumber");
+      if (!contractNumber) {
+        return new Response(JSON.stringify({ error: "contractNumber is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${contractNumber})`;
+      const resp = await fetch(searchUrl);
+      if (!resp.ok) {
+        const text = await resp.text();
+        return new Response(JSON.stringify({ error: "MaxSystem model-search error", details: text }), {
+          status: resp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const json = await resp.json();
+      const item = (json.Items || [])[0] || null;
+      return new Response(JSON.stringify({ item }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === Model Details endpoint ===
+    if (action === "model-details") {
+      const modelId = url.searchParams.get("modelId");
+      if (!modelId) {
+        return new Response(JSON.stringify({ error: "modelId is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${modelId}`;
+      const resp = await fetch(detailsUrl);
+      if (!resp.ok) {
+        const text = await resp.text();
+        return new Response(JSON.stringify({ error: "MaxSystem model-details error", details: text }), {
+          status: resp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const details = await resp.json();
+      // Return only address fields + email
+      return new Response(JSON.stringify({
+        Address: details.Address || null,
+        CEP: details.CEP || null,
+        Neighborhood: details.Neighborhood || null,
+        City: details.City || null,
+        State: details.State != null ? (STATE_TO_UF[details.State] || null) : null,
+        Email: details.Email || null,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
