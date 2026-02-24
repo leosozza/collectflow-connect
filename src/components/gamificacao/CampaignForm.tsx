@@ -265,6 +265,8 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
                 placeholder="Selecionar operadores"
                 allLabel="Todos os operadores"
                 className="w-full"
+                searchable
+                searchPlaceholder="Buscar operador..."
               />
             )}
           </div>
