@@ -19,6 +19,7 @@ const DOCUMENT_TYPES = [
   { key: "template_recibo", label: "Recibo de Pagamento", icon: "🧾" },
   { key: "template_quitacao", label: "Carta de Quitação", icon: "✅" },
   { key: "template_descricao_divida", label: "Descrição de Dívida", icon: "📋" },
+  { key: "template_notificacao_extrajudicial", label: "Notificação Extrajudicial", icon: "⚖️" },
 ];
 
 const replaceTemplateVars = (template: string, vars: Record<string, string>) => {
@@ -35,7 +36,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     queryFn: async () => {
       const { data } = await supabase
         .from("credores")
-        .select("razao_social, nome_fantasia, cnpj, template_acordo, template_recibo, template_quitacao, template_descricao_divida")
+        .select("razao_social, nome_fantasia, cnpj, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial")
         .or(`razao_social.eq.${client.credor},nome_fantasia.eq.${client.credor}`)
         .limit(1)
         .maybeSingle();
@@ -86,7 +87,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
         <p className="text-sm text-muted-foreground mb-6">
           Gere e baixe os documentos com os dados preenchidos automaticamente. Os modelos são definidos no cadastro do credor.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-4">
           {DOCUMENT_TYPES.map((doc) => (
             <button
               key={doc.key}
