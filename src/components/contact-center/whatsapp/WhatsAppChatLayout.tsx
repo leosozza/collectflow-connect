@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,17 @@ import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
 import GlobalSearch from "./GlobalSearch";
 
+interface ConversationTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface TagAssignment {
+  conversation_id: string;
+  tag_id: string;
+}
+
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
@@ -33,12 +44,30 @@ const WhatsAppChatLayout = () => {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [tags, setTags] = useState<ConversationTag[]>([]);
+  const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
 
-  // Load instances + quick replies
+  // Track known waiting conversation IDs to avoid duplicate notifications
+  const knownWaitingRef = useRef<Set<string>>(new Set());
+
+  // Load instances + quick replies + tags
   useEffect(() => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
     fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
+
+    // Load tags
+    supabase
+      .from("conversation_tags")
+      .select("id, name, color")
+      .eq("tenant_id", tenantId)
+      .then(({ data }) => setTags((data as ConversationTag[]) || []));
+
+    // Load tag assignments
+    supabase
+      .from("conversation_tag_assignments")
+      .select("conversation_id, tag_id")
+      .then(({ data }) => setTagAssignments((data as TagAssignment[]) || []));
   }, [tenantId]);
 
   // Load conversations
@@ -47,6 +76,13 @@ const WhatsAppChatLayout = () => {
     try {
       const data = await fetchConversations(tenantId);
       setConversations(data);
+
+      // Initialize known waiting set on first load
+      if (knownWaitingRef.current.size === 0) {
+        for (const c of data) {
+          if (c.status === "waiting") knownWaitingRef.current.add(c.id);
+        }
+      }
     } catch (err) {
       console.error("Error loading conversations:", err);
     }
@@ -90,7 +126,32 @@ const WhatsAppChatLayout = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
-        () => {
+        (payload) => {
+          // Check for new "waiting" conversations to send notification
+          if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
+            const conv = payload.new as any;
+            if (conv.status === "waiting" && !knownWaitingRef.current.has(conv.id)) {
+              knownWaitingRef.current.add(conv.id);
+              // Create notification for the operator
+              const displayName = conv.remote_name || conv.remote_phone || "Cliente";
+              supabase
+                .from("notifications")
+                .insert({
+                  tenant_id: tenantId,
+                  user_id: profile?.user_id || profile?.id,
+                  title: "Conversa aguardando atendimento",
+                  message: `${displayName} está aguardando resposta no WhatsApp.`,
+                  type: "warning",
+                  reference_type: "conversation",
+                  reference_id: conv.id,
+                } as any)
+                .then(({ error }) => {
+                  if (error) console.error("Error creating waiting notification:", error);
+                });
+            } else if (conv.status !== "waiting") {
+              knownWaitingRef.current.delete(conv.id);
+            }
+          }
           loadConversations();
         }
       )
@@ -99,7 +160,7 @@ const WhatsAppChatLayout = () => {
     return () => {
       supabase.removeChannel(convChannel);
     };
-  }, [tenantId, loadConversations]);
+  }, [tenantId, loadConversations, profile]);
 
   useEffect(() => {
     if (!selectedConv) return;
@@ -271,6 +332,8 @@ const WhatsAppChatLayout = () => {
             selectedId={selectedConv?.id || null}
             onSelect={handleSelectConv}
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
+            tags={tags}
+            tagAssignments={tagAssignments}
           />
         </div>
         <ChatPanel

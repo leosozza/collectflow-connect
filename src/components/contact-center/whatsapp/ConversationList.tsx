@@ -1,22 +1,34 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Conversation } from "@/services/conversationService";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+interface ConversationTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface TagAssignment {
+  conversation_id: string;
+  tag_id: string;
+}
+
 interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
   onSelect: (conv: Conversation) => void;
   instances: { id: string; name: string }[];
+  tags?: ConversationTag[];
+  tagAssignments?: TagAssignment[];
 }
 
-// Generate a stable color from a string
 function stringToColor(str: string): string {
   const colors = [
     "bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500",
@@ -55,16 +67,34 @@ function ConversationAvatar({ conv }: { conv: Conversation }) {
   }
 
   return (
-    <div className="w-[49px] h-[49px] rounded-full bg-[#dfe5e7] dark:bg-[#6b7c85] flex items-center justify-center shrink-0">
-      <User className="w-6 h-6 text-[#cfd7db] dark:text-[#aebac1]" />
+    <div className="w-[49px] h-[49px] rounded-full bg-muted flex items-center justify-center shrink-0">
+      <User className="w-6 h-6 text-muted-foreground" />
     </div>
   );
 }
 
-const ConversationList = ({ conversations, selectedId, onSelect, instances }: ConversationListProps) => {
+const ConversationList = ({ conversations, selectedId, onSelect, instances, tags = [], tagAssignments = [] }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string>("all");
+
+  // Build a set of conversation IDs that have the selected tag
+  const taggedConvIds = useMemo(() => {
+    if (tagFilter === "all") return null;
+    return new Set(tagAssignments.filter((a) => a.tag_id === tagFilter).map((a) => a.conversation_id));
+  }, [tagFilter, tagAssignments]);
+
+  // Status counts
+  const statusCounts = useMemo(() => {
+    const counts = { open: 0, waiting: 0, closed: 0 };
+    for (const c of conversations) {
+      if (c.status === "open") counts.open++;
+      else if (c.status === "waiting") counts.waiting++;
+      else if (c.status === "closed") counts.closed++;
+    }
+    return counts;
+  }, [conversations]);
 
   const filtered = conversations.filter((c) => {
     const displayName = c.client_name || c.remote_name;
@@ -74,7 +104,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
       c.remote_phone.includes(search);
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
-    return matchSearch && matchStatus && matchInstance;
+    const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
+    return matchSearch && matchStatus && matchInstance && matchTag;
   });
 
   const statusColors: Record<string, string> = {
@@ -82,6 +113,13 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
     waiting: "bg-yellow-500",
     closed: "bg-muted-foreground",
   };
+
+  const statusPills = [
+    { key: "all", label: "Todas", count: conversations.length },
+    { key: "open", label: "Aberta", count: statusCounts.open, color: "bg-[#25d366]" },
+    { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
+    { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
+  ];
 
   return (
     <div className="flex flex-col h-full border-r border-border bg-card">
@@ -97,18 +135,49 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances }: Co
             className="pl-8 h-8 text-sm bg-card rounded-lg"
           />
         </div>
+
+        {/* Status pills */}
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {statusPills.map((pill) => (
+            <button
+              key={pill.key}
+              onClick={() => setStatusFilter(pill.key)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                statusFilter === pill.key
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {pill.color && <span className={`w-1.5 h-1.5 rounded-full ${pill.color}`} />}
+              {pill.label}
+              <span className={`font-bold ${statusFilter === pill.key ? "text-primary-foreground" : "text-foreground"}`}>
+                {pill.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tag + Instance filters */}
         <div className="flex gap-1.5">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="open">Aberta</SelectItem>
-              <SelectItem value="waiting">Aguardando</SelectItem>
-              <SelectItem value="closed">Fechada</SelectItem>
-            </SelectContent>
-          </Select>
+          {tags.length > 0 && (
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
+                <Tag className="w-3 h-3 mr-1 shrink-0" />
+                <SelectValue placeholder="Etiqueta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas etiquetas</SelectItem>
+                {tags.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                      {t.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {instances.length > 1 && (
             <Select value={instanceFilter} onValueChange={setInstanceFilter}>
               <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
