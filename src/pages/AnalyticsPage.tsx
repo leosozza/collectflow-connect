@@ -78,7 +78,7 @@ const AnalyticsPage = () => {
 
   const isOperator = profile?.role !== "admin";
 
-  const { data: allClients = [] } = useQuery({
+  const { data: rawClients = [] } = useQuery({
     queryKey: ["analytics-clients", isOperator ? profile?.id : "all"],
     queryFn: async () => {
       let query = supabase.from("clients").select("*");
@@ -90,6 +90,24 @@ const AnalyticsPage = () => {
       return data as ClientRow[];
     },
   });
+
+  const { data: analyticsAgreements = [] } = useQuery({
+    queryKey: ["analytics-agreements"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("agreements").select("client_cpf");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Filter clients to only those with agreements
+  const agreementCpfSet = useMemo(() => {
+    return new Set(analyticsAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  }, [analyticsAgreements]);
+
+  const allClients = useMemo(() => {
+    return rawClients.filter(c => agreementCpfSet.has(c.cpf.replace(/\D/g, "")));
+  }, [rawClients, agreementCpfSet]);
 
   const { data: operators = [] } = useQuery({
     queryKey: ["operators"],
