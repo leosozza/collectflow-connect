@@ -135,8 +135,8 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
-              {pendentes.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground">Nenhum título em aberto</div>
+              {clients.length === 0 ? (
+                <div className="p-6 text-center text-muted-foreground">Nenhum título encontrado</div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -149,19 +149,30 @@ const ClientDetailPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendentes.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
-                        <TableCell>{formatDate(c.data_vencimento)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
-                            Pendente
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {clients.map((c) => {
+                      const isOverdue = c.status === "pendente" && new Date(c.data_vencimento) < new Date();
+                      const statusLabel = c.status === "pago" ? "Pago" : isOverdue ? "Atrasado" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
+                      const statusClass = c.status === "pago"
+                        ? "bg-green-500/10 text-green-600 border-green-500/30"
+                        : isOverdue
+                        ? "bg-destructive/10 text-destructive border-destructive/30"
+                        : c.status === "quebrado"
+                        ? "bg-muted text-muted-foreground border-muted"
+                        : "bg-warning/10 text-warning border-warning/30";
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell>{formatDate(c.data_vencimento)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className={statusClass}>
+                              {statusLabel}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
