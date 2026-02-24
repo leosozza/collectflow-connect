@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchClients } from "@/services/clientService";
 import { supabase } from "@/integrations/supabase/client";
-import { parseISO } from "date-fns";
+import { parseISO, differenceInDays } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Download, Printer } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
@@ -37,9 +37,83 @@ const RelatoriosPage = () => {
     },
   });
 
+  // Fetch agreements with credor info for derived status
+  const { data: agreements = [] } = useQuery({
+    queryKey: ["agreements-report"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("agreements").select("*");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: credoresData = [] } = useQuery({
+    queryKey: ["credores-report"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("credores").select("razao_social, prazo_dias_acordo");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const credores = useMemo(() => {
     return [...new Set(clients.map((c) => c.credor))].sort();
   }, [clients]);
+
+  // Build a map: credor name -> prazo_dias_acordo
+  const credorPrazoMap = useMemo(() => {
+    const map = new Map<string, number>();
+    credoresData.forEach((c: any) => map.set(c.razao_social, c.prazo_dias_acordo ?? 30));
+    return map;
+  }, [credoresData]);
+
+  // Derive agreement status: pago / pendente / quebra
+  const agreementDerivedStatus = useMemo(() => {
+    const today = new Date();
+    return agreements.map((a: any) => {
+      const cpf = a.client_cpf?.replace(/\D/g, "") || "";
+      const prazo = credorPrazoMap.get(a.credor) ?? 30;
+      const firstDue = parseISO(a.first_due_date);
+      const daysSinceFirstDue = differenceInDays(today, firstDue);
+
+      let derivedStatus: "pago" | "pendente" | "quebra";
+      if (a.status === "approved" || a.status === "completed") {
+        // Check if all installments for this CPF/credor are paid
+        const relatedClients = clients.filter(
+          (c) => c.cpf.replace(/\D/g, "") === cpf && c.credor === a.credor
+        );
+        const allPaid = relatedClients.length > 0 && relatedClients.every((c) => c.status === "pago");
+        if (allPaid) {
+          derivedStatus = "pago";
+        } else if (daysSinceFirstDue > prazo) {
+          derivedStatus = "quebra";
+        } else {
+          derivedStatus = "pendente";
+        }
+      } else if (a.status === "pending") {
+        if (daysSinceFirstDue > prazo) {
+          derivedStatus = "quebra";
+        } else {
+          derivedStatus = "pendente";
+        }
+      } else {
+        // rejected/cancelled – treat as quebra
+        derivedStatus = "quebra";
+      }
+
+      return { cpf, credor: a.credor, derivedStatus };
+    });
+  }, [agreements, clients, credorPrazoMap]);
+
+  // CPFs matching selected agreement status filter
+  const agreementFilteredCpfs = useMemo(() => {
+    if (selectedStatus === "todos") return null;
+    const cpfs = new Set<string>();
+    agreementDerivedStatus
+      .filter((a) => a.derivedStatus === selectedStatus)
+      .forEach((a) => cpfs.add(a.cpf));
+    return cpfs;
+  }, [selectedStatus, agreementDerivedStatus]);
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
@@ -48,14 +122,15 @@ const RelatoriosPage = () => {
       if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
       if (selectedCredor !== "todos" && c.credor !== selectedCredor) return false;
       if (selectedOperator !== "todos" && c.operator_id !== selectedOperator) return false;
-      if (selectedStatus !== "todos" && c.status !== selectedStatus) return false;
       if (selectedTipoDivida !== "todos" && (c as any).tipo_divida_id !== selectedTipoDivida) return false;
       if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
       if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
       if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
+      // Agreement status filter
+      if (agreementFilteredCpfs !== null && !agreementFilteredCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
-  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedStatus, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte]);
+  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte, agreementFilteredCpfs]);
 
   const exportExcel = () => {
     const rows = filteredClients.map((c) => ({
