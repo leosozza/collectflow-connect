@@ -570,6 +570,7 @@ const CarteiraPage = () => {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
+                    <TableHead>Modelo</TableHead>
                     <TableHead>
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("created_at")}>
                         Nome <SortIcon field="created_at" />
@@ -602,6 +603,9 @@ const CarteiraPage = () => {
                           checked={selectedIds.has(client.id)}
                           onCheckedChange={() => toggleSelect(client.id)}
                         />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {(client as any).observacoes?.replace(/^Modelo:\s*/i, '') || '—'}
                       </TableCell>
                       <TableCell>
                         <button
