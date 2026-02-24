@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
+import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,11 +13,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter } from "lucide-react";
+import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
+const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+  const selected = value ? parseISO(value) : undefined;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn("w-full justify-start text-left font-normal h-9 text-sm", !value && "text-muted-foreground")}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {selected ? format(selected, "dd/MM/yyyy") : "Selecionar"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : "")}
+          initialFocus
+          className={cn("p-3 pointer-events-auto")}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const ALLOWED_SLUGS = ["maxfama", "temis"];
 const BATCH_SIZE = 500;
@@ -391,17 +421,17 @@ const MaxListPage = () => {
           <CardTitle className="text-base">Filtros de Busca</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
               <Label className="font-semibold">Vencimento</Label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs text-muted-foreground">De</Label>
-                  <Input type="date" value={filters.vencDe} onChange={(e) => updateFilter("vencDe", e.target.value)} />
+                  <DatePickerField value={filters.vencDe} onChange={(v) => updateFilter("vencDe", v)} />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Até</Label>
-                  <Input type="date" value={filters.vencAte} onChange={(e) => updateFilter("vencAte", e.target.value)} />
+                  <DatePickerField value={filters.vencAte} onChange={(v) => updateFilter("vencAte", v)} />
                 </div>
               </div>
             </div>
@@ -410,11 +440,11 @@ const MaxListPage = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs text-muted-foreground">De</Label>
-                  <Input type="date" value={filters.pagDe} onChange={(e) => updateFilter("pagDe", e.target.value)} />
+                  <DatePickerField value={filters.pagDe} onChange={(v) => updateFilter("pagDe", v)} />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Até</Label>
-                  <Input type="date" value={filters.pagAte} onChange={(e) => updateFilter("pagAte", e.target.value)} />
+                  <DatePickerField value={filters.pagAte} onChange={(v) => updateFilter("pagAte", v)} />
                 </div>
               </div>
             </div>
@@ -423,11 +453,11 @@ const MaxListPage = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs text-muted-foreground">De</Label>
-                  <Input type="date" value={filters.regDe} onChange={(e) => updateFilter("regDe", e.target.value)} />
+                  <DatePickerField value={filters.regDe} onChange={(v) => updateFilter("regDe", v)} />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Até</Label>
-                  <Input type="date" value={filters.regAte} onChange={(e) => updateFilter("regAte", e.target.value)} />
+                  <DatePickerField value={filters.regAte} onChange={(v) => updateFilter("regAte", v)} />
                 </div>
               </div>
             </div>
