@@ -133,7 +133,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
           parcelas_min: 1, parcelas_max: 12, entrada_minima_valor: 0, entrada_minima_tipo: "percent",
           desconto_maximo: 0, juros_mes: 0, multa: 0,
-          template_acordo: TEMPLATE_ACORDO_DEFAULT, template_recibo: TEMPLATE_RECIBO_DEFAULT, template_quitacao: TEMPLATE_QUITACAO_DEFAULT, template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT,
+          template_acordo: TEMPLATE_ACORDO_DEFAULT, template_recibo: TEMPLATE_RECIBO_DEFAULT, template_quitacao: TEMPLATE_QUITACAO_DEFAULT, template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT, template_notificacao_extrajudicial: TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT,
         });
         setHonorarios([]);
       }
@@ -155,6 +155,37 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["credores"] }); toast.success("Credor salvo!"); onOpenChange(false); },
     onError: () => toast.error("Erro ao salvar credor"),
   });
+
+  const [savingGrade, setSavingGrade] = useState(false);
+  const [savingAging, setSavingAging] = useState(false);
+
+  const handleSaveGrade = async () => {
+    if (!editing?.id) return;
+    setSavingGrade(true);
+    try {
+      await upsertCredor({ id: editing.id, tenant_id: tenant!.id, honorarios_grade: honorarios });
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      toast.success("Grade de honorários salva!");
+    } catch {
+      toast.error("Erro ao salvar grade");
+    } finally {
+      setSavingGrade(false);
+    }
+  };
+
+  const handleSaveAgingTiers = async () => {
+    if (!editing?.id) return;
+    setSavingAging(true);
+    try {
+      await upsertCredor({ id: editing.id, tenant_id: tenant!.id, aging_discount_tiers: agingTiers });
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      toast.success("Faixas de aging salvas!");
+    } catch {
+      toast.error("Erro ao salvar faixas");
+    } finally {
+      setSavingAging(false);
+    }
+  };
 
   const handleSave = () => {
     if (!form.razao_social?.trim()) { toast.error("Razão Social obrigatória"); return; }
@@ -350,9 +381,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     </Select>
                   </div>
                 </div>
-                <div><Label>Desconto Máximo (%)</Label><Input type="number" value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", parseFloat(e.target.value) || 0)} /></div>
-                <div><Label>Juros ao Mês (%)</Label><Input type="number" value={form.juros_mes ?? 0} onChange={e => set("juros_mes", parseFloat(e.target.value) || 0)} /></div>
-                <div><Label>Multa (%)</Label><Input type="number" value={form.multa ?? 0} onChange={e => set("multa", parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} /></div>
+                <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? 0} onChange={e => set("juros_mes", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
+                <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? 0} onChange={e => set("multa", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
                 <div className="col-span-2">
                   <Label>Prazo SLA de Atendimento (horas)</Label>
                   <Input
@@ -375,7 +406,14 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                   <p className="text-sm font-medium text-foreground">Grade de Honorários</p>
                   <p className="text-xs text-muted-foreground">Defina os honorários por percentual ou valor fixo.</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={addHonorario}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
+                <div className="flex gap-2">
+                  {editing?.id && (
+                    <Button size="sm" variant="default" onClick={handleSaveGrade} disabled={savingGrade}>
+                      {savingGrade ? "Salvando..." : "Salvar Grade"}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={addHonorario}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
+                </div>
               </div>
               {honorarios.length > 0 && (
                 <Table>
@@ -408,7 +446,14 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                   <p className="text-sm font-medium text-foreground">Faixas de Desconto por Aging</p>
                   <p className="text-xs text-muted-foreground">Defina descontos automáticos por tempo de atraso.</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={addAgingTier}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
+                <div className="flex gap-2">
+                  {editing?.id && (
+                    <Button size="sm" variant="default" onClick={handleSaveAgingTiers} disabled={savingAging}>
+                      {savingAging ? "Salvando..." : "Salvar Faixas"}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={addAgingTier}><Plus className="w-3 h-3 mr-1" /> Adicionar Faixa</Button>
+                </div>
               </div>
               {agingTiers.length > 0 && (
                 <Table>
