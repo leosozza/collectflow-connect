@@ -1,56 +1,46 @@
 
 
-## Plano: Reorganizacao de Filtros, Negociacao e Relatorios
+## Plano: Corrigir filtro "Status de Acordo" na Carteira
 
-### 1. Negociacao do Credor (`CredorForm.tsx`)
+### Problema identificado
 
-**Collapsible nas secoes de Grade e Aging:**
-- Envolver "Grade de Honorarios" e "Faixas de Desconto por Aging" em componentes `Collapsible` com seta para recolher/expandir
-- Quando ha dados salvos, iniciar recolhido com indicador de quantidade (ex: "3 faixas salvas")
-- Quando vazio, iniciar expandido
+O filtro "Status de Acordo" esta filtrando pelo campo `clients.status` (pendente/pago/quebrado), que e o status de pagamento da parcela. Isso mostra TODOS os clientes, independente de terem acordo formalizado ou nao.
 
-**Remover Prazo SLA de Atendimento:**
-- Remover o bloco completo do campo `sla_hours` (linhas 387-398) da aba Negociacao
+O correto e filtrar pelo campo `agreements.status` (pending/approved/rejected/cancelled), mostrando APENAS clientes que possuem acordos registrados na tabela `agreements`.
 
-### 2. Filtros da Carteira (`ClientFilters.tsx`)
+### Mudancas
 
-**Reorganizacao dos filtros avancados:**
+**Arquivo: `src/components/clients/ClientFilters.tsx`**
 
-Linha 1 (selects lado a lado):
-- Status do Acordo | Status de Carteira | Credor | Perfil do Devedor | Tipo de Divida
+Alterar as opcoes do select "Status do Acordo" para refletir os status reais da tabela `agreements`:
+- Todos (nao filtra)
+- Pendente (pending)
+- Aprovado (approved)
+- Rejeitado (rejected)
+- Cancelado (cancelled)
 
-Linha 2 (datas lado a lado):
-- Vencimento De | Vencimento Ate | Cadastro De | Cadastro Ate
+**Arquivo: `src/pages/CarteiraPage.tsx`**
 
-Linha 3 (checkboxes lado a lado):
-- Sem Acordo | Quitados
+1. Alterar a query `agreement-cpfs` para ser dinamica: quando `filters.status` != "todos", buscar apenas acordos com aquele status especifico. Quando "todos", nao filtrar por status.
 
-**Remover filtros de Quitacao (De/Ate)** da pagina Carteira - serao movidos para Relatorios.
+2. No `displayClients`, quando `filters.status` != "todos", filtrar clientes para mostrar APENAS aqueles cujo CPF aparece na lista de CPFs retornados pela query de agreements com o status selecionado.
 
-**Logica de filtragem:**
-- "Status do Acordo" filtra por `status` (pendente/pago/quebrado) -- mostra apenas clientes que TEM acordo formalizado quando != "todos"
-- "Status de Carteira" filtra por `status_cobranca_id` -- filtra toda a carteira independente de acordo
-- Sao filtros independentes e complementares
+3. Remover o filtro atual em `fetchClients` que usa `filters.status` como `clients.status` -- o campo `status` do filtro agora se refere exclusivamente a acordos.
 
-### 3. Relatorios (`RelatoriosPage.tsx` + `ReportFilters.tsx`)
+**Arquivo: `src/services/clientService.ts`**
 
-**Adicionar novos filtros em ReportFilters:**
-- Filtro de Quitacao De / Quitacao Ate (movido da Carteira)
-- Filtro de Status do Acordo (pendente/pago/quebrado)
-- Filtro de Tipo de Divida
-- Filtro de Perfil do Devedor
+Remover o filtro por `status` da funcao `fetchClients`, pois esse campo agora e tratado no frontend via a query de agreements.
 
-**Atualizar ReportFilters props** para receber os novos estados e callbacks.
+**Arquivo: `src/pages/ClientsPage.tsx`**
 
-**Atualizar RelatoriosPage** para aplicar os novos filtros no `filteredClients`.
+Aplicar a mesma logica: quando "Status de Acordo" esta ativo, buscar CPFs da tabela agreements e filtrar localmente.
 
 ### Detalhes tecnicos
 
 | Arquivo | Mudanca |
 |---|---|
-| `CredorForm.tsx` | Collapsible em Grade + Aging; remover SLA |
-| `ClientFilters.tsx` | Remover quitacaoDe/Ate; reorganizar grid; Sem Acordo + Quitados lado a lado |
-| `CarteiraPage.tsx` | Remover refs a quitacaoDe/Ate do state inicial e displayClients |
-| `ReportFilters.tsx` | Adicionar filtros de quitacao, status acordo, tipo divida, perfil devedor |
-| `RelatoriosPage.tsx` | Novos states + logica de filtragem para os filtros adicionados |
+| `ClientFilters.tsx` | Opcoes: pending/approved/rejected/cancelled em vez de pendente/pago/quebrado |
+| `CarteiraPage.tsx` | Query de agreements dinamica por status; filtrar displayClients por CPFs com acordo |
+| `clientService.ts` | Remover filtro `status` de `fetchClients` |
+| `ClientsPage.tsx` | Adicionar query de agreements e filtro por CPF |
 
