@@ -55,11 +55,16 @@ const DashboardPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("agreements")
-        .select("id, created_at, created_by, status");
+        .select("id, created_at, created_by, status, client_cpf");
       if (error) throw error;
       return data || [];
     },
   });
+
+  // Set of CPFs that have agreements — used to filter metrics
+  const agreementCpfs = useMemo(() => {
+    return new Set(agreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  }, [agreements]);
 
   const canViewAll = permissions.canViewAllDashboard;
   const todayStr = format(now, "yyyy-MM-dd");
@@ -131,14 +136,17 @@ const DashboardPage = () => {
 
   
 
+  // filteredClients: only clients that have an agreement (for metrics)
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
+      // Only include clients with agreements
+      if (!agreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       const d = parseISO(c.data_vencimento);
       if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
       if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
       return true;
     });
-  }, [clients, selectedYears, selectedMonths]);
+  }, [clients, selectedYears, selectedMonths, agreementCpfs]);
 
   const yearOptions = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
   const monthOptions = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);

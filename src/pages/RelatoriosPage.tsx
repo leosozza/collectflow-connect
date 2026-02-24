@@ -115,8 +115,15 @@ const RelatoriosPage = () => {
     return cpfs;
   }, [selectedStatus, agreementDerivedStatus]);
 
+  // Base set: all CPFs that have at least one agreement
+  const allAgreementCpfs = useMemo(() => {
+    return new Set(agreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  }, [agreements]);
+
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
+      // Only include clients that have agreements
+      if (!allAgreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       const d = parseISO(c.data_vencimento);
       if (d.getFullYear() !== parseInt(selectedYear)) return false;
       if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
@@ -126,11 +133,11 @@ const RelatoriosPage = () => {
       if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
       if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
       if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
-      // Agreement status filter
+      // Agreement status filter (pago/pendente/quebra)
       if (agreementFilteredCpfs !== null && !agreementFilteredCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
-  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte, agreementFilteredCpfs]);
+  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte, agreementFilteredCpfs, allAgreementCpfs]);
 
   const exportExcel = () => {
     const rows = filteredClients.map((c) => ({
