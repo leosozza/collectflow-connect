@@ -1,22 +1,21 @@
 
 
-## Plano: Adicionar "Notificacao Extrajudicial" e layout vertical nos Documentos
+## Plano: Tornar seção de Endereço recolhível na aba Dados
 
-### Problema
-1. O array `DOCUMENT_TYPES` na linha 17 tem apenas 4 documentos -- falta `template_notificacao_extrajudicial` (que ja existe na tabela `credores`).
-2. A query na linha 38 nao inclui `template_notificacao_extrajudicial` no SELECT.
-3. O layout usa `grid-cols-1 sm:grid-cols-2` (2 colunas em telas maiores). O usuario quer todos empilhados verticalmente.
+### Mudança
 
-### Mudancas
+**Arquivo: `src/components/cadastros/CredorForm.tsx`** (linhas 294-305)
 
-**Arquivo: `src/components/client-detail/ClientDocuments.tsx`**
+Substituir o bloco estático de Endereço por um `Collapsible` (já importado na linha 8) com uma seta que permite expandir/recolher os campos.
 
-1. Adicionar ao array `DOCUMENT_TYPES` (linha 22):
-   ```
-   { key: "template_notificacao_extrajudicial", label: "Notificacao Extrajudicial", icon: "⚖️" }
-   ```
+- O `CollapsibleTrigger` mostra "Endereço" com ícone `ChevronDown` (já importado) que rotaciona ao abrir
+- O `CollapsibleContent` envolve o grid de campos (CEP, Rua, Número, etc.)
+- Começa fechado por padrão (`defaultOpen={false}`) para manter o formulário limpo
+- Se algum campo de endereço já estiver preenchido (edição), abre automaticamente
 
-2. Adicionar `template_notificacao_extrajudicial` ao SELECT da query (linha 38).
+### Detalhes técnicos
 
-3. Trocar o grid de `grid-cols-1 sm:grid-cols-2` para `flex flex-col` (linha 89) para exibir todos os documentos um abaixo do outro.
+- Usar state `enderecoOpen` controlado pelo Collapsible
+- Inicializar como `true` se editando credor com endereço preenchido, `false` caso contrário
+- Nenhuma mudança de banco de dados
 
