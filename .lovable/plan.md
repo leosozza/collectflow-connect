@@ -1,117 +1,66 @@
 
 
-## Plano: Unificar Telefonia Preditiva + Atendimento e Auto-Tabular no 3CPlus
+## Plano: Redesign do Dashboard de Telefonia (Admin) no estilo 3CPlus
 
-### Contexto Atual
+### Contexto
 
-Hoje existem duas telas separadas:
-- `/contact-center/telefonia` — Operador ve seu card de status, login/logout de campanha, pausas. Nao tem como tabular nem negociar.
-- `/atendimento/:id` — Tela de atendimento com dados do cliente, tabulacao, negociacao, timeline. Precisa navegar manualmente.
+A tela atual do Dashboard admin em `/contact-center/telefonia` possui 6 KPI cards + grid de agentes em cards + campanhas em cards. O usuario quer um layout inspirado no print da 3CPlus: KPIs resumidos no topo, lista de operadores colapsavel, e campanhas em formato de tabela com progresso/completamento.
 
-A discagem preditiva do 3CPlus conecta o operador automaticamente a um cliente. Mas hoje nao ha integracao entre a chamada recebida e a tela de atendimento. Alem disso, a tabulacao no Rivo nao reflete no 3CPlus.
+### Alteracoes
 
-### O Que Vai Mudar
+---
 
+#### 1. Redesign do Admin View no `TelefoniaDashboard.tsx`
+
+**KPI Cards** — manter apenas 4 cards principais:
+- Online, Em Ligacao, Em Pausa, Ociosos
+- Layout `grid-cols-4` com estilo similar ao print (valor grande + label pequeno)
+- Remover "Ativas" e "Completadas" do grid principal (podem ficar como resumo secundario)
+
+**Secao Operadores** — colapsavel com `Collapsible`:
+- Inicialmente fechado (`defaultOpen={false}`)
+- Header: "Operadores (N)" com seta de toggle
+- Formato de **tabela/lista** (nao cards) com colunas:
+  - Nome completo
+  - Status (badge colorido)
+  - Ligacoes do dia (do `agentMetrics.contacts`)
+  - Acordos do dia (do `agentMetrics.agreements`)
+  - Tempo no discador (do `status_start_time` ou `status_time`)
+  - Botao de logout
+- Manter o clique no agente para abrir o `AgentDetailSheet`
+
+**Secao Campanhas** — formato tabela similar ao print da 3CPlus:
+- Colunas: Nome, Progresso (barra), Completamento (%), Agentes, Ociosidade Media
+- Slider de agressividade e botao pausar/retomar inline
+- Usar `CampaignOverview` refatorado ou substituir por tabela
+
+---
+
+#### 2. Botao "Voltar" no `ThreeCPlusPanel.tsx`
+
+Quando `activeTab !== "dashboard"`, exibir um botao "← Dashboard" no topo de cada sub-pagina que volta para `setActiveTab("dashboard")`.
+
+Adicionar ao componente de cada tab um header com:
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  /contact-center/telefonia  (tela unificada)            │
-│                                                         │
-│  ┌──────────────────┐  ┌──────────────────────────────┐ │
-│  │ Painel Operador  │  │ AtendimentoEmbutido          │ │
-│  │ - Status agente  │  │ - ClientHeader               │ │
-│  │ - Login campanha │  │ - DispositionPanel           │ │
-│  │ - Pausa/Retomar  │  │ - NegotiationPanel           │ │
-│  │ - Script         │  │ - ClientTimeline             │ │
-│  └──────────────────┘  │                              │ │
-│                        │  (carregado via phone lookup) │ │
-│                        └──────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
+[← Dashboard]  Titulo da Tab
 ```
 
-### Alteracoes Detalhadas
+Isso sera feito passando um `onBack` prop ou renderizando o botao diretamente no `ThreeCPlusPanel` acima de cada `TabsContent`.
 
 ---
 
-#### 1. Proxy 3CPlus — Novo action `qualify_call`
+#### 3. Verificacao de funcionalidades admin conectadas ao 3CPlus
 
-**Arquivo: `supabase/functions/threecplus-proxy/index.ts`**
+As funcoes administrativas ja invocam o `threecplus-proxy`:
+- **Campanhas**: `pause_campaign`, `resume_campaign`, `update_campaign` (agressividade) — conectados
+- **Qualificacoes**: `list_qualifications`, `create_qualification` — conectados
+- **Equipes**: `list_teams` — conectado
+- **Usuarios**: `list_users` — conectado
+- **Mailing**: `upload_mailing` — conectado
+- **Bloqueio**: `list_blocklist`, `add_to_blocklist` — conectado
+- **Rotas/Receptivo/Horarios**: `list_routes`, `list_queues`, `list_office_hours` — conectados
 
-Adicionar case para `qualify_call`:
-- Recebe: `agent_id`, `call_id`, `qualification_id`
-- Resolve o `api_token` do agente (mesmo pattern de login/logout)
-- Chama `POST /agent/call/{call_id}/qualify` com body `{ qualification_id }`
-- Permite que o Rivo tabule a chamada ativa no 3CPlus automaticamente
-
----
-
-#### 2. Mapeamento de Tabulacoes — Configuracao no Tenant Settings
-
-**Arquivo: `src/services/dispositionService.ts`**
-
-Adicionar funcao `qualifyOn3CPlus` que:
-- Recebe `dispositionType`, `tenantSettings`, `agentId`
-- Busca o mapeamento `threecplus_disposition_map` dos settings do tenant (um objeto `{ voicemail: 123, no_answer: 456, ... }`)
-- Se existir mapeamento para o tipo, invoca `threecplus-proxy` com action `qualify_call`
-- Se nao existir, ignora silenciosamente (sem bloquear o fluxo)
-
----
-
-#### 3. Tela Unificada do Operador — Telefonia + Atendimento
-
-**Arquivo: `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`**
-
-Na visao do operador (`isOperatorView`):
-
-- Quando o agente estiver online e em chamada (status 2 / `on_call`):
-  - Buscar o cliente pelo telefone da chamada (`myAgent.phone` ou `myAgent.remote_phone`)
-  - Ao encontrar, exibir ao lado do card do operador os componentes de atendimento:
-    - `ClientHeader` (compacto)
-    - `DispositionPanel` — ao tabular, chama TANTO o `createDisposition` do Rivo QUANTO o `qualify_call` no 3CPlus
-    - `NegotiationPanel` (quando operador clica "Negociar")
-    - `ClientTimeline`
-  - Se nao encontrar cliente pelo telefone, mostrar mensagem "Cliente nao encontrado no CRM"
-
-- Quando o agente NAO estiver em chamada:
-  - Manter a interface atual (card status + login campanha + pausas)
-  - Mostrar o ScriptPanel normalmente
-
----
-
-#### 4. Componente `TelefoniaAtendimento` (novo)
-
-**Arquivo: `src/components/contact-center/threecplus/TelefoniaAtendimento.tsx`**
-
-Componente que encapsula a logica de atendimento dentro da telefonia:
-- Recebe: `clientPhone`, `agentId`, `callId` (quando disponivel)
-- Busca o cliente pelo telefone (query por ultimos 8 digitos)
-- Busca registros do CPF, disposicoes, acordos, mensagens (mesma logica do AtendimentoPage)
-- Renderiza ClientHeader, DispositionPanel, NegotiationPanel, ClientTimeline
-- Ao tabular:
-  1. Salva no Rivo (`createDisposition`)
-  2. Executa automacoes pos-tabulacao (`executeAutomations`)
-  3. Qualifica no 3CPlus (`qualify_call`) usando mapeamento do tenant
-
----
-
-#### 5. AtendimentoPage — Tambem auto-tabula no 3CPlus
-
-**Arquivo: `src/pages/AtendimentoPage.tsx`**
-
-Na funcao `handleDisposition`:
-- Apos salvar a tabulacao no Rivo, verificar se o operador tem `threecplus_agent_id` e se o tenant tem credenciais 3CPlus
-- Se sim, chamar `qualify_call` no proxy (melhor esforco, sem bloquear)
-- Isso garante que mesmo ao atender via carteira, a tabulacao reflita no 3CPlus
-
----
-
-#### 6. Configuracao do Mapeamento de Qualificacoes
-
-**Arquivo: `src/pages/IntegracaoPage.tsx` ou `src/components/integracao/ThreeCPlusTab.tsx`**
-
-Na aba de configuracao do 3CPlus, adicionar secao "Mapeamento de Tabulacoes":
-- Busca as qualificacoes cadastradas no 3CPlus (via `list_qualifications`)
-- Para cada tipo de disposicao do Rivo (voicemail, no_answer, etc.), permite selecionar a qualificacao correspondente no 3CPlus
-- Salva no `tenant.settings.threecplus_disposition_map`
+Todas as acoes de criacao/edicao feitas no Rivo chamam o proxy que repassa para a API 3CPlus. **Ja estao funcionais.** Nenhuma alteracao necessaria aqui.
 
 ---
 
@@ -119,10 +68,8 @@ Na aba de configuracao do 3CPlus, adicionar secao "Mapeamento de Tabulacoes":
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `qualify_call` |
-| `src/services/dispositionService.ts` | Adicionar `qualifyOn3CPlus()` |
-| `src/components/contact-center/threecplus/TelefoniaAtendimento.tsx` | **Novo** — atendimento embutido na telefonia |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Integrar TelefoniaAtendimento na visao operador |
-| `src/pages/AtendimentoPage.tsx` | Chamar `qualifyOn3CPlus` apos tabulacao |
-| `src/components/integracao/ThreeCPlusTab.tsx` | Adicionar config de mapeamento de qualificacoes |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Redesign da admin view: 4 KPIs + operadores colapsaveis em lista + campanhas em tabela |
+| `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` | Adicionar botao "← Dashboard" nas sub-paginas |
+| `src/components/contact-center/threecplus/CampaignOverview.tsx` | Refatorar para formato de tabela com progresso/completamento |
+| `src/components/contact-center/threecplus/AgentStatusTable.tsx` | Refatorar de grid de cards para formato de lista/tabela colapsavel |
 
