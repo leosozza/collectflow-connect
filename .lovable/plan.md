@@ -1,87 +1,86 @@
 
 
-## Plano: Pagina HERO do Sistema (Landing Page de Conversao)
+## Plano: Redesign da Hero Section - Foco B2B e Conversao
 
 ### Objetivo
-Criar uma landing page publica focada em conversao de vendas do RIVO CONNECT, acessivel em `/landing`. A pagina deve apresentar o sistema de cobranca, seus beneficios, e direcionar visitantes para criar conta ou agendar demonstracao.
+Reescrever completamente a Hero Section da LandingPage existente (`/landing`) com foco em conversao B2B, aplicando a tecnica AIDA e direcionada a decisores (CFO, CEO, gestores financeiros).
 
-### Estrutura da Pagina
+### Mudancas na Rota
+A rota raiz (`/`) atualmente leva ao dashboard (protegido). Para que `rivoconnect.lovable.app` mostre a landing page para visitantes nao logados, vou:
+- Mover a landing page para a rota `/` como pagina publica
+- Redirecionar usuarios logados para o dashboard automaticamente
+- Manter `/landing` como alias
+
+### Estrutura da Nova Hero
 
 ```text
-+--------------------------------------------------+
-| HEADER (logo + nav sticky)                        |
-|  [RIVO CONNECT]   Recursos  Precos  [Acessar]    |
-+--------------------------------------------------+
-|                                                    |
-|  HERO SECTION                                      |
-|  "Recupere mais dividas com menos esforco"         |
-|  Subtitulo + CTA "Comece Gratis" + "Ver Demo"     |
-|  Metricas animadas: +45% recuperacao, etc.         |
-|                                                    |
-+--------------------------------------------------+
-|  SOCIAL PROOF BAR                                  |
-|  "Mais de 500 empresas confiam no RIVO"            |
-|  Logos/numeros de credores                          |
-+--------------------------------------------------+
-|  FEATURES GRID (3 colunas)                         |
-|  - Automacao inteligente                           |
-|  - Contact Center omnichannel                      |
-|  - Portal do devedor                               |
-|  - Gamificacao de equipe                           |
-|  - Relatorios em tempo real                        |
-|  - Integracoes (3CPlus, Gupshup, etc.)            |
-+--------------------------------------------------+
-|  COMO FUNCIONA (3 steps)                           |
-|  1. Importe sua carteira                           |
-|  2. Automatize reguas de cobranca                  |
-|  3. Acompanhe resultados em tempo real             |
-+--------------------------------------------------+
-|  METRICAS / RESULTADOS                             |
-|  Cards com numeros animados                        |
-|  45% mais acordos, 3x mais produtividade, etc.    |
-+--------------------------------------------------+
-|  DEPOIMENTOS                                      |
-|  Cards com quotes de clientes                      |
-+--------------------------------------------------+
-|  PRICING (3 planos)                                |
-|  Starter / Pro / Enterprise                        |
-+--------------------------------------------------+
-|  CTA FINAL                                         |
-|  "Pronto para transformar sua cobranca?"           |
-|  [Comece agora gratuitamente]                      |
-+--------------------------------------------------+
-|  FOOTER                                            |
-|  Links, contato, LGPD                              |
-+--------------------------------------------------+
++----------------------------------------------------------+
+| HEADER sticky (logo + nav + CTAs)                         |
++----------------------------------------------------------+
+|                                                            |
+|  BADGE: "Plataforma lider em cobranca B2B"                |
+|                                                            |
+|  TITULO: "Sua Empresa Perde Dinheiro                      |
+|           Cobrando do Jeito Errado"                        |
+|                                                            |
+|  SUBTITULO: Empresas que usam RIVO recuperam              |
+|  ate 45% mais recebiveis em 90 dias —                     |
+|  sem aumentar equipe e sem integracao complexa.           |
+|                                                            |
+|  [Fale com um Especialista]  [Teste Gratis 14 Dias]      |
+|                                                            |
+|  REMOCAO DE OBJECAO:                                      |
+|  "Sem cartao" | "Setup em 24h" | "Funciona com seu ERP"  |
+|                                                            |
+|  METRICAS ANIMADAS:                                       |
+|  R$120M+ recuperados | 500+ empresas | 45% mais acordos  |
+|  | 70% menos tempo                                        |
+|                                                            |
++----------------------------------------------------------+
+|  SOCIAL PROOF BAR com logos                                |
++----------------------------------------------------------+
+| ... restante da pagina (features, pricing, etc.)          |
++----------------------------------------------------------+
 ```
 
-### Arquivos
+### Tecnica AIDA Aplicada
+
+| Etapa | Elemento | Conteudo |
+|-------|----------|----------|
+| Atencao | Badge + Titulo | Frase provocativa que expoe o problema |
+| Interesse | Subtitulo | Solucao clara com resultado numerico |
+| Desejo | Metricas + Remocao de objecoes | Prova social + facilidade |
+| Acao | 2 CTAs | Primario (contato) + Secundario (teste gratis) |
+
+### Arquivos Modificados
 
 | Arquivo | Acao |
 |---------|------|
-| `src/pages/LandingPage.tsx` | Novo - Pagina completa da landing |
-| `src/App.tsx` | Adicionar rota `/landing` (publica, sem auth) |
+| `src/pages/LandingPage.tsx` | Reescrever Hero section com novo copy B2B, metricas maiores, CTAs duplos e remocao de objecoes |
+| `src/App.tsx` | Adicionar logica para mostrar LandingPage na rota `/` para visitantes nao logados |
 
 ### Detalhes Tecnicos
 
-- **Rota publica**: `/landing` sem ProtectedRoute, sem AppLayout
-- **Animacoes**: Usar `framer-motion` (ja instalado) para fade-in, scroll reveals e contadores animados
-- **Responsivo**: Mobile-first com grid adaptativo
-- **CTAs**: Botao principal leva para `/auth` (criar conta), botao secundario abre WhatsApp ou formulario
-- **Cores**: Usar as variaveis CSS ja definidas (primary orange `#FF7F00`, secondary dark `#1A1D29`)
-- **Logo**: Usar `src/assets/rivo_connect.png` ja existente
-- **SEO**: Tags de titulo e meta description via `document.title`
-- **Contador animado**: Numeros que incrementam ao entrar no viewport (useInView do framer-motion)
-- **Sticky header**: Navbar fixa com transparencia que ganha fundo no scroll
+**Hero Section:**
+- Titulo principal provocativo: "Sua Empresa Perde Dinheiro Cobrando do Jeito Errado"
+- Subtitulo com dados: "recuperam ate 45% mais recebiveis em 90 dias"
+- 2 CTAs: "Fale com um Especialista" (WhatsApp) + "Teste Gratis 14 Dias" (link para /auth)
+- Barra de remocao de objecoes com icones: sem cartao, setup rapido, compativel com ERP
+- Metricas maiores com prefixo "R$" e contadores animados
+- Background com gradiente dark + efeito radial sutil
+- Animacoes framer-motion mantidas (fade-in, contadores)
 
-### Secoes em Detalhe
+**Roteamento:**
+- Rota `/` verifica se usuario esta logado: se sim, mostra Dashboard; se nao, mostra LandingPage
+- Usa o hook `useAuth` para verificar estado de autenticacao
+- `/landing` continua funcionando como rota publica direta
 
-1. **Hero**: Headline impactante + subtitulo + 2 CTAs + numeros animados de prova social
-2. **Features**: 6 cards com icones lucide, titulo e descricao curta
-3. **Como Funciona**: 3 passos com icones numerados e conexao visual
-4. **Resultados**: 4 metricas grandes com animacao de contagem
-5. **Depoimentos**: 3 cards com avatar, nome, cargo e quote
-6. **Pricing**: 3 colunas (Starter gratuito, Pro, Enterprise) com feature list e CTAs
-7. **CTA Final**: Fundo gradient dark com headline e botao grande
-8. **Footer**: Links organizados em colunas + selo LGPD
+**Social Proof:**
+- Nomes de empresas fictcias na barra de logos
+- Metricas: R$120M+ recuperados, 500+ empresas, 45% mais acordos, 70% menos tempo
+
+**Responsividade:**
+- Layout mobile-first
+- CTAs empilhados em mobile, lado a lado em desktop
+- Metricas em grid 2x2 mobile, 4 colunas desktop
 
