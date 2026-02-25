@@ -28,6 +28,7 @@ import UsersPanel from "./UsersPanel";
 import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
 import RoutesPanel from "./RoutesPanel";
 import OfficeHoursPanel from "./OfficeHoursPanel";
+import WorkBreakIntervalsPanel from "./WorkBreakIntervalsPanel";
 
 const tabs = [
   { value: "dashboard", label: "Dashboard", group: "operation" },
@@ -37,6 +38,7 @@ const tabs = [
   { value: "chart", label: "Gráficos", group: "operation" },
   { value: "agents-report", label: "Produtividade", group: "operation" },
   { value: "qualifications", label: "Qualificações", group: "admin" },
+  { value: "intervals", label: "Intervalos", group: "admin" },
   { value: "blocklist", label: "Bloqueio", group: "admin" },
   { value: "teams", label: "Equipes", group: "admin" },
   { value: "schedules", label: "Agendamentos", group: "admin" },
@@ -131,6 +133,7 @@ const ThreeCPlusPanel = () => {
       <TabsContent value="chart"><CallsChart /></TabsContent>
       <TabsContent value="agents-report"><AgentsReportPanel /></TabsContent>
       <TabsContent value="qualifications"><QualificationsPanel /></TabsContent>
+      <TabsContent value="intervals"><WorkBreakIntervalsPanel /></TabsContent>
       <TabsContent value="blocklist"><BlockListPanel /></TabsContent>
       <TabsContent value="teams"><TeamsPanel /></TabsContent>
       <TabsContent value="schedules"><SchedulesPanel /></TabsContent>

@@ -481,6 +481,41 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'create_work_break_interval': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        method = 'POST';
+        const intervalBody: Record<string, any> = { name: body.name };
+        if (body.max_time) intervalBody.max_time = body.max_time;
+        reqBody = JSON.stringify(intervalBody);
+        break;
+      }
+
+      case 'update_work_break_interval': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'interval_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        method = 'PUT';
+        const updateBody: Record<string, any> = {};
+        if (body.name) updateBody.name = body.name;
+        if (body.max_time !== undefined) updateBody.max_time = body.max_time;
+        reqBody = JSON.stringify(updateBody);
+        break;
+      }
+
+      case 'delete_work_break_interval': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'interval_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
       // ── Manual Call ──
       case 'manual_call_enter':
         url = buildUrl(baseUrl, 'agent/manual_call/enter', authParam);

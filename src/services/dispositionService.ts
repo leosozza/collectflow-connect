@@ -12,7 +12,7 @@ export interface CallDisposition {
   created_at: string;
 }
 
-export const DISPOSITION_TYPES = {
+export const DISPOSITION_TYPES: Record<string, string> = {
   voicemail: "Caixa Postal",
   interrupted: "Ligação Interrompida",
   wrong_contact: "Contato Incorreto",
@@ -20,9 +20,38 @@ export const DISPOSITION_TYPES = {
   negotiated: "Negociar",
   no_answer: "Não Atende",
   promise: "Promessa de Pagamento",
-} as const;
+};
 
-export type DispositionType = keyof typeof DISPOSITION_TYPES;
+export type DispositionType = string;
+
+export interface CustomDispositionType {
+  key: string;
+  label: string;
+  color?: string;
+  icon?: string;
+  group?: string;
+}
+
+/**
+ * Resolve disposition types from tenant settings or fallback to defaults.
+ */
+export const getDispositionTypes = (tenantSettings?: Record<string, any>): Record<string, string> => {
+  const custom = tenantSettings?.custom_disposition_types as CustomDispositionType[] | undefined;
+  if (custom && Array.isArray(custom) && custom.length > 0) {
+    const map: Record<string, string> = {};
+    for (const c of custom) {
+      map[c.key] = c.label;
+    }
+    return map;
+  }
+  return DISPOSITION_TYPES;
+};
+
+export const getCustomDispositionList = (tenantSettings?: Record<string, any>): CustomDispositionType[] => {
+  const custom = tenantSettings?.custom_disposition_types as CustomDispositionType[] | undefined;
+  if (custom && Array.isArray(custom) && custom.length > 0) return custom;
+  return Object.entries(DISPOSITION_TYPES).map(([key, label]) => ({ key, label }));
+};
 
 export const fetchDispositions = async (clientId: string): Promise<CallDisposition[]> => {
   const { data, error } = await supabase
@@ -77,7 +106,6 @@ export const qualifyOn3CPlus = async (params: {
     const apiToken = params.tenantSettings.threecplus_api_token;
     if (!domain || !apiToken) return;
 
-    // If no explicit call_id, try current call
     const callId = params.callId || "current";
 
     await supabase.functions.invoke("threecplus-proxy", {

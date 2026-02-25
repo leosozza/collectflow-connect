@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
+  Mic, Keyboard, Phone, MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
@@ -19,6 +21,7 @@ import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import TelefoniaAtendimento from "./TelefoniaAtendimento";
+import OperatorCallHistory from "./OperatorCallHistory";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
@@ -27,9 +30,9 @@ interface TelefoniaDashboardProps {
 
 const statusLabel = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
-  if (status === 1 || ["idle", "available"].includes(s)) return "Disponível";
-  if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em Ligação";
-  if (status === 3 || s === "paused") return "Em Pausa";
+  if (status === 1 || ["idle", "available"].includes(s)) return "Aguardando ligação";
+  if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em ligação";
+  if (status === 3 || s === "paused") return "Em pausa";
   return String(status ?? "Desconhecido");
 };
 
@@ -39,6 +42,20 @@ const statusColor = (status: any): string => {
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive";
   if (status === 3 || s === "paused") return "bg-amber-500";
   return "bg-muted-foreground";
+};
+
+const statusBgClass = (status: any): string => {
+  const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
+  if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive text-destructive-foreground";
+  if (status === 3 || s === "paused") return "bg-amber-500 text-white";
+  return "bg-primary text-primary-foreground";
+};
+
+/** Format seconds into MM:SS */
+const formatTimer = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
 const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardProps) => {
@@ -66,6 +83,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pauseIntervals, setPauseIntervals] = useState<any[]>([]);
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
+
+  // Timer state
+  const [timerSeconds, setTimerSeconds] = useState(0);
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
 
@@ -198,6 +218,29 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [autoRefresh, interval, fetchAll]);
 
+  // ── Real-time timer based on status_start_time ──
+  const myAgent = operatorAgentId
+    ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
+    : null;
+  const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
+  const myCampaignId = myAgent?.campaign_id || myAgent?.campaign?.id;
+
+  useEffect(() => {
+    if (!isOperatorView || !isAgentOnline) {
+      setTimerSeconds(0);
+      return;
+    }
+    const startTime = myAgent?.status_start_time || myAgent?.status_time;
+    const calcSeconds = () => {
+      if (!startTime) return 0;
+      const start = new Date(startTime).getTime();
+      return Math.max(0, Math.floor((Date.now() - start) / 1000));
+    };
+    setTimerSeconds(calcSeconds());
+    const id = setInterval(() => setTimerSeconds(calcSeconds()), 1000);
+    return () => clearInterval(id);
+  }, [isOperatorView, isAgentOnline, myAgent?.status_start_time, myAgent?.status_time, myAgent?.status]);
+
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
     try {
@@ -290,66 +333,46 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  // Compute operator agent info at top level (before conditional return)
-  const myAgent = operatorAgentId
-    ? agents.find((a) => a.id === operatorAgentId || a.agent_id === operatorAgentId)
-    : null;
-  const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
-  const myCampaignId = myAgent?.campaign_id || myAgent?.campaign?.id;
-
-  // Load intervals when agent comes online with a campaign (must be top-level hook)
+  // Load intervals when agent comes online with a campaign
   useEffect(() => {
     if (isOperatorView && isAgentOnline && myCampaignId) {
       loadPauseIntervals(Number(myCampaignId));
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals]);
 
+  const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
+  const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+
   // ── OPERATOR VIEW ──
   if (isOperatorView) {
     const myMetrics = operatorAgentId ? agentMetrics[operatorAgentId] : undefined;
-    const myStatusStr = statusLabel(myAgent?.status);
-    const myStatusColor = statusColor(myAgent?.status);
-    const myCampaign = myAgent?.campaign_name || myAgent?.campaign?.name || "—";
-    const myExtension = myAgent?.extension || myAgent?.ramal || "—";
-    const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
 
-    return (
-      <div className="space-y-4 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-foreground">Minha Telefonia</h2>
-          <Badge
-            variant="outline"
-            className={`cursor-default transition-colors ${
-              lastUpdate
-                ? "border-emerald-500/40 text-emerald-700 gap-1.5"
-                : "border-destructive/40 text-destructive gap-1.5"
-            }`}
-          >
-            {lastUpdate ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {lastUpdate ? "Conectado" : "Desconectado"}
-            {lastUpdate && (
-              <span className="text-muted-foreground font-normal ml-1">
-                {lastUpdate.toLocaleTimeString("pt-BR")}
-              </span>
-            )}
-          </Badge>
-        </div>
-
-        {/* Operator card - full width, no DialPad */}
-        {loading && !lastUpdate ? (
+    // State 1: No campaign (offline)
+    if (loading && !lastUpdate) {
+      return (
+        <div className="p-4">
           <Skeleton className="h-64 w-full rounded-xl" />
-        ) : !isAgentOnline ? (
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4 max-w-lg">
+        </div>
+      );
+    }
+
+    if (!isAgentOnline) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh] p-4">
+          <div className="bg-card rounded-xl border border-border p-8 space-y-5 max-w-md w-full">
             {!operatorAgentId ? (
               <p className="text-sm text-muted-foreground text-center">
                 Seu perfil não possui um ID de agente 3CPlus vinculado.
               </p>
             ) : (
               <>
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">Entrar em uma Campanha</h3>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Selecione a campanha e clique para iniciar seu turno.
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <Headphones className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-bold text-foreground">Entrar em uma Campanha</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Selecione a campanha para iniciar seu turno.
                   </p>
                 </div>
                 <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
@@ -373,121 +396,180 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                   onClick={handleCampaignLogin}
                   disabled={!selectedCampaign || loggingIn}
                   className="w-full gap-2"
+                  size="lg"
                 >
                   <LogIn className={`w-4 h-4 ${loggingIn ? "animate-spin" : ""}`} />
-                  {loggingIn ? "Entrando..." : "Entrar na Campanha"}
+                  {loggingIn ? "Conectando..." : "Entrar na Campanha"}
                 </Button>
               </>
             )}
           </div>
-        ) : (
-          <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm max-w-2xl">
-            <div className={`h-2 ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
-            <div className="p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">
-                    {myAgent.name || myAgent.agent_name || "Agente"}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">Ramal: {myExtension}</p>
-                </div>
-                <Badge variant="outline" className="text-sm gap-1.5 px-3 py-1">
-                  <span className={`w-2 h-2 rounded-full ${myStatusColor} ${myAgent?.status === 2 ? "animate-pulse" : ""}`} />
-                  {myStatusStr}
-                </Badge>
-              </div>
+        </div>
+      );
+    }
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Campanha</p>
-                  <p className="text-sm font-semibold text-foreground truncate mt-0.5">{myCampaign}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Tempo no Status</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">
-                    {myAgent.status_time || myAgent.time_in_status || "—"}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Contatos Hoje</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">
-                    {myMetrics?.contacts ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Acordos Hoje</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">
-                    {myMetrics?.agreements ?? 0}
-                  </p>
-                </div>
-              </div>
-
-              {/* Pause / Unpause controls */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {isPaused ? (
-                  <Button
-                    size="sm"
-                    onClick={handleUnpause}
-                    disabled={unpausing}
-                    className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    <Play className={`w-4 h-4 ${unpausing ? "animate-spin" : ""}`} />
-                    {unpausing ? "Retomando..." : "Retomar Atendimento"}
-                  </Button>
-                ) : (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Pause className="w-4 h-4" />
-                        Pausar
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-56 p-2" align="start">
-                      <p className="text-xs font-medium text-muted-foreground px-2 py-1">Selecione o motivo:</p>
-                      {pauseIntervals.length === 0 ? (
-                        <p className="text-xs text-muted-foreground px-2 py-2">Nenhum intervalo disponível</p>
-                      ) : (
-                        pauseIntervals.map((pi: any) => (
-                          <button
-                            key={pi.id}
-                            onClick={() => handlePause(pi.id)}
-                            disabled={pausingWith === pi.id}
-                            className="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-accent transition-colors disabled:opacity-50"
-                          >
-                            <Coffee className="w-3.5 h-3.5 inline mr-2 text-amber-500" />
-                            {pausingWith === pi.id ? "Pausando..." : (pi.name || pi.description || `Intervalo ${pi.id}`)}
-                          </button>
-                        ))
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCampaignLogout}
-                  disabled={loggingOutSelf}
-                  className="gap-2 text-destructive hover:text-destructive ml-auto"
-                >
-                  <LogOut className={`w-4 h-4 ${loggingOutSelf ? "animate-spin" : ""}`} />
-                  {loggingOutSelf ? "Saindo..." : "Sair da Campanha"}
-                </Button>
-              </div>
+    // State 3: On call → show atendimento
+    if (isOnCall && (myAgent?.phone || myAgent?.remote_phone)) {
+      return (
+        <div className="space-y-0">
+          {/* Top bar - on call */}
+          <div className={`flex items-center justify-between px-4 py-2.5 ${statusBgClass(myAgent?.status)} animate-pulse`}>
+            <div className="flex items-center gap-3">
+              <Phone className="w-4 h-4" />
+              <span className="font-semibold text-sm">Em ligação ({formatTimer(timerSeconds)})</span>
             </div>
           </div>
-        )}
-
-        {/* Show atendimento when on call, script otherwise */}
-        {(myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call") && (myAgent?.phone || myAgent?.remote_phone) ? (
           <TelefoniaAtendimento
             clientPhone={myAgent.phone || myAgent.remote_phone}
             agentId={operatorAgentId!}
             callId={myAgent.call_id || myAgent.current_call_id}
           />
-        ) : (
-          <ScriptPanel clientPhone={myAgent?.phone || myAgent?.remote_phone} />
-        )}
+        </div>
+      );
+    }
+
+    // State 2: Logged in, waiting for call
+    return (
+      <div className="space-y-4">
+        {/* ── Top Status Bar ── */}
+        <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl ${statusBgClass(myAgent?.status)}`}>
+          <div className="flex items-center gap-3">
+            {/* Interval dropdown */}
+            {isPaused ? (
+              <Button
+                size="sm"
+                onClick={handleUnpause}
+                disabled={unpausing}
+                variant="secondary"
+                className="gap-1.5 h-8 text-xs bg-white/20 hover:bg-white/30 border-0"
+              >
+                <Play className={`w-3.5 h-3.5 ${unpausing ? "animate-spin" : ""}`} />
+                {unpausing ? "Retomando..." : "Retomar"}
+              </Button>
+            ) : (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="secondary" className="gap-1.5 h-8 text-xs bg-white/20 hover:bg-white/30 border-0">
+                    <Coffee className="w-3.5 h-3.5" />
+                    Intervalo
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2" align="start">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">Selecione o motivo:</p>
+                  {pauseIntervals.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-2 py-2">Nenhum intervalo disponível</p>
+                  ) : (
+                    pauseIntervals.map((pi: any) => (
+                      <button
+                        key={pi.id}
+                        onClick={() => handlePause(pi.id)}
+                        disabled={pausingWith === pi.id}
+                        className="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-accent transition-colors disabled:opacity-50"
+                      >
+                        <Coffee className="w-3.5 h-3.5 inline mr-2 text-amber-500" />
+                        {pausingWith === pi.id ? "Pausando..." : (pi.name || pi.description || `Intervalo ${pi.id}`)}
+                      </button>
+                    ))
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+
+          {/* Status central */}
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-300" : "bg-white"} ${isOnCall ? "animate-pulse" : ""}`} />
+            <span className="font-semibold text-sm">
+              {statusLabel(myAgent?.status)} ({formatTimer(timerSeconds)})
+            </span>
+          </div>
+
+          {/* Right side placeholders */}
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
+              <Mic className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
+              <Keyboard className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* ── 4 KPI Cards ── */}
+        <div className="grid grid-cols-2 gap-3 px-4">
+          {/* Ligações */}
+          <Card className="border-border/60">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <PhoneCall className="w-4 h-4 text-blue-600" />
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ligações</p>
+              </div>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.contacts ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Realizadas hoje</p>
+            </CardContent>
+          </Card>
+
+          {/* CPC */}
+          <Card className="border-border/60">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-emerald-600" />
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CPC</p>
+              </div>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.agreements ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Contatos com pessoa certa</p>
+            </CardContent>
+          </Card>
+
+          {/* Tempo de atendimento */}
+          <Card className="border-border/60">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                  <Headphones className="w-4 h-4 text-purple-600" />
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tempo</p>
+              </div>
+              <p className="text-3xl font-bold text-foreground">{formatTimer(timerSeconds)}</p>
+              <p className="text-xs text-muted-foreground mt-1">No status atual</p>
+            </CardContent>
+          </Card>
+
+          {/* Feedback */}
+          <Card className="border-border/60">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-amber-600" />
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Feedback</p>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">Nenhuma avaliação ainda</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Last calls table ── */}
+        <div className="px-4">
+          <OperatorCallHistory />
+        </div>
+
+        {/* ── Exit campaign button ── */}
+        <div className="px-4 pb-4">
+          <Button
+            variant="outline"
+            onClick={handleCampaignLogout}
+            disabled={loggingOutSelf}
+            className="gap-2 text-destructive hover:text-destructive"
+          >
+            <LogOut className={`w-4 h-4 ${loggingOutSelf ? "animate-spin" : ""}`} />
+            {loggingOutSelf ? "Saindo..." : "Sair da Campanha"}
+          </Button>
+        </div>
       </div>
     );
   }
