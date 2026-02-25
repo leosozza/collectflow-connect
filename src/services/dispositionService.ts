@@ -56,3 +56,41 @@ export const createDisposition = async (params: {
   });
   return data as CallDisposition;
 };
+
+/**
+ * Auto-qualify the active call on 3CPlus after a Rivo disposition.
+ * Best-effort: errors are logged but never block the main flow.
+ */
+export const qualifyOn3CPlus = async (params: {
+  dispositionType: string;
+  tenantSettings: Record<string, any>;
+  agentId: number;
+  callId?: string | number;
+}): Promise<void> => {
+  try {
+    const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
+    if (!map) return;
+    const qualificationId = map[params.dispositionType];
+    if (!qualificationId) return;
+
+    const domain = params.tenantSettings.threecplus_domain;
+    const apiToken = params.tenantSettings.threecplus_api_token;
+    if (!domain || !apiToken) return;
+
+    // If no explicit call_id, try current call
+    const callId = params.callId || "current";
+
+    await supabase.functions.invoke("threecplus-proxy", {
+      body: {
+        action: "qualify_call",
+        domain,
+        api_token: apiToken,
+        agent_id: params.agentId,
+        call_id: callId,
+        qualification_id: qualificationId,
+      },
+    });
+  } catch (err) {
+    console.error("qualifyOn3CPlus error (non-blocking):", err);
+  }
+};

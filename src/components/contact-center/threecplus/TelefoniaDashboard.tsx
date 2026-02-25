@@ -18,6 +18,7 @@ import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
+import TelefoniaAtendimento from "./TelefoniaAtendimento";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
@@ -477,7 +478,16 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           </div>
         )}
 
-        <ScriptPanel clientPhone={myAgent?.phone || myAgent?.remote_phone} />
+        {/* Show atendimento when on call, script otherwise */}
+        {(myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call") && (myAgent?.phone || myAgent?.remote_phone) ? (
+          <TelefoniaAtendimento
+            clientPhone={myAgent.phone || myAgent.remote_phone}
+            agentId={operatorAgentId!}
+            callId={myAgent.call_id || myAgent.current_call_id}
+          />
+        ) : (
+          <ScriptPanel clientPhone={myAgent?.phone || myAgent?.remote_phone} />
+        )}
       </div>
     );
   }
