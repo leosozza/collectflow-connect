@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { AlertTriangle, Menu } from "lucide-react";
+import { AlertTriangle, Menu, ArrowLeft } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -110,8 +110,19 @@ const ThreeCPlusPanel = () => {
     </DropdownMenu>
   );
 
+  const activeTabLabel = tabs.find((t) => t.value === activeTab)?.label;
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      {activeTab !== "dashboard" && (
+        <div className="flex items-center gap-3 px-4 pt-2">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => setActiveTab("dashboard")}>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Dashboard
+          </Button>
+          <span className="text-sm font-semibold text-foreground">{activeTabLabel}</span>
+        </div>
+      )}
 
       <TabsContent value="dashboard"><TelefoniaDashboard menuButton={menuButton} /></TabsContent>
       <TabsContent value="campaigns"><CampaignsPanel /></TabsContent>

@@ -498,16 +498,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const onCallCount = agents.filter((a) => a.status === 2 || ["on_call", "ringing"].includes(statusStr(a.status))).length;
   const pausedCount = agents.filter((a) => a.status === 3 || statusStr(a.status) === "paused").length;
   const idleCount = agents.filter((a) => a.status === 1 || ["idle", "available"].includes(statusStr(a.status))).length;
-  const activeCalls = companyCalls?.active ?? companyCalls?.data?.active ?? "—";
-  const completedCalls = companyCalls?.completed ?? companyCalls?.data?.completed ?? "—";
 
   const kpis = [
     { label: "Online", value: onlineCount, icon: Users, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600" },
     { label: "Em Ligação", value: onCallCount, icon: Headphones, bgClass: "bg-destructive/10", iconClass: "text-destructive" },
     { label: "Em Pausa", value: pausedCount, icon: Coffee, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
     { label: "Ociosos", value: idleCount, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-    { label: "Ativas", value: activeCalls, icon: PhoneCall, bgClass: "bg-primary/10", iconClass: "text-primary" },
-    { label: "Completadas", value: completedCalls, icon: PhoneOff, bgClass: "bg-muted/50", iconClass: "text-muted-foreground" },
   ];
 
   return (
@@ -567,20 +563,20 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         </Popover>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+      {/* KPI row — 4 cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card p-2.5 hover:shadow-sm transition-shadow">
+          <div key={kpi.label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-4 hover:shadow-sm transition-shadow">
             {loading && !lastUpdate ? (
-              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-12 w-full" />
             ) : (
               <>
-                <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${kpi.bgClass}`}>
-                  <kpi.icon className={`w-4 h-4 ${kpi.iconClass}`} />
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${kpi.bgClass}`}>
+                  <kpi.icon className={`w-5 h-5 ${kpi.iconClass}`} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-lg font-bold text-foreground leading-none">{kpi.value}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight truncate">{kpi.label}</p>
+                  <p className="text-2xl font-bold text-foreground leading-none">{kpi.value}</p>
+                  <p className="text-xs text-muted-foreground leading-tight mt-0.5">{kpi.label}</p>
                 </div>
               </>
             )}
@@ -588,23 +584,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         ))}
       </div>
 
-      {/* Agent Status */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-foreground">Agentes ({agents.length})</h3>
-          <p className="text-[11px] text-muted-foreground">Clique para detalhes</p>
-        </div>
-        <AgentStatusTable
-          agents={agents}
-          loading={loading}
-          onLogout={handleLogout}
-          loggingOut={loggingOut}
-          domain={domain}
-          apiToken={apiToken}
-          onAgentClick={(agent) => setSelectedAgent(agent)}
-          agentMetrics={agentMetrics}
-        />
-      </div>
+      {/* Collapsible Agents */}
+      <AgentStatusTable
+        agents={agents}
+        loading={loading}
+        onLogout={handleLogout}
+        loggingOut={loggingOut}
+        domain={domain}
+        apiToken={apiToken}
+        onAgentClick={(agent) => setSelectedAgent(agent)}
+        agentMetrics={agentMetrics}
+      />
 
       <AgentDetailSheet
         agent={selectedAgent}
@@ -617,17 +607,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         allAgents={agents}
       />
 
-      {/* Campaigns */}
-      <div>
-        <h3 className="text-sm font-semibold text-foreground mb-2">Campanhas</h3>
-        <CampaignOverview
-          campaigns={campaigns}
-          loading={loading}
-          domain={domain}
-          apiToken={apiToken}
-          onRefresh={fetchAll}
-        />
-      </div>
+      {/* Campaigns table */}
+      <CampaignOverview
+        campaigns={campaigns}
+        loading={loading}
+        domain={domain}
+        apiToken={apiToken}
+        onRefresh={fetchAll}
+      />
     </div>
   );
 };
