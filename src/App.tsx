@@ -36,6 +36,7 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import LandingPage from "./pages/LandingPage";
 
 
 const queryClient = new QueryClient();
@@ -229,6 +230,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/api-docs/public" element={<ApiDocsPublicPage />} />
             <Route path="/portal/:tenantSlug" element={<PortalPage />} />
             <Route path="/portal/:tenantSlug/checkout/:token" element={<PortalPage />} />
