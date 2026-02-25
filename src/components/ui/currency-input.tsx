@@ -21,7 +21,7 @@ function formatToBRL(num: number): string {
 
 function parseBRL(str: string): number {
   // Remove everything except digits and comma
-  const clean = str.replace(/[^\\d,]/g, "");
+  const clean = str.replace(/[^\d,]/g, "");
   if (!clean) return 0;
   // Replace comma with dot for parseFloat
   const normalized = clean.replace(",", ".");
