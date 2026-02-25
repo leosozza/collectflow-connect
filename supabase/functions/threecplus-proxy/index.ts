@@ -566,7 +566,7 @@ Deno.serve(async (req) => {
         const agentAuthLogin = `api_token=${targetUser.api_token}`;
         url = `${baseUrl}/agent/login?${agentAuthLogin}`;
         method = 'POST';
-        reqBody = JSON.stringify({ campaign_id: body.campaign_id });
+        reqBody = JSON.stringify({ campaign: body.campaign_id });
         console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/login`);
         break;
       }
