@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Pause, Play, Settings2, Users, PhoneCall, PhoneOff } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Pause, Play, Settings2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -24,6 +25,8 @@ interface Campaign {
     completed?: number;
     abandoned?: number;
     no_answer?: number;
+    total?: number;
+    avg_idle_time?: number;
   };
 }
 
@@ -78,101 +81,93 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
   };
 
   if (loading && campaigns.length === 0) {
-    return (
-      <div className="grid gap-3 md:grid-cols-2">
-        {[...Array(2)].map((_, i) => (
-          <Skeleton key={i} className="h-32 w-full" />
-        ))}
-      </div>
-    );
+    return <Skeleton className="h-32 w-full rounded-xl" />;
   }
 
   if (campaigns.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-8">Nenhuma campanha encontrada</p>;
   }
 
-  const activeCampaigns = campaigns.filter((c) => c.status === "running");
-  const inactiveCampaigns = campaigns.filter((c) => c.status !== "running");
-
-  const renderCampaign = (c: Campaign, inactive = false) => {
-    const isRunning = c.status === "running";
-    const aggr = c.dialer_settings?.aggressiveness ?? 1;
-
-    return (
-      <Card key={c.id} className={`shadow-none border-border/60 ${inactive ? "opacity-60" : ""}`}>
-        <CardContent className="p-3 space-y-3">
-          {/* Header row */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm font-semibold truncate">{c.name}</span>
-              <Badge variant={isRunning ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 shrink-0">
-                {isRunning ? "Ativa" : c.status || "Parada"}
-              </Badge>
-            </div>
-            <span className="text-[10px] text-muted-foreground shrink-0">
-              {c.start_time || "08:00"} – {c.end_time || "18:30"}
-            </span>
-          </div>
-
-          {/* Metrics chips inline */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Users className="w-3 h-3" />
-              <span className="font-medium text-foreground">{c.agents_count ?? "—"}</span> agentes
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <PhoneCall className="w-3 h-3" />
-              <span className="font-medium text-foreground">{c.statistics?.completed ?? "—"}</span> completadas
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <PhoneOff className="w-3 h-3" />
-              <span className="font-medium text-foreground">{c.statistics?.abandoned ?? "—"}</span> abandonadas
-            </div>
-          </div>
-
-          {/* Aggressiveness + action in one row */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Settings2 className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">Agr.</span>
-              <span className="text-xs font-semibold w-4 text-center">{aggr}</span>
-            </div>
-            <Slider
-              min={1}
-              max={10}
-              step={1}
-              defaultValue={[aggr]}
-              onValueCommit={(v) => handleAggressiveness(c.id, v[0])}
-              disabled={actionLoading === `aggr_${c.id}`}
-              className="flex-1"
-            />
-            <Button
-              variant={isRunning ? "outline" : "default"}
-              size="sm"
-              className="h-7 px-2.5 gap-1 text-[11px] shrink-0"
-              onClick={() => handlePauseResume(c.id, c.status)}
-              disabled={!!actionLoading}
-            >
-              {actionLoading === `${isRunning ? 'pause' : 'resume'}_campaign_${c.id}` ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : isRunning ? (
-                <Pause className="w-3 h-3" />
-              ) : (
-                <Play className="w-3 h-3" />
-              )}
-              {isRunning ? "Pausar" : "Retomar"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        {activeCampaigns.map((c) => renderCampaign(c))}
-        {inactiveCampaigns.map((c) => renderCampaign(c, true))}
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-foreground">Campanhas ({campaigns.length})</h3>
+      <div className="rounded-lg border border-border/60 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-xs h-9">Campanha</TableHead>
+              <TableHead className="text-xs h-9">Status</TableHead>
+              <TableHead className="text-xs h-9 w-[180px]">Progresso</TableHead>
+              <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
+              <TableHead className="text-xs h-9 text-center">Completadas</TableHead>
+              <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
+              <TableHead className="text-xs h-9 w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {campaigns.map((c) => {
+              const isRunning = c.status === "running";
+              const aggr = c.dialer_settings?.aggressiveness ?? 1;
+              const total = c.statistics?.total || 0;
+              const completed = c.statistics?.completed || 0;
+              const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+              return (
+                <TableRow key={c.id} className={!isRunning ? "opacity-60" : ""}>
+                  <TableCell className="py-2 text-sm font-medium">{c.name}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant={isRunning ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                      {isRunning ? "Ativa" : c.status || "Parada"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex items-center gap-2">
+                      <Progress value={pct} className="h-2 flex-1" />
+                      <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2 text-center text-sm font-semibold">
+                    {c.agents_count ?? "—"}
+                  </TableCell>
+                  <TableCell className="py-2 text-center text-sm font-semibold">
+                    {completed || "—"}
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold w-4 text-center">{aggr}</span>
+                      <Slider
+                        min={1}
+                        max={10}
+                        step={1}
+                        defaultValue={[aggr]}
+                        onValueCommit={(v) => handleAggressiveness(c.id, v[0])}
+                        disabled={actionLoading === `aggr_${c.id}`}
+                        className="flex-1"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2">
+                    <Button
+                      variant={isRunning ? "ghost" : "ghost"}
+                      size="icon"
+                      className={`h-7 w-7 ${isRunning ? "text-muted-foreground hover:text-destructive" : "text-muted-foreground hover:text-primary"}`}
+                      onClick={() => handlePauseResume(c.id, c.status)}
+                      disabled={!!actionLoading}
+                    >
+                      {actionLoading === `${isRunning ? "pause" : "resume"}_campaign_${c.id}` ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isRunning ? (
+                        <Pause className="w-3.5 h-3.5" />
+                      ) : (
+                        <Play className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
