@@ -4,7 +4,8 @@ import { motion, useInView } from "framer-motion";
 import {
   Zap, MessageSquare, Globe, Trophy, BarChart3, Plug,
   Upload, Settings, TrendingUp, Check, ArrowRight, Shield,
-  Star, ChevronRight, Phone, Mail, MapPin
+  Star, ChevronRight, Phone, Mail, MapPin,
+  CreditCard, Clock, Cable
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logoImg from "@/assets/rivo_connect.png";
@@ -62,10 +63,16 @@ const steps = [
 ];
 
 const metrics = [
-  { value: 45, suffix: "%", label: "mais acordos fechados" },
-  { value: 3, suffix: "x", label: "mais produtividade por operador" },
-  { value: 70, suffix: "%", label: "redução no tempo de negociação" },
-  { value: 500, prefix: "+", suffix: "", label: "empresas confiam no RIVO" },
+  { value: 120, prefix: "R$", suffix: "M+", label: "recuperados para nossos clientes" },
+  { value: 500, prefix: "", suffix: "+", label: "empresas confiam no RIVO" },
+  { value: 45, prefix: "", suffix: "%", label: "mais acordos fechados" },
+  { value: 70, prefix: "", suffix: "%", label: "menos tempo de cobrança" },
+];
+
+const objections = [
+  { icon: CreditCard, text: "Sem cartão de crédito" },
+  { icon: Clock, text: "Setup em 24h" },
+  { icon: Cable, text: "Funciona com seu ERP" },
 ];
 
 const testimonials = [
@@ -128,47 +135,76 @@ export default function LandingPage() {
       </header>
 
       {/* ── HERO ── */}
-      <section className="relative pt-32 pb-20 sm:pt-40 sm:pb-28 overflow-hidden">
+      <section className="relative pt-32 pb-24 sm:pt-44 sm:pb-32 overflow-hidden">
         <div className="absolute inset-0 gradient-dark opacity-95" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(30_100%_50%/0.15),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(30_100%_50%/0.18),transparent)]" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 text-center">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-            <span className="inline-block mb-4 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase bg-primary/15 text-primary border border-primary/25">
-              Plataforma #1 de Cobrança no Brasil
+            {/* Badge — Atenção */}
+            <span className="inline-block mb-6 px-5 py-2 rounded-full text-xs font-semibold tracking-wide uppercase bg-primary/15 text-primary border border-primary/25">
+              Plataforma líder em cobrança B2B
             </span>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
-              Recupere mais dívidas<br className="hidden sm:block" /> com <span className="text-primary">menos esforço</span>
+
+            {/* Título — Atenção */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold text-white leading-[1.1] tracking-tight">
+              Sua Empresa Perde Dinheiro<br className="hidden sm:block" />
+              <span className="text-primary">Cobrando do Jeito Errado</span>
             </h1>
-            <p className="mt-6 text-lg sm:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed">
-              Automação inteligente, contact center omnichannel e portal do devedor — tudo em uma única plataforma que transforma sua operação de cobrança.
+
+            {/* Subtítulo — Interesse */}
+            <p className="mt-6 text-lg sm:text-xl lg:text-2xl text-white/70 max-w-3xl mx-auto leading-relaxed">
+              Empresas que usam RIVO recuperam até <span className="text-white font-semibold">45% mais recebíveis em 90 dias</span> — sem aumentar equipe e sem integração complexa.
             </p>
+
+            {/* CTAs — Ação */}
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/auth">
+              <a
+                href="https://wa.me/5511999999999?text=Quero%20falar%20com%20um%20especialista%20RIVO"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <Button size="lg" className="text-base px-8 py-6 font-bold shadow-lg shadow-primary/25">
-                  Comece Grátis <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/5511999999999?text=Quero%20uma%20demonstração%20do%20RIVO%20Connect" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 text-white hover:bg-white/10">
-                  Ver Demonstração
+                  Fale com um Especialista <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </a>
+              <Link to="/auth">
+                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 text-white hover:bg-white/10">
+                  Teste Grátis 14 Dias
+                </Button>
+              </Link>
             </div>
+
+            {/* Remoção de objeções — Desejo */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="mt-8 flex flex-wrap items-center justify-center gap-6 text-white/50 text-sm"
+            >
+              {objections.map((o) => (
+                <div key={o.text} className="flex items-center gap-2">
+                  <o.icon className="h-4 w-4 text-primary/70" />
+                  <span>{o.text}</span>
+                </div>
+              ))}
+            </motion.div>
           </motion.div>
 
-          {/* hero metrics */}
+          {/* Métricas animadas — Desejo */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto"
+            transition={{ delay: 0.5, duration: 0.6 }}
+            className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto"
           >
             {metrics.map((m) => (
-              <div key={m.label} className="text-center">
+              <div key={m.label} className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
                 <p className="text-3xl sm:text-4xl font-extrabold text-primary">
                   <AnimatedCounter target={m.value} suffix={m.suffix} prefix={m.prefix} />
                 </p>
-                <p className="mt-1 text-xs sm:text-sm text-white/60">{m.label}</p>
+                <p className="mt-2 text-xs sm:text-sm text-white/60">{m.label}</p>
               </div>
             ))}
           </motion.div>
