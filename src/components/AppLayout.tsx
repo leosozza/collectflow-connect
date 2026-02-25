@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,6 +28,7 @@ import AgreementCelebration from "@/components/notifications/AgreementCelebratio
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import SupportFloatingButton from "@/components/support/SupportFloatingButton";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface AppLayoutProps {
@@ -252,6 +253,21 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "Painel Super Admin"}
             </Link>
           )}
+          {isSuperAdmin && (
+            <Link
+              to="/suporte-admin"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Suporte" : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                location.pathname === "/suporte-admin"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <Headphones className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && "Suporte"}
+            </Link>
+          )}
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}
@@ -340,6 +356,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         notification={celebrationNotification}
         onDismiss={dismissCelebration}
       />
+
+      <SupportFloatingButton />
     </div>
   );
 };
