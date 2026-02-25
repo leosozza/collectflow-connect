@@ -37,6 +37,7 @@ import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LandingPage from "./pages/LandingPage";
+import SupportAdminPage from "./pages/SupportAdminPage";
 
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
@@ -337,6 +338,16 @@ const App = () => (
                 <ProtectedRoute requireTenant>
                   <AppLayout>
                     <TenantSettingsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/suporte-admin"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <SupportAdminPage />
                   </AppLayout>
                 </ProtectedRoute>
               }

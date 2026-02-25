@@ -606,7 +606,7 @@ Tabelas relacionadas: credores, agreements, clients`,
     title: "Agente IA Autônomo de Negociação",
     description: "LLM integrado via Edge Function que negocia em tempo real com contorno de objeções no contexto de cobrança.",
     status: "planned",
-    progress: 0,
+    progress: 15,
     category: "IA",
     lovablePrompt: `Evoluir o Agente IA do Contact Center para negociar de forma autônoma, aplicando políticas de desconto e contornando objeções.
 
@@ -676,8 +676,8 @@ Tabelas: chat_messages (nova coluna sentiment), conversations, profiles`,
     id: "construtor-visual-fluxos",
     title: "Construtor Visual de Fluxos (N8N Embutido)",
     description: "Interface drag-and-drop com reactflow para criar réguas de cobrança visuais sem código.",
-    status: "future",
-    progress: 0,
+    status: "done",
+    progress: 100,
     category: "Automação",
     lovablePrompt: `Implementar um Construtor Visual de Fluxos de Cobrança usando reactflow, similar ao N8N, dentro do próprio sistema.
 
@@ -720,8 +720,8 @@ Rota: /automacao/fluxos (dentro da AutomacaoPage existente como nova tab)`,
     id: "motor-execucao-fluxos",
     title: "Motor de Execução de Fluxos",
     description: "Engine em Edge Functions + CRON que executa os fluxos visuais de cobrança automaticamente.",
-    status: "future",
-    progress: 0,
+    status: "done",
+    progress: 100,
     category: "Automação",
     lovablePrompt: `Implementar o Motor de Execução que roda os fluxos criados no Construtor Visual de Fluxos.
 
@@ -1018,6 +1018,44 @@ Output:
 4. Exportação priorizada: no DialerExportDialog, ordenar por score DESC
 
 Tabelas: clients, agreements, call_dispositions, message_logs, campaign_participants`,
+  },
+
+  // ── NOVOS ITENS ──
+  {
+    id: "landing-b2b",
+    title: "Landing Page B2B (Hero de Conversão)",
+    description: "Hero section otimizada para conversão B2B com técnica AIDA, métricas animadas, CTAs duplos e remoção de objeções.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "A Landing Page B2B está implementada em src/pages/LandingPage.tsx com Hero section focada em conversão, métricas animadas, CTAs para WhatsApp e teste grátis, e barra de remoção de objeções.",
+  },
+  {
+    id: "suporte-inapp",
+    title: "Módulo de Suporte In-App",
+    description: "Botão flutuante, chat com tickets em tempo real, guias interativos passo-a-passo e agendamento de reunião.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "O Módulo de Suporte está implementado com SupportFloatingButton, SupportPanel (3 abas: Guias, Chat, Agendar), SupportAdminPage para super_admin. Tabelas: support_tickets, support_messages, support_schedule_requests com RLS e realtime.",
+  },
+  {
+    id: "guias-interativos",
+    title: "Guias Interativos Passo-a-Passo",
+    description: "Tutoriais organizados por módulo do sistema com busca e navegação em accordion.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Os Guias Interativos estão implementados em src/components/support/SupportGuidesTab.tsx com categorias: Dashboard, Carteira, Acordos, Contact Center, Automação, Cadastros e Portal.",
+  },
+  {
+    id: "agendamento-suporte",
+    title: "Agendamento de Reunião com Suporte",
+    description: "Formulário para solicitar reunião com data/hora preferida, salvo no banco com notificação ao admin.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "O Agendamento está implementado em src/components/support/SupportScheduleTab.tsx com formulário e tabela support_schedule_requests. Visível na aba 'Agendar' do painel de suporte.",
   },
 ];
 
