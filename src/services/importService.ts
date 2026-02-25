@@ -63,7 +63,10 @@ const parseBRDate = (value: any): string => {
 
 const cleanCPF = (value: any): string => {
   if (!value) return "";
-  return String(value).replace(/\D/g, "").padStart(11, "0").slice(0, 14);
+  const digits = String(value).replace(/\D/g, "").padStart(11, "0").slice(0, 14);
+  // Valid CPF has 11 digits, CNPJ has 14
+  if (digits.length !== 11 && digits.length !== 14) return "";
+  return digits;
 };
 
 const formatCPFDisplay = (cpf: string): string => {

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 const UF_MAP: Record<number, string> = {
   1: "AC", 2: "AL", 3: "AP", 4: "AM", 5: "BA", 6: "CE", 7: "DF", 8: "ES",
@@ -28,7 +29,7 @@ async function fetchAddressForContract(
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   try {
-    const searchResp = await fetch(
+    const searchResp = await fetchWithTimeout(
       `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-search&contractNumber=${contractNumber}`,
       { headers }
     );
@@ -37,7 +38,7 @@ async function fetchAddressForContract(
     const modelId = searchJson.item?.Id;
     if (!modelId) { cache.set(contractNumber, emptyAddress()); return null; }
 
-    const detResp = await fetch(
+    const detResp = await fetchWithTimeout(
       `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-details&modelId=${modelId}`,
       { headers }
     );
