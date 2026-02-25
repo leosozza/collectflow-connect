@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.send-quitados-report]
 verify_jwt = false
+
+[functions.support-ai-chat]
+verify_jwt = false
