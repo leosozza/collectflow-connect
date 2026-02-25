@@ -1,58 +1,41 @@
 
 
-## Plano: Auto-conectar MicroSIP ao entrar na campanha
+## Plano: Corrigir erro de validacao ao entrar na campanha
 
-### Contexto
+### Problema Identificado
 
-Hoje, ao clicar "Entrar na Campanha", o Rivo chama apenas `POST /agent/login` na API 3CPlus. Isso loga o agente na campanha, mas nao aciona o softphone SIP (MicroSIP). O operador precisa ir manualmente ao 3CPlus para conectar.
+Testei a chamada `POST /agent/login` diretamente e a API 3CPlus retornou:
 
-A API 3CPlus tem um endpoint separado: `POST /agent/connect` que dispara a conexao SIP do agente, fazendo o MicroSIP receber a chamada de registro automaticamente.
+```json
+{
+  "detail": "Erros de validação foram encontrados ao processar sua requisição.",
+  "errors": {
+    "campaign": ["O campo Campanha é obrigatório quanto group id não está presente."],
+    "group_id": ["O campo group id é obrigatório quanto Campanha não está presente."]
+  },
+  "status": 422
+}
+```
 
-### O Que Vai Mudar
+**Causa raiz**: No proxy, linha 569, o body enviado ao 3CPlus usa `campaign_id`, mas a API espera o campo chamado `campaign`.
 
-Ao clicar "Entrar na Campanha" no Rivo, o sistema fara automaticamente:
-1. `POST /agent/login` — Loga o agente na campanha (ja existe)
-2. `POST /agent/connect` — Conecta o softphone SIP/MicroSIP (novo)
+```typescript
+// ERRADO (atual):
+reqBody = JSON.stringify({ campaign_id: body.campaign_id });
 
-O operador so precisa atender a chamada no MicroSIP para ficar conectado.
+// CORRETO:
+reqBody = JSON.stringify({ campaign: body.campaign_id });
+```
 
-### Alteracoes Detalhadas
+### Alteracao
 
----
+**Arquivo: `supabase/functions/threecplus-proxy/index.ts`** (linha 569)
 
-#### 1. Proxy — Novo action `connect_agent`
-
-**Arquivo: `supabase/functions/threecplus-proxy/index.ts`**
-
-Adicionar case `connect_agent`:
-- Resolve o `api_token` do agente (mesmo padrao dos demais)
-- Chama `POST /agent/connect` com o token do agente
-- Sem body adicional necessario (a API conecta o agente ao ramal SIP ja configurado)
-
----
-
-#### 2. Login do Operador — Chamar connect apos login
-
-**Arquivo: `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`**
-
-Na funcao `handleCampaignLogin`:
-- Apos o `login_agent_to_campaign` retornar sucesso
-- Chamar `invoke("connect_agent", { agent_id: operatorAgentId })`
-- Se o connect falhar, mostrar aviso (mas nao bloquear, pois o login ja funcionou)
-- Mensagem de sucesso: "Conectado! Atenda o MicroSIP para iniciar."
-
----
-
-### Resumo dos Arquivos
-
-| Arquivo | Acao |
-|---------|------|
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `connect_agent` → `POST /agent/connect` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Chamar `connect_agent` automaticamente apos login na campanha |
+Mudar o nome do campo no body de `campaign_id` para `campaign`. Apenas 1 linha precisa ser alterada.
 
 ### Detalhes Tecnicos
 
-- O endpoint `POST /agent/connect` usa o `api_token` do agente (nao o token da empresa), seguindo o mesmo padrao de resolucao ja usado em `login_agent_to_campaign`
-- O MicroSIP deve estar instalado e configurado no PC do operador com as credenciais SIP do 3CPlus — isso e pre-requisito externo, nao depende do Rivo
-- Apos o connect, o 3CPlus envia uma chamada SIP para o ramal do agente; o operador atende e fica disponivel para receber ligacoes preditivas
+- A API 3CPlus `POST /agent/login` aceita `campaign` (numero do ID da campanha) como campo obrigatorio, nao `campaign_id`
+- Confirmado testando diretamente via curl na edge function — a resposta 422 mostra explicitamente que o campo esperado e `campaign`
+- Apos a correcao, o fluxo completo (login + connect SIP) deve funcionar normalmente
 
