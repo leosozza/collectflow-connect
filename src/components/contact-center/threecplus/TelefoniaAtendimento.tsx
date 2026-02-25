@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,42 +7,50 @@ import { formatCPF } from "@/lib/formatters";
 import { createAgreement } from "@/services/agreementService";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
 import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
 import ClientTimeline from "@/components/atendimento/ClientTimeline";
+import { Card, CardContent } from "@/components/ui/card";
+import { UserX } from "lucide-react";
 
-const AtendimentoPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+interface TelefoniaAtendimentoProps {
+  clientPhone: string;
+  agentId: number;
+  callId?: string | number;
+}
+
+const TelefoniaAtendimento = ({ clientPhone, agentId, callId }: TelefoniaAtendimentoProps) => {
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
-  const { trackAction } = useActivityTracker();
   const [showNegotiation, setShowNegotiation] = useState(false);
-  const [callingPhone, setCallingPhone] = useState(false);
+  const settings = (tenant?.settings as Record<string, any>) || {};
 
-  // Fetch client by ID
+  // Normalize phone for lookup — match last 8+ digits
+  const normalizedPhone = clientPhone.replace(/\D/g, "");
+  const phoneSuffix = normalizedPhone.length >= 8 ? normalizedPhone.slice(-8) : normalizedPhone;
+
+  // Fetch client by phone
   const { data: client, isLoading: clientLoading } = useQuery({
-    queryKey: ["atendimento-client", id],
+    queryKey: ["telefonia-client", phoneSuffix],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
-        .eq("id", id!)
-        .single();
+        .or(`phone.ilike.%${phoneSuffix},phone2.ilike.%${phoneSuffix},phone3.ilike.%${phoneSuffix}`)
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!id,
+    enabled: !!phoneSuffix && phoneSuffix.length >= 8,
   });
 
-  // Fetch all records for this CPF (for totals)
+  // Fetch all records for this CPF
   const { data: clientRecords = [] } = useQuery({
-    queryKey: ["atendimento-records", client?.cpf],
+    queryKey: ["telefonia-records", client?.cpf],
     queryFn: async () => {
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
@@ -61,14 +67,14 @@ const AtendimentoPage = () => {
 
   // Fetch dispositions
   const { data: dispositions = [] } = useQuery({
-    queryKey: ["dispositions", id],
-    queryFn: () => fetchDispositions(id!),
-    enabled: !!id,
+    queryKey: ["dispositions", client?.id],
+    queryFn: () => fetchDispositions(client!.id),
+    enabled: !!client?.id,
   });
 
-  // Fetch agreements for this CPF
+  // Fetch agreements
   const { data: agreements = [] } = useQuery({
-    queryKey: ["atendimento-agreements", client?.cpf],
+    queryKey: ["telefonia-agreements", client?.cpf],
     queryFn: async () => {
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
@@ -83,19 +89,19 @@ const AtendimentoPage = () => {
     enabled: !!client?.cpf,
   });
 
-  // Fetch message logs for this client
+  // Fetch message logs
   const { data: messageLogs = [] } = useQuery({
-    queryKey: ["atendimento-messages", id],
+    queryKey: ["telefonia-messages", client?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("message_logs")
         .select("*")
-        .eq("client_id", id!)
+        .eq("client_id", client!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
-    enabled: !!id,
+    enabled: !!client?.id,
   });
 
   // Disposition mutation
@@ -103,7 +109,7 @@ const AtendimentoPage = () => {
     mutationFn: async ({ type, notes, scheduledCallback }: { type: DispositionType; notes?: string; scheduledCallback?: string }) => {
       if (!tenant?.id || !profile?.id) throw new Error("Dados do operador não encontrados");
       return createDisposition({
-        client_id: id!,
+        client_id: client!.id,
         tenant_id: tenant.id,
         operator_id: profile.id,
         disposition_type: type,
@@ -112,22 +118,18 @@ const AtendimentoPage = () => {
       });
     },
     onSuccess: (_, variables) => {
-      trackAction("tabulacao", { tipo: variables.type, client_id: id });
-      queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+      queryClient.invalidateQueries({ queryKey: ["dispositions", client?.id] });
       // Execute post-disposition automations
-      if (tenant?.id && id) {
-        executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
+      if (tenant?.id && client?.id) {
+        executeAutomations(tenant.id, variables.type, client.id, profile?.user_id || "").catch(console.error);
       }
-      // Auto-qualify on 3CPlus (best-effort)
-      const tenantSettings = (tenant?.settings as Record<string, any>) || {};
-      const operatorAgentId = (profile as any)?.threecplus_agent_id as number | undefined;
-      if (operatorAgentId && tenantSettings.threecplus_domain) {
-        qualifyOn3CPlus({
-          dispositionType: variables.type,
-          tenantSettings,
-          agentId: operatorAgentId,
-        });
-      }
+      // Auto-qualify on 3CPlus
+      qualifyOn3CPlus({
+        dispositionType: variables.type,
+        tenantSettings: settings,
+        agentId,
+        callId,
+      });
     },
   });
 
@@ -160,20 +162,26 @@ const AtendimentoPage = () => {
       );
     },
     onSuccess: () => {
-      trackAction("criar_acordo_atendimento", { client_id: id });
       toast.success("Acordo criado com sucesso!");
       setShowNegotiation(false);
-      queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
-      // Also register negotiation disposition
-      if (tenant?.id && profile?.id) {
+      queryClient.invalidateQueries({ queryKey: ["telefonia-agreements"] });
+      // Register negotiation disposition
+      if (tenant?.id && profile?.id && client?.id) {
         createDisposition({
-          client_id: id!,
+          client_id: client.id,
           tenant_id: tenant.id,
           operator_id: profile.id,
           disposition_type: "negotiated",
-          notes: "Acordo gerado",
+          notes: "Acordo gerado via telefonia",
         }).then(() => {
-          queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+          queryClient.invalidateQueries({ queryKey: ["dispositions", client?.id] });
+          // Also qualify on 3CPlus
+          qualifyOn3CPlus({
+            dispositionType: "negotiated",
+            tenantSettings: settings,
+            agentId,
+            callId,
+          });
         });
       }
     },
@@ -183,17 +191,20 @@ const AtendimentoPage = () => {
   });
 
   if (clientLoading) {
-    return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
+    return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
   }
 
   if (!client) {
     return (
-      <div className="p-8 text-center space-y-4">
-        <p className="text-muted-foreground">Cliente não encontrado</p>
-        <Button variant="outline" onClick={() => navigate("/carteira")}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
-        </Button>
-      </div>
+      <Card className="border-dashed">
+        <CardContent className="flex items-center gap-3 py-6">
+          <UserX className="w-5 h-5 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
+            <p className="text-xs text-muted-foreground">Telefone: {clientPhone}</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -206,80 +217,20 @@ const AtendimentoPage = () => {
     await dispositionMutation.mutateAsync({ type, notes, scheduledCallback });
   };
 
-  const handleCall = async (phone: string) => {
-    if (!profile?.threecplus_agent_id) {
-      toast.error("Seu perfil não possui um agente 3CPlus vinculado");
-      return;
-    }
-    const { data: tenantData } = await supabase
-      .from("tenants")
-      .select("settings")
-      .eq("id", tenant!.id)
-      .single();
-    const settings = (tenantData?.settings as any) || {};
-    const domain = settings.threecplus_domain;
-    const apiToken = settings.threecplus_api_token;
-    if (!domain || !apiToken) {
-      toast.error("Telefonia 3CPlus não configurada neste tenant");
-      return;
-    }
-    setCallingPhone(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "click2call",
-          domain,
-          api_token: apiToken,
-          agent_id: profile.threecplus_agent_id,
-          phone_number: phone.replace(/\D/g, ""),
-        },
-      });
-      if (error) throw error;
-      if (data?.status && data.status >= 400) {
-        const detail = data.detail || data.message || (Array.isArray(data.errors) ? data.errors[0] : null) || "Erro ao discar";
-        // "O agente não está online" means the agent is not logged in to 3CPlus
-        if (detail.toLowerCase().includes("não está online") || detail.toLowerCase().includes("not online")) {
-          toast.error("Agente não está online no 3CPlus. Faça login na plataforma de telefonia antes de discar.");
-        } else {
-          toast.error(detail);
-        }
-      } else {
-        toast.success("Ligação iniciada");
-      }
-    } catch {
-      toast.error("Erro ao iniciar ligação");
-    } finally {
-      setCallingPhone(false);
-    }
-  };
-
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Back button */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Atendimento</h1>
-          <p className="text-sm text-muted-foreground">Tela do operador</p>
-        </div>
-      </div>
-
-      {/* Client Header */}
+    <div className="space-y-3">
       <ClientHeader
         client={client as any}
         totalAberto={totalAberto}
         totalPago={totalPago}
         totalParcelas={clientRecords.length}
         parcelasPagas={clientRecords.filter((c) => c.status === "pago").length}
-        onCall={handleCall}
-        callingPhone={callingPhone}
+        onCall={() => {}}
+        callingPhone={false}
       />
 
-      {/* Main content - two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-1 space-y-3">
           <DispositionPanel
             onDisposition={handleDisposition}
             onNegotiate={() => setShowNegotiation(true)}
@@ -311,4 +262,4 @@ const AtendimentoPage = () => {
   );
 };
 
-export default AtendimentoPage;
+export default TelefoniaAtendimento;

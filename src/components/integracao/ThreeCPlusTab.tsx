@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
+import { DISPOSITION_TYPES } from "@/services/dispositionService";
 
 const ThreeCPlusTab = () => {
   const { tenant } = useTenant();
@@ -20,6 +22,14 @@ const ThreeCPlusTab = () => {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
+
+  // Qualification mapping state
+  const [qualifications, setQualifications] = useState<any[]>([]);
+  const [loadingQuals, setLoadingQuals] = useState(false);
+  const [dispositionMap, setDispositionMap] = useState<Record<string, string>>(
+    settings.threecplus_disposition_map || {}
+  );
+  const [savingMap, setSavingMap] = useState(false);
 
   const handleSave = async () => {
     if (!tenant?.id) return;
@@ -72,6 +82,55 @@ const ThreeCPlusTab = () => {
       toast.error("Erro ao testar conexão: " + (err.message || ""));
     } finally {
       setTesting(false);
+    }
+  };
+
+  const loadQualifications = async () => {
+    if (!domain || !apiToken) return;
+    setLoadingQuals(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+        body: {
+          action: "list_qualifications",
+          domain: domain.trim(),
+          api_token: apiToken.trim(),
+        },
+      });
+      if (error) throw error;
+      const list = Array.isArray(data) ? data : data?.data || [];
+      setQualifications(list);
+    } catch {
+      toast.error("Erro ao carregar qualificações do 3CPlus");
+    } finally {
+      setLoadingQuals(false);
+    }
+  };
+
+  // Load qualifications when connection is tested
+  useEffect(() => {
+    if (connected) {
+      loadQualifications();
+    }
+  }, [connected]);
+
+  const handleSaveMap = async () => {
+    if (!tenant?.id) return;
+    setSavingMap(true);
+    try {
+      const newSettings = {
+        ...settings,
+        threecplus_disposition_map: dispositionMap,
+      };
+      const { error } = await supabase
+        .from("tenants")
+        .update({ settings: newSettings })
+        .eq("id", tenant.id);
+      if (error) throw error;
+      toast.success("Mapeamento de tabulações salvo!");
+    } catch {
+      toast.error("Erro ao salvar mapeamento");
+    } finally {
+      setSavingMap(false);
     }
   };
 
@@ -171,6 +230,73 @@ const ThreeCPlusTab = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Disposition → Qualification Mapping */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <ArrowRightLeft className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">Mapeamento de Tabulações</CardTitle>
+              <CardDescription>
+                Vincule cada tabulação do Rivo a uma qualificação do 3CPlus para tabulação automática
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {qualifications.length === 0 && !loadingQuals && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Teste a conexão acima para carregar as qualificações do 3CPlus.
+              </p>
+              <Button variant="outline" size="sm" onClick={loadQualifications} disabled={!domain || !apiToken || loadingQuals}>
+                {loadingQuals ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Carregar Qualificações
+              </Button>
+            </div>
+          )}
+
+          {loadingQuals && <p className="text-sm text-muted-foreground">Carregando qualificações...</p>}
+
+          {qualifications.length > 0 && (
+            <>
+              <div className="space-y-3">
+                {Object.entries(DISPOSITION_TYPES).map(([key, label]) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <div className="w-40 shrink-0">
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-[10px] text-muted-foreground">{key}</p>
+                    </div>
+                    <Select
+                      value={dispositionMap[key] || ""}
+                      onValueChange={(v) =>
+                        setDispositionMap((prev) => ({ ...prev, [key]: v === "__none__" ? "" : v }))
+                      }
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Não mapeado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Não mapeado</SelectItem>
+                        {qualifications.map((q: any) => (
+                          <SelectItem key={q.id} value={String(q.id)}>
+                            {q.name || q.label || `ID ${q.id}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <Button onClick={handleSaveMap} disabled={savingMap} className="gap-2">
+                {savingMap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar Mapeamento
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
