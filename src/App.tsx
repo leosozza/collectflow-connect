@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { TenantProvider } from "@/hooks/useTenant";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
@@ -38,6 +38,28 @@ import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LandingPage from "./pages/LandingPage";
 
+/* Conditional root: landing for visitors, dashboard for logged-in users */
+const RootPage = () => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-muted-foreground">Carregando...</span>
+        </div>
+      </div>
+    );
+  }
+  if (!user) return <LandingPage />;
+  return (
+    <ProtectedRoute requireTenant>
+      <AppLayout>
+        <Index />
+      </AppLayout>
+    </ProtectedRoute>
+  );
+};
 
 const queryClient = new QueryClient();
 
@@ -62,13 +84,7 @@ const App = () => (
             />
             <Route
               path="/"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <Index />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
+              element={<RootPage />}
             />
             <Route
               path="/carteira"
