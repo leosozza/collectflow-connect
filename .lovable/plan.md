@@ -1,75 +1,36 @@
 
 
-## Plano: Criar documentacao da integracao MaxSystem
+## Plano: Corrigir bug no CurrencyInput que impede salvar valores
 
-### Arquivo a criar
+### Causa raiz
 
-**`docs/maxsystem-integracao.md`**
+O bug esta na funcao `parseBRL` dentro de `src/components/ui/currency-input.tsx`, linha 24:
 
-Documento completo cobrindo todos os fluxos de integracao com o MaxSystem, organizado nas seguintes secoes:
+```text
+Atual:   str.replace(/[^\\d,]/g, "")   ← \\d = literal backslash + 'd'
+Correto: str.replace(/[^\d,]/g, "")    ← \d = classe de digitos
+```
 
----
+O `\\d` no regex literal nao representa digitos — representa um backslash literal seguido da letra 'd'. Isso faz com que a funcao remova TODOS os digitos da string, retornando sempre 0.
 
-### Conteudo do documento
+O componente **exibe** o valor corretamente (a funcao `maskCurrency` usa `/\D/g` que esta correto), mas o valor numerico passado para `onValueChange` e sempre 0. Isso afeta **todos os CurrencyInput** do sistema (metas de equipe, metas de operador, filtros de valor, etc).
 
-1. **Visao Geral** - O que e o MaxSystem, URL base (`maxsystem.azurewebsites.net`), proxy utilizado (`maxsystem-proxy`)
+### Evidencia
 
-2. **Autenticacao e Controle de Acesso**
-   - JWT via Bearer token
-   - Tenants permitidos: `maxfama`, `temis`
-   - Validacao de claims e verificacao de tenant
+A equipe "Cobranca" tem `meta_mensal: 0` no banco, apesar do usuario ter digitado R$ 100.000,00 e recebido confirmacao "Salvo!".
 
-3. **Endpoints Disponiveis** (via query param `action`)
+### Correcao
 
-   **3.1 Parcelas / Installments** (`action=installments` ou default)
-   - API: `/api/Installment`
-   - Filtros OData: vencimento, pagamento, registro, CPF, contrato, status (IsCancelled), agencias
-   - Campos retornados: ContractNumber, ResponsibleName, ResponsibleCPF, Value, PaymentDateQuery, PaymentDateEffected, IsCancelled, Number, CellPhone1/2, HomePhone
-   - Paginacao: `$top` (default 50000), `$orderby`, `$inlinecount`
-   - Diferenciacao entre parcelas pagas (PaymentDateEffected preenchido) e em aberto
+**Arquivo: `src/components/ui/currency-input.tsx`**
 
-   **3.2 Agencias** (`action=agencies`)
-   - API: `/api/Agencies`
-   - Retorna lista de agencias com Id e Name
-   - Usado como filtro multi-select na importacao
+- Linha 24: trocar `\\d` por `\d` na regex de `parseBRL`
 
-   **3.3 Busca de Modelo** (`action=model-search`)
-   - API: `/api/NewModelSearch`
-   - Parametro: `contractNumber`
-   - Retorna o primeiro item com `Id` do modelo (usado para buscar detalhes)
+```typescript
+// De:
+const clean = str.replace(/[^\\d,]/g, "");
+// Para:
+const clean = str.replace(/[^\d,]/g, "");
+```
 
-   **3.4 Detalhes do Modelo** (`action=model-details`)
-   - API: `/api/NewModelSearch/Details/{modelId}`
-   - Parametro: `modelId`
-   - Retorna: Address, CEP, Neighborhood, City, State (convertido para UF), Email, ModelName
-
-4. **Fluxo de Importacao (MaxList)**
-   - Pagina: `/maxlist`
-   - Filtros disponiveis: periodo de vencimento/pagamento/registro, CPF, contrato, status, agencias
-   - Mapeamento de campos MaxSystem para tabela `clients`
-   - Upsert por `external_id` (formato: `{ContractNumber}-{Number}`)
-   - Status: pago (tem data pagamento), cancelado (IsCancelled), pendente (demais)
-   - Selecao de Status de Cobranca antes da importacao
-   - Log de importacao na tabela `import_logs`
-
-5. **Enriquecimento de Endereco**
-   - Servico: `addressEnrichmentService.ts`
-   - Momento: na formalizacao do acordo (nao na importacao)
-   - Processo em 2 passos: model-search (por ContractNumber) -> model-details (por modelId)
-   - Cache por contrato para evitar chamadas duplicadas
-   - Busca em lote (batches de 5 contratos em paralelo)
-   - Campos persistidos: endereco, cep, bairro, cidade, uf, email, observacoes (ModelName)
-   - Se ja possui endereco, retorna o existente sem consultar API
-
-6. **Mapa de Conversao de Estados**
-   - Tabela completa: numero do MaxSystem -> sigla UF (1=AC, 2=AL, ..., 27=TO)
-   - Nota sobre inconsistencia entre proxy (25=SE, 26=SP) e frontend (25=SP, 26=SE) — ambos estao no codigo
-
-7. **Estrutura de Arquivos**
-   - `supabase/functions/maxsystem-proxy/index.ts` — Edge function proxy
-   - `src/pages/MaxListPage.tsx` — Interface de consulta e importacao
-   - `src/services/addressEnrichmentService.ts` — Enriquecimento de endereco
-
-8. **Tabela de Mapeamento de Campos**
-   - MaxSystem -> CRM: ContractNumber -> cod_contrato, ResponsibleName -> nome_completo, ResponsibleCPF -> cpf, Value -> valor_parcela, etc.
+Uma unica linha. Corrige o problema em todas as telas que usam CurrencyInput.
 
