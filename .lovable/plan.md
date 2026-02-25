@@ -1,41 +1,77 @@
 
 
-## Plano: Corrigir erro de validacao ao entrar na campanha
+## Plano: Correcoes Prioritarias da Auditoria
 
-### Problema Identificado
+A auditoria identificou problemas reais. Vou focar nas correcoes de maior impacto que podem ser feitas sem risco de quebrar funcionalidades existentes.
 
-Testei a chamada `POST /agent/login` diretamente e a API 3CPlus retornou:
+### Fase 1 — Correcoes Criticas (esta implementacao)
 
-```json
-{
-  "detail": "Erros de validação foram encontrados ao processar sua requisição.",
-  "errors": {
-    "campaign": ["O campo Campanha é obrigatório quanto group id não está presente."],
-    "group_id": ["O campo group id é obrigatório quanto Campanha não está presente."]
-  },
-  "status": 422
-}
-```
+---
 
-**Causa raiz**: No proxy, linha 569, o body enviado ao 3CPlus usa `campaign_id`, mas a API espera o campo chamado `campaign`.
+#### 1. Adicionar timeout em fetch calls dos services
 
-```typescript
-// ERRADO (atual):
-reqBody = JSON.stringify({ campaign_id: body.campaign_id });
+**Arquivos afetados:**
+- `src/services/cobcloudService.ts`
+- `src/services/negociarieService.ts`
+- `src/services/addressEnrichmentService.ts`
 
-// CORRETO:
-reqBody = JSON.stringify({ campaign: body.campaign_id });
-```
+Criar helper `fetchWithTimeout` e usar em todas as chamadas fetch externas. Timeout padrao: 30 segundos.
 
-### Alteracao
+---
 
-**Arquivo: `supabase/functions/threecplus-proxy/index.ts`** (linha 569)
+#### 2. Validacao de CPF no importService
 
-Mudar o nome do campo no body de `campaign_id` para `campaign`. Apenas 1 linha precisa ser alterada.
+**Arquivo: `src/services/importService.ts`**
 
-### Detalhes Tecnicos
+A funcao `cleanCPF` nao valida comprimento. Adicionar validacao de 11 digitos e log de CPFs invalidos na lista de erros de importacao.
 
-- A API 3CPlus `POST /agent/login` aceita `campaign` (numero do ID da campanha) como campo obrigatorio, nao `campaign_id`
-- Confirmado testando diretamente via curl na edge function — a resposta 422 mostra explicitamente que o campo esperado e `campaign`
-- Apos a correcao, o fluxo completo (login + connect SIP) deve funcionar normalmente
+---
+
+#### 3. Melhorar error handling no auditService
+
+**Arquivo: `src/services/auditService.ts`**
+
+Trocar catch vazio por `console.warn` para que falhas de auditoria sejam rastreáveis sem quebrar o fluxo principal.
+
+---
+
+#### 4. Validacao de env vars no startup
+
+**Arquivo: `src/main.tsx`**
+
+Adicionar verificacao de `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` no inicio da aplicacao com mensagem clara no console.
+
+---
+
+#### 5. Corrigir filtro de data no auditService
+
+**Arquivo: `src/services/auditService.ts`**
+
+A concatenacao `filters.dateTo + "T23:59:59"` pode falhar. Adicionar validacao antes de concatenar.
+
+---
+
+### Fase 2 — Melhorias de Qualidade (proxima iteracao)
+
+Estas ficam para um segundo momento pois exigem refatoracao mais ampla:
+
+- Eliminar `as any` (requer regenerar types do Supabase)
+- Implementar retry logic com backoff
+- Quebrar componentes grandes (CarteiraPage, ClientDetailPage)
+- Adicionar testes unitarios
+- Paginacao real no lugar de `.limit(1000)`
+
+---
+
+### Resumo dos Arquivos
+
+| Arquivo | Acao |
+|---------|------|
+| `src/lib/fetchWithTimeout.ts` | Novo — helper de fetch com timeout |
+| `src/services/cobcloudService.ts` | Usar fetchWithTimeout |
+| `src/services/negociarieService.ts` | Usar fetchWithTimeout |
+| `src/services/addressEnrichmentService.ts` | Usar fetchWithTimeout |
+| `src/services/importService.ts` | Validar CPF com 11 digitos |
+| `src/services/auditService.ts` | console.warn no catch + validar dateTo |
+| `src/main.tsx` | Validar env vars no startup |
 
