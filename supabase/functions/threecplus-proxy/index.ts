@@ -571,6 +571,35 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'connect_agent': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        const usersUrlConnect = buildUrl(baseUrl, 'users', authParam);
+        const usersResConnect = await fetch(usersUrlConnect, { headers: { 'Content-Type': 'application/json' } });
+        if (!usersResConnect.ok) {
+          const errText = await usersResConnect.text();
+          console.error(`Failed to fetch users for agent connect: ${usersResConnect.status} ${errText.substring(0, 200)}`);
+          return new Response(
+            JSON.stringify({ status: usersResConnect.status, detail: 'Falha ao buscar token do agente para connect' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const usersDataConnect = await usersResConnect.json();
+        const usersListConnect = Array.isArray(usersDataConnect) ? usersDataConnect : usersDataConnect?.data || [];
+        const targetConnect = usersListConnect.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
+        if (!targetConnect || !targetConnect.api_token) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const agentAuthConnect = `api_token=${targetConnect.api_token}`;
+        url = `${baseUrl}/agent/connect?${agentAuthConnect}`;
+        method = 'POST';
+        console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/connect`);
+        break;
+      }
+
       case 'logout_agent_self': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
