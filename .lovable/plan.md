@@ -1,36 +1,24 @@
 
 
-## Plano: Corrigir bug no CurrencyInput que impede salvar valores
+## Plano: 3 correções
 
-### Causa raiz
+### 1. Corrigir erro "column operator_goals_unique_idx does not exist"
 
-O bug esta na funcao `parseBRL` dentro de `src/components/ui/currency-input.tsx`, linha 24:
+**Causa**: O `onConflict` do Supabase JS espera nomes de colunas separados por vírgula, não nome de índice. Além disso, o índice usa `COALESCE(credor_id, ...)` que não pode ser expresso como coluna simples.
 
-```text
-Atual:   str.replace(/[^\\d,]/g, "")   ← \\d = literal backslash + 'd'
-Correto: str.replace(/[^\d,]/g, "")    ← \d = classe de digitos
-```
+**Solução**: Trocar o upsert por uma lógica de "buscar existente → insert ou update".
 
-O `\\d` no regex literal nao representa digitos — representa um backslash literal seguido da letra 'd'. Isso faz com que a funcao remova TODOS os digitos da string, retornando sempre 0.
+**Arquivo: `src/services/goalService.ts`** — função `upsertGoal`:
+- Buscar registro existente com `operator_id + year + month + credor_id`
+- Se existir: `update` pelo `id`
+- Se não existir: `insert`
 
-O componente **exibe** o valor corretamente (a funcao `maskCurrency` usa `/\D/g` que esta correto), mas o valor numerico passado para `onValueChange` e sempre 0. Isso afeta **todos os CurrencyInput** do sistema (metas de equipe, metas de operador, filtros de valor, etc).
+### 2. Adicionar critério "Acordos Formalizados" nos templates de conquista
 
-### Evidencia
+**Arquivo: `src/services/achievementTemplateService.ts`**
+- Adicionar `{ value: "agreements_count", label: "Qtd. de acordos formalizados" }` ao array `CRITERIA_OPTIONS`
 
-A equipe "Cobranca" tem `meta_mensal: 0` no banco, apesar do usuario ter digitado R$ 100.000,00 e recebido confirmacao "Salvo!".
+### 3. Nenhuma alteração de banco necessária
 
-### Correcao
-
-**Arquivo: `src/components/ui/currency-input.tsx`**
-
-- Linha 24: trocar `\\d` por `\d` na regex de `parseBRL`
-
-```typescript
-// De:
-const clean = str.replace(/[^\\d,]/g, "");
-// Para:
-const clean = str.replace(/[^\d,]/g, "");
-```
-
-Uma unica linha. Corrige o problema em todas as telas que usam CurrencyInput.
+O campo `criteria_type` já é `text` livre, então aceita o novo valor `agreements_count` sem migração.
 
