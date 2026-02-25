@@ -111,6 +111,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pauseIntervals, setPauseIntervals] = useState<any[]>([]);
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
+  const [reconnectingSip, setReconnectingSip] = useState(false);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -385,6 +386,25 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
+
+  const handleReconnectSip = async () => {
+    if (!operatorAgentId) return;
+    setReconnectingSip(true);
+    try {
+      const result = await invoke("connect_agent", { agent_id: operatorAgentId });
+      if (result?.status && result.status >= 400) {
+        toast.error(result.detail || "Falha ao reconectar MicroSIP");
+      } else {
+        toast.success("Reconectando MicroSIP. Atenda a chamada.");
+      }
+      fetchAll();
+    } catch {
+      toast.error("Erro ao reconectar MicroSIP");
+    } finally {
+      setReconnectingSip(false);
+    }
+  };
 
   // ── OPERATOR VIEW ──
   if (isOperatorView) {
@@ -517,6 +537,27 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 </PopoverContent>
               </Popover>
             )}
+
+            {/* SIP Connection Indicator */}
+            <div className="flex items-center gap-1.5">
+              {isSipConnected ? (
+                <Badge variant="secondary" className="gap-1 h-7 text-xs bg-emerald-500/20 text-emerald-100 border-0">
+                  <Wifi className="w-3 h-3" />
+                  SIP
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5 h-7 text-xs bg-destructive/30 hover:bg-destructive/50 border-0 text-white"
+                  onClick={handleReconnectSip}
+                  disabled={reconnectingSip}
+                >
+                  <WifiOff className={`w-3 h-3 ${reconnectingSip ? "animate-spin" : ""}`} />
+                  {reconnectingSip ? "Conectando..." : "SIP Off"}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Status central */}
