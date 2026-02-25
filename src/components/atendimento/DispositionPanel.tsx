@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Voicemail, PhoneOff, UserX, PhoneForwarded, Handshake, Clock 
 } from "lucide-react";
-import { DispositionType, DISPOSITION_TYPES } from "@/services/dispositionService";
+import { DispositionType, DISPOSITION_TYPES, getDispositionTypes, getCustomDispositionList } from "@/services/dispositionService";
+import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
 
 interface DispositionPanelProps {
@@ -15,16 +16,50 @@ interface DispositionPanelProps {
   loading?: boolean;
 }
 
+const DEFAULT_ICON_MAP: Record<string, React.ReactNode> = {
+  voicemail: <Voicemail className="w-5 h-5 flex-shrink-0" />,
+  interrupted: <PhoneOff className="w-5 h-5 flex-shrink-0" />,
+  wrong_contact: <UserX className="w-5 h-5 flex-shrink-0" />,
+  callback: <PhoneForwarded className="w-5 h-5 flex-shrink-0" />,
+  no_answer: <PhoneOff className="w-5 h-5 flex-shrink-0" />,
+  promise: <Clock className="w-5 h-5 flex-shrink-0" />,
+  negotiated: <Handshake className="w-5 h-5 flex-shrink-0" />,
+};
+
+const DEFAULT_COLOR_MAP: Record<string, string> = {
+  voicemail: "bg-red-500 hover:bg-red-600",
+  interrupted: "bg-amber-500 hover:bg-amber-600",
+  wrong_contact: "bg-gray-500 hover:bg-gray-600",
+  callback: "bg-blue-500 hover:bg-blue-600",
+  no_answer: "bg-orange-500 hover:bg-orange-600",
+  promise: "bg-emerald-500 hover:bg-emerald-600",
+  negotiated: "bg-green-600 hover:bg-green-700",
+};
+
+const DEFAULT_GROUP_MAP: Record<string, string> = {
+  callback: "agendar",
+  voicemail: "resultado",
+  interrupted: "resultado",
+  no_answer: "resultado",
+  wrong_contact: "contato",
+  promise: "contato",
+};
+
 const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPanelProps) => {
+  const { tenant } = useTenant();
+  const settings = (tenant?.settings as Record<string, any>) || {};
   const [showCallback, setShowCallback] = useState(false);
   const [callbackDate, setCallbackDate] = useState("");
   const [notes, setNotes] = useState("");
 
-  const handleDisposition = async (type: DispositionType) => {
+  const dispositionTypes = useMemo(() => getDispositionTypes(settings), [settings]);
+  const dispositionList = useMemo(() => getCustomDispositionList(settings), [settings]);
+
+  const handleDisposition = async (type: string) => {
     try {
       await onDisposition(type, notes || undefined);
       setNotes("");
-      toast.success(`Tabulação "${DISPOSITION_TYPES[type]}" registrada`);
+      toast.success(`Tabulação "${dispositionTypes[type] || type}" registrada`);
     } catch {
       toast.error("Erro ao registrar tabulação");
     }
@@ -46,22 +81,29 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
     }
   };
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Ações</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* AGENDAR */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agendar</p>
+  // Group dispositions
+  const agendarGroup = dispositionList.filter(d => (d.group || DEFAULT_GROUP_MAP[d.key]) === "agendar");
+  const resultadoGroup = dispositionList.filter(d => (d.group || DEFAULT_GROUP_MAP[d.key]) === "resultado");
+  const contatoGroup = dispositionList.filter(d => (d.group || DEFAULT_GROUP_MAP[d.key]) === "contato");
+  const otherGroup = dispositionList.filter(d => {
+    const g = d.group || DEFAULT_GROUP_MAP[d.key];
+    return !g || !["agendar", "resultado", "contato"].includes(g);
+  });
+
+  const renderButton = (d: { key: string; label: string; color?: string }) => {
+    const colorClass = d.color || DEFAULT_COLOR_MAP[d.key] || "bg-primary hover:bg-primary/90";
+    const icon = DEFAULT_ICON_MAP[d.key] || <PhoneOff className="w-5 h-5 flex-shrink-0" />;
+
+    if (d.key === "callback") {
+      return (
+        <div key={d.key} className="space-y-2">
           <Button
             disabled={loading}
             onClick={() => setShowCallback(!showCallback)}
-            className="w-full h-12 justify-start gap-3 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white"
+            className={`w-full h-12 justify-start gap-3 text-sm font-medium text-white ${colorClass}`}
           >
-            <PhoneForwarded className="w-5 h-5 flex-shrink-0" />
-            Retornar Ligação
+            {icon}
+            {d.label}
           </Button>
           {showCallback && (
             <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
@@ -77,60 +119,65 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
             </div>
           )}
         </div>
+      );
+    }
+
+    return (
+      <Button
+        key={d.key}
+        disabled={loading}
+        onClick={() => handleDisposition(d.key)}
+        className={`w-full h-12 justify-start gap-3 text-sm font-medium text-white ${colorClass}`}
+      >
+        {icon}
+        {d.label}
+      </Button>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Ações</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* AGENDAR */}
+        {agendarGroup.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agendar</p>
+            {agendarGroup.map(renderButton)}
+          </div>
+        )}
 
         {/* RESULTADO DA LIGAÇÃO */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resultado da Ligação</p>
-          <div className="grid grid-cols-1 gap-2">
-            <Button
-              disabled={loading}
-              onClick={() => handleDisposition("voicemail")}
-              className="w-full h-12 justify-start gap-3 text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
-            >
-              <Voicemail className="w-5 h-5 flex-shrink-0" />
-              Caixa Postal
-            </Button>
-            <Button
-              disabled={loading}
-              onClick={() => handleDisposition("interrupted")}
-              className="w-full h-12 justify-start gap-3 text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white"
-            >
-              <PhoneOff className="w-5 h-5 flex-shrink-0" />
-              Ligação Interrompida
-            </Button>
-            <Button
-              disabled={loading}
-              onClick={() => handleDisposition("no_answer")}
-              className="w-full h-12 justify-start gap-3 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white"
-            >
-              <PhoneOff className="w-5 h-5 flex-shrink-0" />
-              Não Atende
-            </Button>
+        {resultadoGroup.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resultado da Ligação</p>
+            <div className="grid grid-cols-1 gap-2">
+              {resultadoGroup.map(renderButton)}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* CONTATO */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contato</p>
-          <div className="grid grid-cols-1 gap-2">
-            <Button
-              disabled={loading}
-              onClick={() => handleDisposition("wrong_contact")}
-              className="w-full h-12 justify-start gap-3 text-sm font-medium bg-gray-500 hover:bg-gray-600 text-white"
-            >
-              <UserX className="w-5 h-5 flex-shrink-0" />
-              Contato Incorreto
-            </Button>
-            <Button
-              disabled={loading}
-              onClick={() => handleDisposition("promise")}
-              className="w-full h-12 justify-start gap-3 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white"
-            >
-              <Clock className="w-5 h-5 flex-shrink-0" />
-              Promessa de Pagamento
-            </Button>
+        {contatoGroup.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contato</p>
+            <div className="grid grid-cols-1 gap-2">
+              {contatoGroup.map(renderButton)}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* OTHER */}
+        {otherGroup.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Outros</p>
+            <div className="grid grid-cols-1 gap-2">
+              {otherGroup.map(renderButton)}
+            </div>
+          </div>
+        )}
 
         {/* OBSERVAÇÕES */}
         <Textarea
