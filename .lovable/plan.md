@@ -1,81 +1,104 @@
 
 
-## Plano: Redesign do Botao Flutuante de Suporte — Estilo Chat (Kodee)
+## Plano: Chat de Suporte com IA Interativa + Feedback + Falar com Humano
 
-### Objetivo
+### Problema Atual
 
-Transformar o botao flutuante de suporte de um painel lateral com abas (Guias, Chat, Agendar) para um **widget de chat flutuante** no estilo do Kodee (imagem de referencia), onde o usuario interage diretamente em uma janela de conversa fixa no canto inferior direito.
+O chat flutuante apenas salva mensagens no banco (`support_messages`) e depende de um staff humano responder via `SupportAdminPage`. O usuario envia mensagem e nao recebe resposta — nao ha interacao automatica.
 
-### Mudancas Principais
+### Solucao
 
-1. **Remover o painel Sheet/abas** — O SupportPanel com Sheet sera substituido por um popup/card flutuante ancorado no canto inferior direito, acima do botao
-2. **Chat direto** — Ao clicar no FAB, abre uma janela de chat (card com sombra, ~400px de altura) onde o usuario digita e o sistema responde
-3. **Manter funcionalidade de tickets** — Por baixo, o chat continua criando tickets e mensagens no banco (support_tickets/support_messages), mas a UX e simplificada: o usuario so ve um chat
+Integrar o Lovable AI (ja configurado com `LOVABLE_API_KEY`) para responder automaticamente as perguntas do usuario no chat de suporte, usando os guias do sistema (`SupportGuidesTab`) como contexto. Alem disso, adicionar botoes de feedback (joinha cima/baixo) e opcao de "Falar com Humano".
 
-### Layout do Widget
+### Mudancas Visuais
 
-```text
-+------------------------------------+
-| RIVO Suporte    [_] [✏] [▼ fechar] |
-+------------------------------------+
-|                                    |
-|                                    |
-|        (area de mensagens)         |
-|                                    |
-|          "quanto custa..."  [user] |
-|                                    |
-| ✨ RIVO Suporte                    |
-| Resposta do sistema aqui...        |
-|                                    |
-|   👍 👎                            |
-+------------------------------------+
-| Pergunte algo ao RIVO...       [↑] |
-+------------------------------------+
-| O RIVO pode cometer erros.         |
-+------------------------------------+
-```
+- **Tamanho do chat**: de `w-[380px] h-[500px]` para `w-[340px] h-[600px]` (mais fino e mais comprido)
+- **Feedback**: apos cada resposta da IA, dois botoes (👍 👎) abaixo da mensagem
+- **Falar com humano**: botao no footer do chat "Falar com humano" que cria um ticket e avisa que um atendente ira responder
+- **Indicador de digitacao**: animacao de "..." enquanto a IA processa
 
-### Arquivos Modificados
+### Arquivos
 
 | Arquivo | Acao |
 |---------|------|
-| `src/components/support/SupportFloatingButton.tsx` | Reescrever: FAB + popup card de chat inline (sem Sheet) |
-| `src/components/support/SupportPanel.tsx` | Remover (substituido pelo chat inline no FloatingButton) |
-
-### Arquivos Mantidos (sem alteracao)
-
-| Arquivo | Motivo |
-|---------|--------|
-| `src/components/support/SupportChatTab.tsx` | Logica de tickets/mensagens reutilizada |
-| `src/components/support/SupportGuidesTab.tsx` | Mantido para uso na pagina admin |
-| `src/components/support/SupportScheduleTab.tsx` | Mantido para uso na pagina admin |
-| `src/pages/SupportAdminPage.tsx` | Pagina admin inalterada |
-| `src/components/AppLayout.tsx` | Ja renderiza SupportFloatingButton, sem mudanca |
+| `supabase/functions/support-ai-chat/index.ts` | NOVO — Edge function que recebe a pergunta do usuario, envia para Lovable AI com contexto dos guias do sistema, e retorna resposta via streaming |
+| `src/components/support/SupportFloatingButton.tsx` | MODIFICAR — Integrar chamada a IA, feedback, falar com humano, novo tamanho |
+| `supabase/config.toml` | MODIFICAR — Registrar `support-ai-chat` |
 
 ### Detalhes Tecnicos
 
-**SupportFloatingButton.tsx — Novo Design:**
+#### 1. Edge Function `support-ai-chat`
 
-- Estado `open` controla visibilidade do card de chat
-- Card posicionado `fixed bottom-24 right-6` (acima do FAB)
-- Dimensoes: `w-[380px] h-[500px]` (responsivo: em mobile `w-[calc(100vw-2rem)]`)
-- Header: titulo "RIVO Suporte", botao de fechar (ChevronDown)
-- Body: lista de mensagens scrollavel (mesmo layout do SupportChatTab atual mas embutido)
-- Footer: input de texto + botao enviar + disclaimer "O RIVO pode cometer erros"
-- Ao abrir pela primeira vez: cria ou reutiliza o ultimo ticket aberto do usuario
-- Mensagens do staff aparecem a esquerda com icone/nome "RIVO Suporte"
-- Mensagens do usuario aparecem a direita com fundo primario
-- Animacao framer-motion: scale + fade ao abrir/fechar
-- O FAB muda de icone quando aberto (LifeBuoy → X)
+- Recebe `{ message, history }` (mensagem do usuario + historico recente)
+- System prompt inclui TODOS os guias do `SupportGuidesTab` como contexto (hardcoded na function)
+- Usa `google/gemini-3-flash-preview` via Lovable AI Gateway
+- Resposta via streaming SSE para exibicao progressiva
+- Trata erros 429/402
 
-**Fluxo simplificado:**
+System prompt:
+```
+Voce e o assistente RIVO Suporte. Responda perguntas sobre o sistema RIVO de cobranca.
+Use as informacoes dos guias abaixo para responder. Se nao souber, diga que nao tem essa informacao e sugira falar com um atendente humano.
+Responda de forma curta e objetiva em portugues brasileiro.
 
-1. Usuario clica no FAB
-2. Widget de chat abre com animacao
-3. Se ha ticket aberto, carrega mensagens dele
-4. Se nao ha ticket, cria um automaticamente ("Chat de Suporte") ao enviar a primeira mensagem
-5. Staff responde via SupportAdminPage (sem mudanca)
-6. Respostas aparecem em tempo real via realtime (ja implementado)
+[conteudo completo dos guias do SupportGuidesTab]
+```
 
-**Sem mudanca no banco de dados** — reutiliza as mesmas tabelas support_tickets e support_messages.
+#### 2. SupportFloatingButton — Mudancas
+
+**Fluxo novo:**
+1. Usuario digita pergunta
+2. Mensagem do usuario aparece no chat (local, sem salvar no banco ainda)
+3. Chamada streaming para `support-ai-chat`
+4. Resposta da IA aparece progressivamente
+5. Apos resposta completa, botoes 👍 👎 aparecem abaixo
+6. Se usuario clica "Falar com humano": cria ticket no banco, muda modo para chat humano (comportamento atual)
+
+**Estado local vs banco:**
+- Mensagens da IA ficam em estado local (nao salvas como `support_messages`)
+- Apenas quando o usuario pede "falar com humano", um ticket e criado e as mensagens passam a ser salvas no banco
+
+**Dimensoes:** `w-[340px]` e `style={{ height: 600 }}`
+
+**Footer atualizado:**
+```
+[input de texto] [enviar]
+Falar com humano
+O RIVO pode cometer erros.
+```
+
+**Feedback (thumbs):**
+- Apenas visual por enquanto (estado local `rated` por mensagem)
+- Botoes desabilitados apos clicar
+
+#### 3. config.toml
+
+Adicionar:
+```toml
+[functions.support-ai-chat]
+verify_jwt = false
+```
+
+### Layout Final
+
+```text
++----------------------------------+
+| ✨ RIVO Suporte           [▼]   |
++----------------------------------+
+|                                  |
+|   Ola! Como posso te ajudar?     |
+|                                  |
+|          "Como importar?" [user] |
+|                                  |
+| ✨ RIVO Suporte                  |
+| Para importar clientes, va em    |
+| Carteira > Importar...           |
+|   👍 👎                          |
+|                                  |
++----------------------------------+
+| Pergunte algo ao RIVO...    [↑]  |
+| 💬 Falar com humano              |
+| O RIVO pode cometer erros.       |
++----------------------------------+
+```
 
