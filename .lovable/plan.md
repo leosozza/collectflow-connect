@@ -1,44 +1,75 @@
 
 
-## Plano: Filtro por valor em aberto + botão "Sem Contato" na Carteira
+## Plano: Criar documentacao da integracao MaxSystem
 
-### 1. Filtro por Valor Total em Aberto
+### Arquivo a criar
 
-**Arquivo: `src/components/clients/ClientFilters.tsx`**
+**`docs/maxsystem-integracao.md`**
 
-- Adicionar dois campos numéricos (usando `CurrencyInput`) na linha de datas: "Valor Aberto De" e "Valor Aberto Até"
-- Novos campos na interface `Filters`: `valorAbertoDe: number` e `valorAbertoAte: number`
+Documento completo cobrindo todos os fluxos de integracao com o MaxSystem, organizado nas seguintes secoes:
 
-**Arquivo: `src/pages/CarteiraPage.tsx`**
+---
 
-- Adicionar `valorAbertoDe: 0` e `valorAbertoAte: 0` no estado inicial de `filters`
-- No `displayClients` (useMemo), adicionar lógica de filtro:
-  - Calcular valor em aberto como `c.valor_parcela - c.valor_pago`
-  - Se `valorAbertoDe > 0`, filtrar apenas clientes com valor aberto >= valorAbertoDe
-  - Se `valorAbertoAte > 0`, filtrar apenas clientes com valor aberto <= valorAbertoAte
+### Conteudo do documento
 
-### 2. Botão "Sem Contato"
+1. **Visao Geral** - O que e o MaxSystem, URL base (`maxsystem.azurewebsites.net`), proxy utilizado (`maxsystem-proxy`)
 
-**Conceito**: Clientes que nunca tiveram nenhuma interacao — sem registros em `call_dispositions` (tabulacoes de discador/operador) e sem conversas em `conversations` (WhatsApp).
+2. **Autenticacao e Controle de Acesso**
+   - JWT via Bearer token
+   - Tenants permitidos: `maxfama`, `temis`
+   - Validacao de claims e verificacao de tenant
 
-**Arquivo: `src/components/clients/ClientFilters.tsx`**
+3. **Endpoints Disponiveis** (via query param `action`)
 
-- Adicionar checkbox "Sem contato" ao lado de "Sem acordo" e "Quitados" na linha 3 de checkboxes
-- Novo campo na interface `Filters`: `semContato: boolean`
+   **3.1 Parcelas / Installments** (`action=installments` ou default)
+   - API: `/api/Installment`
+   - Filtros OData: vencimento, pagamento, registro, CPF, contrato, status (IsCancelled), agencias
+   - Campos retornados: ContractNumber, ResponsibleName, ResponsibleCPF, Value, PaymentDateQuery, PaymentDateEffected, IsCancelled, Number, CellPhone1/2, HomePhone
+   - Paginacao: `$top` (default 50000), `$orderby`, `$inlinecount`
+   - Diferenciacao entre parcelas pagas (PaymentDateEffected preenchido) e em aberto
 
-**Arquivo: `src/pages/CarteiraPage.tsx`**
+   **3.2 Agencias** (`action=agencies`)
+   - API: `/api/Agencies`
+   - Retorna lista de agencias com Id e Name
+   - Usado como filtro multi-select na importacao
 
-- Adicionar `semContato: false` no estado inicial
-- Criar query para buscar CPFs que tiveram contato:
-  1. Buscar CPFs distintos de `call_dispositions` (tabulacoes feitas por operadores/discador)
-  2. Buscar telefones/CPFs distintos de `conversations` (conversas WhatsApp)
-  3. Unir em um Set de CPFs "contatados"
-- No `displayClients`, se `semContato === true`, filtrar apenas clientes cujo CPF NAO esta no Set de contatados
+   **3.3 Busca de Modelo** (`action=model-search`)
+   - API: `/api/NewModelSearch`
+   - Parametro: `contractNumber`
+   - Retorna o primeiro item com `Id` do modelo (usado para buscar detalhes)
 
-### Detalhes tecnicos
+   **3.4 Detalhes do Modelo** (`action=model-details`)
+   - API: `/api/NewModelSearch/Details/{modelId}`
+   - Parametro: `modelId`
+   - Retorna: Address, CEP, Neighborhood, City, State (convertido para UF), Email, ModelName
 
-- `CurrencyInput` ja existe em `src/components/ui/currency-input.tsx` e sera reutilizado
-- A query de contatos usa `call_dispositions` (vinculada por `client_id`) — sera necessario buscar os `client_id` que possuem tabulacao e cruzar com os clientes carregados
-- Para `conversations`, o campo `contact_phone` pode ser cruzado com `phone` dos clientes
-- Ambas as queries sao leves (apenas select de IDs/CPFs distintos)
+4. **Fluxo de Importacao (MaxList)**
+   - Pagina: `/maxlist`
+   - Filtros disponiveis: periodo de vencimento/pagamento/registro, CPF, contrato, status, agencias
+   - Mapeamento de campos MaxSystem para tabela `clients`
+   - Upsert por `external_id` (formato: `{ContractNumber}-{Number}`)
+   - Status: pago (tem data pagamento), cancelado (IsCancelled), pendente (demais)
+   - Selecao de Status de Cobranca antes da importacao
+   - Log de importacao na tabela `import_logs`
+
+5. **Enriquecimento de Endereco**
+   - Servico: `addressEnrichmentService.ts`
+   - Momento: na formalizacao do acordo (nao na importacao)
+   - Processo em 2 passos: model-search (por ContractNumber) -> model-details (por modelId)
+   - Cache por contrato para evitar chamadas duplicadas
+   - Busca em lote (batches de 5 contratos em paralelo)
+   - Campos persistidos: endereco, cep, bairro, cidade, uf, email, observacoes (ModelName)
+   - Se ja possui endereco, retorna o existente sem consultar API
+
+6. **Mapa de Conversao de Estados**
+   - Tabela completa: numero do MaxSystem -> sigla UF (1=AC, 2=AL, ..., 27=TO)
+   - Nota sobre inconsistencia entre proxy (25=SE, 26=SP) e frontend (25=SP, 26=SE) — ambos estao no codigo
+
+7. **Estrutura de Arquivos**
+   - `supabase/functions/maxsystem-proxy/index.ts` — Edge function proxy
+   - `src/pages/MaxListPage.tsx` — Interface de consulta e importacao
+   - `src/services/addressEnrichmentService.ts` — Enriquecimento de endereco
+
+8. **Tabela de Mapeamento de Campos**
+   - MaxSystem -> CRM: ContractNumber -> cod_contrato, ResponsibleName -> nome_completo, ResponsibleCPF -> cpf, Value -> valor_parcela, etc.
 
