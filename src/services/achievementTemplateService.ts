@@ -21,6 +21,7 @@ export const CRITERIA_OPTIONS = [
   { value: "total_received", label: "Valor recebido (R$)" },
   { value: "no_breaks", label: "Zero quebras no mês" },
   { value: "goal_reached", label: "Meta atingida" },
+  { value: "agreements_count", label: "Qtd. de acordos formalizados" },
 ];
 
 export const fetchAchievementTemplates = async (tenantId: string): Promise<AchievementTemplate[]> => {
