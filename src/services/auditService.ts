@@ -39,8 +39,8 @@ export const logAction = async (params: {
       entity_id: params.entity_id || null,
       details: params.details || {},
     } as any);
-  } catch {
-    // Silently fail - audit logging should not break main operations
+  } catch (err) {
+    console.warn("[AuditService] Failed to log action:", params.action, err);
   }
 };
 
@@ -58,7 +58,9 @@ export const fetchAuditLogs = async (filters?: {
     .limit(500);
 
   if (filters?.dateFrom) query = query.gte("created_at", filters.dateFrom);
-  if (filters?.dateTo) query = query.lte("created_at", filters.dateTo + "T23:59:59");
+  if (filters?.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(filters.dateTo)) {
+    query = query.lte("created_at", filters.dateTo + "T23:59:59");
+  }
   if (filters?.action && filters.action !== "todos") query = query.eq("action", filters.action);
   if (filters?.entity_type && filters.entity_type !== "todos") query = query.eq("entity_type", filters.entity_type);
   if (filters?.user_id && filters.user_id !== "todos") query = query.eq("user_id", filters.user_id);

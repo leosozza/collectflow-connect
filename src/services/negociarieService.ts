@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-proxy`;
 
@@ -6,7 +7,7 @@ async function callProxy(action: string, params: Record<string, unknown> = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Não autenticado");
 
-  const res = await fetch(FUNCTION_URL, {
+  const res = await fetchWithTimeout(FUNCTION_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
