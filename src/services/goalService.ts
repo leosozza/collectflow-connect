@@ -55,16 +55,42 @@ export const upsertGoal = async (params: {
   created_by: string;
   credor_id?: string | null;
 }): Promise<void> => {
-  const { error } = await supabase
+  const credorId = params.credor_id || null;
+
+  // Find existing goal
+  let query = supabase
     .from("operator_goals")
-    .upsert({
-      operator_id: params.operator_id,
-      year: params.year,
-      month: params.month,
-      target_amount: params.target_amount,
-      tenant_id: params.tenant_id,
-      created_by: params.created_by,
-      credor_id: params.credor_id || null,
-    } as any, { onConflict: "operator_goals_unique_idx" });
-  if (error) throw error;
+    .select("id")
+    .eq("operator_id", params.operator_id)
+    .eq("year", params.year)
+    .eq("month", params.month);
+
+  if (credorId) {
+    query = query.eq("credor_id", credorId);
+  } else {
+    query = query.is("credor_id", null);
+  }
+
+  const { data: existing } = await query.maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from("operator_goals")
+      .update({ target_amount: params.target_amount } as any)
+      .eq("id", existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("operator_goals")
+      .insert({
+        operator_id: params.operator_id,
+        year: params.year,
+        month: params.month,
+        target_amount: params.target_amount,
+        tenant_id: params.tenant_id,
+        created_by: params.created_by,
+        credor_id: credorId,
+      } as any);
+    if (error) throw error;
+  }
 };
