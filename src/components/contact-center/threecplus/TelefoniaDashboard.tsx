@@ -51,11 +51,39 @@ const statusBgClass = (status: any): string => {
   return "bg-primary text-primary-foreground";
 };
 
-/** Format seconds into MM:SS */
+/** Format seconds into HH:MM:SS or MM:SS */
 const formatTimer = (seconds: number): string => {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
+  const totalSec = Math.floor(seconds);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) {
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+};
+
+/** Parse a start time from 3CPlus API into epoch ms */
+const parseStartTime = (value: any): number | null => {
+  if (!value) return null;
+  // If it's already a number (Unix timestamp in seconds)
+  if (typeof value === "number") {
+    // If it looks like seconds (before year 2100 in ms), convert
+    if (value < 1e12) return value * 1000;
+    return value;
+  }
+  const str = String(value);
+  // Try ISO date parse
+  const d = new Date(str);
+  if (!isNaN(d.getTime()) && d.getTime() > 0) return d.getTime();
+  // Try as plain number string
+  const num = Number(str);
+  if (!isNaN(num) && num > 0) {
+    if (num < 1e12) return num * 1000;
+    return num;
+  }
+  return null;
 };
 
 const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardProps) => {
@@ -230,11 +258,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       setTimerSeconds(0);
       return;
     }
-    const startTime = myAgent?.status_start_time || myAgent?.status_time;
+    const raw = myAgent?.status_start_time || myAgent?.status_time;
+    const startMs = parseStartTime(raw);
     const calcSeconds = () => {
-      if (!startTime) return 0;
-      const start = new Date(startTime).getTime();
-      return Math.max(0, Math.floor((Date.now() - start) / 1000));
+      if (!startMs) return 0;
+      const diff = Math.floor((Date.now() - startMs) / 1000);
+      // Guard against nonsensical values (negative or > 24h)
+      if (diff < 0 || diff > 86400) return 0;
+      return diff;
     };
     setTimerSeconds(calcSeconds());
     const id = setInterval(() => setTimerSeconds(calcSeconds()), 1000);
