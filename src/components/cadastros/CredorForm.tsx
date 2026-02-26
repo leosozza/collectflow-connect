@@ -162,6 +162,32 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const [savingGrade, setSavingGrade] = useState(false);
   const [savingAging, setSavingAging] = useState(false);
+  const [savingNegociacao, setSavingNegociacao] = useState(false);
+
+  const handleSaveNegociacao = async () => {
+    if (!editing?.id) return;
+    setSavingNegociacao(true);
+    try {
+      await upsertCredor({
+        id: editing.id,
+        tenant_id: tenant!.id,
+        parcelas_min: parseInt(form.parcelas_min) || 1,
+        parcelas_max: parseInt(form.parcelas_max) || 12,
+        entrada_minima_valor: parseFloat(form.entrada_minima_valor) || 0,
+        entrada_minima_tipo: form.entrada_minima_tipo || "percent",
+        desconto_maximo: parseFloat(form.desconto_maximo) || 0,
+        juros_mes: parseFloat(form.juros_mes) || 0,
+        multa: parseFloat(form.multa) || 0,
+        prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
+      });
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      toast.success("Regras de negociação salvas!");
+    } catch {
+      toast.error("Erro ao salvar regras");
+    } finally {
+      setSavingNegociacao(false);
+    }
+  };
 
   const handleSaveGrade = async () => {
     if (!editing?.id) return;
@@ -452,7 +478,14 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           {/* ABA 3 - NEGOCIAÇÃO */}
           <TabsContent value="negociacao" className="space-y-6 mt-4">
             <div>
-              <p className="text-sm font-medium text-foreground mb-3">Regras de Acordo</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-foreground">Regras de Acordo</p>
+                {editing?.id && (
+                  <Button size="sm" variant="default" onClick={handleSaveNegociacao} disabled={savingNegociacao}>
+                    {savingNegociacao ? "Salvando..." : "Salvar Regras"}
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Parcelas Mínimas</Label><Input type="number" value={form.parcelas_min ?? ""} onChange={e => set("parcelas_min", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_min", parseInt(form.parcelas_min) || 1)} /></div>
                 <div><Label>Parcelas Máximas</Label><Input type="number" value={form.parcelas_max ?? ""} onChange={e => set("parcelas_max", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_max", parseInt(form.parcelas_max) || 12)} /></div>

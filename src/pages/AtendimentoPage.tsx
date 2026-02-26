@@ -307,6 +307,7 @@ const AtendimentoPage = () => {
               onClose={() => setShowNegotiation(false)}
               onCreateAgreement={async (data) => { await agreementMutation.mutateAsync(data); }}
               loading={agreementMutation.isPending}
+              hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
             />
           )}
         </div>

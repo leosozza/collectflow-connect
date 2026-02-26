@@ -46,6 +46,7 @@ interface NegotiationPanelProps {
     approvalReason?: string;
   }) => Promise<void>;
   loading?: boolean;
+  hasActiveAgreement?: boolean;
 }
 
 const NegotiationPanel = ({
@@ -54,6 +55,7 @@ const NegotiationPanel = ({
   onClose,
   onCreateAgreement,
   loading,
+  hasActiveAgreement,
 }: NegotiationPanelProps) => {
   const [discountPercent, setDiscountPercent] = useState<number | "">(0);
   const [installments, setInstallments] = useState<number | "">(1);
@@ -113,6 +115,14 @@ const NegotiationPanel = ({
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        {hasActiveAgreement && (
+          <Alert variant="destructive">
+            <AlertTriangle className="w-4 h-4" />
+            <AlertDescription className="text-xs">
+              Cliente já possui acordo vigente. Cancele o anterior para criar um novo.
+            </AlertDescription>
+          </Alert>
+        )}
         {/* Templates */}
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">Templates</p>
@@ -205,7 +215,7 @@ const NegotiationPanel = ({
         <Button
           className="w-full"
           onClick={handleSubmit}
-          disabled={loading}
+          disabled={loading || hasActiveAgreement}
           variant={outOfStandard.isOut ? "outline" : "default"}
         >
           {outOfStandard.isOut ? (
