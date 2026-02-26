@@ -454,8 +454,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             <div>
               <p className="text-sm font-medium text-foreground mb-3">Regras de Acordo</p>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Parcelas Mínimas</Label><Input type="number" value={form.parcelas_min ?? 1} onChange={e => set("parcelas_min", parseInt(e.target.value) || 1)} /></div>
-                <div><Label>Parcelas Máximas</Label><Input type="number" value={form.parcelas_max ?? 12} onChange={e => set("parcelas_max", parseInt(e.target.value) || 12)} /></div>
+                <div><Label>Parcelas Mínimas</Label><Input type="number" value={form.parcelas_min ?? ""} onChange={e => set("parcelas_min", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_min", parseInt(form.parcelas_min) || 1)} /></div>
+                <div><Label>Parcelas Máximas</Label><Input type="number" value={form.parcelas_max ?? ""} onChange={e => set("parcelas_max", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_max", parseInt(form.parcelas_max) || 12)} /></div>
                 {/* Item 3: Replaced Switch with Select for entrada minima */}
                 <div className="col-span-2">
                   <Label>Entrada Mínima</Label>
@@ -469,8 +469,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     ) : (
                       <Input
                         type="number"
-                        value={form.entrada_minima_valor ?? 0}
-                        onChange={e => set("entrada_minima_valor", parseFloat(e.target.value) || 0)}
+                        value={form.entrada_minima_valor ?? ""}
+                        onChange={e => set("entrada_minima_valor", e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        onBlur={() => set("entrada_minima_valor", parseFloat(form.entrada_minima_valor) || 0)}
                         className="flex-1"
                       />
                     )}
@@ -483,10 +484,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     </Select>
                   </div>
                 </div>
-                <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? 0} onChange={e => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} /></div>
-                <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? 0} onChange={e => set("juros_mes", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
-                <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? 0} onChange={e => set("multa", Math.max(0, parseFloat(e.target.value) || 0))} /></div>
-                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="number" min={1} value={form.prazo_dias_acordo ?? 30} onChange={e => set("prazo_dias_acordo", Math.max(1, parseInt(e.target.value) || 30))} /></div>
+                <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? ""} onChange={e => set("desconto_maximo", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(form.desconto_maximo) || 0)))} /></div>
+                <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? ""} onChange={e => set("juros_mes", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("juros_mes", Math.max(0, parseFloat(form.juros_mes) || 0))} /></div>
+                <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? ""} onChange={e => set("multa", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("multa", Math.max(0, parseFloat(form.multa) || 0))} /></div>
+                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="number" min={1} value={form.prazo_dias_acordo ?? ""} onChange={e => set("prazo_dias_acordo", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || 30))} /></div>
               </div>
             </div>
 

@@ -9,6 +9,7 @@ import { formatCPF } from "@/lib/formatters";
 import { createAgreement } from "@/services/agreementService";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
+import { fetchCredorRules } from "@/services/cadastrosService";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -59,20 +60,10 @@ const AtendimentoPage = () => {
     enabled: !!client?.cpf,
   });
 
-  // Fetch credor rules
+  // Fetch credor rules (robust matching)
   const { data: credorRules } = useQuery({
     queryKey: ["credor-rules", client?.credor, tenant?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("credores" as any)
-        .select("desconto_maximo, parcelas_max, entrada_minima_valor, entrada_minima_tipo")
-        .eq("tenant_id", tenant!.id)
-        .eq("razao_social", client!.credor)
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data as unknown as { desconto_maximo: number; parcelas_max: number; entrada_minima_valor: number; entrada_minima_tipo: string } | null;
-    },
+    queryFn: () => fetchCredorRules(tenant!.id, client!.credor),
     enabled: !!client?.credor && !!tenant?.id,
   });
 

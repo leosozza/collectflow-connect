@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, Zap, CreditCard, Banknote, AlertTriangle } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
 
 interface AgingTier {
   min_days: number;
@@ -48,44 +48,32 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const pendentes = clients.filter((c) => c.status === "pendente");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountValue, setDiscountValue] = useState(0);
-  const [entradaValue, setEntradaValue] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState<number | "">(0);
+  const [discountValue, setDiscountValue] = useState<number | "">(0);
+  const [entradaValue, setEntradaValue] = useState<number | "">(0);
   const [entradaDate, setEntradaDate] = useState("");
-  const [numParcelas, setNumParcelas] = useState(1);
+  const [numParcelas, setNumParcelas] = useState<number | "">(1);
   const [firstDueDate, setFirstDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [enrichingAddress, setEnrichingAddress] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
-  const [credorRules, setCredorRules] = useState<CredorRules | null>(null);
+  const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
 
-  // Fetch credor rules
+  // Fetch credor rules (robust matching)
   useEffect(() => {
     if (!profile?.tenant_id || !credor) return;
-    const fetchCredor = async () => {
-      const { data } = await supabase
-        .from("credores" as any)
-        .select("desconto_maximo, juros_mes, multa, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, aging_discount_tiers")
-        .eq("tenant_id", profile.tenant_id)
-        .eq("razao_social", credor)
-        .maybeSingle();
-      if (data) {
-        setCredorRules({
-          desconto_maximo: Number((data as any).desconto_maximo) || 0,
-          juros_mes: Number((data as any).juros_mes) || 0,
-          multa: Number((data as any).multa) || 0,
-          parcelas_max: Number((data as any).parcelas_max) || 12,
-          parcelas_min: Number((data as any).parcelas_min) || 1,
-          entrada_minima_valor: Number((data as any).entrada_minima_valor) || 0,
-          entrada_minima_tipo: (data as any).entrada_minima_tipo || "percent",
-          aging_discount_tiers: ((data as any).aging_discount_tiers as AgingTier[]) || [],
-        });
-      }
-    };
-    fetchCredor();
+    fetchCredorRules(profile.tenant_id, credor).then((rules) => {
+      if (rules) setCredorRules(rules);
+    });
   }, [profile?.tenant_id, credor]);
+
+  // Numeric helpers
+  const numDiscountPercent = typeof discountPercent === "number" ? discountPercent : 0;
+  const numDiscountValue = typeof discountValue === "number" ? discountValue : 0;
+  const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
+  const numParcels = typeof numParcelas === "number" && numParcelas > 0 ? numParcelas : 1;
 
   const originalTotal = useMemo(() => {
     return pendentes
@@ -116,17 +104,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   };
 
   const proposedTotal = useMemo(() => {
-    return Math.max(0, originalTotal - discountValue);
-  }, [originalTotal, discountValue]);
+    return Math.max(0, originalTotal - numDiscountValue);
+  }, [originalTotal, numDiscountValue]);
 
   const remainingAfterEntrada = useMemo(() => {
-    return Math.max(0, proposedTotal - entradaValue);
-  }, [proposedTotal, entradaValue]);
+    return Math.max(0, proposedTotal - numEntrada);
+  }, [proposedTotal, numEntrada]);
 
   const installmentValue = useMemo(() => {
-    if (numParcelas <= 0) return 0;
-    return remainingAfterEntrada / numParcelas;
-  }, [remainingAfterEntrada, numParcelas]);
+    return remainingAfterEntrada / numParcels;
+  }, [remainingAfterEntrada, numParcels]);
 
   const toggleId = (id: string) => {
     setSelectedIds((prev) => {
@@ -145,15 +132,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
-  const handleDiscountPercent = (pct: number) => {
+  const handleDiscountPercent = (pct: number | "") => {
     setDiscountPercent(pct);
-    setDiscountValue(Number(((originalTotal * pct) / 100).toFixed(2)));
+    const numPct = typeof pct === "number" ? pct : 0;
+    setDiscountValue(Number(((originalTotal * numPct) / 100).toFixed(2)));
   };
 
-  const handleDiscountValue = (val: number) => {
+  const handleDiscountValue = (val: number | "") => {
     setDiscountValue(val);
+    const numVal = typeof val === "number" ? val : 0;
     if (originalTotal > 0) {
-      setDiscountPercent(Number(((val / originalTotal) * 100).toFixed(2)));
+      setDiscountPercent(Number(((numVal / originalTotal) * 100).toFixed(2)));
     }
   };
 
@@ -201,26 +190,26 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const outOfStandard = useMemo(() => {
     if (!credorRules) return { isOut: false, reasons: [] as string[] };
     const reasons: string[] = [];
-    if (credorRules.desconto_maximo > 0 && discountPercent > credorRules.desconto_maximo) {
-      reasons.push(`Desconto ${discountPercent}% excede o máximo de ${credorRules.desconto_maximo}%`);
+    if (credorRules.desconto_maximo > 0 && numDiscountPercent > credorRules.desconto_maximo) {
+      reasons.push(`Desconto ${numDiscountPercent}% excede o máximo de ${credorRules.desconto_maximo}%`);
     }
-    if (credorRules.parcelas_max > 0 && numParcelas > credorRules.parcelas_max) {
-      reasons.push(`Parcelas ${numParcelas}x excede o máximo de ${credorRules.parcelas_max}x`);
+    if (credorRules.parcelas_max > 0 && numParcels > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${numParcels}x excede o máximo de ${credorRules.parcelas_max}x`);
     }
-    if (credorRules.entrada_minima_valor > 0 && entradaValue > 0) {
+    if (credorRules.entrada_minima_valor > 0 && numEntrada > 0) {
       if (credorRules.entrada_minima_tipo === "percent") {
         const minEntrada = proposedTotal * (credorRules.entrada_minima_valor / 100);
-        if (entradaValue < minEntrada) {
-          reasons.push(`Entrada R$ ${entradaValue.toFixed(2)} abaixo do mínimo de ${credorRules.entrada_minima_valor}% (R$ ${minEntrada.toFixed(2)})`);
+        if (numEntrada < minEntrada) {
+          reasons.push(`Entrada R$ ${numEntrada.toFixed(2)} abaixo do mínimo de ${credorRules.entrada_minima_valor}% (R$ ${minEntrada.toFixed(2)})`);
         }
       } else {
-        if (entradaValue < credorRules.entrada_minima_valor) {
-          reasons.push(`Entrada R$ ${entradaValue.toFixed(2)} abaixo do mínimo de R$ ${credorRules.entrada_minima_valor.toFixed(2)}`);
+        if (numEntrada < credorRules.entrada_minima_valor) {
+          reasons.push(`Entrada R$ ${numEntrada.toFixed(2)} abaixo do mínimo de R$ ${credorRules.entrada_minima_valor.toFixed(2)}`);
         }
       }
     }
     return { isOut: reasons.length > 0, reasons };
-  }, [credorRules, discountPercent, numParcelas, entradaValue, proposedTotal]);
+  }, [credorRules, numDiscountPercent, numParcels, numEntrada, proposedTotal]);
 
   const handleSubmit = async () => {
     if (!user || !profile?.tenant_id) {
@@ -244,14 +233,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       setEnrichingAddress(false);
       setAddressStatus("");
 
-      const totalInstallments = entradaValue > 0 ? numParcelas + 1 : numParcelas;
+      const totalInstallments = numEntrada > 0 ? numParcels + 1 : numParcels;
       const data: AgreementFormData = {
         client_cpf: cpf,
         client_name: clientName,
         credor,
         original_total: originalTotal,
         proposed_total: proposedTotal,
-        discount_percent: discountPercent,
+        discount_percent: numDiscountPercent,
         new_installments: totalInstallments,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
@@ -385,8 +374,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 type="number"
                 min={0}
                 max={100}
-                value={discountPercent || ""}
-                onChange={(e) => handleDiscountPercent(Number(e.target.value))}
+                value={discountPercent}
+                onChange={(e) => handleDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
                 placeholder="0"
               />
             </div>
@@ -395,8 +384,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Input
                 type="number"
                 min={0}
-                value={discountValue || ""}
-                onChange={(e) => handleDiscountValue(Number(e.target.value))}
+                value={discountValue}
+                onChange={(e) => handleDiscountValue(e.target.value === "" ? "" : Number(e.target.value))}
                 placeholder="0,00"
               />
             </div>
@@ -409,8 +398,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Input
                 type="number"
                 min={0}
-                value={entradaValue || ""}
-                onChange={(e) => setEntradaValue(Number(e.target.value))}
+                value={entradaValue}
+                onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))}
                 placeholder="0,00"
               />
             </div>
@@ -432,7 +421,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 type="number"
                 min={1}
                 value={numParcelas}
-                onChange={(e) => setNumParcelas(Math.max(1, Number(e.target.value)))}
+                onChange={(e) => setNumParcelas(e.target.value === "" ? "" : Number(e.target.value))}
               />
             </div>
             <div className="space-y-1.5">
@@ -463,18 +452,18 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <span className="text-muted-foreground">Valor Original:</span>
               <span className="text-right font-medium">{formatCurrency(originalTotal)}</span>
               <span className="text-muted-foreground">Desconto:</span>
-              <span className="text-right font-medium text-green-600">- {formatCurrency(discountValue)} ({discountPercent}%)</span>
+              <span className="text-right font-medium text-green-600">- {formatCurrency(numDiscountValue)} ({numDiscountPercent}%)</span>
               <span className="text-muted-foreground">Valor Proposto:</span>
               <span className="text-right font-bold">{formatCurrency(proposedTotal)}</span>
-              {entradaValue > 0 && (
+              {numEntrada > 0 && (
                 <>
                   <span className="text-muted-foreground">Entrada:</span>
-                  <span className="text-right font-medium">{formatCurrency(entradaValue)}</span>
+                  <span className="text-right font-medium">{formatCurrency(numEntrada)}</span>
                 </>
               )}
               <span className="text-muted-foreground">Demais Parcelas:</span>
               <span className="text-right font-medium">
-                {numParcelas}x de {formatCurrency(installmentValue)}
+                {numParcels}x de {formatCurrency(installmentValue)}
               </span>
             </div>
           </div>

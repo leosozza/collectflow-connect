@@ -1,5 +1,71 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// ====== BUSCA ROBUSTA DE REGRAS DO CREDOR ======
+export interface CredorRulesResult {
+  desconto_maximo: number;
+  parcelas_max: number;
+  parcelas_min: number;
+  entrada_minima_valor: number;
+  entrada_minima_tipo: string;
+  juros_mes: number;
+  multa: number;
+  aging_discount_tiers: any[];
+}
+
+const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+export const fetchCredorRules = async (tenantId: string, credorName: string): Promise<CredorRulesResult | null> => {
+  if (!credorName || !tenantId) return null;
+
+  // Try exact match on razao_social
+  const { data: byRazao } = await supabase
+    .from("credores" as any)
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers")
+    .eq("tenant_id", tenantId)
+    .eq("razao_social", credorName)
+    .limit(1)
+    .maybeSingle();
+  if (byRazao) return mapCredorRules(byRazao);
+
+  // Try exact match on nome_fantasia
+  const { data: byFantasia } = await supabase
+    .from("credores" as any)
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers")
+    .eq("tenant_id", tenantId)
+    .eq("nome_fantasia", credorName)
+    .limit(1)
+    .maybeSingle();
+  if (byFantasia) return mapCredorRules(byFantasia);
+
+  // Fallback: fetch all credores for tenant and normalize match
+  const { data: all } = await supabase
+    .from("credores" as any)
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, razao_social, nome_fantasia")
+    .eq("tenant_id", tenantId);
+  if (all && Array.isArray(all)) {
+    const target = normalize(credorName);
+    const match = (all as any[]).find(
+      (c) => normalize(c.razao_social || "") === target || normalize(c.nome_fantasia || "") === target
+    );
+    if (match) return mapCredorRules(match);
+  }
+
+  return null;
+};
+
+function mapCredorRules(data: any): CredorRulesResult {
+  return {
+    desconto_maximo: Number(data.desconto_maximo) || 0,
+    parcelas_max: Number(data.parcelas_max) || 12,
+    parcelas_min: Number(data.parcelas_min) || 1,
+    entrada_minima_valor: Number(data.entrada_minima_valor) || 0,
+    entrada_minima_tipo: data.entrada_minima_tipo || "percent",
+    juros_mes: Number(data.juros_mes) || 0,
+    multa: Number(data.multa) || 0,
+    aging_discount_tiers: (data.aging_discount_tiers as any[]) || [],
+  };
+}
+
 // ====== CREDORES ======
 export const fetchCredores = async (tenantId: string) => {
   const { data, error } = await supabase
