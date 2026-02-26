@@ -186,9 +186,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setNotes("Modelo: Cartão sem juros/multa");
   };
 
-  // Detect if agreement is out of standard
+  // Detect if agreement is out of standard — if no credorRules found, require approval
   const outOfStandard = useMemo(() => {
-    if (!credorRules) return { isOut: false, reasons: [] as string[] };
+    if (!credorRules) {
+      if (numDiscountPercent > 0 || numParcels > 1) {
+        return { isOut: true, reasons: ["Credor sem regras de negociação cadastradas — requer liberação"] };
+      }
+      return { isOut: false, reasons: [] as string[] };
+    }
     const reasons: string[] = [];
     if (credorRules.desconto_maximo > 0 && numDiscountPercent > credorRules.desconto_maximo) {
       reasons.push(`Desconto ${numDiscountPercent}% excede o máximo de ${credorRules.desconto_maximo}%`);
