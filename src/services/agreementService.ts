@@ -75,8 +75,37 @@ export const createAgreement = async (
     .single();
 
   if (error) throw error;
-  logAction({ action: "create", entity_type: "agreement", entity_id: (result as Agreement).id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
-  return result as Agreement;
+  const agreement = result as Agreement;
+  logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
+
+  // Notify admins when agreement requires approval
+  if (options?.requiresApproval) {
+    try {
+      // Get all admin users from the same tenant
+      const { data: adminUsers } = await supabase
+        .from("tenant_users")
+        .select("user_id")
+        .eq("tenant_id", tenantId)
+        .in("role", ["admin", "super_admin"]);
+
+      if (adminUsers && adminUsers.length > 0) {
+        const notifications = adminUsers.map((admin) => ({
+          tenant_id: tenantId,
+          user_id: admin.user_id,
+          title: "Acordo aguardando liberação",
+          message: `Acordo para ${data.client_name} (${data.client_cpf}) - Credor: ${data.credor} requer liberação. Motivo: ${options.approvalReason || "Fora do padrão"}`,
+          type: "warning",
+          reference_type: "agreement",
+          reference_id: agreement.id,
+        }));
+        await supabase.from("notifications").insert(notifications as any);
+      }
+    } catch (e) {
+      console.error("Erro ao notificar admins:", e);
+    }
+  }
+
+  return agreement;
 };
 
 export const approveAgreement = async (

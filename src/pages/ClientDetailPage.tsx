@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,12 +14,22 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { toast } from "sonner";
 import ClientAttachments from "@/components/clients/ClientAttachments";
 import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
+import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
@@ -27,6 +37,10 @@ const ClientDetailPage = () => {
   const [searchParams] = useSearchParams();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("titulos");
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
+  const [editLoading, setEditLoading] = useState(false);
 
   // Support ?tab=acordo deep link
   useEffect(() => {
@@ -111,6 +125,56 @@ const ClientDetailPage = () => {
     setShowAcordoDialog(false);
     refetch();
     refetchAgreements();
+  };
+
+  const activeStatuses = ["pending", "pending_approval", "approved"];
+
+  const handleCancelAgreement = async (id: string) => {
+    try {
+      await cancelAgreement(id);
+      toast.success("Acordo cancelado. Parcelas marcadas como quebra.");
+      refetch();
+      refetchAgreements();
+    } catch (err: any) {
+      toast.error("Erro ao cancelar acordo: " + err.message);
+    }
+    setCancelId(null);
+  };
+
+  const handleEditOpen = (agreement: any) => {
+    setEditingAgreement(agreement);
+    setEditForm({
+      proposed_total: agreement.proposed_total,
+      new_installments: agreement.new_installments,
+      new_installment_value: agreement.new_installment_value,
+      first_due_date: agreement.first_due_date,
+      notes: agreement.notes || "",
+    });
+  };
+
+  const handleEditProposed = (proposed: number) => {
+    const installments = editForm.new_installments || 1;
+    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: proposed / installments });
+  };
+
+  const handleEditInstallments = (n: number) => {
+    const proposed = editForm.proposed_total || 0;
+    setEditForm({ ...editForm, new_installments: n, new_installment_value: n > 0 ? proposed / n : proposed });
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingAgreement) return;
+    setEditLoading(true);
+    try {
+      await updateAgreement(editingAgreement.id, editForm);
+      toast.success("Acordo atualizado com sucesso.");
+      setEditingAgreement(null);
+      refetchAgreements();
+    } catch (err: any) {
+      toast.error("Erro ao atualizar: " + err.message);
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   return (
@@ -211,6 +275,16 @@ const ClientDetailPage = () => {
                              agreement.status === "cancelled" ? "Cancelado" :
                              agreement.status}
                           </Badge>
+                          {activeStatuses.includes(agreement.status) && (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
+                                <Pencil className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -359,6 +433,81 @@ const ClientDetailPage = () => {
             onAgreementCreated={handleAgreementCreated}
             hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Agreement Dialog */}
+      <AlertDialog open={!!cancelId} onOpenChange={(open) => !open && setCancelId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Acordo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar este acordo? As parcelas pendentes serão marcadas como <strong>Quebra de Acordo</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Não, manter</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => cancelId && handleCancelAgreement(cancelId)}
+            >
+              Sim, cancelar acordo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Agreement Dialog */}
+      <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Acordo</DialogTitle>
+          </DialogHeader>
+          {editingAgreement && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Cliente</Label>
+                  <Input disabled value={editingAgreement.client_name} />
+                </div>
+                <div>
+                  <Label>Credor</Label>
+                  <Input disabled value={editingAgreement.credor} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Valor Original (R$)</Label>
+                  <Input disabled value={Number(editingAgreement.original_total).toFixed(2)} />
+                </div>
+                <div>
+                  <Label>Valor Proposto (R$)</Label>
+                  <CurrencyInput value={editForm.proposed_total || 0} onValueChange={handleEditProposed} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Nº Parcelas</Label>
+                  <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label>Valor Parcela (R$)</Label>
+                  <Input type="number" disabled value={(editForm.new_installment_value || 0).toFixed(2)} />
+                </div>
+              </div>
+              <div>
+                <Label>Primeiro Vencimento</Label>
+                <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
+              </div>
+              <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
+                {editLoading ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
