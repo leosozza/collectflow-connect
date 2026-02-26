@@ -357,6 +357,7 @@ const ClientDetailPage = () => {
             clientName={first.nome_completo}
             credor={first.credor}
             onAgreementCreated={handleAgreementCreated}
+            hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
           />
         </DialogContent>
       </Dialog>

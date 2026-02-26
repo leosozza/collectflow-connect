@@ -41,9 +41,10 @@ interface AgreementCalculatorProps {
   clientName: string;
   credor: string;
   onAgreementCreated: () => void;
+  hasActiveAgreement?: boolean;
 }
 
-const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated }: AgreementCalculatorProps) => {
+const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
   const pendentes = clients.filter((c) => c.status === "pendente");
 
@@ -270,6 +271,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   return (
     <div className="space-y-4">
+      {hasActiveAgreement && (
+        <Alert variant="destructive">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription>
+            Este cliente já possui um acordo vigente. Para criar um novo acordo, cancele o anterior primeiro.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Parcelas selection */}
       <Card>
         <CardHeader className="pb-3">
@@ -490,9 +500,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
           )}
 
-          <Button
+            <Button
             onClick={handleSubmit}
-            disabled={submitting || selectedIds.size === 0 || !firstDueDate}
+            disabled={submitting || selectedIds.size === 0 || !firstDueDate || hasActiveAgreement}
             className="w-full gap-2"
             size="lg"
             variant={outOfStandard.isOut ? "outline" : "default"}
