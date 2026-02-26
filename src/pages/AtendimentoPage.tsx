@@ -28,7 +28,7 @@ const AtendimentoPage = () => {
   const [callingPhone, setCallingPhone] = useState(false);
 
   // Fetch client by ID
-  const { data: client, isLoading: clientLoading } = useQuery({
+  const { data: client, isLoading: clientLoading } = useQuery<any>({
     queryKey: ["atendimento-client", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -57,6 +57,23 @@ const AtendimentoPage = () => {
       return data || [];
     },
     enabled: !!client?.cpf,
+  });
+
+  // Fetch credor rules
+  const { data: credorRules } = useQuery({
+    queryKey: ["credor-rules", client?.credor, tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credores" as any)
+        .select("desconto_maximo, parcelas_max, entrada_minima_valor, entrada_minima_tipo")
+        .eq("tenant_id", tenant!.id)
+        .eq("razao_social", client!.credor)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as unknown as { desconto_maximo: number; parcelas_max: number; entrada_minima_valor: number; entrada_minima_tipo: string } | null;
+    },
+    enabled: !!client?.credor && !!tenant?.id,
   });
 
   // Fetch dispositions
@@ -140,6 +157,8 @@ const AtendimentoPage = () => {
       new_installment_value: number;
       first_due_date: string;
       notes?: string;
+      requiresApproval?: boolean;
+      approvalReason?: string;
     }) => {
       if (!user?.id || !tenant?.id || !client) throw new Error("Dados não encontrados");
       return createAgreement(
@@ -156,7 +175,8 @@ const AtendimentoPage = () => {
           notes: data.notes,
         },
         user.id,
-        tenant.id
+        tenant.id,
+        { requiresApproval: data.requiresApproval, approvalReason: data.approvalReason }
       );
     },
     onSuccess: () => {
@@ -292,6 +312,7 @@ const AtendimentoPage = () => {
               clientCpf={client.cpf}
               clientName={client.nome_completo}
               credor={client.credor}
+              credorRules={credorRules}
               onClose={() => setShowNegotiation(false)}
               onCreateAgreement={async (data) => { await agreementMutation.mutateAsync(data); }}
               loading={agreementMutation.isPending}
