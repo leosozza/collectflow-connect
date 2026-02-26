@@ -211,6 +211,7 @@ const ClientDetailPage = () => {
                       <TableHead>Vencimento</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
+                      <TableHead className="text-right">Saldo Devedor</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -225,6 +226,7 @@ const ClientDetailPage = () => {
                         : c.status === "quebrado"
                         ? "bg-muted text-muted-foreground border-muted"
                         : "bg-warning/10 text-warning border-warning/30";
+                      const saldoDevedor = Math.max(0, Number(c.valor_parcela) - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
                         <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
@@ -234,6 +236,7 @@ const ClientDetailPage = () => {
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className={statusClass}>
                               {statusLabel}
