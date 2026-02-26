@@ -1,104 +1,90 @@
 
 
-## Plano: Chat de Suporte com IA Interativa + Feedback + Falar com Humano
+## Plano: Liberacao de Acordos Fora do Padrao + Agendados no Dashboard
 
-### Problema Atual
+### Parte 1: Acordo Fora do Padrao — Solicitar Liberacao
 
-O chat flutuante apenas salva mensagens no banco (`support_messages`) e depende de um staff humano responder via `SupportAdminPage`. O usuario envia mensagem e nao recebe resposta — nao ha interacao automatica.
+**Problema:** Operadores podem criar acordos com desconto/parcelas fora dos limites do credor sem nenhuma validacao ou aprovacao.
 
-### Solucao
+**Solucao:** Validar os parametros do acordo contra as regras do credor. Se estiver fora dos limites, exibir botao "Solicitar Liberacao" em vez de "Gerar Acordo". O acordo sera criado com status `pending_approval` e ficara visivel para Supervisor/Gerente/Admin aprovar.
 
-Integrar o Lovable AI (ja configurado com `LOVABLE_API_KEY`) para responder automaticamente as perguntas do usuario no chat de suporte, usando os guias do sistema (`SupportGuidesTab`) como contexto. Alem disso, adicionar botoes de feedback (joinha cima/baixo) e opcao de "Falar com Humano".
+#### Banco de Dados
 
-### Mudancas Visuais
+Nova coluna na tabela `agreements`:
+```sql
+ALTER TABLE agreements ADD COLUMN requires_approval boolean NOT NULL DEFAULT false;
+ALTER TABLE agreements ADD COLUMN approval_reason text;
+```
 
-- **Tamanho do chat**: de `w-[380px] h-[500px]` para `w-[340px] h-[600px]` (mais fino e mais comprido)
-- **Feedback**: apos cada resposta da IA, dois botoes (👍 👎) abaixo da mensagem
-- **Falar com humano**: botao no footer do chat "Falar com humano" que cria um ticket e avisa que um atendente ira responder
-- **Indicador de digitacao**: animacao de "..." enquanto a IA processa
+#### Mudancas no Frontend
 
-### Arquivos
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/client-detail/AgreementCalculator.tsx` | Adicionar validacao contra `credorRules`: verificar se `discountPercent > desconto_maximo` ou `numParcelas > parcelas_max` ou entrada abaixo do minimo. Se fora do padrao, exibir alerta visual e mudar botao para "Solicitar Liberacao". Ao submeter, criar acordo com `status: 'pending_approval'` e `requires_approval: true` |
+| `src/components/atendimento/NegotiationPanel.tsx` | Mesma logica de validacao (receber `credorRules` como prop) |
+| `src/services/agreementService.ts` | Adicionar parametro `requiresApproval` em `createAgreement`. Novo status `pending_approval`. Nova funcao `approveSpecialAgreement` |
+| `src/components/acordos/AgreementsList.tsx` | Adicionar status `pending_approval` com badge amarela "Aguardando Liberacao". Mostrar botoes aprovar/rejeitar para quem tem permissao |
+| `src/pages/AcordosPage.tsx` | Adicionar filtro `pending_approval`. Notificacao ao operador quando aprovado/rejeitado |
+
+#### Permissoes
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/hooks/usePermissions.ts` | Adicionar modulo `liberacoes` com acoes `["view", "approve"]`. Default: admin/gerente/supervisor tem `approve`, operador tem `view` |
+| `src/components/cadastros/UserPermissionsTab.tsx` | Exibir novo modulo na interface de permissoes |
+
+---
+
+### Parte 2: Botao "Agendados" no Dashboard
+
+**Problema:** Agendamentos de callback nao tem visibilidade. Operador nao recebe alerta quando chega a hora do retorno.
+
+**Solucao:** Botao "Agendados" no header do Dashboard (ao lado de Analytics). Abre pagina/dialog com lista de callbacks agendados para o dia. Notificacao no sino + popup na tela quando chega a hora.
+
+#### Banco de Dados
+
+Nao precisa de nova tabela — usa `call_dispositions` existente filtrando por `disposition_type = 'callback'` e `scheduled_callback` no dia.
+
+#### Mudancas no Frontend
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/pages/DashboardPage.tsx` | Adicionar botao "Agendados" ao lado de "Analytics" no header. Badge com contagem de agendados do dia. Ao clicar, abre Dialog com lista |
+| `src/components/dashboard/ScheduledCallbacksDialog.tsx` | NOVO — Dialog listando callbacks do dia. Admin ve todos (com nome do operador). Operador ve apenas os seus. Cada linha clicavel -> navega para ficha do cliente |
+| `src/hooks/useScheduledCallbacks.ts` | NOVO — Hook que busca callbacks agendados do dia, com polling a cada 60s. Quando um callback atinge a hora agendada, dispara notificacao no sino e popup (toast) com link para ficha do cliente |
+| `src/hooks/useNotifications.ts` | Integrar com o hook de callbacks para disparar popup |
+
+#### Logica do Admin vs Operador
+
+- **Operador**: ve apenas seus agendamentos do dia
+- **Admin/Supervisor/Gerente**: ve todos os agendamentos do dia, com coluna "Operador"
+
+#### Notificacao e Popup
+
+- Polling a cada 60s verifica se algum `scheduled_callback` esta dentro dos proximos 5 minutos
+- Ao detectar, cria notificacao local (toast) com titulo "Retorno agendado: {nome_cliente}" e botao para abrir ficha
+- Tambem registra no sino (insere na tabela `notifications`)
+
+#### Permissoes
+
+| Mudanca |
+|---------|
+| Novo modulo `agendados` em `usePermissions.ts` com acoes `["view_own", "view_all"]`. Default: operador tem `view_own`, supervisor/gerente/admin tem `view_all` |
+
+---
+
+### Resumo de Arquivos
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/support-ai-chat/index.ts` | NOVO — Edge function que recebe a pergunta do usuario, envia para Lovable AI com contexto dos guias do sistema, e retorna resposta via streaming |
-| `src/components/support/SupportFloatingButton.tsx` | MODIFICAR — Integrar chamada a IA, feedback, falar com humano, novo tamanho |
-| `supabase/config.toml` | MODIFICAR — Registrar `support-ai-chat` |
-
-### Detalhes Tecnicos
-
-#### 1. Edge Function `support-ai-chat`
-
-- Recebe `{ message, history }` (mensagem do usuario + historico recente)
-- System prompt inclui TODOS os guias do `SupportGuidesTab` como contexto (hardcoded na function)
-- Usa `google/gemini-3-flash-preview` via Lovable AI Gateway
-- Resposta via streaming SSE para exibicao progressiva
-- Trata erros 429/402
-
-System prompt:
-```
-Voce e o assistente RIVO Suporte. Responda perguntas sobre o sistema RIVO de cobranca.
-Use as informacoes dos guias abaixo para responder. Se nao souber, diga que nao tem essa informacao e sugira falar com um atendente humano.
-Responda de forma curta e objetiva em portugues brasileiro.
-
-[conteudo completo dos guias do SupportGuidesTab]
-```
-
-#### 2. SupportFloatingButton — Mudancas
-
-**Fluxo novo:**
-1. Usuario digita pergunta
-2. Mensagem do usuario aparece no chat (local, sem salvar no banco ainda)
-3. Chamada streaming para `support-ai-chat`
-4. Resposta da IA aparece progressivamente
-5. Apos resposta completa, botoes 👍 👎 aparecem abaixo
-6. Se usuario clica "Falar com humano": cria ticket no banco, muda modo para chat humano (comportamento atual)
-
-**Estado local vs banco:**
-- Mensagens da IA ficam em estado local (nao salvas como `support_messages`)
-- Apenas quando o usuario pede "falar com humano", um ticket e criado e as mensagens passam a ser salvas no banco
-
-**Dimensoes:** `w-[340px]` e `style={{ height: 600 }}`
-
-**Footer atualizado:**
-```
-[input de texto] [enviar]
-Falar com humano
-O RIVO pode cometer erros.
-```
-
-**Feedback (thumbs):**
-- Apenas visual por enquanto (estado local `rated` por mensagem)
-- Botoes desabilitados apos clicar
-
-#### 3. config.toml
-
-Adicionar:
-```toml
-[functions.support-ai-chat]
-verify_jwt = false
-```
-
-### Layout Final
-
-```text
-+----------------------------------+
-| ✨ RIVO Suporte           [▼]   |
-+----------------------------------+
-|                                  |
-|   Ola! Como posso te ajudar?     |
-|                                  |
-|          "Como importar?" [user] |
-|                                  |
-| ✨ RIVO Suporte                  |
-| Para importar clientes, va em    |
-| Carteira > Importar...           |
-|   👍 👎                          |
-|                                  |
-+----------------------------------+
-| Pergunte algo ao RIVO...    [↑]  |
-| 💬 Falar com humano              |
-| O RIVO pode cometer erros.       |
-+----------------------------------+
-```
+| Migracao SQL | NOVO — colunas `requires_approval`, `approval_reason` em agreements |
+| `src/services/agreementService.ts` | MODIFICAR — suporte a `pending_approval` |
+| `src/components/client-detail/AgreementCalculator.tsx` | MODIFICAR — validacao + botao liberacao |
+| `src/components/atendimento/NegotiationPanel.tsx` | MODIFICAR — validacao + botao liberacao |
+| `src/components/acordos/AgreementsList.tsx` | MODIFICAR — novo status |
+| `src/pages/AcordosPage.tsx` | MODIFICAR — filtro novo status |
+| `src/pages/DashboardPage.tsx` | MODIFICAR — botao Agendados |
+| `src/components/dashboard/ScheduledCallbacksDialog.tsx` | NOVO |
+| `src/hooks/useScheduledCallbacks.ts` | NOVO |
+| `src/hooks/usePermissions.ts` | MODIFICAR — modulos `liberacoes` e `agendados` |
 
