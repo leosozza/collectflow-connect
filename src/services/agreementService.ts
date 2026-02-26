@@ -111,9 +111,9 @@ export const createAgreement = async (
 export const approveAgreement = async (
   agreement: Agreement,
   userId: string,
-  operatorProfileId: string
+  _operatorProfileId: string
 ): Promise<void> => {
-  // 1. Update agreement status
+  // Update agreement status only — original titles in clients table remain untouched
   const { error: updateError } = await supabase
     .from("agreements")
     .update({ status: "approved", approved_by: userId } as any)
@@ -121,41 +121,6 @@ export const approveAgreement = async (
 
   if (updateError) throw updateError;
   logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
-
-  // 2. Cancel existing pending installments for this CPF/credor
-  const { error: cancelError } = await supabase
-    .from("clients")
-    .delete()
-    .eq("cpf", agreement.client_cpf)
-    .eq("credor", agreement.credor)
-    .eq("status", "pendente");
-
-  if (cancelError) throw cancelError;
-
-  // 3. Generate new installments
-  const records = [];
-  for (let i = 0; i < agreement.new_installments; i++) {
-    const date = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
-    records.push({
-      credor: agreement.credor,
-      nome_completo: agreement.client_name,
-      cpf: agreement.client_cpf,
-      numero_parcela: i + 1,
-      total_parcelas: agreement.new_installments,
-      valor_entrada: agreement.new_installment_value,
-      valor_parcela: agreement.new_installment_value,
-      valor_pago: 0,
-      data_vencimento: date.toISOString().split("T")[0],
-      status: "pendente" as const,
-      operator_id: operatorProfileId,
-    });
-  }
-
-  const { error: insertError } = await supabase
-    .from("clients")
-    .insert(records as any);
-
-  if (insertError) throw insertError;
 
   // Auto-cancel active protest titles for this CPF
   try {
@@ -199,36 +164,61 @@ export const updateAgreement = async (
 };
 
 export const cancelAgreement = async (id: string): Promise<void> => {
-  // 1. Fetch agreement details
-  const { data: agreement, error: fetchError } = await supabase
-    .from("agreements")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (fetchError) throw fetchError;
-
-  // 2. Cancel the agreement
+  // Only update agreement status — original titles remain untouched for future negotiations
   const { error } = await supabase
     .from("agreements")
     .update({ status: "cancelled" } as any)
     .eq("id", id);
 
   if (error) throw error;
+  logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+};
 
-  // 3. Mark pending installments as "quebrado" (not back to "aguardando acionamento")
-  if (agreement) {
+/** Distribute an agreement payment across original pending titles for a CPF/credor */
+export const registerAgreementPayment = async (
+  cpf: string,
+  credor: string,
+  valor: number
+): Promise<void> => {
+  // Fetch pending titles ordered by due date
+  const { data: titles, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("cpf", cpf)
+    .eq("credor", credor)
+    .eq("status", "pendente")
+    .order("data_vencimento", { ascending: true });
+
+  if (error) throw error;
+  if (!titles || titles.length === 0) return;
+
+  let remaining = valor;
+
+  for (const title of titles) {
+    if (remaining <= 0) break;
+
+    const saldo = Number(title.valor_parcela) - Number(title.valor_pago);
+    if (saldo <= 0) continue;
+
+    const payment = Math.min(remaining, saldo);
+    const newValorPago = Number(title.valor_pago) + payment;
+    const isPaid = newValorPago >= Number(title.valor_parcela);
+
+    const updateData: any = { valor_pago: newValorPago };
+    if (isPaid) {
+      updateData.status = "pago";
+      updateData.data_quitacao = new Date().toISOString().split("T")[0];
+    }
+
     const { error: updateError } = await supabase
       .from("clients")
-      .update({ status: "quebrado" } as any)
-      .eq("cpf", agreement.client_cpf)
-      .eq("credor", agreement.credor)
-      .eq("status", "pendente");
+      .update(updateData)
+      .eq("id", title.id);
 
-    if (updateError) {
-      console.error("Erro ao marcar parcelas como quebrado:", updateError);
-    }
+    if (updateError) throw updateError;
+
+    remaining -= payment;
   }
 
-  logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+  logAction({ action: "agreement_payment", entity_type: "client", details: { cpf, credor, valor, distributed: valor - remaining } });
 };
