@@ -156,11 +156,50 @@ export const rejectAgreement = async (
   logAction({ action: "reject", entity_type: "agreement", entity_id: id });
 };
 
+export const updateAgreement = async (
+  id: string,
+  data: Partial<AgreementFormData>
+): Promise<void> => {
+  const { error } = await supabase
+    .from("agreements")
+    .update(data as any)
+    .eq("id", id);
+
+  if (error) throw error;
+  logAction({ action: "update", entity_type: "agreement", entity_id: id, details: data });
+};
+
 export const cancelAgreement = async (id: string): Promise<void> => {
+  // 1. Fetch agreement details
+  const { data: agreement, error: fetchError } = await supabase
+    .from("agreements")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  // 2. Cancel the agreement
   const { error } = await supabase
     .from("agreements")
     .update({ status: "cancelled" } as any)
     .eq("id", id);
 
   if (error) throw error;
+
+  // 3. Mark pending installments as "quebrado" (not back to "aguardando acionamento")
+  if (agreement) {
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ status: "quebrado" } as any)
+      .eq("cpf", agreement.client_cpf)
+      .eq("credor", agreement.credor)
+      .eq("status", "pendente");
+
+    if (updateError) {
+      console.error("Erro ao marcar parcelas como quebrado:", updateError);
+    }
+  }
+
+  logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
 };

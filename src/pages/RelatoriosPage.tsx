@@ -67,10 +67,10 @@ const RelatoriosPage = () => {
     return map;
   }, [credoresData]);
 
-  // Derive agreement status: pago / pendente / quebra
+  // Derive agreement status: pago / pendente / quebra (exclude cancelled)
   const agreementDerivedStatus = useMemo(() => {
     const today = new Date();
-    return agreements.map((a: any) => {
+    return agreements.filter((a: any) => a.status !== "cancelled").map((a: any) => {
       const cpf = a.client_cpf?.replace(/\D/g, "") || "";
       const prazo = credorPrazoMap.get(a.credor) ?? 30;
       const firstDue = parseISO(a.first_due_date);
@@ -115,9 +115,9 @@ const RelatoriosPage = () => {
     return cpfs;
   }, [selectedStatus, agreementDerivedStatus]);
 
-  // Base set: all CPFs that have at least one agreement
+  // Base set: all CPFs that have at least one active agreement (exclude cancelled/rejected)
   const allAgreementCpfs = useMemo(() => {
-    return new Set(agreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+    return new Set(agreements.filter((a: any) => a.status !== "cancelled" && a.status !== "rejected").map((a: any) => a.client_cpf?.replace(/\D/g, "")));
   }, [agreements]);
 
   const filteredClients = useMemo(() => {

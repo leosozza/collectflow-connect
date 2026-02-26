@@ -66,21 +66,25 @@ const DashboardPage = () => {
     },
   });
 
-  // Set of CPFs that have agreements — used to filter metrics
-  const agreementCpfs = useMemo(() => {
-    return new Set(agreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  // Set of CPFs that have agreements — used to filter metrics (exclude cancelled/rejected)
+  const activeAgreements = useMemo(() => {
+    return agreements.filter((a: any) => a.status !== "cancelled" && a.status !== "rejected");
   }, [agreements]);
+
+  const agreementCpfs = useMemo(() => {
+    return new Set(activeAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  }, [activeAgreements]);
 
   const canViewAll = permissions.canViewAllDashboard;
   const todayStr = format(now, "yyyy-MM-dd");
 
   const filteredAgreements = useMemo(() => {
-    let items = agreements;
+    let items = activeAgreements;
     if (!canViewAll && profile?.user_id) {
       items = items.filter(a => a.created_by === profile.user_id);
     }
     return items;
-  }, [agreements, canViewAll, profile?.user_id]);
+  }, [activeAgreements, canViewAll, profile?.user_id]);
 
   const acordosDia = useMemo(() =>
     filteredAgreements.filter(a => a.created_at.startsWith(todayStr)).length,
