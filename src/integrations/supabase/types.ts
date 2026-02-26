@@ -2848,6 +2848,7 @@ export type Database = {
           is_default: boolean
           name: string
           phone_number: string | null
+          provider: string
           status: string
           tenant_id: string
           updated_at: string
@@ -2861,6 +2862,7 @@ export type Database = {
           is_default?: boolean
           name?: string
           phone_number?: string | null
+          provider?: string
           status?: string
           tenant_id: string
           updated_at?: string
@@ -2874,6 +2876,7 @@ export type Database = {
           is_default?: boolean
           name?: string
           phone_number?: string | null
+          provider?: string
           status?: string
           tenant_id?: string
           updated_at?: string
