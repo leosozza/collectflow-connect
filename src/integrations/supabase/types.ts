@@ -172,6 +172,7 @@ export type Database = {
       }
       agreements: {
         Row: {
+          approval_reason: string | null
           approved_by: string | null
           checkout_token: string | null
           client_cpf: string
@@ -188,11 +189,13 @@ export type Database = {
           original_total: number
           portal_origin: boolean
           proposed_total: number
+          requires_approval: boolean
           status: string
           tenant_id: string
           updated_at: string
         }
         Insert: {
+          approval_reason?: string | null
           approved_by?: string | null
           checkout_token?: string | null
           client_cpf: string
@@ -209,11 +212,13 @@ export type Database = {
           original_total?: number
           portal_origin?: boolean
           proposed_total?: number
+          requires_approval?: boolean
           status?: string
           tenant_id: string
           updated_at?: string
         }
         Update: {
+          approval_reason?: string | null
           approved_by?: string | null
           checkout_token?: string | null
           client_cpf?: string
@@ -230,6 +235,7 @@ export type Database = {
           original_total?: number
           portal_origin?: boolean
           proposed_total?: number
+          requires_approval?: boolean
           status?: string
           tenant_id?: string
           updated_at?: string

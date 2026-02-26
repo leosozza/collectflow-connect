@@ -13,8 +13,9 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck, Loader2, Zap, CreditCard, Banknote } from "lucide-react";
+import { Calculator, FileCheck, Loader2, Zap, CreditCard, Banknote, AlertTriangle } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AgingTier {
@@ -196,6 +197,31 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setNotes("Modelo: Cartão sem juros/multa");
   };
 
+  // Detect if agreement is out of standard
+  const outOfStandard = useMemo(() => {
+    if (!credorRules) return { isOut: false, reasons: [] as string[] };
+    const reasons: string[] = [];
+    if (credorRules.desconto_maximo > 0 && discountPercent > credorRules.desconto_maximo) {
+      reasons.push(`Desconto ${discountPercent}% excede o máximo de ${credorRules.desconto_maximo}%`);
+    }
+    if (credorRules.parcelas_max > 0 && numParcelas > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${numParcelas}x excede o máximo de ${credorRules.parcelas_max}x`);
+    }
+    if (credorRules.entrada_minima_valor > 0 && entradaValue > 0) {
+      if (credorRules.entrada_minima_tipo === "percent") {
+        const minEntrada = proposedTotal * (credorRules.entrada_minima_valor / 100);
+        if (entradaValue < minEntrada) {
+          reasons.push(`Entrada R$ ${entradaValue.toFixed(2)} abaixo do mínimo de ${credorRules.entrada_minima_valor}% (R$ ${minEntrada.toFixed(2)})`);
+        }
+      } else {
+        if (entradaValue < credorRules.entrada_minima_valor) {
+          reasons.push(`Entrada R$ ${entradaValue.toFixed(2)} abaixo do mínimo de R$ ${credorRules.entrada_minima_valor.toFixed(2)}`);
+        }
+      }
+    }
+    return { isOut: reasons.length > 0, reasons };
+  }, [credorRules, discountPercent, numParcelas, entradaValue, proposedTotal]);
+
   const handleSubmit = async () => {
     if (!user || !profile?.tenant_id) {
       toast.error("Usuário não autenticado");
@@ -232,8 +258,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         notes: notes || undefined,
       };
 
-      await createAgreement(data, user.id, profile.tenant_id);
-      toast.success("Acordo gerado com sucesso!");
+      await createAgreement(data, user.id, profile.tenant_id, outOfStandard.isOut ? {
+        requiresApproval: true,
+        approvalReason: outOfStandard.reasons.join("; "),
+      } : undefined);
+
+      toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gerado com sucesso!");
       onAgreementCreated();
     } catch (err: any) {
       toast.error(err.message || "Erro ao gerar acordo");
@@ -449,6 +479,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
           </div>
 
+          {outOfStandard.isOut && (
+            <Alert variant="destructive" className="border-orange-300 bg-orange-50 text-orange-800">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertDescription className="text-xs">
+                <strong>Acordo fora do padrão:</strong> {outOfStandard.reasons.join("; ")}. 
+                Será enviado para liberação por Supervisor/Gerente/Admin.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {enrichingAddress && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -461,9 +501,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             disabled={submitting || selectedIds.size === 0 || !firstDueDate}
             className="w-full gap-2"
             size="lg"
+            variant={outOfStandard.isOut ? "outline" : "default"}
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
-            {enrichingAddress ? addressStatus : submitting ? "Gerando..." : "Gerar Acordo"}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+            {enrichingAddress ? addressStatus : submitting ? "Gerando..." : outOfStandard.isOut ? "Solicitar Liberação" : "Gerar Acordo"}
           </Button>
         </CardContent>
       </Card>

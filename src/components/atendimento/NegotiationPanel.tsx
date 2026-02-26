@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/formatters";
-import { X } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 
 interface NegotiationTemplate {
   label: string;
@@ -20,11 +21,19 @@ const templates: NegotiationTemplate[] = [
   { label: "12x sem desconto", discountPercent: 0, installments: 12 },
 ];
 
+interface CredorRules {
+  desconto_maximo: number;
+  parcelas_max: number;
+  entrada_minima_valor: number;
+  entrada_minima_tipo: string;
+}
+
 interface NegotiationPanelProps {
   totalAberto: number;
   clientCpf: string;
   clientName: string;
   credor: string;
+  credorRules?: CredorRules | null;
   onClose: () => void;
   onCreateAgreement: (data: {
     discount_percent: number;
@@ -33,12 +42,15 @@ interface NegotiationPanelProps {
     new_installment_value: number;
     first_due_date: string;
     notes?: string;
+    requiresApproval?: boolean;
+    approvalReason?: string;
   }) => Promise<void>;
   loading?: boolean;
 }
 
 const NegotiationPanel = ({
   totalAberto,
+  credorRules,
   onClose,
   onCreateAgreement,
   loading,
@@ -58,6 +70,19 @@ const NegotiationPanel = ({
     setInstallments(t.installments);
   };
 
+  // Detect if out of standard
+  const outOfStandard = useMemo(() => {
+    if (!credorRules) return { isOut: false, reasons: [] as string[] };
+    const reasons: string[] = [];
+    if (credorRules.desconto_maximo > 0 && discountPercent > credorRules.desconto_maximo) {
+      reasons.push(`Desconto ${discountPercent}% excede máx ${credorRules.desconto_maximo}%`);
+    }
+    if (credorRules.parcelas_max > 0 && installments > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${installments}x excede máx ${credorRules.parcelas_max}x`);
+    }
+    return { isOut: reasons.length > 0, reasons };
+  }, [credorRules, discountPercent, installments]);
+
   const handleSubmit = async () => {
     await onCreateAgreement({
       discount_percent: discountPercent,
@@ -66,6 +91,8 @@ const NegotiationPanel = ({
       new_installment_value: installmentValue,
       first_due_date: firstDueDate,
       notes: notes || undefined,
+      requiresApproval: outOfStandard.isOut,
+      approvalReason: outOfStandard.isOut ? outOfStandard.reasons.join("; ") : undefined,
     });
   };
 
@@ -152,8 +179,29 @@ const NegotiationPanel = ({
           className="text-sm"
         />
 
-        <Button className="w-full" onClick={handleSubmit} disabled={loading}>
-          Gerar Acordo
+        {outOfStandard.isOut && (
+          <Alert variant="destructive" className="border-orange-300 bg-orange-50 text-orange-800">
+            <AlertTriangle className="w-4 h-4" />
+            <AlertDescription className="text-xs">
+              <strong>Fora do padrão:</strong> {outOfStandard.reasons.join("; ")}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Button
+          className="w-full"
+          onClick={handleSubmit}
+          disabled={loading}
+          variant={outOfStandard.isOut ? "outline" : "default"}
+        >
+          {outOfStandard.isOut ? (
+            <>
+              <AlertTriangle className="w-4 h-4 mr-1" />
+              Solicitar Liberação
+            </>
+          ) : (
+            "Gerar Acordo"
+          )}
         </Button>
       </CardContent>
     </Card>

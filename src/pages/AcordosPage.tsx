@@ -95,6 +95,7 @@ const AcordosPage = () => {
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="pending_approval">Aguardando Liberação</SelectItem>
             <SelectItem value="approved">Aprovado</SelectItem>
             <SelectItem value="rejected">Rejeitado</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>

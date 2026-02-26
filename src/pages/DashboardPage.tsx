@@ -5,7 +5,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { format, parseISO, startOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,6 +20,8 @@ import { useNavigate } from "react-router-dom";
 import MiniRanking from "@/components/dashboard/MiniRanking";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useGamification } from "@/hooks/useGamification";
+import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
+import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -44,6 +47,8 @@ const DashboardPage = () => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [browseDate, setBrowseDate] = useState(new Date());
+  const [agendadosOpen, setAgendadosOpen] = useState(false);
+  const { callbacks, count: agendadosCount, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
@@ -195,6 +200,20 @@ const DashboardPage = () => {
               <span className="hidden sm:inline">Relatórios</span>
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-primary text-primary hover:bg-primary/10 relative"
+            onClick={() => setAgendadosOpen(true)}
+          >
+            <Clock className="w-4 h-4" />
+            <span className="hidden sm:inline">Agendados</span>
+            {agendadosCount > 0 && (
+              <Badge className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1 text-[10px] bg-destructive text-destructive-foreground">
+                {agendadosCount}
+              </Badge>
+            )}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -352,6 +371,13 @@ const DashboardPage = () => {
           }
         }}
         submitting={paymentMutation.isPending}
+      />
+
+      <ScheduledCallbacksDialog
+        open={agendadosOpen}
+        onOpenChange={setAgendadosOpen}
+        callbacks={callbacks}
+        showOperator={canViewAllAgendados}
       />
     </div>
   );
