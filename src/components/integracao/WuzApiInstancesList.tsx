@@ -9,20 +9,22 @@ import {
   updateWhatsAppInstance,
   deleteWhatsAppInstance,
   setDefaultInstance,
-  createEvolutionInstance,
-  connectEvolutionInstance,
-  getEvolutionInstanceStatus,
-  deleteEvolutionInstance,
-  setEvolutionWebhook,
   WhatsAppInstance,
 } from "@/services/whatsappInstanceService";
+import {
+  connectWuzapiInstance,
+  getWuzapiQrCode,
+  getWuzapiStatus,
+  disconnectWuzapiInstance,
+  setWuzapiWebhook,
+} from "@/services/wuzapiService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2, Pencil, Check, X, Webhook } from "lucide-react";
+import { Server, Plus, Star, Trash2, Radio, QrCode, Wifi, WifiOff, Loader2, Pencil, Check, X, Webhook } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import BaylersInstanceForm from "./BaylersInstanceForm";
+import WuzApiInstanceForm from "./WuzApiInstanceForm";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +42,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const BaylersInstancesList = () => {
+const WuzApiInstancesList = () => {
   const { tenant, refetch: refetchTenant } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -59,18 +61,17 @@ const BaylersInstancesList = () => {
   const [editName, setEditName] = useState("");
   const [qrConnected, setQrConnected] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollingInstanceRef = useRef<string | null>(null);
 
+  // Filter only wuzapi instances
   const { data: allInstances = [], isLoading } = useQuery({
     queryKey: ["whatsapp-instances", tenant?.id],
     queryFn: () => fetchWhatsAppInstances(tenant!.id),
     enabled: !!tenant?.id,
   });
 
-  // Filter only evolution instances (default provider)
-  const instances = allInstances.filter((i: any) => !(i as any).provider || (i as any).provider === "evolution");
+  const instances = allInstances.filter((i: any) => (i as any).provider === "wuzapi");
 
-  // Auto-fetch status and phone number for all instances on load
+  // Auto-fetch status on load
   useEffect(() => {
     if (instances.length === 0) return;
     instances.forEach((inst) => {
@@ -78,10 +79,8 @@ const BaylersInstancesList = () => {
         handleCheckStatus(inst);
       }
     });
-  }, [instances]);
+  }, [instances.length]);
 
-
-  // Count active conversations per instance
   const { data: conversationCounts = {} } = useQuery({
     queryKey: ["conversation-counts-by-instance", tenant?.id],
     queryFn: async () => {
@@ -100,53 +99,31 @@ const BaylersInstancesList = () => {
     enabled: !!tenant?.id,
   });
 
-  const handleCreate = async (data: { name: string }) => {
+  const handleCreate = async (data: { name: string; serverUrl: string; userToken: string }) => {
     if (!tenant) return;
     setSaving(true);
     try {
-      const instanceName = `${tenant.name} - ${data.name}`;
-      const result = await createEvolutionInstance(instanceName);
-
-      const hash = result?.hash?.apikey || "";
-      const isFirst = instances.length === 0;
-
       await createWhatsAppInstance({
         name: data.name,
-        instance_name: instanceName,
-        instance_url: "",
-        api_key: hash,
+        instance_name: data.name,
+        instance_url: data.serverUrl,
+        api_key: data.userToken,
         tenant_id: tenant.id,
-        is_default: isFirst,
+        is_default: instances.length === 0,
         status: "active",
         phone_number: null,
-        provider: "evolution",
-      });
+      } as any);
 
-      if (isFirst) {
+      if (instances.length === 0) {
         await updateTenant(tenant.id, {
-          settings: { ...settings, whatsapp_provider: "baylers" },
+          settings: { ...settings, whatsapp_provider: "wuzapi" },
         });
         await refetchTenant();
       }
 
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
       setFormOpen(false);
-      toast({ title: "Instância criada!" });
-
-      // Auto-configure webhook
-      try {
-        await setEvolutionWebhook(instanceName);
-        toast({ title: "Webhook configurado automaticamente!" });
-      } catch {
-        toast({ title: "Aviso", description: "Instância criada, mas webhook não pôde ser configurado. Use o botão de webhook manualmente.", variant: "destructive" });
-      }
-
-      // Show QR code if available
-      const qr = result?.qrcode?.base64 || result?.base64;
-      if (qr) {
-        setQrCodeData(qr);
-        setQrDialogOpen(true);
-      }
+      toast({ title: "Instância WuzAPI criada!" });
     } catch (err: any) {
       toast({ title: "Erro ao criar instância", description: err.message, variant: "destructive" });
     } finally {
@@ -159,13 +136,11 @@ const BaylersInstancesList = () => {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-    pollingInstanceRef.current = null;
   }, []);
 
   const startPolling = useCallback((inst: WhatsAppInstance) => {
     stopPolling();
     setQrConnected(false);
-    pollingInstanceRef.current = inst.instance_name;
     let elapsed = 0;
     pollingRef.current = setInterval(async () => {
       elapsed += 5000;
@@ -175,17 +150,12 @@ const BaylersInstancesList = () => {
         return;
       }
       try {
-        const result = await getEvolutionInstanceStatus(inst.instance_name);
-        const state = result?.instance?.state || result?.state || "unknown";
+        const result = await getWuzapiStatus(inst.id);
+        const state = result?.Connected ? "open" : "disconnected";
         setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
         if (state === "open") {
           stopPolling();
           setQrConnected(true);
-          const phone = result?.instance?.owner || result?.owner || null;
-          if (phone && phone !== inst.phone_number) {
-            await updateWhatsAppInstance(inst.id, { phone_number: phone } as any);
-            queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant?.id] });
-          }
           toast({ title: "WhatsApp conectado com sucesso! ✅" });
           setTimeout(() => {
             setQrDialogOpen(false);
@@ -196,9 +166,8 @@ const BaylersInstancesList = () => {
         // ignore polling errors
       }
     }, 5000);
-  }, [stopPolling, toast, queryClient, tenant?.id]);
+  }, [stopPolling, toast]);
 
-  // Cleanup polling on unmount or dialog close
   useEffect(() => {
     if (!qrDialogOpen) {
       stopPolling();
@@ -213,56 +182,34 @@ const BaylersInstancesList = () => {
   const handleConnect = async (inst: WhatsAppInstance) => {
     setLoadingQr((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      const result = await connectEvolutionInstance(inst.instance_name);
-      const qr = result?.base64 || result?.qrcode?.base64 || result?.code;
+      await connectWuzapiInstance(inst.id);
+      // Get QR code
+      const qrResult = await getWuzapiQrCode(inst.id);
+      const qr = qrResult?.QRCode || qrResult?.qrcode || qrResult?.code;
       if (qr) {
         setQrCodeData(qr);
         setQrDialogOpen(true);
         startPolling(inst);
-      } else if (result?.not_found) {
-        toast({ title: "Instância não encontrada", description: "Remova e recrie esta instância.", variant: "destructive" });
       } else {
-        toast({
-          title: "QR Code sendo gerado",
-          description: "A sessão foi reiniciada. Clique novamente neste botão se necessário.",
-        });
-        setTimeout(() => handleCheckStatus(inst), 3000);
+        toast({ title: "QR Code não disponível", description: "Verifique se a instância está configurada corretamente." });
       }
-      // Auto-configure webhook after connect
+      // Auto webhook
       try {
-        await setEvolutionWebhook(inst.instance_name);
-      } catch {
-        // silent
-      }
+        await setWuzapiWebhook(inst.id);
+      } catch { /* silent */ }
     } catch (err: any) {
-      toast({ title: "Erro ao gerar QR Code", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao conectar", description: err.message, variant: "destructive" });
     } finally {
       setLoadingQr((prev) => ({ ...prev, [inst.id]: false }));
-    }
-  };
-
-  const handleSetWebhook = async (inst: WhatsAppInstance) => {
-    try {
-      await setEvolutionWebhook(inst.instance_name);
-      toast({ title: "Webhook configurado com sucesso!" });
-    } catch (err: any) {
-      toast({ title: "Erro ao configurar webhook", description: err.message, variant: "destructive" });
     }
   };
 
   const handleCheckStatus = async (inst: WhatsAppInstance) => {
     setLoadingStatus((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      const result = await getEvolutionInstanceStatus(inst.instance_name);
-      const state = result?.instance?.state || result?.state || "unknown";
+      const result = await getWuzapiStatus(inst.id);
+      const state = result?.Connected ? "open" : "disconnected";
       setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
-
-      // Save phone number if returned by the API
-      const phone = result?.instance?.owner || result?.owner || null;
-      if (phone && phone !== inst.phone_number) {
-        await updateWhatsAppInstance(inst.id, { phone_number: phone } as any);
-        queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant?.id] });
-      }
     } catch {
       setStatusMap((prev) => ({ ...prev, [inst.id]: "error" }));
     } finally {
@@ -275,11 +222,11 @@ const BaylersInstancesList = () => {
     try {
       await setDefaultInstance(inst.id, tenant.id);
       await updateTenant(tenant.id, {
-        settings: { ...settings, whatsapp_provider: "baylers" },
+        settings: { ...settings, whatsapp_provider: "wuzapi" },
       });
       await refetchTenant();
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
-      toast({ title: `"${inst.name || inst.instance_name}" definida como padrão` });
+      toast({ title: `"${inst.name}" definida como padrão` });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
@@ -288,18 +235,24 @@ const BaylersInstancesList = () => {
   const handleDelete = async () => {
     if (!deleteTarget || !tenant) return;
     try {
-      // Delete from Evolution API first (best effort)
       try {
-        await deleteEvolutionInstance(deleteTarget.instance_name);
-      } catch {
-        // Ignore Evolution API errors on delete
-      }
+        await disconnectWuzapiInstance(deleteTarget.id);
+      } catch { /* ignore */ }
       await deleteWhatsAppInstance(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
       toast({ title: "Instância removida" });
       setDeleteTarget(null);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleSetWebhook = async (inst: WhatsAppInstance) => {
+    try {
+      await setWuzapiWebhook(inst.id);
+      toast({ title: "Webhook configurado com sucesso!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao configurar webhook", description: err.message, variant: "destructive" });
     }
   };
 
@@ -328,18 +281,17 @@ const BaylersInstancesList = () => {
     const state = statusMap[instId];
     if (!state) return null;
     if (state === "open") return <Badge className="bg-green-100 text-green-700 text-xs gap-1"><Wifi className="w-3 h-3" />Conectado</Badge>;
-    if (state === "connecting") return <Badge className="bg-yellow-100 text-yellow-700 text-xs">Conectando...</Badge>;
     return <Badge variant="outline" className="text-xs gap-1"><WifiOff className="w-3 h-3" />Desconectado</Badge>;
   };
 
   return (
     <>
-      <Card className={activeProvider === "baylers" ? "ring-2 ring-primary" : ""}>
+      <Card className={activeProvider === "wuzapi" ? "ring-2 ring-primary" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <MessageSquare className="w-5 h-5" />
-              WhatsApp QR Code
+              <Server className="w-5 h-5" />
+              WuzAPI
             </CardTitle>
             <div className="flex items-center gap-2">
               {instances.length > 0 && (
@@ -347,19 +299,19 @@ const BaylersInstancesList = () => {
                   {instances.length} instância{instances.length > 1 ? "s" : ""}
                 </Badge>
               )}
-              {activeProvider === "baylers" && (
+              {activeProvider === "wuzapi" && (
                 <Badge><Radio className="w-3 h-3 mr-1" />Ativo</Badge>
               )}
             </div>
           </div>
-          <CardDescription>Conexão via QR Code — apenas informe o nome da instância</CardDescription>
+          <CardDescription>WhatsApp via WuzAPI (whatsmeow/Go) — self-hosted</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando...</p>
           ) : instances.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhuma instância configurada
+              Nenhuma instância WuzAPI configurada
             </p>
           ) : (
             <div className="space-y-2">
@@ -409,47 +361,21 @@ const BaylersInstancesList = () => {
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
                       {inst.phone_number
-                        ? `📱 ${inst.phone_number.replace(/^(\d{2})(\d{2})(\d{4,5})(\d{4})$/, '+$1 ($2) $3-$4')}`
-                        : inst.instance_name}
+                        ? `📱 ${inst.phone_number}`
+                        : inst.instance_url || inst.instance_name}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleStartEdit(inst)}
-                      title="Editar nome"
-                    >
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartEdit(inst)} title="Editar nome">
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleConnect(inst)}
-                      title="QR Code / Conectar"
-                      disabled={loadingQr[inst.id]}
-                    >
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleConnect(inst)} title="QR Code / Conectar" disabled={loadingQr[inst.id]}>
                       {loadingQr[inst.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleCheckStatus(inst)}
-                      title="Verificar status"
-                      disabled={loadingStatus[inst.id]}
-                    >
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCheckStatus(inst)} title="Verificar status" disabled={loadingStatus[inst.id]}>
                       {loadingStatus[inst.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleSetWebhook(inst)}
-                      title="Configurar Webhook"
-                    >
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetWebhook(inst)} title="Configurar Webhook">
                       <Webhook className="w-4 h-4" />
                     </Button>
                     {!inst.is_default && (
@@ -457,7 +383,7 @@ const BaylersInstancesList = () => {
                         <Star className="w-4 h-4" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(inst)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(inst)} title="Remover">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -465,55 +391,51 @@ const BaylersInstancesList = () => {
               ))}
             </div>
           )}
-
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => setFormOpen(true)}
-          >
-            <Plus className="w-4 h-4" /> Nova Instância
+          <Button variant="outline" className="w-full gap-2" onClick={() => setFormOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Adicionar instância WuzAPI
           </Button>
         </CardContent>
       </Card>
 
-      <BaylersInstanceForm
+      <WuzApiInstanceForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSave={handleCreate}
         saving={saving}
-        tenantName={tenant?.name || ""}
       />
 
       {/* QR Code Dialog */}
       <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{qrConnected ? "Conectado! ✅" : "Escaneie o QR Code"}</DialogTitle>
+            <DialogTitle>Escaneie o QR Code</DialogTitle>
           </DialogHeader>
-          {qrConnected ? (
-            <div className="flex flex-col items-center gap-3 p-6">
-              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-                <Check className="w-8 h-8 text-green-600" />
+          <div className="flex flex-col items-center gap-4 py-4">
+            {qrConnected ? (
+              <div className="flex flex-col items-center gap-2">
+                <Check className="w-16 h-16 text-green-500" />
+                <p className="text-green-600 font-medium">Conectado!</p>
               </div>
-              <p className="text-sm text-muted-foreground">WhatsApp conectado com sucesso!</p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 p-4">
-              {qrCodeData ? (
-                <img
-                  src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
-                  alt="QR Code WhatsApp"
-                  className="w-64 h-64 object-contain"
-                />
+            ) : qrCodeData ? (
+              qrCodeData.startsWith("data:") ? (
+                <img src={qrCodeData} alt="QR Code" className="w-64 h-64" />
               ) : (
-                <p className="text-muted-foreground">QR Code indisponível</p>
-              )}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Aguardando leitura do QR Code...
-              </div>
-            </div>
-          )}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrCodeData)}`}
+                  alt="QR Code"
+                  className="w-64 h-64"
+                />
+              )
+            ) : (
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            )}
+            {!qrConnected && (
+              <p className="text-xs text-muted-foreground text-center">
+                Abra o WhatsApp no celular → Configurações → Aparelhos conectados → Conectar um aparelho
+              </p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -522,24 +444,18 @@ const BaylersInstancesList = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover instância?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  A instância <strong>"{deleteTarget?.name || deleteTarget?.instance_name}"</strong> será removida do sistema e da Evolution API.
-                </p>
-                {deleteTarget && (conversationCounts[deleteTarget.id] || 0) > 0 && (
-                  <p className="text-amber-600 dark:text-amber-400 font-medium">
-                    ⚠️ Esta instância possui {conversationCounts[deleteTarget.id]} conversa{conversationCounts[deleteTarget.id] > 1 ? "s" : ""} ativa{conversationCounts[deleteTarget.id] > 1 ? "s" : ""}. As conversas serão preservadas, mas desvinculadas da instância.
-                  </p>
-                )}
-              </div>
+            <AlertDialogDescription>
+              A instância "{deleteTarget?.name || deleteTarget?.instance_name}" será removida.
+              {(conversationCounts[deleteTarget?.id || ""] || 0) > 0 && (
+                <span className="block mt-2 font-medium text-amber-600">
+                  ⚠️ {conversationCounts[deleteTarget?.id || ""]} conversa(s) ativa(s) serão desvinculadas.
+                </span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Remover
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Remover</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -547,4 +463,4 @@ const BaylersInstancesList = () => {
   );
 };
 
-export default BaylersInstancesList;
+export default WuzApiInstancesList;

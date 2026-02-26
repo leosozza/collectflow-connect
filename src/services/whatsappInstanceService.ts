@@ -10,6 +10,7 @@ export interface WhatsAppInstance {
   is_default: boolean;
   status: string;
   phone_number: string | null;
+  provider: string;
   created_at: string;
   updated_at: string;
 }
