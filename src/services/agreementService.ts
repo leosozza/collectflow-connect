@@ -57,20 +57,25 @@ export const fetchAgreements = async (filters?: {
 export const createAgreement = async (
   data: AgreementFormData,
   userId: string,
-  tenantId: string
+  tenantId: string,
+  options?: { requiresApproval?: boolean; approvalReason?: string }
 ): Promise<Agreement> => {
+  const status = options?.requiresApproval ? "pending_approval" : "pending";
   const { data: result, error } = await supabase
     .from("agreements")
     .insert({
       ...data,
       created_by: userId,
       tenant_id: tenantId,
+      status,
+      requires_approval: options?.requiresApproval || false,
+      approval_reason: options?.approvalReason || null,
     } as any)
     .select()
     .single();
 
   if (error) throw error;
-  logAction({ action: "create", entity_type: "agreement", entity_id: (result as Agreement).id, details: { cpf: data.client_cpf, credor: data.credor } });
+  logAction({ action: "create", entity_type: "agreement", entity_id: (result as Agreement).id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
   return result as Agreement;
 };
 

@@ -22,6 +22,8 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     configuracoes: ["view", "manage"],
     central_empresa: ["view", "manage"],
     auditoria: ["view"],
+    liberacoes: ["view", "approve"],
+    agendados: ["view_own", "view_all"],
   },
   admin: {
     dashboard: ["view_all"],
@@ -39,6 +41,8 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     configuracoes: ["view", "manage"],
     central_empresa: ["view", "manage"],
     auditoria: ["view"],
+    liberacoes: ["view", "approve"],
+    agendados: ["view_own", "view_all"],
   },
   gerente: {
     dashboard: ["view_all"],
@@ -56,6 +60,8 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     configuracoes: [],
     central_empresa: [],
     auditoria: ["view"],
+    liberacoes: ["view", "approve"],
+    agendados: ["view_own", "view_all"],
   },
   supervisor: {
     dashboard: ["view_all"],
@@ -73,6 +79,8 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     configuracoes: [],
     central_empresa: [],
     auditoria: [],
+    liberacoes: ["view", "approve"],
+    agendados: ["view_own", "view_all"],
   },
   operador: {
     dashboard: ["view_own"],
@@ -90,6 +98,8 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     configuracoes: [],
     central_empresa: [],
     auditoria: [],
+    liberacoes: ["view"],
+    agendados: ["view_own"],
   },
 };
 
@@ -187,6 +197,14 @@ export function usePermissions() {
 
     // Auditoria
     canViewAuditoria: hasAny("auditoria"),
+
+    // Liberações
+    canViewLiberacoes: hasAny("liberacoes"),
+    canApproveLiberacoes: has("liberacoes", "approve"),
+
+    // Agendados
+    canViewOwnAgendados: has("agendados", "view_own") || has("agendados", "view_all"),
+    canViewAllAgendados: has("agendados", "view_all"),
   };
 }
 
@@ -211,6 +229,8 @@ export const MODULE_LABELS: Record<string, string> = {
   configuracoes: "Configurações",
   central_empresa: "Central Empresa",
   auditoria: "Auditoria",
+  liberacoes: "Liberações",
+  agendados: "Agendados",
 };
 
 export const ACTION_LABELS: Record<string, string> = {
@@ -241,4 +261,6 @@ export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   configuracoes: ["view", "manage"],
   central_empresa: ["view", "manage"],
   auditoria: ["view"],
+  liberacoes: ["view", "approve"],
+  agendados: ["view_own", "view_all"],
 };

@@ -16,6 +16,7 @@ interface AgreementsListProps {
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
+  pending_approval: "bg-orange-100 text-orange-800",
   approved: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
   cancelled: "bg-muted text-muted-foreground",
@@ -23,6 +24,7 @@ const statusColors: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
   pending: "Pendente",
+  pending_approval: "Aguardando Liberação",
   approved: "Aprovado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
@@ -64,7 +66,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel }: 
               </TableCell>
               {isAdmin && (
                 <TableCell className="text-right">
-                  {a.status === "pending" && (
+                  {(a.status === "pending" || a.status === "pending_approval") && (
                     <div className="flex gap-1 justify-end">
                       <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
                         <Check className="w-4 h-4 text-green-600" />
@@ -74,7 +76,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel }: 
                       </Button>
                     </div>
                   )}
-                  {a.status !== "pending" && a.status !== "cancelled" && (
+                  {a.status !== "pending" && a.status !== "pending_approval" && a.status !== "cancelled" && (
                     <Button size="sm" variant="ghost" onClick={() => onCancel(a.id)} title="Cancelar">
                       <Trash2 className="w-4 h-4 text-muted-foreground" />
                     </Button>
