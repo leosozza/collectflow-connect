@@ -55,15 +55,17 @@ const NegotiationPanel = ({
   onCreateAgreement,
   loading,
 }: NegotiationPanelProps) => {
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [installments, setInstallments] = useState(1);
+  const [discountPercent, setDiscountPercent] = useState<number | "">(0);
+  const [installments, setInstallments] = useState<number | "">(1);
   const [firstDueDate, setFirstDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
   );
   const [notes, setNotes] = useState("");
 
-  const proposedTotal = totalAberto * (1 - discountPercent / 100);
-  const installmentValue = installments > 0 ? proposedTotal / installments : 0;
+  const numDiscount = typeof discountPercent === "number" ? discountPercent : 0;
+  const numInstallments = typeof installments === "number" && installments > 0 ? installments : 1;
+  const proposedTotal = totalAberto * (1 - numDiscount / 100);
+  const installmentValue = proposedTotal / numInstallments;
 
   const applyTemplate = (t: NegotiationTemplate) => {
     setDiscountPercent(t.discountPercent);
@@ -74,19 +76,19 @@ const NegotiationPanel = ({
   const outOfStandard = useMemo(() => {
     if (!credorRules) return { isOut: false, reasons: [] as string[] };
     const reasons: string[] = [];
-    if (credorRules.desconto_maximo > 0 && discountPercent > credorRules.desconto_maximo) {
-      reasons.push(`Desconto ${discountPercent}% excede máx ${credorRules.desconto_maximo}%`);
+    if (credorRules.desconto_maximo > 0 && numDiscount > credorRules.desconto_maximo) {
+      reasons.push(`Desconto ${numDiscount}% excede máx ${credorRules.desconto_maximo}%`);
     }
-    if (credorRules.parcelas_max > 0 && installments > credorRules.parcelas_max) {
-      reasons.push(`Parcelas ${installments}x excede máx ${credorRules.parcelas_max}x`);
+    if (credorRules.parcelas_max > 0 && numInstallments > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${numInstallments}x excede máx ${credorRules.parcelas_max}x`);
     }
     return { isOut: reasons.length > 0, reasons };
-  }, [credorRules, discountPercent, installments]);
+  }, [credorRules, numDiscount, numInstallments]);
 
   const handleSubmit = async () => {
     await onCreateAgreement({
-      discount_percent: discountPercent,
-      new_installments: installments,
+      discount_percent: numDiscount,
+      new_installments: numInstallments,
       proposed_total: proposedTotal,
       new_installment_value: installmentValue,
       first_due_date: firstDueDate,
@@ -132,7 +134,10 @@ const NegotiationPanel = ({
               min={0}
               max={100}
               value={discountPercent}
-              onChange={(e) => setDiscountPercent(Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDiscountPercent(v === "" ? "" : Number(v));
+              }}
             />
           </div>
           <div>
@@ -142,7 +147,10 @@ const NegotiationPanel = ({
               min={1}
               max={60}
               value={installments}
-              onChange={(e) => setInstallments(Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setInstallments(v === "" ? "" : Number(v));
+              }}
             />
           </div>
           <div className="col-span-2">
