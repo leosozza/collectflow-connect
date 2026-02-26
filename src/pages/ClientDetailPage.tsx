@@ -132,7 +132,7 @@ const ClientDetailPage = () => {
   const handleCancelAgreement = async (id: string) => {
     try {
       await cancelAgreement(id);
-      toast.success("Acordo cancelado. Parcelas marcadas como quebra.");
+      toast.success("Acordo cancelado com sucesso.");
       refetch();
       refetchAgreements();
     } catch (err: any) {
@@ -442,7 +442,7 @@ const ClientDetailPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar Acordo</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja cancelar este acordo? As parcelas pendentes serão marcadas como <strong>Quebra de Acordo</strong>.
+              Tem certeza que deseja cancelar este acordo? Os títulos originais permanecerão em aberto para futuras negociações.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
