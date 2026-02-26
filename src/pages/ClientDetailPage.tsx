@@ -19,6 +19,7 @@ import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
+import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
@@ -187,51 +188,78 @@ const ClientDetailPage = () => {
         <TabsContent value="acordo">
           <Card>
             <CardContent className="p-6">
-              {lastAgreement ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-foreground">Último Acordo</h3>
-                    <Badge variant={lastAgreement.status === "approved" ? "default" : "secondary"}>
-                      {lastAgreement.status === "approved" ? "Aprovado" : lastAgreement.status === "pending" ? "Pendente" : lastAgreement.status}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
-                      <p className="text-sm font-semibold">{formatCurrency(Number(lastAgreement.original_total))}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
-                      <p className="text-sm font-semibold">{formatCurrency(Number(lastAgreement.proposed_total))}</p>
-                    </div>
-                    {lastAgreement.discount_percent > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Desconto</p>
-                        <p className="text-sm font-semibold text-green-600">{lastAgreement.discount_percent}%</p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
-                      <p className="text-sm font-semibold">{lastAgreement.new_installments}x de {formatCurrency(Number(lastAgreement.new_installment_value))}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
-                      <p className="text-sm font-semibold">{formatDate(lastAgreement.first_due_date)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Criado em</p>
-                      <p className="text-sm font-semibold">{new Date(lastAgreement.created_at).toLocaleDateString("pt-BR")}</p>
-                    </div>
-                  </div>
-                  {lastAgreement.notes && (
-                    <div className="pt-3 border-t border-border">
-                      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
-                      <p className="text-sm text-foreground">{lastAgreement.notes}</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
+              {agreements.length === 0 ? (
                 <p className="text-center text-muted-foreground">Nenhum acordo registrado</p>
+              ) : (
+                <div className="space-y-6">
+                  {agreements.map((agreement: any) => (
+                    <div key={agreement.id} className="space-y-4 border-b border-border pb-6 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-foreground">
+                          Acordo — {new Date(agreement.created_at).toLocaleDateString("pt-BR")}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            agreement.status === "approved" ? "default" :
+                            agreement.status === "pending_approval" ? "outline" :
+                            "secondary"
+                          }>
+                            {agreement.status === "approved" ? "Aprovado" :
+                             agreement.status === "pending" ? "Pendente" :
+                             agreement.status === "pending_approval" ? "Aguardando Liberação" :
+                             agreement.status === "rejected" ? "Rejeitado" :
+                             agreement.status === "cancelled" ? "Cancelado" :
+                             agreement.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
+                          <p className="text-sm font-semibold">{formatCurrency(Number(agreement.original_total))}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
+                          <p className="text-sm font-semibold">{formatCurrency(Number(agreement.proposed_total))}</p>
+                        </div>
+                        {agreement.discount_percent > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Desconto</p>
+                            <p className="text-sm font-semibold text-green-600">{agreement.discount_percent}%</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
+                          <p className="text-sm font-semibold">{agreement.new_installments}x de {formatCurrency(Number(agreement.new_installment_value))}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
+                          <p className="text-sm font-semibold">{formatDate(agreement.first_due_date)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Criado em</p>
+                          <p className="text-sm font-semibold">{new Date(agreement.created_at).toLocaleDateString("pt-BR")}</p>
+                        </div>
+                      </div>
+                      {agreement.approval_reason && (
+                        <div className="pt-2 border-t border-border">
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Motivo da Liberação</p>
+                          <p className="text-sm text-orange-600">{agreement.approval_reason}</p>
+                        </div>
+                      )}
+                      {agreement.notes && (
+                        <div className="pt-2 border-t border-border">
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
+                          <p className="text-sm text-foreground">{agreement.notes}</p>
+                        </div>
+                      )}
+                      {/* Boleto/Parcelas section for approved agreements */}
+                      {agreement.status === "approved" && (
+                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} />
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

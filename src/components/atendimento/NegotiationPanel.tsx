@@ -72,9 +72,15 @@ const NegotiationPanel = ({
     setInstallments(t.installments);
   };
 
-  // Detect if out of standard
+  // Detect if out of standard — if no credorRules found, require approval
   const outOfStandard = useMemo(() => {
-    if (!credorRules) return { isOut: false, reasons: [] as string[] };
+    if (!credorRules) {
+      // No rules configured = always require approval when there's a discount or multiple installments
+      if (numDiscount > 0 || numInstallments > 1) {
+        return { isOut: true, reasons: ["Credor sem regras de negociação cadastradas — requer liberação"] };
+      }
+      return { isOut: false, reasons: [] as string[] };
+    }
     const reasons: string[] = [];
     if (credorRules.desconto_maximo > 0 && numDiscount > credorRules.desconto_maximo) {
       reasons.push(`Desconto ${numDiscount}% excede máx ${credorRules.desconto_maximo}%`);
