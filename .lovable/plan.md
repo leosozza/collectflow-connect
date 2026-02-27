@@ -1,36 +1,35 @@
 
 
-## Problema
+## Plano: Criar aba /acordos na sidebar e reestruturar a página
 
-A seção "Vencimentos" e a tabela "Meus Clientes" no Dashboard mostram **todos** os clientes importados na carteira, sem filtrar por acordos. Os stat cards (Total Recebido, Quebra, Pendentes, Total Projetado) já filtram corretamente por `agreementCpfs`, mas a strip de vencimentos e a tabela abaixo não aplicam esse filtro.
+### 1) Adicionar link "Acordos" na sidebar (`AppLayout.tsx`)
 
-Resultado: ao importar uma carteira, os dados aparecem imediatamente no Dashboard (na strip e tabela), mesmo sem acordo formalizado.
+- Inserir item "Acordos" logo abaixo de "Carteira" no array `preContactItems`, usando ícone `Handshake` (lucide)
+- Condição de visibilidade: `permissions.canViewAcordos`
 
-## Correção
+### 2) Filtrar acordos por operador vs admin (`AcordosPage.tsx`)
 
-**Arquivo: `src/pages/DashboardPage.tsx`**
+- Atualizar `fetchAgreements` no service para aceitar filtro `created_by`
+- Na página, se o usuário **não** for admin (`!permissions.canApproveAcordos`), filtrar apenas acordos criados pelo próprio operador (`created_by = user.id`)
+- Se admin, mostrar todos os acordos
 
-1. Filtrar `browseClients` (linha 164-166) para incluir apenas clientes cujo CPF consta em `agreementCpfs`
-2. Isso faz com que:
-   - A strip "Vencimentos" mostre contagem e valor apenas de clientes com acordo ativo
-   - A tabela "Meus Clientes" liste apenas clientes com acordo
-   - Clientes importados sem acordo não aparecem no Dashboard
+### 3) Integrar aba de "Liberação" dentro da página de Acordos para admin
 
-**Alteração específica:**
-```typescript
-// ANTES (linha 164-166):
-const browseClients = useMemo(() => {
-  return clients.filter((c) => c.data_vencimento === browseDateStr);
-}, [clients, browseDateStr]);
+- Para admin (`permissions.canApproveLiberacoes`), adicionar uma `Tabs` com duas abas: "Todos os Acordos" e "Aguardando Liberação"
+- A aba "Aguardando Liberação" filtra automaticamente por `status = pending_approval`
+- Isso traz a funcionalidade de liberação para dentro da mesma página
 
-// DEPOIS:
-const browseClients = useMemo(() => {
-  return clients.filter((c) => 
-    c.data_vencimento === browseDateStr && 
-    agreementCpfs.has(c.cpf.replace(/\D/g, ""))
-  );
-}, [clients, browseDateStr, agreementCpfs]);
-```
+### 4) Atualizar `agreementService.ts`
 
-Nenhuma outra alteração necessária — os stat cards já estão corretos.
+- `fetchAgreements` aceita novo filtro opcional `created_by` para filtrar por operador
+
+### 5) Atualizar header titles em `AppLayout.tsx`
+
+- Já existe `/acordos` no `pageTitles` — manter
+
+### Detalhes Técnicos
+
+- Operador: vê apenas seus acordos, sem botões de aprovar/rejeitar
+- Admin: vê todos os acordos + aba "Aguardando Liberação" com botões de aprovar/rejeitar
+- Nenhuma alteração de banco necessária — RLS já filtra por tenant
 
