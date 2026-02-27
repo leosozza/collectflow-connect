@@ -162,8 +162,11 @@ const DashboardPage = () => {
 
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const browseClients = useMemo(() => {
-    return clients.filter((c) => c.data_vencimento === browseDateStr);
-  }, [clients, browseDateStr]);
+    return clients.filter((c) => 
+      c.data_vencimento === browseDateStr && 
+      agreementCpfs.has(c.cpf.replace(/\D/g, ""))
+    );
+  }, [clients, browseDateStr, agreementCpfs]);
 
   const navigateDate = (dir: number) => {
     setBrowseDate((prev) => {
