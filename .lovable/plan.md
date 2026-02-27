@@ -1,35 +1,31 @@
 
 
-## Plano: Criar aba /acordos na sidebar e reestruturar a página
+## Plano: Ajustar página /acordos
 
-### 1) Adicionar link "Acordos" na sidebar (`AppLayout.tsx`)
+### 1) Remover botão "Nova Proposta"
+- Remover o `<AgreementForm>` do header e seu import
+- Remover `handleCreate` e imports não utilizados (`createAgreement`, `AgreementFormData`)
 
-- Inserir item "Acordos" logo abaixo de "Carteira" no array `preContactItems`, usando ícone `Handshake` (lucide)
-- Condição de visibilidade: `permissions.canViewAcordos`
+### 2) Alterar Stat Cards para 3 cards apenas com quantidades
+- **Total de Acordos**: `activeAgreements.length`
+- **Pendentes**: `pending` (count)
+- **Pagos**: acordos com `status === "approved"` (count)
+- Remover card "Valor Renegociado" e import `formatCurrency`
+- Grid: `md:grid-cols-3`
 
-### 2) Filtrar acordos por operador vs admin (`AcordosPage.tsx`)
+### 3) Adicionar filtro por Credor
+- Extrair lista única de credores dos agreements carregados
+- Adicionar `credorFilter` state (default "todos")
+- Novo `<Select>` ao lado do filtro de status
 
-- Atualizar `fetchAgreements` no service para aceitar filtro `created_by`
-- Na página, se o usuário **não** for admin (`!permissions.canApproveAcordos`), filtrar apenas acordos criados pelo próprio operador (`created_by = user.id`)
-- Se admin, mostrar todos os acordos
+### 4) Adicionar campo de pesquisa por nome/CPF
+- State `searchQuery`
+- `<Input>` com placeholder "Buscar por nome ou CPF..."
+- Filtrar `agreements` localmente por `client_name` ou `client_cpf` (case-insensitive, contains)
 
-### 3) Integrar aba de "Liberação" dentro da página de Acordos para admin
+### 5) Aplicar filtros na lista exibida
+- Criar `filteredAgreements` memo que aplica `credorFilter` e `searchQuery` sobre `agreements`
+- Usar `filteredAgreements` em `renderAgreementsList` e nas tabs
 
-- Para admin (`permissions.canApproveLiberacoes`), adicionar uma `Tabs` com duas abas: "Todos os Acordos" e "Aguardando Liberação"
-- A aba "Aguardando Liberação" filtra automaticamente por `status = pending_approval`
-- Isso traz a funcionalidade de liberação para dentro da mesma página
-
-### 4) Atualizar `agreementService.ts`
-
-- `fetchAgreements` aceita novo filtro opcional `created_by` para filtrar por operador
-
-### 5) Atualizar header titles em `AppLayout.tsx`
-
-- Já existe `/acordos` no `pageTitles` — manter
-
-### Detalhes Técnicos
-
-- Operador: vê apenas seus acordos, sem botões de aprovar/rejeitar
-- Admin: vê todos os acordos + aba "Aguardando Liberação" com botões de aprovar/rejeitar
-- Nenhuma alteração de banco necessária — RLS já filtra por tenant
+**Arquivo alterado:** `src/pages/AcordosPage.tsx` (único)
 
