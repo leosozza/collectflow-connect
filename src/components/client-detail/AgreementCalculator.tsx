@@ -94,14 +94,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return Math.max(0, diff);
   }, [pendentes, selectedIds]);
 
+  const DEFAULT_DISCOUNT = 10;
+
   const getAgingDiscount = () => {
-    if (!credorRules || credorRules.aging_discount_tiers.length === 0) {
-      return credorRules?.desconto_maximo || 0;
+    if (!credorRules) return DEFAULT_DISCOUNT;
+    if (credorRules.aging_discount_tiers.length === 0) {
+      return credorRules.desconto_maximo || DEFAULT_DISCOUNT;
     }
     const tier = credorRules.aging_discount_tiers.find(
       t => agingDays >= t.min_days && agingDays <= t.max_days
     );
-    return tier ? tier.discount_percent : credorRules.desconto_maximo || 0;
+    return tier ? tier.discount_percent : credorRules.desconto_maximo || DEFAULT_DISCOUNT;
   };
 
   const proposedTotal = useMemo(() => {
@@ -327,8 +330,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       </Card>
 
       {/* Preset Models */}
-      {credorRules && (
-        <Card>
+      <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Modelos de Acordo</CardTitle>
             {agingDays > 0 && (
@@ -363,14 +365,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               className="flex flex-col items-center gap-1 h-auto py-3"
               onClick={applyModel3}
               type="button"
+              disabled={!credorRules}
             >
               <CreditCard className="w-5 h-5" />
               <span className="text-xs font-medium">Cartão</span>
-              <span className="text-[10px] text-muted-foreground">Sem juros/multa</span>
+              <span className="text-[10px] text-muted-foreground">{credorRules ? "Sem juros/multa" : "Requer regras"}</span>
             </Button>
           </CardContent>
         </Card>
-      )}
 
       {/* Calculator */}
       <Card>
