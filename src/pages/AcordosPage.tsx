@@ -10,6 +10,7 @@ import AgreementsList from "@/components/acordos/AgreementsList";
 import StatCard from "@/components/StatCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -30,10 +31,15 @@ const AcordosPage = () => {
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
 
+  const isAdmin = permissions.canApproveAcordos;
+
   const load = async () => {
     setLoading(true);
     try {
-      const data = await fetchAgreements(statusFilter !== "todos" ? { status: statusFilter } : undefined);
+      const filters: { status?: string; created_by?: string } = {};
+      if (statusFilter !== "todos") filters.status = statusFilter;
+      if (!isAdmin && user) filters.created_by = user.id;
+      const data = await fetchAgreements(Object.keys(filters).length > 0 ? filters : undefined);
       setAgreements(data);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -42,7 +48,7 @@ const AcordosPage = () => {
     }
   };
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { load(); }, [statusFilter, isAdmin, user?.id]);
 
   const handleCreate = async (data: AgreementFormData) => {
     if (!user || !tenant) return;
@@ -116,8 +122,75 @@ const AcordosPage = () => {
   // Exclude cancelled and rejected from metrics
   const activeAgreements = agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
   const pending = activeAgreements.filter(a => a.status === "pending").length;
+  const pendingApproval = agreements.filter(a => a.status === "pending_approval");
   const approved = activeAgreements.filter(a => a.status === "approved");
   const totalRenegociado = approved.reduce((s, a) => s + a.proposed_total, 0);
+
+  const renderAgreementsList = (items: Agreement[]) => (
+    <AgreementsList
+      agreements={items}
+      isAdmin={isAdmin}
+      onApprove={handleApprove}
+      onReject={handleReject}
+      onCancel={handleCancel}
+      onEdit={handleEditOpen}
+    />
+  );
+
+  const editDialog = (
+    <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Editar Acordo</DialogTitle>
+        </DialogHeader>
+        {editingAgreement && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Cliente</Label>
+                <Input disabled value={editingAgreement.client_name} />
+              </div>
+              <div>
+                <Label>Credor</Label>
+                <Input disabled value={editingAgreement.credor} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Valor Original (R$)</Label>
+                <Input disabled value={editingAgreement.original_total.toFixed(2)} />
+              </div>
+              <div>
+                <Label>Valor Proposto (R$)</Label>
+                <CurrencyInput value={editForm.proposed_total || 0} onValueChange={handleEditProposed} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Nº Parcelas</Label>
+                <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
+              </div>
+              <div>
+                <Label>Valor Parcela (R$)</Label>
+                <Input type="number" disabled value={(editForm.new_installment_value || 0).toFixed(2)} />
+              </div>
+            </div>
+            <div>
+              <Label>Primeiro Vencimento</Label>
+              <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
+            </div>
+            <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
+              {editLoading ? "Salvando..." : "Salvar Alterações"}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 
   return (
     <div className="space-y-6">
@@ -151,70 +224,30 @@ const AcordosPage = () => {
 
       {loading ? (
         <p className="text-muted-foreground">Carregando...</p>
+      ) : isAdmin ? (
+        <Tabs defaultValue="todos">
+          <TabsList>
+            <TabsTrigger value="todos">Todos os Acordos</TabsTrigger>
+            <TabsTrigger value="liberacao">
+              Aguardando Liberação {pendingApproval.length > 0 && `(${pendingApproval.length})`}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="todos">
+            {renderAgreementsList(agreements)}
+          </TabsContent>
+          <TabsContent value="liberacao">
+            {pendingApproval.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Nenhum acordo aguardando liberação.</p>
+            ) : (
+              renderAgreementsList(pendingApproval)
+            )}
+          </TabsContent>
+        </Tabs>
       ) : (
-        <AgreementsList
-          agreements={agreements}
-          isAdmin={permissions.canApproveAcordos}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onCancel={handleCancel}
-          onEdit={handleEditOpen}
-        />
+        renderAgreementsList(agreements)
       )}
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Acordo</DialogTitle>
-          </DialogHeader>
-          {editingAgreement && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Cliente</Label>
-                  <Input disabled value={editingAgreement.client_name} />
-                </div>
-                <div>
-                  <Label>Credor</Label>
-                  <Input disabled value={editingAgreement.credor} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Valor Original (R$)</Label>
-                  <Input disabled value={editingAgreement.original_total.toFixed(2)} />
-                </div>
-                <div>
-                  <Label>Valor Proposto (R$)</Label>
-                  <CurrencyInput value={editForm.proposed_total || 0} onValueChange={handleEditProposed} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Nº Parcelas</Label>
-                  <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
-                </div>
-                <div>
-                  <Label>Valor Parcela (R$)</Label>
-                  <Input type="number" disabled value={(editForm.new_installment_value || 0).toFixed(2)} />
-                </div>
-              </div>
-              <div>
-                <Label>Primeiro Vencimento</Label>
-                <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
-              </div>
-              <div>
-                <Label>Observações</Label>
-                <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
-              </div>
-              <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
-                {editLoading ? "Salvando..." : "Salvar Alterações"}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {editDialog}
     </div>
   );
 };
