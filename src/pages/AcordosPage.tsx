@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
-import { fetchAgreements, createAgreement, approveAgreement, rejectAgreement, cancelAgreement, updateAgreement, Agreement, AgreementFormData } from "@/services/agreementService";
-import AgreementForm from "@/components/acordos/AgreementForm";
+import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, updateAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
 import StatCard from "@/components/StatCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency } from "@/lib/formatters";
+import { Search } from "lucide-react";
 
 const AcordosPage = () => {
   const { trackAction } = useActivityTracker();
@@ -27,8 +26,10 @@ const AcordosPage = () => {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [credorFilter, setCredorFilter] = useState("todos");
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingAgreement, setEditingAgreement] = useState<Agreement | null>(null);
-  const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
+  const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; notes: string }>>({});
   const [editLoading, setEditLoading] = useState(false);
 
   const isAdmin = permissions.canApproveAcordos;
@@ -49,14 +50,6 @@ const AcordosPage = () => {
   };
 
   useEffect(() => { load(); }, [statusFilter, isAdmin, user?.id]);
-
-  const handleCreate = async (data: AgreementFormData) => {
-    if (!user || !tenant) return;
-    await createAgreement(data, user.id, tenant.id);
-    trackAction("criar_acordo", { cpf: data.client_cpf, valor: data.proposed_total });
-    toast({ title: "Proposta criada com sucesso" });
-    load();
-  };
 
   const handleApprove = async (agreement: Agreement) => {
     if (!user || !profile) return;
@@ -119,12 +112,28 @@ const AcordosPage = () => {
     }
   };
 
-  // Exclude cancelled and rejected from metrics
-  const activeAgreements = agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
-  const pending = activeAgreements.filter(a => a.status === "pending").length;
-  const pendingApproval = agreements.filter(a => a.status === "pending_approval");
-  const approved = activeAgreements.filter(a => a.status === "approved");
-  const totalRenegociado = approved.reduce((s, a) => s + a.proposed_total, 0);
+  // Unique credores list
+  const credores = useMemo(() => {
+    const set = new Set(agreements.map(a => a.credor));
+    return Array.from(set).sort();
+  }, [agreements]);
+
+  // Filtered agreements
+  const filteredAgreements = useMemo(() => {
+    let list = agreements;
+    if (credorFilter !== "todos") list = list.filter(a => a.credor === credorFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(a => a.client_name.toLowerCase().includes(q) || a.client_cpf.toLowerCase().includes(q));
+    }
+    return list;
+  }, [agreements, credorFilter, searchQuery]);
+
+  // Metrics (exclude cancelled/rejected)
+  const activeAgreements = filteredAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
+  const pending = activeAgreements.filter(a => a.status === "pending" || a.status === "pending_approval").length;
+  const paid = activeAgreements.filter(a => a.status === "approved").length;
+  const pendingApproval = filteredAgreements.filter(a => a.status === "pending_approval");
 
   const renderAgreementsList = (items: Agreement[]) => (
     <AgreementsList
@@ -194,19 +203,15 @@ const AcordosPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
-        <AgreementForm onSubmit={handleCreate} />
-      </div>
+      <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total de Acordos" value={String(activeAgreements.length)} icon="projected" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard title="Total de Acordos" value={String(activeAgreements.length)} icon="agreement" />
         <StatCard title="Pendentes" value={String(pending)} icon="receivable" />
-        <StatCard title="Aprovados" value={String(approved.length)} icon="received" />
-        <StatCard title="Valor Renegociado" value={formatCurrency(totalRenegociado)} icon="commission" />
+        <StatCard title="Pagos" value={String(paid)} icon="received" />
       </div>
 
-      <div className="flex gap-4 items-center">
+      <div className="flex flex-wrap gap-4 items-center">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filtrar status" />
@@ -220,6 +225,28 @@ const AcordosPage = () => {
             <SelectItem value="cancelled">Cancelado</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={credorFilter} onValueChange={setCredorFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filtrar credor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os Credores</SelectItem>
+            {credores.map(c => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou CPF..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -233,7 +260,7 @@ const AcordosPage = () => {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="todos">
-            {renderAgreementsList(agreements)}
+            {renderAgreementsList(filteredAgreements)}
           </TabsContent>
           <TabsContent value="liberacao">
             {pendingApproval.length === 0 ? (
@@ -244,7 +271,7 @@ const AcordosPage = () => {
           </TabsContent>
         </Tabs>
       ) : (
-        renderAgreementsList(agreements)
+        renderAgreementsList(filteredAgreements)
       )}
 
       {editDialog}
