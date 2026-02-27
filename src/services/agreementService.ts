@@ -39,6 +39,7 @@ export interface AgreementFormData {
 
 export const fetchAgreements = async (filters?: {
   status?: string;
+  created_by?: string;
 }): Promise<Agreement[]> => {
   let query = supabase
     .from("agreements")
@@ -47,6 +48,10 @@ export const fetchAgreements = async (filters?: {
 
   if (filters?.status && filters.status !== "todos") {
     query = query.eq("status", filters.status);
+  }
+
+  if (filters?.created_by) {
+    query = query.eq("created_by", filters.created_by);
   }
 
   const { data, error } = await query;

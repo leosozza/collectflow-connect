@@ -22,6 +22,7 @@ import {
   Building2,
   BookUser,
   Zap,
+  Handshake,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -58,6 +59,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
     ...(permissions.canViewGamificacao ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
+    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
   ];
 
   const contactCenterItems = [
