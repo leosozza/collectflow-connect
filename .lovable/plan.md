@@ -1,31 +1,28 @@
 
 
-## Plano: Ajustar página /acordos
+## Problema identificado
 
-### 1) Remover botão "Nova Proposta"
-- Remover o `<AgreementForm>` do header e seu import
-- Remover `handleCreate` e imports não utilizados (`createAgreement`, `AgreementFormData`)
+Os 3 modelos pré-sugeridos ("À Vista", "Entrada + Parcelas", "Cartão") só aparecem quando o nome do credor nos títulos do cliente bate exatamente com um credor cadastrado na tabela `credores`. 
 
-### 2) Alterar Stat Cards para 3 cards apenas com quantidades
-- **Total de Acordos**: `activeAgreements.length`
-- **Pendentes**: `pending` (count)
-- **Pagos**: acordos com `status === "approved"` (count)
-- Remover card "Valor Renegociado" e import `formatCurrency`
-- Grid: `md:grid-cols-3`
+No caso atual: os acordos usam credor `"YBRASIL"`, mas o único credor cadastrado é `"TESS MODELS... / Maxfama"`. Sem match, `credorRules` fica `null` e o bloco dos modelos não renderiza.
 
-### 3) Adicionar filtro por Credor
-- Extrair lista única de credores dos agreements carregados
-- Adicionar `credorFilter` state (default "todos")
-- Novo `<Select>` ao lado do filtro de status
+## Correção
 
-### 4) Adicionar campo de pesquisa por nome/CPF
-- State `searchQuery`
-- `<Input>` com placeholder "Buscar por nome ou CPF..."
-- Filtrar `agreements` localmente por `client_name` ou `client_cpf` (case-insensitive, contains)
+**Arquivo: `src/components/client-detail/AgreementCalculator.tsx`**
 
-### 5) Aplicar filtros na lista exibida
-- Criar `filteredAgreements` memo que aplica `credorFilter` e `searchQuery` sobre `agreements`
-- Usar `filteredAgreements` em `renderAgreementsList` e nas tabs
+1. **Sempre exibir os modelos de acordo** — remover a condição `{credorRules && (...)}` (linha 330) que esconde os botões
+2. **Usar valores padrão quando `credorRules` é null**:
+   - "À Vista": desconto padrão de 10% quando não há regras
+   - "Entrada + Parcelas": desconto padrão de 10%, entrada 30%, 5 parcelas
+   - "Cartão": desabilitar botão quando não há regras (precisa de juros/multa para calcular)
+3. Ajustar `getAgingDiscount()` para retornar um desconto padrão (ex: 10%) quando `credorRules` é null
 
-**Arquivo alterado:** `src/pages/AcordosPage.tsx` (único)
+### Verificação da página /acordos
+
+A página `/acordos` já está correta:
+- Sem botão "Nova Proposta"
+- 3 cards com apenas quantidades (Total, Pendentes, Pagos)
+- Filtro por credor funcional
+- Busca por nome/CPF funcional
+- Admin vê tabs com "Aguardando Liberação"
 
