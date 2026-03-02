@@ -79,10 +79,24 @@ interface MappedRecord {
   FONE_1: string;
   FONE_2: string;
   FONE_3: string;
-  PARCELA: number;
+  EMAIL: string | null;
+  ENDERECO: string | null;
+  NUMERO: string | null;
+  COMPLEMENTO: string | null;
+  BAIRRO: string | null;
+  CIDADE: string | null;
+  ESTADO: string | null;
+  CEP: string | null;
+  DADOS_ADICIONAIS: string | null;
+  COD_TITULO: string;
+  NM_PARCELA: number;
   DT_PAGAMENTO: string;
   DT_VENCIMENTO: string;
+  ANO_VENCIMENTO: string | null;
   VL_TITULO: number;
+  VL_SALDO: number | null;
+  VL_ATUALIZADO: number | null;
+  TP_TITULO: string | null;
   STATUS: string;
   MODEL_NAME: string;
 }
@@ -96,7 +110,15 @@ function formatStatus(isCancelled: boolean): string {
   return isCancelled ? "CANCELADO" : "ATIVO";
 }
 
+function extractYear(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const parts = dateStr.split("/");
+  if (parts.length === 3) return parts[2] || null;
+  return null;
+}
+
 function mapItem(item: MaxSystemItem): MappedRecord {
+  const dtVenc = removeTimestamp(item.PaymentDateQuery);
   return {
     CREDOR: "YBRASIL",
     COD_DEVEDOR: item.IdRecord,
@@ -107,10 +129,24 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     FONE_1: item.CellPhone1 ?? "",
     FONE_2: item.CellPhone2 ?? "",
     FONE_3: item.HomePhone ?? "",
-    PARCELA: item.Number,
+    EMAIL: null,
+    ENDERECO: null,
+    NUMERO: null,
+    COMPLEMENTO: null,
+    BAIRRO: null,
+    CIDADE: null,
+    ESTADO: null,
+    CEP: null,
+    DADOS_ADICIONAIS: null,
+    COD_TITULO: `${item.ContractNumber.trim()}-${item.Number}`,
+    NM_PARCELA: item.Number,
     DT_PAGAMENTO: removeTimestamp(item.PaymentDateEffected),
-    DT_VENCIMENTO: removeTimestamp(item.PaymentDateQuery),
+    DT_VENCIMENTO: dtVenc,
+    ANO_VENCIMENTO: extractYear(dtVenc),
     VL_TITULO: item.Value,
+    VL_SALDO: null,
+    VL_ATUALIZADO: null,
+    TP_TITULO: null,
     STATUS: formatStatus(item.IsCancelled),
     MODEL_NAME: "",
   };
@@ -434,8 +470,8 @@ const MaxListPage = () => {
         data_pagamento: convertDateToISO(item.DT_PAGAMENTO) || null,
         external_id: item.TITULO,
         cod_contrato: item.COD_CONTRATO,
-        numero_parcela: item.PARCELA || 1,
-        total_parcelas: item.PARCELA || 1,
+        numero_parcela: item.NM_PARCELA || 1,
+        total_parcelas: item.NM_PARCELA || 1,
         valor_entrada: 0,
         valor_pago: item.DT_PAGAMENTO ? item.VL_TITULO : 0,
         status: item.DT_PAGAMENTO ? "pago" : item.STATUS === "CANCELADO" ? "quebrado" : "pendente",
@@ -768,7 +804,7 @@ const MaxListPage = () => {
                       <TableHead className="whitespace-nowrap">CPF</TableHead>
                       <TableHead className="whitespace-nowrap">Nome</TableHead>
                       <TableHead className="whitespace-nowrap">Contrato</TableHead>
-                      <TableHead className="whitespace-nowrap">Parcela</TableHead>
+                      <TableHead className="whitespace-nowrap">Nº Parcela</TableHead>
                       <TableHead className="text-right whitespace-nowrap">Valor</TableHead>
                       <TableHead className="whitespace-nowrap">Vencimento</TableHead>
                       <TableHead className="whitespace-nowrap">Pagamento</TableHead>
@@ -789,7 +825,7 @@ const MaxListPage = () => {
                         <TableCell className="font-mono text-xs whitespace-nowrap">{item.CNPJ_CPF}</TableCell>
                         <TableCell className="max-w-[200px] truncate">{item.NOME_DEVEDOR}</TableCell>
                         <TableCell className="whitespace-nowrap">{item.COD_CONTRATO}</TableCell>
-                        <TableCell>{item.PARCELA}</TableCell>
+                        <TableCell>{item.NM_PARCELA}</TableCell>
                         <TableCell className="text-right whitespace-nowrap">
                           {item.VL_TITULO.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                         </TableCell>
@@ -819,7 +855,7 @@ const MaxListPage = () => {
       <MaxListMappingDialog
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
-        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "PARCELA", "DT_VENCIMENTO", "DT_PAGAMENTO", "VL_TITULO", "STATUS", "MODEL_NAME"]}
+        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS", "MODEL_NAME"]}
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />
