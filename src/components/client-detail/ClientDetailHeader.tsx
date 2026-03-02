@@ -218,6 +218,7 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
                 <InfoItem label="Cod. Contrato" value={client.cod_contrato} />
                 <InfoItem label="Credor" value={client.credor} />
                 <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
+                <InfoItem label="Nome do Modelo" value={client.model_name} />
               </div>
 
               {/* Telefones */}

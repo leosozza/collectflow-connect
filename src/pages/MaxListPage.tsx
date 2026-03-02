@@ -122,7 +122,7 @@ function mapItem(item: MaxSystemItem): MappedRecord {
   return {
     CREDOR: "YBRASIL",
     COD_DEVEDOR: item.IdRecord,
-    COD_CONTRATO: item.ContractNumber,
+    COD_CONTRATO: item.ContractNumber?.trim() || "",
     NOME_DEVEDOR: item.ResponsibleName,
     TITULO: `${item.ContractNumber.trim()}-${item.Number}`,
     CNPJ_CPF: item.ResponsibleCPF,
@@ -469,7 +469,7 @@ const MaxListPage = () => {
         data_vencimento: convertDateToISO(item.DT_VENCIMENTO) || new Date().toISOString().split("T")[0],
         data_pagamento: convertDateToISO(item.DT_PAGAMENTO) || null,
         external_id: item.TITULO,
-        cod_contrato: item.COD_CONTRATO,
+        cod_contrato: (item.COD_CONTRATO || "").trim(),
         numero_parcela: item.NM_PARCELA || 1,
         total_parcelas: item.NM_PARCELA || 1,
         valor_entrada: 0,
