@@ -1388,6 +1388,50 @@ export type Database = {
           },
         ]
       }
+      field_mappings: {
+        Row: {
+          created_at: string | null
+          credor: string | null
+          id: string
+          is_default: boolean | null
+          mappings: Json
+          name: string
+          source: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          credor?: string | null
+          id?: string
+          is_default?: boolean | null
+          mappings?: Json
+          name: string
+          source?: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          credor?: string | null
+          id?: string
+          is_default?: boolean | null
+          mappings?: Json
+          name?: string
+          source?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gamification_campaigns: {
         Row: {
           created_at: string

@@ -329,12 +329,26 @@ Deno.serve(async (req: Request) => {
 
   // POST /clients/bulk
   if (segments[0] === "clients" && segments[1] === "bulk" && method === "POST") {
-    const rawBody = await req.json() as { records: Record<string, unknown>[]; upsert?: boolean; upsert_key?: string };
+    const rawBody = await req.json() as { records: Record<string, unknown>[]; upsert?: boolean; upsert_key?: string; mapping_id?: string };
     if (!Array.isArray(rawBody.records) || rawBody.records.length === 0) {
       return json({ error: "'records' deve ser um array não vazio" }, 422);
     }
     if (rawBody.records.length > 500) {
       return json({ error: "Máximo de 500 registros por requisição bulk" }, 422);
+    }
+
+    // Load custom mapping if provided
+    let customFieldMap: Record<string, string> | null = null;
+    if (rawBody.mapping_id) {
+      const { data: mapping } = await supabaseAdmin
+        .from("field_mappings")
+        .select("mappings")
+        .eq("id", rawBody.mapping_id)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (mapping?.mappings) {
+        customFieldMap = mapping.mappings as Record<string, string>;
+      }
     }
 
     const upsertKey = rawBody.upsert_key ?? "external_id";
@@ -344,7 +358,22 @@ Deno.serve(async (req: Request) => {
     const validRows: ReturnType<typeof buildClientRow>[] = [];
 
     rawBody.records.forEach((rawRecord, i) => {
-      const record = normalizeRecord(rawRecord);
+      // If custom mapping exists, apply it before normalizeRecord
+      let recordToNormalize = rawRecord;
+      if (customFieldMap) {
+        const remapped: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(rawRecord)) {
+          const upperKey = key.toUpperCase().trim();
+          const target = customFieldMap[upperKey];
+          if (target && target !== "__ignorar__") {
+            remapped[target] = value;
+          } else if (!target) {
+            remapped[key] = value;
+          }
+        }
+        recordToNormalize = remapped;
+      }
+      const record = normalizeRecord(recordToNormalize);
       const { valid, errors } = validateClientRecord(record);
       if (!valid) {
         errorList.push({ index: i, external_id: record.external_id as string, cpf: record.cpf as string, error: errors.join("; ") });

@@ -64,7 +64,6 @@ const parseBRDate = (value: any): string => {
 const cleanCPF = (value: any): string => {
   if (!value) return "";
   const digits = String(value).replace(/\D/g, "").padStart(11, "0").slice(0, 14);
-  // Valid CPF has 11 digits, CNPJ has 14
   if (digits.length !== 11 && digits.length !== 14) return "";
   return digits;
 };
@@ -97,6 +96,53 @@ const detectHeaderRow = (sheet: XLSX.WorkSheet): number => {
     }
   }
   return 0;
+};
+
+const getHeaders = (sheet: XLSX.WorkSheet, headerRow: number): string[] => {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  const headers: string[] = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c })];
+    const val = String(cell?.v || "").trim();
+    if (val) headers.push(val);
+  }
+  return headers;
+};
+
+/**
+ * Parse spreadsheet and return only the raw headers for mapping step.
+ */
+export const parseSpreadsheetRaw = async (file: File): Promise<{ headers: string[] }> => {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const headerRow = detectHeaderRow(sheet);
+  const headers = getHeaders(sheet, headerRow);
+  return { headers };
+};
+
+/**
+ * Build column index map from custom mapping + headers.
+ */
+const buildColMapFromMapping = (
+  sheet: XLSX.WorkSheet,
+  headerRow: number,
+  customMapping: Record<string, string>
+): Record<string, number> => {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  const map: Record<string, number> = {};
+
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c })];
+    const val = String(cell?.v || "").toUpperCase().trim();
+    const target = customMapping[val];
+    if (target && target !== "__ignorar__") {
+      map[target] = c;
+    }
+  }
+
+  return map;
 };
 
 const detectColumnMapping = (sheet: XLSX.WorkSheet, headerRow: number): Record<string, number> => {
@@ -160,16 +206,16 @@ const detectColumnMapping = (sheet: XLSX.WorkSheet, headerRow: number): Record<s
   return map;
 };
 
-export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-
-  const headerRow = detectHeaderRow(sheet);
-  const colMap = detectColumnMapping(sheet, headerRow);
+/**
+ * Parse rows using a given column index map (system field name → column index).
+ */
+const parseRows = (
+  sheet: XLSX.WorkSheet,
+  headerRow: number,
+  colMap: Record<string, number>,
+  isCustomMapping: boolean
+): ImportedRow[] => {
   const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
-
   const rows: ImportedRow[] = [];
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
@@ -184,26 +230,27 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       return v != null ? String(v).trim() : "";
     };
 
-    // Get name - required field
-    const nome = getCellStr(colMap["nome"]);
+    // For custom mappings, field names are already system names
+    // For legacy mappings, field names are internal aliases
+    const nameCol = isCustomMapping ? colMap["nome_completo"] : colMap["nome"];
+    const cpfCol = isCustomMapping ? colMap["cpf"] : colMap["cpf"];
+    const dateCol = isCustomMapping ? colMap["data_vencimento"] : colMap["dt_vencimento"];
+
+    const nome = getCellStr(nameCol);
     if (!nome) continue;
 
-    // CPF - required
-    const rawCpf = cleanCPF(getCell(colMap["cpf"]));
+    const rawCpf = cleanCPF(getCell(cpfCol));
     if (!rawCpf) continue;
 
-    // Date - required
-    const dataVencimento = parseBRDate(getCell(colMap["dt_vencimento"]));
+    const dataVencimento = parseBRDate(getCell(dateCol));
     if (!dataVencimento) continue;
 
-    // Value - prefer VL_ATUALIZADO over VL_TITULO
-    const vlAtualizado = parseBRLCurrency(getCell(colMap["vl_atualizado"]));
-    const vlTitulo = parseBRLCurrency(getCell(colMap["vl_titulo"]));
+    const vlAtualizado = parseBRLCurrency(getCell(isCustomMapping ? colMap["valor_atualizado"] : colMap["vl_atualizado"]));
+    const vlTitulo = parseBRLCurrency(getCell(isCustomMapping ? colMap["valor_parcela"] : colMap["vl_titulo"]));
     const valorParcela = vlAtualizado > 0 ? vlAtualizado : vlTitulo;
     const valorEntrada = parseBRLCurrency(getCell(colMap["valor_entrada"])) || valorParcela;
     const valorPago = parseBRLCurrency(getCell(colMap["valor_pago"]));
 
-    // Status mapping
     let status: "pendente" | "pago" | "quebrado" = "pendente";
     const statusRaw = getCellStr(colMap["status"]).toUpperCase();
     if (statusRaw === "CANCELADO" || statusRaw === "QUEBRADO") {
@@ -216,36 +263,41 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       status = "quebrado";
     }
 
-    // Keep original status text for status_cobranca mapping
     const statusOriginal = getCellStr(colMap["status"]).trim();
 
-    // Address concatenation
-    const endParts = [
-      getCellStr(colMap["endereco"]),
-      getCellStr(colMap["numero"]),
-      getCellStr(colMap["complemento"]),
-      getCellStr(colMap["bairro"]),
-    ].filter(Boolean);
-    const endereco = endParts.join(", ") || undefined;
+    // Address
+    const endParts = isCustomMapping
+      ? [getCellStr(colMap["endereco"])]
+      : [
+          getCellStr(colMap["endereco"]),
+          getCellStr(colMap["numero"]),
+          getCellStr(colMap["complemento"]),
+          getCellStr(colMap["bairro"]),
+        ];
+    const endereco = endParts.filter(Boolean).join(", ") || undefined;
 
-    // Phones - first goes to phone, extras to observacoes
-    const fone1 = cleanPhone(getCell(colMap["fone1"]));
-    const fone2 = cleanPhone(getCell(colMap["fone2"]));
-    const fone3 = cleanPhone(getCell(colMap["fone3"]));
+    // Phones
+    const fone1 = cleanPhone(getCell(isCustomMapping ? colMap["phone"] : colMap["fone1"]));
+    const fone2 = cleanPhone(getCell(isCustomMapping ? colMap["phone2"] : colMap["fone2"]));
+    const fone3 = cleanPhone(getCell(isCustomMapping ? colMap["phone3"] : colMap["fone3"]));
 
-    // Build observacoes
     const obsParts: string[] = [];
-    const codContrato = getCellStr(colMap["cod_contrato"]);
+    const codContrato = getCellStr(isCustomMapping ? colMap["cod_contrato"] : colMap["cod_contrato"]);
     if (codContrato) obsParts.push(`Contrato: ${codContrato}`);
     if (fone2) obsParts.push(`Fone 2: ${fone2}`);
     if (fone3) obsParts.push(`Fone 3: ${fone3}`);
+
+    const externalIdCol = isCustomMapping ? colMap["external_id"] : colMap["cod_devedor"];
+    const cidadeCol = isCustomMapping ? colMap["cidade"] : colMap["cidade"];
+    const ufCol = isCustomMapping ? colMap["uf"] : colMap["estado"];
+    const parcelaCol = isCustomMapping ? colMap["numero_parcela"] : colMap["parcela"];
 
     rows.push({
       credor: getCellStr(colMap["credor"]) || "MAXFAMA",
       nome_completo: nome,
       cpf: formatCPFDisplay(rawCpf),
-      external_id: getCellStr(colMap["cod_devedor"]) || undefined,
-      numero_parcela: parseInt(String(getCell(colMap["parcela"]) || "1"), 10) || 1,
+      external_id: getCellStr(externalIdCol) || undefined,
+      numero_parcela: parseInt(String(getCell(parcelaCol) || "1"), 10) || 1,
       valor_entrada: valorEntrada,
       valor_parcela: valorParcela,
       valor_pago: valorPago,
@@ -255,12 +307,36 @@ export const parseSpreadsheet = async (file: File): Promise<ImportedRow[]> => {
       phone: fone1 || undefined,
       email: getCellStr(colMap["email"]) || undefined,
       endereco,
-      cidade: getCellStr(colMap["cidade"]) || undefined,
-      uf: getCellStr(colMap["estado"]) || undefined,
+      cidade: getCellStr(cidadeCol) || undefined,
+      uf: getCellStr(ufCol) || undefined,
       cep: getCellStr(colMap["cep"]) || undefined,
       observacoes: obsParts.length > 0 ? obsParts.join(" | ") : undefined,
     });
   }
 
   return rows;
+};
+
+/**
+ * Parse spreadsheet with optional custom column mapping.
+ * If customMapping is provided (header_upper → system_field), it's used instead of auto-detection.
+ */
+export const parseSpreadsheet = async (
+  file: File,
+  customMapping?: Record<string, string>
+): Promise<ImportedRow[]> => {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+
+  const headerRow = detectHeaderRow(sheet);
+
+  if (customMapping && Object.keys(customMapping).length > 0) {
+    const colMap = buildColMapFromMapping(sheet, headerRow, customMapping);
+    return parseRows(sheet, headerRow, colMap, true);
+  } else {
+    const colMap = detectColumnMapping(sheet, headerRow);
+    return parseRows(sheet, headerRow, colMap, false);
+  }
 };
