@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import MaxListMappingDialog from "@/components/maxlist/MaxListMappingDialog";
+import ImportResultDialog, { type ImportReport } from "@/components/maxlist/ImportResultDialog";
 
 const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
   const selected = value ? parseISO(value) : undefined;
@@ -190,7 +191,8 @@ const MaxListPage = () => {
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
-
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [showImportResult, setShowImportResult] = useState(false);
   const { data: tiposStatus } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
     queryFn: async () => {
@@ -371,6 +373,22 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(0);
 
+    // Capture rejected records
+    const rejectedRecords: ImportReport["rejected"] = [];
+    sourceData.forEach((item) => {
+      const reasons: string[] = [];
+      if (!item.CNPJ_CPF) reasons.push("CPF ausente");
+      if (!item.NOME_DEVEDOR) reasons.push("Nome ausente");
+      if (!item.TITULO) reasons.push("Título ausente");
+      if (reasons.length > 0) {
+        rejectedRecords.push({
+          nome: item.NOME_DEVEDOR || undefined,
+          cpf: item.CNPJ_CPF || undefined,
+          reason: reasons.join(", "),
+        });
+      }
+    });
+
     const filteredItems = sourceData.filter((item) => item.CNPJ_CPF && item.NOME_DEVEDOR && item.TITULO);
 
     const session = await supabase.auth.getSession();
@@ -496,6 +514,29 @@ const MaxListPage = () => {
       }
     }
 
+    // Build updated records for report
+    const updatedRecords: ImportReport["updated"] = changeLogs.map((log) => {
+      const existing = Object.values(Object.fromEntries(existingMap)).find((e: any) => e.id === log.client_id) as any;
+      return {
+        nome: existing?.nome_completo || "-",
+        cpf: existing?.cpf || "-",
+        changes: log.changes,
+      };
+    });
+
+    const reportInserted = totalInserted - changeLogs.length;
+
+    const report: ImportReport = {
+      inserted: Math.max(reportInserted, 0),
+      updated: updatedRecords,
+      rejected: rejectedRecords,
+      skipped: totalSkipped,
+    };
+    setImportReport(report);
+    setShowImportResult(true);
+
+    toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
+
     setImporting(false);
     setImportProgress(100);
 
@@ -508,8 +549,6 @@ const MaxListPage = () => {
       skipped: totalSkipped,
       credor: "YBRASIL",
     });
-
-    toast.success(`Importação concluída! ${totalInserted} inseridos, ${totalSkipped} ignorados${changeLogs.length > 0 ? `, ${changeLogs.length} atualizados` : ""}`);
   };
 
   const updateFilter = (key: string, value: string) => {
@@ -755,6 +794,14 @@ const MaxListPage = () => {
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />
+
+      {importReport && (
+        <ImportResultDialog
+          open={showImportResult}
+          onOpenChange={setShowImportResult}
+          report={importReport}
+        />
+      )}
     </div>
   );
 };
