@@ -10,11 +10,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
+import { formatCPF, formatCurrency, formatPhone, formatDate } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
-import { fetchTiposDevedor } from "@/services/cadastrosService";
+import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ClientDetailHeaderProps {
@@ -31,6 +31,13 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const InfoItem = ({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) => (
+  <div className={className}>
+    <p className="text-xs text-muted-foreground uppercase font-medium mb-1">{label}</p>
+    <p className="text-sm font-semibold text-foreground">{value || "—"}</p>
+  </div>
+);
+
 const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAcordo }: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -40,11 +47,15 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const [editForm, setEditForm] = useState({
     nome_completo: client.nome_completo || "",
     phone: client.phone || "",
+    phone2: client.phone2 || "",
+    phone3: client.phone3 || "",
     email: client.email || "",
     endereco: client.endereco || "",
+    bairro: client.bairro || "",
     cidade: client.cidade || "",
     uf: client.uf || "",
     cep: client.cep || "",
+    cod_contrato: client.cod_contrato || "",
     observacoes: client.observacoes || "",
     external_id: client.external_id || "",
   });
@@ -53,6 +64,18 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const { data: tiposDevedor = [] } = useQuery({
     queryKey: ["tipos_devedor", tenant?.id],
     queryFn: () => fetchTiposDevedor(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  const { data: tiposDivida = [] } = useQuery({
+    queryKey: ["tipos_divida", tenant?.id],
+    queryFn: () => fetchTiposDivida(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  const { data: tiposStatus = [] } = useQuery({
+    queryKey: ["tipos_status", tenant?.id],
+    queryFn: () => fetchTiposStatus(tenant!.id),
     enabled: !!tenant?.id,
   });
 
@@ -78,11 +101,15 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
         const { error } = await supabase.from("clients").update({
           nome_completo: data.nome_completo,
           phone: data.phone || null,
+          phone2: data.phone2 || null,
+          phone3: data.phone3 || null,
           email: data.email || null,
           endereco: data.endereco || null,
+          bairro: data.bairro || null,
           cidade: data.cidade || null,
           uf: data.uf || null,
           cep: data.cep || null,
+          cod_contrato: data.cod_contrato || null,
           observacoes: data.observacoes || null,
           external_id: data.external_id || null,
         } as any).eq("id", id);
@@ -109,7 +136,15 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
 
   const totalPago = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
   const pagas = clients.filter((c) => c.status === "pago").length;
-  const endereco = [client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
+  const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
+
+  // Lookup names
+  const statusCobrancaNome = (tiposStatus as any[]).find((t) => t.id === client.status_cobranca_id)?.nome;
+  const tipoDividaNome = (tiposDivida as any[]).find((t) => t.id === client.tipo_divida_id)?.nome;
+  const tipoDevedorNome = (tiposDevedor as any[]).find((t) => t.id === client.tipo_devedor_id)?.nome;
+
+  // Format phones for metadata line
+  const phones = [client.phone, client.phone2, client.phone3].filter(Boolean);
 
   return (
     <>
@@ -154,7 +189,7 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
           <span><strong>CPF:</strong> {formattedCpf}</span>
           <span className="text-border">|</span>
-          <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
+          <span><strong>Tel:</strong> {phones.length > 0 ? phones.map(p => formatPhone(p)).join(" / ") : "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
@@ -170,46 +205,74 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
             <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-12 pt-3 pb-1 border-t border-border mt-2">
+            <div className="px-12 pt-3 pb-1 border-t border-border mt-2 space-y-4">
+              {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Cod. Devedor</p>
-                  <p className="text-sm font-semibold text-foreground">{client.external_id || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Total Pago</p>
-                  <p className="text-sm font-semibold text-success">{formatCurrency(totalPago)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
-                  <p className="text-sm font-semibold text-foreground">{pagas}/{clients.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Endereço</p>
-                  <p className="text-sm text-foreground">{endereco || "—"}</p>
+                <InfoItem label="Cod. Devedor" value={client.external_id} />
+                <InfoItem label="Cod. Contrato" value={client.cod_contrato} />
+                <InfoItem label="Credor" value={client.credor} />
+                <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
+              </div>
+
+              {/* Telefones */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+                <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
+                <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
+                <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
+                <InfoItem label="Email" value={client.email} />
+              </div>
+
+              {/* Endereço */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+                <InfoItem label="Endereço" value={client.endereco} className="md:col-span-2" />
+                <InfoItem label="Bairro" value={client.bairro} />
+                <InfoItem label="Cidade" value={client.cidade} />
+                <InfoItem label="UF" value={client.uf} />
+                <InfoItem label="CEP" value={client.cep} />
+              </div>
+
+              {/* Valores */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+                <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
+                <InfoItem label="Saldo Devedor" value={client.valor_saldo != null ? formatCurrency(Number(client.valor_saldo)) : null} />
+                <InfoItem label="Valor Atualizado" value={client.valor_atualizado != null ? formatCurrency(Number(client.valor_atualizado)) : null} />
+                <InfoItem label="Em Aberto" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
+              </div>
+
+              {/* Datas */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+                <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
+                <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
+              </div>
+
+              {/* Classificações */}
+              <div className="pt-3 border-t border-border">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
+                    <Select
+                      value={client.tipo_devedor_id || "none"}
+                      onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
+                    >
+                      <SelectTrigger className="h-8 text-sm w-48">
+                        <SelectValue placeholder="Selecionar..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {tiposDevedor.map((t: any) => (
+                          <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <InfoItem label="Tipo de Dívida" value={tipoDividaNome} />
+                  <InfoItem label="Status Cobrança" value={statusCobrancaNome} />
                 </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-border">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
-                  <Select
-                    value={client.tipo_devedor_id || "none"}
-                    onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
-                  >
-                    <SelectTrigger className="h-8 text-sm w-48">
-                      <SelectValue placeholder="Selecionar..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {tiposDevedor.map((t: any) => (
-                        <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+
+              {/* Observações */}
               {client.observacoes && (
-                <div className="mt-4 pt-3 border-t border-border">
+                <div className="pt-3 border-t border-border">
                   <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
                   <p className="text-sm text-foreground whitespace-pre-wrap">{client.observacoes}</p>
                 </div>
@@ -228,93 +291,66 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
           <div className="grid gap-4 py-6">
             <div className="grid gap-2">
               <Label htmlFor="nome_completo">Nome Completo</Label>
-              <Input
-                id="nome_completo"
-                value={editForm.nome_completo}
-                onChange={e => setEditForm(f => ({ ...f, nome_completo: e.target.value }))}
-              />
+              <Input id="nome_completo" value={editForm.nome_completo} onChange={e => setEditForm(f => ({ ...f, nome_completo: e.target.value }))} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="phone">Telefone</Label>
-              <Input
-                id="phone"
-                value={editForm.phone}
-                onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="(11) 99999-9999"
-              />
+              <Label htmlFor="phone">Telefone 1</Label>
+              <Input id="phone" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="(11) 99999-9999" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2">
+                <Label htmlFor="phone2">Telefone 2</Label>
+                <Input id="phone2" value={editForm.phone2} onChange={e => setEditForm(f => ({ ...f, phone2: e.target.value }))} placeholder="(11) 99999-9999" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phone3">Telefone 3</Label>
+                <Input id="phone3" value={editForm.phone3} onChange={e => setEditForm(f => ({ ...f, phone3: e.target.value }))} placeholder="(11) 99999-9999" />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={editForm.email}
-                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="email@exemplo.com"
-              />
+              <Input id="email" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="external_id">Cód. Devedor (ID Externo)</Label>
-              <Input
-                id="external_id"
-                value={editForm.external_id}
-                onChange={e => setEditForm(f => ({ ...f, external_id: e.target.value }))}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2">
+                <Label htmlFor="external_id">Cód. Devedor (ID Externo)</Label>
+                <Input id="external_id" value={editForm.external_id} onChange={e => setEditForm(f => ({ ...f, external_id: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="cod_contrato">Cód. Contrato</Label>
+                <Input id="cod_contrato" value={editForm.cod_contrato} onChange={e => setEditForm(f => ({ ...f, cod_contrato: e.target.value }))} />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="endereco">Endereço</Label>
-              <Input
-                id="endereco"
-                value={editForm.endereco}
-                onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))}
-              />
+              <Input id="endereco" value={editForm.endereco} onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bairro">Bairro</Label>
+              <Input id="bairro" value={editForm.bairro} onChange={e => setEditForm(f => ({ ...f, bairro: e.target.value }))} />
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2 grid gap-2">
                 <Label htmlFor="cidade">Cidade</Label>
-                <Input
-                  id="cidade"
-                  value={editForm.cidade}
-                  onChange={e => setEditForm(f => ({ ...f, cidade: e.target.value }))}
-                />
+                <Input id="cidade" value={editForm.cidade} onChange={e => setEditForm(f => ({ ...f, cidade: e.target.value }))} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="uf">UF</Label>
-                <Input
-                  id="uf"
-                  value={editForm.uf}
-                  onChange={e => setEditForm(f => ({ ...f, uf: e.target.value }))}
-                  maxLength={2}
-                  placeholder="SP"
-                />
+                <Input id="uf" value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value }))} maxLength={2} placeholder="SP" />
               </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="cep">CEP</Label>
-              <Input
-                id="cep"
-                value={editForm.cep}
-                onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))}
-                placeholder="00000-000"
-              />
+              <Input id="cep" value={editForm.cep} onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))} placeholder="00000-000" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="observacoes">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={editForm.observacoes}
-                onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
-                rows={4}
-                placeholder="Anotações sobre o devedor..."
-              />
+              <Textarea id="observacoes" value={editForm.observacoes} onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))} rows={4} placeholder="Anotações sobre o devedor..." />
             </div>
           </div>
           <SheetFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={() => updateClientMutation.mutate(editForm)}
-              disabled={updateClientMutation.isPending}
-            >
+            <Button onClick={() => updateClientMutation.mutate(editForm)} disabled={updateClientMutation.isPending}>
               {updateClientMutation.isPending ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </SheetFooter>
@@ -325,4 +361,3 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
 };
 
 export default ClientDetailHeader;
-
