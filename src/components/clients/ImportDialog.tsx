@@ -9,6 +9,8 @@ import {
   SYSTEM_FIELDS,
   type FieldMapping,
 } from "@/services/fieldMappingService";
+import { fetchCustomFields, type CustomField } from "@/services/customFieldsService";
+import InlineCustomFieldDialog from "@/components/cadastros/InlineCustomFieldDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, ArrowRight, Save, Columns } from "lucide-react";
 import {
@@ -65,6 +67,22 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
     queryFn: () => fetchFieldMappings(tenantId!),
     enabled: !!tenantId,
   });
+
+  const { data: customFields = [] } = useQuery({
+    queryKey: ["custom-fields", tenantId],
+    queryFn: () => fetchCustomFields(tenantId!),
+    enabled: !!tenantId,
+  });
+
+  const allImportFields = useMemo(() => [
+    ...SYSTEM_FIELDS.filter((f) => f.value !== "__ignorar__"),
+    ...customFields.filter((cf) => cf.is_active).map((cf) => ({
+      value: `custom:${cf.field_key}`,
+      label: `🏷️ ${cf.field_label}`,
+      required: false as const,
+    })),
+    { value: "__ignorar__", label: "— Ignorar —", required: false as const },
+  ], [customFields]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -315,11 +333,21 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__none__">— Não mapear —</SelectItem>
-                                {SYSTEM_FIELDS.map((f) => (
+                                {allImportFields.map((f) => (
                                   <SelectItem key={f.value} value={f.value}>
                                     {f.label} {f.required ? "*" : ""}
                                   </SelectItem>
                                 ))}
+                                <div className="border-t border-border mt-1 pt-1">
+                                  {tenantId && (
+                                    <InlineCustomFieldDialog
+                                      tenantId={tenantId}
+                                      onCreated={(cf) => {
+                                        updateMapping(header, `custom:${cf.field_key}`);
+                                      }}
+                                    />
+                                  )}
+                                </div>
                               </SelectContent>
                             </Select>
                           </TableCell>
