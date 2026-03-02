@@ -204,8 +204,9 @@ export const bulkCreateClients = async (
     status_cobranca_id?: string;
     [key: string]: any;
   }>,
-  operatorId: string
-): Promise<void> => {
+  operatorId: string,
+  options?: { source?: string }
+): Promise<{ inserted: number; updated: number }> => {
   // Validate all rows before inserting
   const { valid, errors } = validateImportRows(clients);
 
@@ -222,11 +223,96 @@ export const bulkCreateClients = async (
     };
   });
 
-  // Insert in batches of 100
+  // Fetch existing clients by external_id or cpf for update logging
+  const externalIds = records.map((r) => r.external_id).filter(Boolean);
+  const cpfs = records.map((r) => r.cpf).filter(Boolean);
+  
+  let existingMap = new Map<string, any>();
+  
+  if (externalIds.length > 0) {
+    const { data: existing } = await supabase
+      .from("clients")
+      .select("*")
+      .in("external_id", externalIds)
+      .limit(5000);
+    (existing || []).forEach((e: any) => {
+      if (e.external_id) existingMap.set(e.external_id, e);
+    });
+  } else if (cpfs.length > 0) {
+    // Deduplicate by CPF when no external_id
+    const uniqueCpfs = [...new Set(cpfs)];
+    for (let i = 0; i < uniqueCpfs.length; i += 100) {
+      const batch = uniqueCpfs.slice(i, i + 100);
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("*")
+        .in("cpf", batch)
+        .limit(5000);
+      (existing || []).forEach((e: any) => {
+        existingMap.set(e.cpf, e);
+      });
+    }
+  }
+
+  let totalInserted = 0;
+  let totalUpdated = 0;
+  const changeLogs: any[] = [];
+
+  // Upsert in batches of 100
   const batchSize = 100;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    const { error } = await supabase.from("clients").insert(batch as any);
-    if (error) throw error;
+    
+    // Track changes for update logs
+    batch.forEach((record) => {
+      const key = record.external_id || record.cpf;
+      const existing = existingMap.get(key);
+      if (existing) {
+        const changes: Record<string, { old: any; new: any }> = {};
+        const fieldsToCompare = [
+          "nome_completo", "phone", "phone2", "phone3", "email",
+          "valor_parcela", "valor_pago", "status", "data_vencimento",
+          "endereco", "cidade", "uf", "cep", "credor", "status_cobranca_id",
+        ];
+        fieldsToCompare.forEach((field) => {
+          const oldVal = existing[field];
+          const newVal = record[field];
+          if (newVal !== undefined && newVal !== null && String(oldVal) !== String(newVal)) {
+            changes[field] = { old: oldVal, new: newVal };
+          }
+        });
+        if (Object.keys(changes).length > 0) {
+          changeLogs.push({
+            tenant_id: existing.tenant_id,
+            client_id: existing.id,
+            source: options?.source || "import",
+            changes,
+          });
+          totalUpdated++;
+        }
+      } else {
+        totalInserted++;
+      }
+    });
+
+    if (externalIds.length > 0) {
+      const { error } = await supabase
+        .from("clients")
+        .upsert(batch as any, { onConflict: "external_id,tenant_id" });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("clients").insert(batch as any);
+      if (error) throw error;
+    }
   }
+
+  // Insert change logs in batches
+  if (changeLogs.length > 0) {
+    for (let i = 0; i < changeLogs.length; i += 100) {
+      const logBatch = changeLogs.slice(i, i + 100);
+      await supabase.from("client_update_logs").insert(logBatch as any);
+    }
+  }
+
+  return { inserted: totalInserted, updated: totalUpdated };
 };

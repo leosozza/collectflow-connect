@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Columns } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Columns, Puzzle } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
@@ -8,6 +8,7 @@ import TipoStatusList from "@/components/cadastros/TipoStatusList";
 import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 import FieldMappingConfig from "@/components/cadastros/FieldMappingConfig";
+import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -85,6 +86,7 @@ const CadastrosPage = () => {
         { key: "permissoes", label: "Permissões", icon: Shield },
         { key: "grade_comissao", label: "Grade de Comissão", icon: TrendingUp },
         { key: "mapeamento_campos", label: "Mapeamento de Campos", icon: Columns },
+        { key: "campos_personalizados", label: "Campos Personalizados", icon: Puzzle },
       ],
     },
   ];
@@ -183,6 +185,7 @@ const CadastrosPage = () => {
         {active === "permissoes" && <UserPermissionsTab />}
         {active === "grade_comissao" && <CommissionGradesTab />}
         {active === "mapeamento_campos" && <FieldMappingConfig />}
+        {active === "campos_personalizados" && <CustomFieldsConfig />}
       </div>
     </div>
   );
