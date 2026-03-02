@@ -89,9 +89,10 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <p className="text-xs text-muted-foreground">* Campos obrigatórios</p>
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 space-y-2">
-          <Label>Nome Completo</Label>
+          <Label>Nome Completo <span className="text-destructive">*</span></Label>
           <Input
             value={nomeCompleto}
             onChange={(e) => setNomeCompleto(e.target.value)}
@@ -102,7 +103,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>CPF</Label>
+          <Label>CPF <span className="text-destructive">*</span></Label>
           <Input
             value={cpf}
             onChange={(e) => setCpf(formatCPF(e.target.value))}
@@ -144,7 +145,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Credor</Label>
+          <Label>Credor <span className="text-destructive">*</span></Label>
           <Select value={credor} onValueChange={setCredor}>
             <SelectTrigger>
               <SelectValue />
@@ -156,7 +157,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Nº da Parcela</Label>
+          <Label>Nº da Parcela <span className="text-destructive">*</span></Label>
           <Input
             type="number"
             min={1}
@@ -167,7 +168,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Total de Parcelas</Label>
+          <Label>Total de Parcelas <span className="text-destructive">*</span></Label>
           <Input
             type="number"
             min={1}
@@ -179,7 +180,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Data de Vencimento</Label>
+          <Label>Data de Vencimento <span className="text-destructive">*</span></Label>
           <Input
             type="date"
             value={dataVencimento}
@@ -189,7 +190,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Valor de Entrada (R$)</Label>
+          <Label>Valor de Entrada (R$) <span className="text-destructive">*</span></Label>
           <Input
             type="number"
             step="0.01"
@@ -202,7 +203,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Valor das Demais Parcelas (R$)</Label>
+          <Label>Valor das Demais Parcelas (R$) <span className="text-destructive">*</span></Label>
           <Input
             type="number"
             step="0.01"
@@ -227,7 +228,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
         </div>
 
         <div className="space-y-2">
-          <Label>Status</Label>
+          <Label>Status <span className="text-destructive">*</span></Label>
           <Select value={status} onValueChange={(v) => setStatus(v as any)}>
             <SelectTrigger>
               <SelectValue />
