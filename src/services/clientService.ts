@@ -64,8 +64,21 @@ export const fetchClients = async (filters?: {
   dateFrom?: string;
   dateTo?: string;
   operatorId?: string;
+  search?: string;
 }): Promise<Client[]> => {
   let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
+
+  if (filters?.search?.trim()) {
+    const term = filters.search.trim();
+    const cleanTerm = term.replace(/\D/g, "");
+    // Search by name or CPF (digits only for CPF)
+    if (cleanTerm.length > 0 && cleanTerm === term.replace(/[.\-\/\s]/g, "")) {
+      // Looks like a CPF search
+      query = query.or(`nome_completo.ilike.%${term}%,cpf.ilike.%${cleanTerm}%`);
+    } else {
+      query = query.or(`nome_completo.ilike.%${term}%,cpf.ilike.%${term}%`);
+    }
+  }
 
   // status filter removed – "Status de Acordo" now filters via agreements table in the frontend
   if (filters?.credor && filters.credor !== "todos") {
