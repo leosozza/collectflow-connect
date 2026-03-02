@@ -1,19 +1,29 @@
 
 
-## Plano: Corrigir campo `model_name` não aparecendo no perfil
+## Plano: Corrigir `model_name` não sendo salvo na importação MaxList
 
-### Problema
-O campo `MODEL_NAME` é enriquecido corretamente durante a consulta MaxList (linhas 334-352 de `MaxListPage.tsx`), porém **nunca é incluído nos dados de inserção/upsert** enviados ao banco (linhas 464-481 e 511-531). Por isso, a coluna `model_name` fica sempre `null`.
+### Causa raiz
 
-### Solução
+O campo `COD_CONTRATO` vem da API MaxSystem com espaços à esquerda (ex: `"    412564"`). Isso causa dois problemas:
 
-**`src/pages/MaxListPage.tsx`** — duas alterações:
+1. **Na busca de ModelName**: O edge function envia o contrato com espaços para a API, que não retorna resultado
+2. **Na correspondência do resultado**: Mesmo que retornasse, a chave `modelNames["412564"]` não bate com `m.COD_CONTRATO` (`"    412564"`)
 
-1. **Linha ~481**: Adicionar `model_name: item.MODEL_NAME || null` ao objeto `records`
-2. **Linha ~530**: Adicionar `model_name: r.model_name` ao objeto `rows` do upsert
+Além disso, `MODEL_NAME` é inicializado como `""` (string vazia), e `"" || null` resulta em `null`.
 
-Ambas as alterações são de uma linha cada, no mesmo arquivo.
+### Correções em `src/pages/MaxListPage.tsx`
 
-### Arquivo
-- **Editar**: `src/pages/MaxListPage.tsx`
+1. **Linha 125**: Trimmar o `ContractNumber` ao mapear `COD_CONTRATO`:
+   - `COD_CONTRATO: item.ContractNumber` → `COD_CONTRATO: item.ContractNumber?.trim() || ""`
+
+2. **Linha 472**: Trimmar `cod_contrato` no record de upsert:
+   - `cod_contrato: item.COD_CONTRATO` → `cod_contrato: (item.COD_CONTRATO || "").trim()`
+
+### Adição na seção colapsável (`ClientDetailHeader.tsx`)
+
+Adicionar o campo "Nome do Modelo" na seção "Mais informações", na área de Identificação (ao lado de Cod. Devedor, Cod. Contrato, Credor, Parcelas).
+
+### Arquivos
+- `src/pages/MaxListPage.tsx` — trimmar `COD_CONTRATO`
+- `src/components/client-detail/ClientDetailHeader.tsx` — adicionar `model_name` na seção colapsável
 
