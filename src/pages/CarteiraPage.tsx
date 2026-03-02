@@ -397,13 +397,17 @@ const CarteiraPage = () => {
         setBulkDeleting(false);
         return;
       }
-      // Delete all selected clients
+      // Delete all selected clients in batches of 100
       const ids = Array.from(selectedIds);
-      const { error: deleteError } = await supabase
-        .from("clients")
-        .delete()
-        .in("id", ids);
-      if (deleteError) throw deleteError;
+      const batchSize = 100;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { error: deleteError } = await supabase
+          .from("clients")
+          .delete()
+          .in("id", batch);
+        if (deleteError) throw deleteError;
+      }
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success(`${ids.length} cliente(s) excluído(s) com sucesso!`);
       setSelectedIds(new Set());
