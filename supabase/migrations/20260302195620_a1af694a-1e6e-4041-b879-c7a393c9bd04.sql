@@ -1,0 +1,1 @@
+ALTER TABLE public.clients ADD COLUMN model_name text;

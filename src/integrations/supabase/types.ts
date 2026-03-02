@@ -708,6 +708,7 @@ export type Database = {
           endereco: string | null
           external_id: string | null
           id: string
+          model_name: string | null
           nome_completo: string
           numero_parcela: number
           observacoes: string | null
@@ -749,6 +750,7 @@ export type Database = {
           endereco?: string | null
           external_id?: string | null
           id?: string
+          model_name?: string | null
           nome_completo: string
           numero_parcela?: number
           observacoes?: string | null
@@ -790,6 +792,7 @@ export type Database = {
           endereco?: string | null
           external_id?: string | null
           id?: string
+          model_name?: string | null
           nome_completo?: string
           numero_parcela?: number
           observacoes?: string | null

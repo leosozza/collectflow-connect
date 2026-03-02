@@ -141,7 +141,7 @@ export async function enrichClientAddress(
       cidade: bestAddress.cidade,
       uf: bestAddress.uf,
       email: bestAddress.email,
-      observacoes: bestAddress.model_name ? `Modelo: ${bestAddress.model_name}` : undefined,
+      model_name: bestAddress.model_name || undefined,
     } as any)
     .in("id", clientIds);
 
