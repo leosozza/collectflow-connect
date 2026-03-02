@@ -84,6 +84,7 @@ interface MappedRecord {
   DT_VENCIMENTO: string;
   VL_TITULO: number;
   STATUS: string;
+  MODEL_NAME: string;
 }
 
 function removeTimestamp(dateStr: string | null): string {
@@ -111,6 +112,7 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     DT_VENCIMENTO: removeTimestamp(item.PaymentDateQuery),
     VL_TITULO: item.Value,
     STATUS: formatStatus(item.IsCancelled),
+    MODEL_NAME: "",
   };
 }
 
@@ -292,6 +294,33 @@ const MaxListPage = () => {
 
       const json = await response.json();
       const mapped = (json.Items || []).map(mapItem);
+
+      // Enrich with ModelName
+      const uniqueContracts = [...new Set(mapped.map((m: MappedRecord) => m.COD_CONTRATO))].filter(Boolean);
+      if (uniqueContracts.length > 0) {
+        try {
+          const mnResp = await fetch(`${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-names`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ contractNumbers: uniqueContracts }),
+          });
+          if (mnResp.ok) {
+            const mnJson = await mnResp.json();
+            const modelNames: Record<string, string> = mnJson.modelNames || {};
+            mapped.forEach((m: MappedRecord) => {
+              if (modelNames[m.COD_CONTRATO]) {
+                m.MODEL_NAME = modelNames[m.COD_CONTRATO];
+              }
+            });
+          }
+        } catch (err) {
+          console.warn("Erro ao buscar ModelName:", err);
+        }
+      }
+
       setData(mapped);
       setSelectedIndexes(new Set());
       setCount(json.Count ?? mapped.length);
@@ -790,7 +819,7 @@ const MaxListPage = () => {
       <MaxListMappingDialog
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
-        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "PARCELA", "DT_VENCIMENTO", "DT_PAGAMENTO", "VL_TITULO", "STATUS"]}
+        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "PARCELA", "DT_VENCIMENTO", "DT_PAGAMENTO", "VL_TITULO", "STATUS", "MODEL_NAME"]}
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />

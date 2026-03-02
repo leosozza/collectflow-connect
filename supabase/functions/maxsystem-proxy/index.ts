@@ -146,7 +146,6 @@ Deno.serve(async (req: Request) => {
         });
       }
       const details = await resp.json();
-      // Return only address fields + email
       return new Response(JSON.stringify({
         Address: details.Address || null,
         CEP: details.CEP || null,
@@ -156,6 +155,46 @@ Deno.serve(async (req: Request) => {
         Email: details.Email || null,
         ModelName: details.ModelName || null,
       }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === Model Names (batch) endpoint ===
+    if (action === "model-names") {
+      if (req.method !== "POST") {
+        return new Response(JSON.stringify({ error: "POST required" }), {
+          status: 405,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await req.json();
+      const contractNumbers: string[] = body.contractNumbers || [];
+      if (contractNumbers.length === 0) {
+        return new Response(JSON.stringify({ modelNames: {} }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const modelNames: Record<string, string> = {};
+      const BATCH = 10;
+
+      for (let i = 0; i < contractNumbers.length; i += BATCH) {
+        const chunk = contractNumbers.slice(i, i + BATCH);
+        await Promise.all(chunk.map(async (cn) => {
+          try {
+            const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${cn})`;
+            const resp = await fetch(searchUrl);
+            if (!resp.ok) return;
+            const json = await resp.json();
+            const item = (json.Items || [])[0];
+            if (item?.ModelName) {
+              modelNames[cn] = item.ModelName;
+            }
+          } catch { /* skip */ }
+        }));
+      }
+
+      return new Response(JSON.stringify({ modelNames }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
