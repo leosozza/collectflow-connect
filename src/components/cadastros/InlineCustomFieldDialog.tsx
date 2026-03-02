@@ -60,9 +60,10 @@ const InlineCustomFieldDialog = ({ tenantId, onCreated }: Props) => {
     <>
       <Button
         type="button"
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start text-primary font-medium gap-1.5 h-8"
+        variant="outline"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        title="Novo Campo Personalizado"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -70,7 +71,6 @@ const InlineCustomFieldDialog = ({ tenantId, onCreated }: Props) => {
         }}
       >
         <Plus className="w-3.5 h-3.5" />
-        Novo Campo Personalizado
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
