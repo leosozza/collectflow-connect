@@ -182,13 +182,21 @@ Deno.serve(async (req: Request) => {
         const chunk = contractNumbers.slice(i, i + BATCH);
         await Promise.all(chunk.map(async (cn) => {
           try {
+            // Step 1: Search for the model ID by ContractNumber
             const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${cn})`;
             const resp = await fetch(searchUrl);
             if (!resp.ok) return;
             const json = await resp.json();
             const item = (json.Items || [])[0];
-            if (item?.ModelName) {
-              modelNames[cn] = item.ModelName;
+            if (!item?.Id) return;
+
+            // Step 2: Fetch details to get ModelName
+            const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${item.Id}`;
+            const detResp = await fetch(detailsUrl);
+            if (!detResp.ok) return;
+            const details = await detResp.json();
+            if (details?.ModelName) {
+              modelNames[cn] = details.ModelName;
             }
           } catch { /* skip */ }
         }));
