@@ -1,39 +1,19 @@
 
 
-## Plano: Exibir todas as informações do cliente no perfil da Carteira
+## Plano: Corrigir campo `model_name` não aparecendo no perfil
 
-O `ClientDetailHeader` atualmente mostra apenas: nome, CPF, telefone (1), email, credor, endereço (rua+cidade+uf+cep), cod. devedor, total pago, parcelas e observações. Faltam vários campos que existem na tabela `clients` e são importados via planilha/MaxList.
+### Problema
+O campo `MODEL_NAME` é enriquecido corretamente durante a consulta MaxList (linhas 334-352 de `MaxListPage.tsx`), porém **nunca é incluído nos dados de inserção/upsert** enviados ao banco (linhas 464-481 e 511-531). Por isso, a coluna `model_name` fica sempre `null`.
 
-### Campos faltantes a adicionar
+### Solução
 
-**Na área colapsável ("Mais informações"):**
-- `phone2` / `phone3` (Telefone 2, Telefone 3)
-- `bairro`
-- `cod_contrato`
-- `valor_saldo` / `valor_atualizado`
-- `data_pagamento` / `data_quitacao`
-- `status_cobranca_id` (nome do status via lookup)
-- `tipo_divida_id` (nome do tipo via lookup)
+**`src/pages/MaxListPage.tsx`** — duas alterações:
 
-**No Sheet de edição:**
-- `phone2`, `phone3`
-- `bairro`
-- `cod_contrato`
+1. **Linha ~481**: Adicionar `model_name: item.MODEL_NAME || null` ao objeto `records`
+2. **Linha ~530**: Adicionar `model_name: r.model_name` ao objeto `rows` do upsert
 
-### Alterações em `src/components/client-detail/ClientDetailHeader.tsx`
-
-1. **Linha 2 (metadados)**: Adicionar `phone2`/`phone3` ao lado do telefone principal
-2. **Seção colapsável**: Reorganizar em grid com todos os campos:
-   - Cod. Devedor, Cod. Contrato, Credor
-   - Telefones 1/2/3
-   - Endereço completo (rua, bairro, cidade, UF, CEP)
-   - Valores: Total Pago, Saldo Devedor, Valor Atualizado
-   - Datas: Pagamento, Quitação
-   - Status Cobrança, Tipo Dívida, Perfil Devedor
-3. **Sheet de edição**: Adicionar campos `phone2`, `phone3`, `bairro`, `cod_contrato`
-4. **Mutation de update**: Incluir os novos campos no payload de atualização
-5. **Queries**: Adicionar lookup de `tipos_divida` e `tipos_status` para exibir nomes
+Ambas as alterações são de uma linha cada, no mesmo arquivo.
 
 ### Arquivo
-- `src/components/client-detail/ClientDetailHeader.tsx`
+- **Editar**: `src/pages/MaxListPage.tsx`
 
