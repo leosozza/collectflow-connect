@@ -1,34 +1,45 @@
 
 
-## Plano: Incluir "Nome do Modelo" (ModelName) nos dados do MaxList
+## Plano: Adicionar todos os campos ao MaxList
 
-O campo ModelName nao vem no endpoint de Installments do MaxSystem. Ele requer chamadas separadas via `model-search` por ContractNumber. O plano e enriquecer os dados apos a busca de parcelas.
+Atualmente o `MappedRecord` tem 15 campos. O formato esperado tem 28 campos. Precisa adicionar os 13 campos faltantes.
 
-### Alteracoes
+### Campos faltantes vs fonte de dados
 
-**`supabase/functions/maxsystem-proxy/index.ts`**:
-1. Adicionar nova action `model-names` que recebe uma lista de ContractNumbers via POST body
-2. Para cada contrato unico, chamar `NewModelSearch` e extrair o campo de nome do modelo
-3. Retornar um mapa `{ [contractNumber]: modelName }`
+| Campo | Disponível na API Installment? | Ação |
+|-------|-------------------------------|------|
+| EMAIL | Não (vem de model-details) | Placeholder vazio |
+| ENDERECO | Não | Placeholder vazio |
+| NUMERO | Não | Placeholder vazio |
+| COMPLEMENTO | Não | Placeholder vazio |
+| BAIRRO | Não | Placeholder vazio |
+| CIDADE | Não | Placeholder vazio |
+| ESTADO | Não | Placeholder vazio |
+| CEP | Não | Placeholder vazio |
+| DADOS_ADICIONAIS | Não | Placeholder vazio |
+| COD_TITULO | Sim (pode derivar de TITULO) | Usar mesmo valor |
+| NM_PARCELA | Sim (atualmente "PARCELA") | Renomear PARCELA → NM_PARCELA |
+| ANO_VENCIMENTO | Pode derivar de DT_VENCIMENTO | Extrair ano |
+| VL_SALDO | Não | Placeholder 0/null |
+| VL_ATUALIZADO | Não | Placeholder 0/null |
+| TP_TITULO | Não | Placeholder vazio |
+
+### Alterações
 
 **`src/pages/MaxListPage.tsx`**:
-1. Adicionar campo `MODEL_NAME` na interface `MappedRecord`
-2. Apos buscar os installments, coletar os ContractNumbers unicos
-3. Chamar a nova action `model-names` com os contratos unicos
-4. Preencher o campo `MODEL_NAME` em cada registro mapeado
-5. O campo ficara disponivel no dialog de mapeamento para vincular ao campo personalizado "Nome do Modelo"
+1. Expandir `MappedRecord` com os 13 campos novos (EMAIL, ENDERECO, NUMERO, COMPLEMENTO, BAIRRO, CIDADE, ESTADO, CEP, DADOS_ADICIONAIS, COD_TITULO, ANO_VENCIMENTO, VL_SALDO, VL_ATUALIZADO, TP_TITULO)
+2. Renomear `PARCELA` → `NM_PARCELA` em toda a interface e mapeamento
+3. Atualizar `mapItem()` para popular os novos campos (maioria vazio/null da API)
+4. Atualizar `sourceHeaders` no `MaxListMappingDialog` com todos os 28 campos
+5. Atualizar referências a `PARCELA` no código (tabela, export Excel, etc.)
 
-### Fluxo
-```text
-1. Usuario busca parcelas (installments)
-2. Frontend coleta ContractNumbers unicos dos resultados
-3. POST /maxsystem-proxy?action=model-names com lista de contratos
-4. Proxy busca nome do modelo para cada contrato (em paralelo, lotes de 10)
-5. Frontend adiciona MODEL_NAME a cada registro
-6. No mapeamento, MODEL_NAME aparece como coluna disponivel
-```
+**`src/components/maxlist/MaxListMappingDialog.tsx`**:
+1. Atualizar o `autoMap` default para incluir os novos campos (EMAIL→email, ENDERECO→endereco, BAIRRO→bairro, CIDADE→cidade, ESTADO→uf, CEP→cep, NM_PARCELA→numero_parcela, VL_SALDO→valor_saldo, VL_ATUALIZADO→valor_atualizado)
 
-### Arquivos
-- **Editar**: `supabase/functions/maxsystem-proxy/index.ts` (nova action)
-- **Editar**: `src/pages/MaxListPage.tsx` (enriquecer dados com ModelName)
+**`src/services/fieldMappingService.ts`**:
+1. Adicionar campo `bairro` nos SYSTEM_FIELDS (existe na tabela `clients` mas não está listado)
+2. Adicionar `valor_saldo` nos SYSTEM_FIELDS (existe na tabela `clients`)
+
+### Nota técnica
+Os campos de endereço (EMAIL, ENDERECO, BAIRRO, CIDADE, ESTADO, CEP) virão vazios da API de Installments pois o MaxSystem não retorna esses dados nesse endpoint. Eles são preenchidos posteriormente no enriquecimento de endereço na formalização do acordo. Porém, ao estarem presentes como colunas, ficam disponíveis para mapeamento manual caso o usuário tenha esses dados de outra fonte.
 
