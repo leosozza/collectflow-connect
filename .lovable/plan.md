@@ -1,29 +1,31 @@
 
 
-## Plano: Corrigir `model_name` não sendo salvo na importação MaxList
+## Plano: Corrigir busca de ModelName no endpoint batch
 
 ### Causa raiz
 
-O campo `COD_CONTRATO` vem da API MaxSystem com espaços à esquerda (ex: `"    412564"`). Isso causa dois problemas:
+O endpoint `model-names` no edge function `maxsystem-proxy` faz apenas a busca em `/api/NewModelSearch` e espera encontrar `ModelName` no resultado. Porém, conforme a documentação da API MaxSystem:
 
-1. **Na busca de ModelName**: O edge function envia o contrato com espaços para a API, que não retorna resultado
-2. **Na correspondência do resultado**: Mesmo que retornasse, a chave `modelNames["412564"]` não bate com `m.COD_CONTRATO` (`"    412564"`)
+- **`NewModelSearch`** (search) retorna apenas `Id`, `ContractNumber`, etc. — **sem** `ModelName`
+- **`NewModelSearch/Details/{id}`** (details) é onde `ModelName` está disponível
 
-Além disso, `MODEL_NAME` é inicializado como `""` (string vazia), e `"" || null` resulta em `null`.
+O endpoint precisa fazer **dois passos**: buscar o `Id` do modelo e depois consultar os detalhes para obter o `ModelName`.
 
-### Correções em `src/pages/MaxListPage.tsx`
+### Correção em `supabase/functions/maxsystem-proxy/index.ts`
 
-1. **Linha 125**: Trimmar o `ContractNumber` ao mapear `COD_CONTRATO`:
-   - `COD_CONTRATO: item.ContractNumber` → `COD_CONTRATO: item.ContractNumber?.trim() || ""`
+Modificar o bloco `model-names` (linhas 183-194) para:
 
-2. **Linha 472**: Trimmar `cod_contrato` no record de upsert:
-   - `cod_contrato: item.COD_CONTRATO` → `cod_contrato: (item.COD_CONTRATO || "").trim()`
+1. Chamar `/api/NewModelSearch?$top=1&$filter=(ContractNumber+eq+{cn})` para obter o `Id` do item
+2. Se encontrou um item com `Id`, chamar `/api/NewModelSearch/Details/{Id}` para obter o `ModelName`
+3. Armazenar `modelNames[cn] = details.ModelName`
 
-### Adição na seção colapsável (`ClientDetailHeader.tsx`)
+```text
+Para cada contractNumber:
+  1. GET /api/NewModelSearch?$top=1&$filter=... → item.Id
+  2. GET /api/NewModelSearch/Details/{item.Id} → details.ModelName
+  3. modelNames[cn] = details.ModelName
+```
 
-Adicionar o campo "Nome do Modelo" na seção "Mais informações", na área de Identificação (ao lado de Cod. Devedor, Cod. Contrato, Credor, Parcelas).
-
-### Arquivos
-- `src/pages/MaxListPage.tsx` — trimmar `COD_CONTRATO`
-- `src/components/client-detail/ClientDetailHeader.tsx` — adicionar `model_name` na seção colapsável
+### Arquivo
+- **Editar**: `supabase/functions/maxsystem-proxy/index.ts` (linhas 183-194)
 
