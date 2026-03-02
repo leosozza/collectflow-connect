@@ -175,15 +175,7 @@ const CarteiraPage = () => {
 
   const displayClients = useMemo(() => {
     let filtered = clients;
-    if (filters.search.trim()) {
-      const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const term = normalize(filters.search.trim());
-      filtered = filtered.filter(
-        (c) =>
-          normalize(c.nome_completo).includes(term) ||
-          c.cpf.replace(/\D/g, "").includes(term.replace(/\D/g, ""))
-      );
-    }
+    // Search is now applied server-side in fetchClients, no client-side filter needed
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
@@ -228,7 +220,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.search, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap]);
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
