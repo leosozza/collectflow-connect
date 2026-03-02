@@ -188,12 +188,6 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
         {/* Linha 2: Metadados */}
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
           <span><strong>CPF:</strong> {formattedCpf}</span>
-          {client.model_name && (
-            <>
-              <span className="text-border">|</span>
-              <span><strong>Modelo:</strong> {client.model_name}</span>
-            </>
-          )}
           <span className="text-border">|</span>
           <span><strong>Tel:</strong> {phones.length > 0 ? phones.map(p => formatPhone(p)).join(" / ") : "—"}</span>
           <span className="text-border">|</span>
@@ -218,7 +212,7 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
                 <InfoItem label="Cod. Contrato" value={client.cod_contrato} />
                 <InfoItem label="Credor" value={client.credor} />
                 <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
-                <InfoItem label="Nome do Modelo" value={client.model_name} />
+                
               </div>
 
               {/* Telefones */}

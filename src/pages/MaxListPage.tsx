@@ -432,7 +432,20 @@ const MaxListPage = () => {
     const token = session.data.session?.access_token || "";
 
     // Build records WITHOUT address data (address is fetched at agreement time)
+    // Identify custom field mappings (e.g. "DADOS_ADICIONAIS" → "custom:nome_do_modelo")
+    const customMappingEntries = Object.entries(_mapping).filter(([, target]) => target.startsWith("custom:"));
+
     const records = filteredItems.map((item) => {
+      // Build custom_data from mapping
+      const custom_data: Record<string, any> = {};
+      customMappingEntries.forEach(([sourceKey, targetKey]) => {
+        const fieldKey = targetKey.replace("custom:", "");
+        const value = (item as any)[sourceKey];
+        if (value !== undefined && value !== null && value !== "") {
+          custom_data[fieldKey] = value;
+        }
+      });
+
       return {
         nome_completo: (item.NOME_DEVEDOR || "").trim(),
         cpf: item.CNPJ_CPF.replace(/[^\d]/g, ""),
@@ -450,7 +463,7 @@ const MaxListPage = () => {
         phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
         phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
         phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
-        
+        custom_data: Object.keys(custom_data).length > 0 ? custom_data : undefined,
       };
     });
 
@@ -499,7 +512,7 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
-          
+          ...(r.custom_data ? { custom_data: r.custom_data } : {}),
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
