@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Tags } from "lucide-react";
@@ -27,6 +28,7 @@ const CustomFieldsConfig = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomField | null>(null);
   const [form, setForm] = useState({ field_key: "", field_label: "", field_type: "text", options: "" });
+  const [deleteTarget, setDeleteTarget] = useState<CustomField | null>(null);
 
   const { data: fields = [], isLoading } = useQuery({
     queryKey: ["custom-fields", tenant?.id],
@@ -167,7 +169,7 @@ const CustomFieldsConfig = () => {
                         <Button variant="ghost" size="icon" onClick={() => openEdit(field)}>
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(field.id)}>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(field)}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                       </div>
@@ -237,6 +239,31 @@ const CustomFieldsConfig = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir campo personalizado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O campo <strong>"{deleteTarget?.field_label}"</strong> será removido permanentemente. Os dados já salvos neste campo nos clientes não serão apagados, mas o campo não aparecerá mais nas importações.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  deleteMutation.mutate(deleteTarget.id);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
