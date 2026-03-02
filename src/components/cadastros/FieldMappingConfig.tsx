@@ -48,6 +48,9 @@ import {
   Globe,
   Star,
 } from "lucide-react";
+import { useQuery as useQueryCF } from "@tanstack/react-query";
+import { fetchCustomFields, type CustomField } from "@/services/customFieldsService";
+import InlineCustomFieldDialog from "./InlineCustomFieldDialog";
 
 interface MappingEntry {
   source: string;
@@ -78,6 +81,22 @@ const FieldMappingConfig = () => {
     queryFn: () => fetchCredores(tenantId!),
     enabled: !!tenantId,
   });
+
+  const { data: customFields = [] } = useQueryCF({
+    queryKey: ["custom-fields", tenantId],
+    queryFn: () => fetchCustomFields(tenantId!),
+    enabled: !!tenantId,
+  });
+
+  const allFields = [
+    ...SYSTEM_FIELDS.filter((f) => f.value !== "__ignorar__"),
+    ...customFields.filter((cf) => cf.is_active).map((cf) => ({
+      value: `custom:${cf.field_key}`,
+      label: `🏷️ ${cf.field_label}`,
+      required: false as const,
+    })),
+    { value: "__ignorar__", label: "— Ignorar —", required: false as const },
+  ];
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -323,11 +342,21 @@ const FieldMappingConfig = () => {
                             <SelectValue placeholder="Selecione..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {SYSTEM_FIELDS.map((f) => (
+                            {allFields.map((f) => (
                               <SelectItem key={f.value} value={f.value}>
                                 {f.label} {f.required ? "*" : ""}
                               </SelectItem>
                             ))}
+                            <div className="border-t border-border mt-1 pt-1">
+                              {tenantId && (
+                                <InlineCustomFieldDialog
+                                  tenantId={tenantId}
+                                  onCreated={(cf) => {
+                                    updateEntry(i, "target", `custom:${cf.field_key}`);
+                                  }}
+                                />
+                              )}
+                            </div>
                           </SelectContent>
                         </Select>
                       </TableCell>

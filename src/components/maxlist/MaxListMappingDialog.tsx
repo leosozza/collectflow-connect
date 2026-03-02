@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ArrowRight } from "lucide-react";
 import { SYSTEM_FIELDS, fetchFieldMappings, createFieldMapping, autoDetectMapping, type FieldMapping } from "@/services/fieldMappingService";
 import { fetchCustomFields, type CustomField } from "@/services/customFieldsService";
+import InlineCustomFieldDialog from "@/components/cadastros/InlineCustomFieldDialog";
 import { toast } from "sonner";
 
 interface Props {
@@ -158,6 +159,15 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
                               {f.label} {f.required ? "*" : ""}
                             </SelectItem>
                           ))}
+                          <div className="border-t border-border mt-1 pt-1">
+                            <InlineCustomFieldDialog
+                              tenantId={tenantId}
+                              onCreated={(cf) => {
+                                setCustomFields((prev) => [...prev, cf]);
+                                setMapping((prev) => ({ ...prev, [header]: `custom:${cf.field_key}` }));
+                              }}
+                            />
+                          </div>
                         </SelectContent>
                       </Select>
                     </TableCell>
