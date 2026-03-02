@@ -478,6 +478,7 @@ const MaxListPage = () => {
         phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
         phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
         phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
+        model_name: item.MODEL_NAME || null,
       };
     });
 
@@ -526,6 +527,7 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
+          model_name: r.model_name,
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
