@@ -146,35 +146,36 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Select
-                          value={mapping[header] || "__ignorar__"}
-                          onValueChange={(v) => setMapping((prev) => ({ ...prev, [header]: v }))}
-                        >
-                          <SelectTrigger className="h-8 text-sm flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allFields.map((f) => (
-                              <SelectItem key={f.value} value={f.value}>
-                                {f.label} {f.required ? "*" : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <InlineCustomFieldDialog
-                          tenantId={tenantId}
-                          onCreated={(cf) => {
-                            setCustomFields((prev) => [...prev, cf]);
-                            setMapping((prev) => ({ ...prev, [header]: `custom:${cf.field_key}` }));
-                          }}
-                        />
-                      </div>
+                      <Select
+                        value={mapping[header] || "__ignorar__"}
+                        onValueChange={(v) => setMapping((prev) => ({ ...prev, [header]: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allFields.map((f) => (
+                            <SelectItem key={f.value} value={f.value}>
+                              {f.label} {f.required ? "*" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+
+            <div className="flex items-center gap-2 mt-2">
+              <InlineCustomFieldDialog
+                tenantId={tenantId}
+                onCreated={(cf) => {
+                  setCustomFields((prev) => [...prev, cf]);
+                }}
+              />
+              <span className="text-sm text-muted-foreground">Novo Campo Personalizado</span>
+            </div>
           </>
         )}
 
