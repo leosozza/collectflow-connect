@@ -1,86 +1,40 @@
 
 
-## Plano: Mapeamento no MaxList + Campos Personalizados + Upsert com Histórico
+## Plano: Botão "Novo Campo Personalizado" nas listas de mapeamento
 
-### 1) Modal de mapeamento no MaxList ao enviar para CRM
+Adicionar um botão "Novo Campo Personalizado" no final dos selects de campo destino nos 3 componentes de mapeamento, permitindo criar campos custom inline sem sair do fluxo.
 
-**Arquivo: `src/pages/MaxListPage.tsx`**
+### Abordagem
 
-Quando o usuário clicar "Enviar para CRM", ao invés de importar direto:
-- Abrir um modal de mapeamento mostrando os campos do MaxSystem (CREDOR, COD_DEVEDOR, NOME_DEVEDOR, etc.) → campos do sistema
-- Na primeira vez, o mapeamento é manual; ao confirmar, salvar automaticamente como `FieldMapping` com `source: "api"` e `name: "MaxSystem - YBRASIL"` na tabela `field_mappings`
-- Nas importações seguintes, detectar automaticamente o mapeamento salvo e pré-aplicar (o usuário pode ajustar se quiser)
-- Reutilizar a lógica do `ImportDialog` (step mapping) extraída em um componente compartilhado ou criando um `MaxListMappingDialog`
+Criar um componente reutilizável `InlineCustomFieldDialog` que encapsula o mini-formulário de criação de campo (nome, tipo, opções). Esse componente será usado nos 3 locais:
 
-### 2) Campos personalizados (custom fields)
+1. **`FieldMappingConfig.tsx`** — No select "Campo do Sistema" de cada linha (linha 321-331), adicionar ao final da lista de `SelectItem` um botão "Novo Campo" que abre o dialog inline. Após criar, o campo é automaticamente selecionado na linha.
 
-**Migração SQL** — criar tabela `custom_fields`:
-```sql
-CREATE TABLE public.custom_fields (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL,
-  field_key TEXT NOT NULL,        -- ex: "campo_extra_1"
-  field_label TEXT NOT NULL,      -- ex: "Nº Processo"
-  field_type TEXT NOT NULL DEFAULT 'text', -- text, number, date, select
-  options JSONB DEFAULT '[]',     -- para tipo select
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE public.custom_fields ENABLE ROW LEVEL SECURITY;
--- RLS: admins manage, users view
-```
+2. **`ImportDialog.tsx`** — No select de mapeamento (linha 309-324), mesma lógica: botão no final do select que abre o dialog, cria o campo e seleciona.
 
-**Migração SQL** — adicionar coluna `custom_data JSONB DEFAULT '{}'` na tabela `clients` para armazenar valores dos campos personalizados.
+3. **`MaxListMappingDialog.tsx`** — No select de campo destino, adicionar o botão após os `allFields`. O `allFields` já inclui custom fields dinâmicos; após criar um novo, atualizar a lista local.
 
-**Atualizar `SYSTEM_FIELDS`** em `fieldMappingService.ts`:
-- Ao carregar os campos disponíveis para mapeamento, buscar também os `custom_fields` do tenant e adicioná-los dinamicamente à lista de campos destino (exibidos com prefixo "🏷️" para diferenciá-los)
+### Componente `InlineCustomFieldDialog`
 
-**UI em Cadastros**: Criar tab "Campos Personalizados" ou seção dentro de "Mapeamento de Campos" para CRUD de custom fields.
+**Arquivo:** `src/components/cadastros/InlineCustomFieldDialog.tsx`
 
-### 3) Upsert por CPF ao importar (update se já existe)
+- Props: `tenantId`, `onCreated(field: CustomField)`, trigger element
+- Mini-formulário: Nome do campo, Tipo (text/number/date/select), Opções (se select)
+- Chave gerada automaticamente a partir do label
+- Usa `createCustomField` do `customFieldsService`
+- Invalida query `custom-fields` após criar
 
-**MaxList** (`handleSendToCRM`): Já usa `upsert` com `onConflict: "external_id,tenant_id"` — funciona para MaxList.
+### Alterações nos componentes
 
-**ImportDialog / CarteiraPage**: Alterar `bulkCreateClients` em `clientService.ts` para usar `upsert` com `onConflict: "external_id,tenant_id"` ao invés de `insert`, garantindo que registros existentes com mesmo CPF/external_id sejam atualizados.
-
-Para cenários sem `external_id`, adicionar lógica de deduplicação por CPF: antes do insert, buscar CPFs existentes e fazer update se encontrado.
-
-### 4) Histórico de atualizações dos clientes
-
-**Migração SQL** — criar tabela `client_update_logs`:
-```sql
-CREATE TABLE public.client_update_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL,
-  client_id UUID NOT NULL,
-  updated_by UUID,
-  source TEXT NOT NULL DEFAULT 'import', -- import, api, manual
-  changes JSONB NOT NULL DEFAULT '{}',   -- {field: {old: x, new: y}}
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE public.client_update_logs ENABLE ROW LEVEL SECURITY;
-```
-
-**Lógica de registro**: No `handleSendToCRM` (MaxList) e `bulkCreateClients` (importação planilha):
-- Antes do upsert, buscar os registros existentes por `external_id` ou CPF
-- Comparar campos que mudaram (valor_parcela, status, phone, etc.)
-- Inserir um registro em `client_update_logs` com as diferenças
-
-**UI**: Na página de detalhe do cliente (`ClientDetailPage`), adicionar seção "Histórico de Atualizações" mostrando timeline de mudanças com data, fonte e campos alterados.
+- **`FieldMappingConfig.tsx`**: Importar custom fields via query, injetar no select junto com `SYSTEM_FIELDS`, adicionar botão "Novo Campo" no final do `SelectContent`
+- **`ImportDialog.tsx`**: Mesmo padrão — buscar custom fields, injetar no select, botão no final
+- **`MaxListMappingDialog.tsx`**: Já busca custom fields; adicionar botão no final do select que abre o dialog inline
 
 ### Arquivos criados
-- `src/components/maxlist/MaxListMappingDialog.tsx` — modal de mapeamento para MaxList
-- `src/components/cadastros/CustomFieldsConfig.tsx` — CRUD de campos personalizados
+- `src/components/cadastros/InlineCustomFieldDialog.tsx`
 
 ### Arquivos editados
-- `src/pages/MaxListPage.tsx` — integrar modal de mapeamento
-- `src/services/fieldMappingService.ts` — incluir custom fields nos campos disponíveis
-- `src/services/clientService.ts` — `bulkCreateClients` usar upsert + registrar histórico
-- `src/pages/CadastrosPage.tsx` — nova tab "Campos Personalizados"
-- `src/pages/ClientDetailPage.tsx` — seção de histórico de atualizações
-
-### Migrações SQL
-1. Tabela `custom_fields` + RLS
-2. Coluna `custom_data JSONB` em `clients`
-3. Tabela `client_update_logs` + RLS
+- `src/components/cadastros/FieldMappingConfig.tsx`
+- `src/components/clients/ImportDialog.tsx`
+- `src/components/maxlist/MaxListMappingDialog.tsx`
 
