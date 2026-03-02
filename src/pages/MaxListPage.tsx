@@ -98,7 +98,6 @@ interface MappedRecord {
   VL_ATUALIZADO: number | null;
   TP_TITULO: string | null;
   STATUS: string;
-  MODEL_NAME: string;
 }
 
 function removeTimestamp(dateStr: string | null): string {
@@ -148,7 +147,6 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     VL_ATUALIZADO: null,
     TP_TITULO: null,
     STATUS: formatStatus(item.IsCancelled),
-    MODEL_NAME: "",
   };
 }
 
@@ -269,7 +267,7 @@ const MaxListPage = () => {
     }
   }, [tiposStatus, selectedStatusCobrancaId]);
 
-  const visibleData = data.slice(0, 500);
+  const visibleData = data.slice(0, 1000);
   const allVisibleSelected = visibleData.length > 0 && visibleData.every((_, i) => selectedIndexes.has(i));
   const someSelected = selectedIndexes.size > 0;
 
@@ -330,32 +328,6 @@ const MaxListPage = () => {
 
       const json = await response.json();
       const mapped = (json.Items || []).map(mapItem);
-
-      // Enrich with ModelName
-      const uniqueContracts = [...new Set(mapped.map((m: MappedRecord) => m.COD_CONTRATO))].filter(Boolean);
-      if (uniqueContracts.length > 0) {
-        try {
-          const mnResp = await fetch(`${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-names`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ contractNumbers: uniqueContracts }),
-          });
-          if (mnResp.ok) {
-            const mnJson = await mnResp.json();
-            const modelNames: Record<string, string> = mnJson.modelNames || {};
-            mapped.forEach((m: MappedRecord) => {
-              if (modelNames[m.COD_CONTRATO]) {
-                m.MODEL_NAME = modelNames[m.COD_CONTRATO];
-              }
-            });
-          }
-        } catch (err) {
-          console.warn("Erro ao buscar ModelName:", err);
-        }
-      }
 
       setData(mapped);
       setSelectedIndexes(new Set());
@@ -478,7 +450,7 @@ const MaxListPage = () => {
         phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
         phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
         phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
-        model_name: item.MODEL_NAME || null,
+        
       };
     });
 
@@ -527,7 +499,7 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
-          model_name: r.model_name,
+          
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
@@ -844,9 +816,9 @@ const MaxListPage = () => {
                   </TableBody>
                 </Table>
               </div>
-              {data.length > 500 && (
+              {data.length > 1000 && (
                 <p className="text-center text-sm text-muted-foreground py-4">
-                  Mostrando 500 de {data.length.toLocaleString("pt-BR")} registros. Use "Download Excel" para ver todos.
+                  Mostrando 1000 de {data.length.toLocaleString("pt-BR")} registros. Use "Download Excel" para ver todos.
                 </p>
               )}
             </ScrollArea>
@@ -857,7 +829,7 @@ const MaxListPage = () => {
       <MaxListMappingDialog
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
-        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS", "MODEL_NAME"]}
+        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS"]}
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />
