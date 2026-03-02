@@ -324,32 +324,32 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                             <ArrowRight className="w-4 h-4 text-muted-foreground" />
                           </TableCell>
                           <TableCell>
-                            <Select
-                              value={mapped || "__none__"}
-                              onValueChange={(v) => updateMapping(header, v)}
-                            >
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">— Não mapear —</SelectItem>
-                                {allImportFields.map((f) => (
-                                  <SelectItem key={f.value} value={f.value}>
-                                    {f.label} {f.required ? "*" : ""}
-                                  </SelectItem>
-                                ))}
-                                <div className="border-t border-border mt-1 pt-1">
-                                  {tenantId && (
-                                    <InlineCustomFieldDialog
-                                      tenantId={tenantId}
-                                      onCreated={(cf) => {
-                                        updateMapping(header, `custom:${cf.field_key}`);
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={mapped || "__none__"}
+                                onValueChange={(v) => updateMapping(header, v)}
+                              >
+                                <SelectTrigger className="h-8 text-sm flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">— Não mapear —</SelectItem>
+                                  {allImportFields.map((f) => (
+                                    <SelectItem key={f.value} value={f.value}>
+                                      {f.label} {f.required ? "*" : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {tenantId && (
+                                <InlineCustomFieldDialog
+                                  tenantId={tenantId}
+                                  onCreated={(cf) => {
+                                    updateMapping(header, `custom:${cf.field_key}`);
+                                  }}
+                                />
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             {mapped && mapped !== "__ignorar__" ? (

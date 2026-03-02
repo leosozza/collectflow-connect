@@ -146,30 +146,30 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     </TableCell>
                     <TableCell>
-                      <Select
-                        value={mapping[header] || "__ignorar__"}
-                        onValueChange={(v) => setMapping((prev) => ({ ...prev, [header]: v }))}
-                      >
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allFields.map((f) => (
-                            <SelectItem key={f.value} value={f.value}>
-                              {f.label} {f.required ? "*" : ""}
-                            </SelectItem>
-                          ))}
-                          <div className="border-t border-border mt-1 pt-1">
-                            <InlineCustomFieldDialog
-                              tenantId={tenantId}
-                              onCreated={(cf) => {
-                                setCustomFields((prev) => [...prev, cf]);
-                                setMapping((prev) => ({ ...prev, [header]: `custom:${cf.field_key}` }));
-                              }}
-                            />
-                          </div>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-1">
+                        <Select
+                          value={mapping[header] || "__ignorar__"}
+                          onValueChange={(v) => setMapping((prev) => ({ ...prev, [header]: v }))}
+                        >
+                          <SelectTrigger className="h-8 text-sm flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allFields.map((f) => (
+                              <SelectItem key={f.value} value={f.value}>
+                                {f.label} {f.required ? "*" : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <InlineCustomFieldDialog
+                          tenantId={tenantId}
+                          onCreated={(cf) => {
+                            setCustomFields((prev) => [...prev, cf]);
+                            setMapping((prev) => ({ ...prev, [header]: `custom:${cf.field_key}` }));
+                          }}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

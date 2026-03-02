@@ -337,28 +337,28 @@ const FieldMappingConfig = () => {
                         <ArrowRight className="w-4 h-4 text-muted-foreground mx-auto" />
                       </TableCell>
                       <TableCell className="py-1.5">
-                        <Select value={entry.target} onValueChange={(v) => updateEntry(i, "target", v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allFields.map((f) => (
-                              <SelectItem key={f.value} value={f.value}>
-                                {f.label} {f.required ? "*" : ""}
-                              </SelectItem>
-                            ))}
-                            <div className="border-t border-border mt-1 pt-1">
-                              {tenantId && (
-                                <InlineCustomFieldDialog
-                                  tenantId={tenantId}
-                                  onCreated={(cf) => {
-                                    updateEntry(i, "target", `custom:${cf.field_key}`);
-                                  }}
-                                />
-                              )}
-                            </div>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center gap-1">
+                          <Select value={entry.target} onValueChange={(v) => updateEntry(i, "target", v)}>
+                            <SelectTrigger className="h-8 text-sm flex-1">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allFields.map((f) => (
+                                <SelectItem key={f.value} value={f.value}>
+                                  {f.label} {f.required ? "*" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {tenantId && (
+                            <InlineCustomFieldDialog
+                              tenantId={tenantId}
+                              onCreated={(cf) => {
+                                updateEntry(i, "target", `custom:${cf.field_key}`);
+                              }}
+                            />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="py-1.5">
                         {entries.length > 1 && (
