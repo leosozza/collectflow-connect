@@ -646,6 +646,51 @@ export type Database = {
           },
         ]
       }
+      client_update_logs: {
+        Row: {
+          changes: Json
+          client_id: string
+          created_at: string | null
+          id: string
+          source: string
+          tenant_id: string
+          updated_by: string | null
+        }
+        Insert: {
+          changes?: Json
+          client_id: string
+          created_at?: string | null
+          id?: string
+          source?: string
+          tenant_id: string
+          updated_by?: string | null
+        }
+        Update: {
+          changes?: Json
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          source?: string
+          tenant_id?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_update_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_update_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           bairro: string | null
@@ -655,6 +700,7 @@ export type Database = {
           cpf: string
           created_at: string
           credor: string
+          custom_data: Json | null
           data_pagamento: string | null
           data_quitacao: string | null
           data_vencimento: string
@@ -695,6 +741,7 @@ export type Database = {
           cpf: string
           created_at?: string
           credor?: string
+          custom_data?: Json | null
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento: string
@@ -735,6 +782,7 @@ export type Database = {
           cpf?: string
           created_at?: string
           credor?: string
+          custom_data?: Json | null
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento?: string
@@ -1205,6 +1253,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "credores_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_fields: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          is_active: boolean | null
+          options: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_fields_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

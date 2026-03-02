@@ -21,6 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import MaxListMappingDialog from "@/components/maxlist/MaxListMappingDialog";
 
 const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
   const selected = value ? parseISO(value) : undefined;
@@ -187,6 +188,8 @@ const MaxListPage = () => {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
+  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
 
   const { data: tiposStatus } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
@@ -356,6 +359,15 @@ const MaxListPage = () => {
       return;
     }
 
+    // Open mapping dialog
+    setPendingMappingData(sourceData);
+    setShowMappingDialog(true);
+  };
+
+  const handleMappingConfirmed = async (_mapping: Record<string, string>) => {
+    setShowMappingDialog(false);
+    const sourceData = pendingMappingData;
+
     setImporting(true);
     setImportProgress(0);
 
@@ -386,8 +398,27 @@ const MaxListPage = () => {
       };
     });
 
+    // Fetch existing clients for change logging
+    const externalIds = records.map((r) => r.external_id).filter(Boolean);
+    const existingMap = new Map<string, any>();
+    if (externalIds.length > 0) {
+      for (let i = 0; i < externalIds.length; i += 500) {
+        const batch = externalIds.slice(i, i + 500);
+        const { data: existing } = await supabase
+          .from("clients")
+          .select("*")
+          .in("external_id", batch)
+          .eq("tenant_id", tenant.id)
+          .limit(5000);
+        (existing || []).forEach((e: any) => {
+          if (e.external_id) existingMap.set(e.external_id, e);
+        });
+      }
+    }
+
     let totalInserted = 0;
     let totalSkipped = 0;
+    const changeLogs: any[] = [];
 
     const totalSteps = records.length;
 
@@ -416,6 +447,28 @@ const MaxListPage = () => {
           status_cobranca_id: selectedStatusCobrancaId || null,
         }));
 
+        // Track changes
+        rows.forEach((row) => {
+          const existing = existingMap.get(row.external_id || "");
+          if (existing) {
+            const changes: Record<string, { old: any; new: any }> = {};
+            const fields = ["nome_completo", "phone", "phone2", "phone3", "valor_parcela", "valor_pago", "status", "data_vencimento", "status_cobranca_id"];
+            fields.forEach((f) => {
+              if ((row as any)[f] !== undefined && String(existing[f]) !== String((row as any)[f])) {
+                changes[f] = { old: existing[f], new: (row as any)[f] };
+              }
+            });
+            if (Object.keys(changes).length > 0) {
+              changeLogs.push({
+                tenant_id: tenant.id,
+                client_id: existing.id,
+                source: "maxlist",
+                changes,
+              });
+            }
+          }
+        });
+
         const { data: result, error } = await supabase
           .from("clients")
           .upsert(rows as any, { onConflict: "external_id,tenant_id" })
@@ -436,6 +489,13 @@ const MaxListPage = () => {
       await new Promise((r) => setTimeout(r, 300));
     }
 
+    // Save change logs
+    if (changeLogs.length > 0) {
+      for (let i = 0; i < changeLogs.length; i += 100) {
+        await supabase.from("client_update_logs").insert(changeLogs.slice(i, i + 100) as any);
+      }
+    }
+
     setImporting(false);
     setImportProgress(100);
 
@@ -449,7 +509,7 @@ const MaxListPage = () => {
       credor: "YBRASIL",
     });
 
-    toast.success(`Importação concluída! ${totalInserted} inseridos, ${totalSkipped} ignorados`);
+    toast.success(`Importação concluída! ${totalInserted} inseridos, ${totalSkipped} ignorados${changeLogs.length > 0 ? `, ${changeLogs.length} atualizados` : ""}`);
   };
 
   const updateFilter = (key: string, value: string) => {
@@ -687,6 +747,14 @@ const MaxListPage = () => {
           </CardContent>
         </Card>
       )}
+
+      <MaxListMappingDialog
+        open={showMappingDialog}
+        onOpenChange={setShowMappingDialog}
+        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "PARCELA", "DT_VENCIMENTO", "DT_PAGAMENTO", "VL_TITULO", "STATUS"]}
+        tenantId={tenant.id}
+        onConfirm={handleMappingConfirmed}
+      />
     </div>
   );
 };

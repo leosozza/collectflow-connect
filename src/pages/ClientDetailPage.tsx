@@ -25,6 +25,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { toast } from "sonner";
 import ClientAttachments from "@/components/clients/ClientAttachments";
 import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
+import ClientUpdateHistory from "@/components/client-detail/ClientUpdateHistory";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
@@ -192,6 +193,7 @@ const ClientDetailPage = () => {
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
           <TabsTrigger value="acordo">Acordos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="atualizacoes">Atualizações</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
@@ -402,6 +404,10 @@ const ClientDetailPage = () => {
               })()}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="atualizacoes">
+          <ClientUpdateHistory clientIds={clients.map((c) => c.id)} />
         </TabsContent>
 
         <TabsContent value="documentos">
