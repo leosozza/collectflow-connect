@@ -48,7 +48,7 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
           COD_DEVEDOR: "external_id",
           COD_CONTRATO: "cod_contrato",
           NOME_DEVEDOR: "nome_completo",
-          TITULO: "external_id",
+          
           CNPJ_CPF: "cpf",
           FONE_1: "phone",
           FONE_2: "phone2",
@@ -66,13 +66,14 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
           VL_SALDO: "valor_saldo",
           VL_ATUALIZADO: "valor_atualizado",
           STATUS: "status",
-          NUMERO: "__ignorar__",
-          COMPLEMENTO: "__ignorar__",
-          DADOS_ADICIONAIS: "__ignorar__",
-          COD_TITULO: "__ignorar__",
-          ANO_VENCIMENTO: "__ignorar__",
-          TP_TITULO: "__ignorar__",
-          MODEL_NAME: "__ignorar__",
+          TITULO: "titulo",
+          NUMERO: "numero",
+          COMPLEMENTO: "complemento",
+          DADOS_ADICIONAIS: "dados_adicionais",
+          COD_TITULO: "cod_titulo",
+          ANO_VENCIMENTO: "ano_vencimento",
+          TP_TITULO: "tp_titulo",
+          MODEL_NAME: "model_name",
         };
         sourceHeaders.forEach((h) => {
           const upper = h.toUpperCase().trim();
