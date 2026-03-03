@@ -403,6 +403,61 @@ const MaxListPage = () => {
     }
   };
 
+  /** Map of legacy spreadsheet keys → real API field names */
+  const LEGACY_TO_API_KEYS: Record<string, string> = {
+    NOME_DEVEDOR: "ResponsibleName",
+    CNPJ_CPF: "ResponsibleCPF",
+    COD_CONTRATO: "ContractNumber",
+    COD_DEVEDOR: "IdRecord",
+    FONE_1: "CellPhone1",
+    FONE_2: "CellPhone2",
+    FONE_3: "HomePhone",
+    EMAIL: "Email",
+    NM_PARCELA: "Number",
+    NUM_PARCELA: "Number",
+    VL_TITULO: "Value",
+    VL_PARCELA: "Value",
+    VL_SALDO: "NetValue",
+    DT_VENCIMENTO: "PaymentDateQuery",
+    DT_PAGAMENTO: "PaymentDateEffected",
+    STATUS: "IsCancelled",
+    NOME_MODELO: "ModelName",
+    OBSERVACOES: "Observations",
+    COD_TITULO: "Id",
+    DADOS_ADICIONAIS: "Producer",
+    DESCONTO: "Discount",
+  };
+
+  const API_FIELD_NAMES = new Set([
+    "ResponsibleName", "ResponsibleCPF", "ContractNumber", "IdRecord",
+    "CellPhone1", "CellPhone2", "HomePhone", "Email",
+    "Number", "Value", "NetValue", "Discount",
+    "PaymentDateQuery", "PaymentDateEffected", "IsCancelled",
+    "ModelName", "Observations", "Id", "Producer",
+  ]);
+
+  /** Detect if mapping uses legacy spreadsheet keys and convert to API keys */
+  const migrateLegacyMapping = (mapping: Record<string, string>): Record<string, string> => {
+    const keys = Object.keys(mapping);
+    // If most keys are already API field names, no migration needed
+    const apiKeyCount = keys.filter((k) => API_FIELD_NAMES.has(k)).length;
+    if (apiKeyCount >= keys.length * 0.5) return mapping;
+
+    // Convert legacy keys to API keys
+    const migrated: Record<string, string> = {};
+    for (const [oldKey, systemField] of Object.entries(mapping)) {
+      const newKey = LEGACY_TO_API_KEYS[oldKey] || LEGACY_TO_API_KEYS[oldKey.toUpperCase()];
+      if (newKey) {
+        migrated[newKey] = systemField;
+      } else {
+        // Keep as-is if no mapping found
+        migrated[oldKey] = systemField;
+      }
+    }
+    console.log("[MaxList] Migrated legacy mapping keys to API format", { original: mapping, migrated });
+    return migrated;
+  };
+
   const handleSendToCRM = async () => {
     const sourceData = someSelected
       ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
@@ -418,8 +473,10 @@ const MaxListPage = () => {
       const savedMappings = await fetchFieldMappings(tenant.id);
       const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
       if (apiMapping) {
+        const rawMapping = apiMapping.mappings as Record<string, string>;
+        const effectiveMapping = migrateLegacyMapping(rawMapping);
         setPendingMappingData(sourceData);
-        handleMappingConfirmed(apiMapping.mappings as Record<string, string>);
+        handleMappingConfirmed(effectiveMapping);
         return;
       }
     } catch (err) {
