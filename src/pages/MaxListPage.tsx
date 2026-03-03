@@ -230,6 +230,7 @@ const MaxListPage = () => {
     cpf: "", contrato: "", status: "todos", agencias: [] as string[],
   });
   const [data, setData] = useState<MappedRecord[]>([]);
+  const [rawItems, setRawItems] = useState<MaxSystemItem[]>([]);
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
   const [count, setCount] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
@@ -237,7 +238,7 @@ const MaxListPage = () => {
   const [importProgress, setImportProgress] = useState(0);
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
-  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
+  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]); // kept for compat
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -339,8 +340,10 @@ const MaxListPage = () => {
       }
 
       const json = await response.json();
-      const mapped = (json.Items || []).map(mapItem);
+      const items = (json.Items || []) as MaxSystemItem[];
+      const mapped = items.map(mapItem);
 
+      setRawItems(items);
       setData(mapped);
       setSelectedIndexes(new Set());
       setCount(json.Count ?? mapped.length);
@@ -428,69 +431,107 @@ const MaxListPage = () => {
     setShowMappingDialog(true);
   };
 
+  /** Helper: get value from raw API item using API field name */
+  const getRawValue = (item: MaxSystemItem, apiField: string): any => {
+    return (item as any)[apiField] ?? null;
+  };
+
+  /** Convert a raw API item + mapping into a CRM-ready record */
+  const buildRecordFromMapping = (rawItem: MaxSystemItem, fieldMapping: Record<string, string>) => {
+    const record: Record<string, any> = {};
+    const custom_data: Record<string, any> = {};
+
+    for (const [apiField, systemField] of Object.entries(fieldMapping)) {
+      if (systemField === "__ignorar__") continue;
+      let value = getRawValue(rawItem, apiField);
+
+      // Special transformations
+      if (apiField === "IsCancelled") {
+        value = value ? "CANCELADO" : "ATIVO";
+      } else if (apiField === "PaymentDateQuery" || apiField === "PaymentDateEffected") {
+        value = value ? value.split("T")[0] : null;
+      } else if (apiField === "ContractNumber" && typeof value === "string") {
+        value = value.trim();
+      } else if ((apiField === "CellPhone1" || apiField === "CellPhone2" || apiField === "HomePhone") && value) {
+        value = String(value).replace(/[^\d]/g, "");
+      } else if (apiField === "ResponsibleCPF" && value) {
+        value = String(value).replace(/[^\d]/g, "");
+      }
+
+      if (systemField.startsWith("custom:")) {
+        const fieldKey = systemField.replace("custom:", "");
+        if (value !== undefined && value !== null && value !== "") {
+          custom_data[fieldKey] = value;
+        }
+      } else {
+        record[systemField] = value;
+      }
+    }
+
+    // Derive computed fields
+    const hasPagamento = !!record.data_pagamento;
+    const isCancelado = record.status === "CANCELADO";
+
+    return {
+      nome_completo: (record.nome_completo || "").trim(),
+      cpf: record.cpf || "",
+      credor: "YBRASIL",
+      valor_parcela: record.valor_parcela || 0,
+      data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
+      data_pagamento: record.data_pagamento || null,
+      external_id: record.external_id ? String(record.external_id) : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`,
+      cod_contrato: record.cod_contrato || "",
+      numero_parcela: record.numero_parcela || 1,
+      total_parcelas: record.numero_parcela || 1,
+      valor_entrada: 0,
+      valor_pago: hasPagamento ? (record.valor_parcela || 0) : 0,
+      status: hasPagamento ? "pago" : isCancelado ? "quebrado" : "pendente",
+      phone: record.phone || "",
+      phone2: record.phone2 || "",
+      phone3: record.phone3 || "",
+      email: record.email || null,
+      valor_saldo: record.valor_saldo ?? null,
+      observacoes: record.observacoes || null,
+      model_name: record.model_name || null,
+      dados_adicionais: record.dados_adicionais || null,
+      cod_titulo: record.cod_titulo ? String(record.cod_titulo) : null,
+      custom_data: Object.keys(custom_data).length > 0 ? custom_data : undefined,
+    };
+  };
+
   const handleMappingConfirmed = async (_mapping: Record<string, string>) => {
     setShowMappingDialog(false);
-    const sourceData = pendingMappingData;
+
+    // Get the raw items corresponding to selection
+    const selectedRaw = someSelected
+      ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => rawItems[i])
+      : rawItems;
 
     setImporting(true);
     setImportProgress(0);
 
+    // Build records using the mapping directly from API fields
+    const allRecords = selectedRaw.map((raw) => buildRecordFromMapping(raw, _mapping));
+
     // Capture rejected records
     const rejectedRecords: ImportReport["rejected"] = [];
-    sourceData.forEach((item) => {
+    allRecords.forEach((r) => {
       const reasons: string[] = [];
-      if (!item.CNPJ_CPF) reasons.push("CPF ausente");
-      if (!item.NOME_DEVEDOR) reasons.push("Nome ausente");
-      if (!item.TITULO) reasons.push("Título ausente");
+      if (!r.cpf) reasons.push("CPF ausente");
+      if (!r.nome_completo) reasons.push("Nome ausente");
       if (reasons.length > 0) {
         rejectedRecords.push({
-          nome: item.NOME_DEVEDOR || undefined,
-          cpf: item.CNPJ_CPF || undefined,
+          nome: r.nome_completo || undefined,
+          cpf: r.cpf || undefined,
           reason: reasons.join(", "),
         });
       }
     });
 
-    const filteredItems = sourceData.filter((item) => item.CNPJ_CPF && item.NOME_DEVEDOR && item.TITULO);
+    const records = allRecords.filter((r) => r.cpf && r.nome_completo);
 
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token || "";
-
-    // Build records WITHOUT address data (address is fetched at agreement time)
-    // Identify custom field mappings (e.g. "DADOS_ADICIONAIS" → "custom:nome_do_modelo")
-    const customMappingEntries = Object.entries(_mapping).filter(([, target]) => target.startsWith("custom:"));
-
-    const records = filteredItems.map((item) => {
-      // Build custom_data from mapping
-      const custom_data: Record<string, any> = {};
-      customMappingEntries.forEach(([sourceKey, targetKey]) => {
-        const fieldKey = targetKey.replace("custom:", "");
-        const value = (item as any)[sourceKey];
-        if (value !== undefined && value !== null && value !== "") {
-          custom_data[fieldKey] = value;
-        }
-      });
-
-      return {
-        nome_completo: (item.NOME_DEVEDOR || "").trim(),
-        cpf: item.CNPJ_CPF.replace(/[^\d]/g, ""),
-        credor: item.CREDOR,
-        valor_parcela: item.VL_TITULO || 0,
-        data_vencimento: convertDateToISO(item.DT_VENCIMENTO) || new Date().toISOString().split("T")[0],
-        data_pagamento: convertDateToISO(item.DT_PAGAMENTO) || null,
-        external_id: item.TITULO,
-        cod_contrato: (item.COD_CONTRATO || "").trim(),
-        numero_parcela: item.NM_PARCELA || 1,
-        total_parcelas: item.NM_PARCELA || 1,
-        valor_entrada: 0,
-        valor_pago: item.DT_PAGAMENTO ? item.VL_TITULO : 0,
-        status: item.DT_PAGAMENTO ? "pago" : item.STATUS === "CANCELADO" ? "quebrado" : "pendente",
-        phone: item.FONE_1?.replace(/[^\d]/g, "") || "",
-        phone2: item.FONE_2?.replace(/[^\d]/g, "") || "",
-        phone3: item.FONE_3?.replace(/[^\d]/g, "") || "",
-        custom_data: Object.keys(custom_data).length > 0 ? custom_data : undefined,
-      };
-    });
 
     // Fetch existing clients for change logging
     const externalIds = records.map((r) => r.external_id).filter(Boolean);
@@ -525,6 +566,7 @@ const MaxListPage = () => {
           cpf: r.cpf,
           credor: r.credor,
           valor_parcela: r.valor_parcela,
+          valor_saldo: r.valor_saldo ?? null,
           data_vencimento: r.data_vencimento,
           data_pagamento: r.data_pagamento,
           external_id: r.external_id,
@@ -537,6 +579,9 @@ const MaxListPage = () => {
           phone: r.phone,
           phone2: r.phone2,
           phone3: r.phone3,
+          email: r.email || null,
+          model_name: r.model_name || null,
+          observacoes: r.observacoes || null,
           ...(r.custom_data ? { custom_data: r.custom_data } : {}),
           updated_at: new Date().toISOString(),
           status_cobranca_id: selectedStatusCobrancaId || null,
@@ -873,7 +918,7 @@ const MaxListPage = () => {
       <MaxListMappingDialog
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
-        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS", "NOME_MODELO", "OBSERVACOES"]}
+        sourceHeaders={["ResponsibleName", "ResponsibleCPF", "ContractNumber", "IdRecord", "CellPhone1", "CellPhone2", "HomePhone", "Email", "Number", "Value", "NetValue", "Discount", "PaymentDateQuery", "PaymentDateEffected", "IsCancelled", "ModelName", "Observations", "Id", "Producer"]}
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />

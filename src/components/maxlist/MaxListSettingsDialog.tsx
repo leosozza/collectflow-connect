@@ -10,45 +10,35 @@ import { fetchCustomFields, type CustomField } from "@/services/customFieldsServ
 import InlineCustomFieldDialog from "@/components/cadastros/InlineCustomFieldDialog";
 import { toast } from "sonner";
 
+/** Real field names from the MaxSystem Installments API payload */
 const SOURCE_HEADERS = [
-  "CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF",
-  "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO",
-  "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO",
-  "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO",
-  "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS", "NOME_MODELO", "OBSERVACOES",
+  "ResponsibleName", "ResponsibleCPF", "ContractNumber", "IdRecord",
+  "CellPhone1", "CellPhone2", "HomePhone", "Email",
+  "Number", "Value", "NetValue", "Discount",
+  "PaymentDateQuery", "PaymentDateEffected", "IsCancelled",
+  "ModelName", "Observations", "Id", "Producer",
 ];
 
 const DEFAULT_AUTO_MAP: Record<string, string> = {
-  CREDOR: "credor",
-  COD_DEVEDOR: "external_id",
-  COD_CONTRATO: "cod_contrato",
-  NOME_DEVEDOR: "nome_completo",
-  CNPJ_CPF: "cpf",
-  FONE_1: "phone",
-  FONE_2: "phone2",
-  FONE_3: "phone3",
-  EMAIL: "email",
-  ENDERECO: "endereco",
-  BAIRRO: "bairro",
-  CIDADE: "cidade",
-  ESTADO: "uf",
-  CEP: "cep",
-  NM_PARCELA: "numero_parcela",
-  DT_VENCIMENTO: "data_vencimento",
-  DT_PAGAMENTO: "data_pagamento",
-  VL_TITULO: "valor_parcela",
-  VL_SALDO: "valor_saldo",
-  VL_ATUALIZADO: "valor_atualizado",
-  STATUS: "status",
-  TITULO: "titulo",
-  NUMERO: "numero",
-  COMPLEMENTO: "complemento",
-  DADOS_ADICIONAIS: "dados_adicionais",
-  COD_TITULO: "cod_titulo",
-  ANO_VENCIMENTO: "ano_vencimento",
-  TP_TITULO: "tp_titulo",
-  NOME_MODELO: "model_name",
-  OBSERVACOES: "observacoes",
+  ResponsibleName: "nome_completo",
+  ResponsibleCPF: "cpf",
+  ContractNumber: "cod_contrato",
+  IdRecord: "external_id",
+  CellPhone1: "phone",
+  CellPhone2: "phone2",
+  HomePhone: "phone3",
+  Email: "email",
+  Number: "numero_parcela",
+  Value: "valor_parcela",
+  NetValue: "valor_saldo",
+  PaymentDateQuery: "data_vencimento",
+  PaymentDateEffected: "data_pagamento",
+  IsCancelled: "status",
+  ModelName: "model_name",
+  Observations: "observacoes",
+  Id: "cod_titulo",
+  Producer: "dados_adicionais",
+  Discount: "__ignorar__",
 };
 
 interface Props {
@@ -79,7 +69,6 @@ const MaxListSettingsDialog = ({ open, onOpenChange, tenantId }: Props) => {
         setMapping(apiMapping.mappings as Record<string, string>);
       } else {
         setExistingMapping(null);
-        // Apply defaults
         const defaultMap: Record<string, string> = {};
         SOURCE_HEADERS.forEach((h) => {
           if (DEFAULT_AUTO_MAP[h]) defaultMap[h] = DEFAULT_AUTO_MAP[h];
@@ -139,7 +128,7 @@ const MaxListSettingsDialog = ({ open, onOpenChange, tenantId }: Props) => {
         ) : (
           <>
             <p className="text-sm text-muted-foreground mb-2">
-              Configure o mapeamento de campos do MaxSystem para o sistema.
+              Configure o mapeamento dos campos da API MaxSystem para o sistema.
               Este mapeamento será usado automaticamente nas importações.
               Campos com <Badge variant="destructive" className="text-[10px] px-1 py-0">*</Badge> são obrigatórios.
             </p>
@@ -147,7 +136,7 @@ const MaxListSettingsDialog = ({ open, onOpenChange, tenantId }: Props) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campo Origem (MaxSystem)</TableHead>
+                  <TableHead>Campo API (MaxSystem)</TableHead>
                   <TableHead className="w-8"></TableHead>
                   <TableHead>Campo Destino (Sistema)</TableHead>
                 </TableRow>
