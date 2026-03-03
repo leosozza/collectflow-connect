@@ -1,41 +1,41 @@
 
 
-## Problema Identificado
+## Plano: Corrigir mapeamento ModelName e chaves legadas faltantes
 
-O erro do banco de dados é: **"ON CONFLICT DO UPDATE command cannot affect row a second time"**.
+### Problema
+O mapeamento salvo no banco (`id: 04807170-...`) ainda usa chaves de planilha e contém inconsistências:
 
-Isso ocorre porque dentro do mesmo batch de 500 registros, existem `external_id` duplicados. Na linha 539, quando o `external_id` não vem da API, o fallback gera `${cod_contrato}-${numero_parcela}`, e se dois registros tiverem o mesmo contrato e parcela (ou ambos vazios), o Postgres rejeita o batch inteiro.
+1. **`NOME_MODELO`** aponta para `custom:nome_do_modelo` em vez de `model_name` (coluna real na tabela `clients`)
+2. **`MODEL_NAME`** aponta para `model_name` mas não existe no `LEGACY_TO_API_KEYS`, então fica como chave desconhecida após migração
+3. Várias chaves legadas (`CREDOR`, `TITULO`, `ANO_VENCIMENTO`, `NUMERO`, `COMPLEMENTO`, `ESTADO`, `TP_TITULO`, `VL_ATUALIZADO`) não têm correspondência no mapa de migração
 
-## Solução
+### Solução
 
-### `src/pages/MaxListPage.tsx`
-
-**1. Deduplicar registros antes do upsert:**
-Após filtrar os registros válidos (com CPF e nome), agrupar por `external_id` mantendo apenas o último registro de cada chave. Isso evita duplicatas dentro do mesmo batch.
-
-**2. Melhorar o fallback de `external_id`:**
-Usar `cod_titulo` (campo `Id` da API) como fonte primária do external_id, pois é o identificador único real do título no MaxSystem. Fallback atual `${cod_contrato}-${numero_parcela}` é fraco demais.
-
-Nova lógica (linha ~539):
+#### 1. `src/pages/MaxListPage.tsx` — Expandir `LEGACY_TO_API_KEYS`
+Adicionar as chaves faltantes:
 ```
-external_id = record.cod_titulo 
-  ? String(record.cod_titulo) 
-  : record.external_id 
-    ? String(record.external_id) 
-    : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`
-```
-
-**3. Reduzir BATCH_SIZE de 500 para 200:**
-Menor chance de colisão dentro do batch e mensagens de erro mais granulares.
-
-**4. Adicionar deduplicação por `external_id` antes de enviar cada batch:**
-```typescript
-// Deduplicate by external_id, keeping last occurrence
-const deduplicated = [...new Map(records.map(r => [r.external_id, r])).values()];
+CREDOR       → (ignorar — valor fixo "YBRASIL")
+TITULO       → (mapeado para external_id/titulo)
+ANO_VENCIMENTO → (campo custom ou ignorar)
+NUMERO       → (campo numero)
+COMPLEMENTO  → (campo complemento)
+ESTADO       → (campo UF — mas API não retorna diretamente)
+TP_TITULO    → (campo tp_titulo)
+VL_ATUALIZADO → (campo valor_atualizado)
+MODEL_NAME   → "ModelName"
 ```
 
-Registros duplicados removidos serão contabilizados no relatório.
+#### 2. `src/pages/MaxListPage.tsx` — Garantir que `ModelName` mapeie para `model_name`
+No `buildRecordFromMapping`, o campo `ModelName` da API já é lido corretamente via `getRawValue`. O problema é que o mapeamento salvo aponta para `custom:nome_do_modelo`. A correção é:
+- Adicionar um fallback no `buildRecordFromMapping`: se `model_name` não foi preenchido pelo mapeamento, tentar ler `rawItem.ModelName` diretamente
+- Isso garante que mesmo com mapeamento incorreto, o `model_name` é sempre populado
 
-### Resultado
-Os 537 registros devem ser processados corretamente, sem erros de conflito de chave duplicada dentro do mesmo batch.
+#### 3. Atualizar o mapeamento salvo no banco
+Na migração de chaves legadas, além de converter as chaves, corrigir o target de `NOME_MODELO`/`ModelName` para `model_name` em vez de `custom:nome_do_modelo`.
+
+### Arquivos a editar
+
+| Arquivo | Alteração |
+|---|---|
+| `src/pages/MaxListPage.tsx` | Expandir `LEGACY_TO_API_KEYS`, adicionar fallback de `model_name` no `buildRecordFromMapping`, corrigir target na migração |
 
