@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon } from "lucide-react";
+import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon, Settings } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,7 +22,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import MaxListMappingDialog from "@/components/maxlist/MaxListMappingDialog";
+import MaxListSettingsDialog from "@/components/maxlist/MaxListSettingsDialog";
 import ImportResultDialog, { type ImportReport } from "@/components/maxlist/ImportResultDialog";
+import { fetchFieldMappings } from "@/services/fieldMappingService";
 
 const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
   const selected = value ? parseISO(value) : undefined;
@@ -238,6 +240,7 @@ const MaxListPage = () => {
   const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const { data: tiposStatus } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
     queryFn: async () => {
@@ -407,7 +410,20 @@ const MaxListPage = () => {
       return;
     }
 
-    // Open mapping dialog
+    // Check if saved mapping exists — if so, skip dialog
+    try {
+      const savedMappings = await fetchFieldMappings(tenant.id);
+      const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
+      if (apiMapping) {
+        setPendingMappingData(sourceData);
+        handleMappingConfirmed(apiMapping.mappings as Record<string, string>);
+        return;
+      }
+    } catch (err) {
+      console.error("Erro ao buscar mapeamento salvo:", err);
+    }
+
+    // No saved mapping — open dialog
     setPendingMappingData(sourceData);
     setShowMappingDialog(true);
   };
@@ -623,12 +639,18 @@ const MaxListPage = () => {
           <h1 className="text-2xl font-bold text-foreground">MaxList - Importação</h1>
           <p className="text-muted-foreground">Consulte e importe dados do MaxSystem</p>
         </div>
-        {count !== null && (
-          <Badge variant="secondary" className="text-lg px-4 py-2">
-            <Database className="w-4 h-4 mr-2" />
-            {count.toLocaleString("pt-BR")} registros
-          </Badge>
-        )}
+        <div className="flex items-center gap-3">
+          {count !== null && (
+            <Badge variant="secondary" className="text-lg px-4 py-2">
+              <Database className="w-4 h-4 mr-2" />
+              {count.toLocaleString("pt-BR")} registros
+            </Badge>
+          )}
+          <Button variant="outline" onClick={() => setShowSettings(true)}>
+            <Settings className="w-4 h-4 mr-2" />
+            Configurações
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -851,7 +873,7 @@ const MaxListPage = () => {
       <MaxListMappingDialog
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
-        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS"]}
+        sourceHeaders={["CREDOR", "COD_DEVEDOR", "COD_CONTRATO", "NOME_DEVEDOR", "TITULO", "CNPJ_CPF", "FONE_1", "FONE_2", "FONE_3", "EMAIL", "ENDERECO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "ESTADO", "CEP", "DADOS_ADICIONAIS", "COD_TITULO", "NM_PARCELA", "DT_PAGAMENTO", "DT_VENCIMENTO", "ANO_VENCIMENTO", "VL_TITULO", "VL_SALDO", "VL_ATUALIZADO", "TP_TITULO", "STATUS", "NOME_MODELO", "OBSERVACOES"]}
         tenantId={tenant.id}
         onConfirm={handleMappingConfirmed}
       />
@@ -863,6 +885,12 @@ const MaxListPage = () => {
           report={importReport}
         />
       )}
+
+      <MaxListSettingsDialog
+        open={showSettings}
+        onOpenChange={setShowSettings}
+        tenantId={tenant.id}
+      />
     </div>
   );
 };
