@@ -9,7 +9,7 @@ export interface ImportedRow {
   valor_entrada: number;
   valor_parcela: number;
   valor_pago: number;
-  data_vencimento: string;
+  data_vencimento?: string;
   status: "pendente" | "pago" | "quebrado";
   status_raw?: string;
   status_cobranca_id?: string;
@@ -182,20 +182,29 @@ const detectColumnMapping = (sheet: XLSX.WorkSheet, headerRow: number): Record<s
       "ESTADO": "estado",
       "UF": "estado",
       "CEP": "cep",
+      "NM.": "parcela",
       "PARCELA": "parcela",
       "DT_VENCIMENTO": "dt_vencimento",
       "DT VENCIMENTO": "dt_vencimento",
       "DATA_VENCIMENTO": "dt_vencimento",
       "DATA VENCIMENTO": "dt_vencimento",
+      "DT_PAGAMENTO": "dt_pagamento",
+      "DT PAGAMENTO": "dt_pagamento",
+      "ANO_VENCIMENTO": "ano_vencimento",
       "VL_TITULO": "vl_titulo",
       "VL TITULO": "vl_titulo",
       "VALOR_PARCELA": "vl_titulo",
       "VL_SALDO": "vl_saldo",
       "VL_ATUALIZADO": "vl_atualizado",
       "VL ATUALIZADO": "vl_atualizado",
+      "TP_TITULO": "tp_titulo",
       "STATUS": "status",
       "VALOR_ENTRADA": "valor_entrada",
       "VALOR_PAGO": "valor_pago",
+      "ADICIONAL 1": "adicional_1",
+      "ADICIONAL 2": "adicional_2",
+      "ADICIONAL 3": "adicional_3",
+      "ADICIONAL 4": "adicional_4",
     };
 
     if (mappings[val]) {
@@ -243,7 +252,7 @@ const parseRows = (
     if (!rawCpf) continue;
 
     const dataVencimento = parseBRDate(getCell(dateCol));
-    if (!dataVencimento) continue;
+    // data_vencimento is now optional — don't skip rows without it
 
     const vlAtualizado = parseBRLCurrency(getCell(isCustomMapping ? colMap["valor_atualizado"] : colMap["vl_atualizado"]));
     const vlTitulo = parseBRLCurrency(getCell(isCustomMapping ? colMap["valor_parcela"] : colMap["vl_titulo"]));
@@ -287,6 +296,18 @@ const parseRows = (
     if (fone2) obsParts.push(`Fone 2: ${fone2}`);
     if (fone3) obsParts.push(`Fone 3: ${fone3}`);
 
+    // Adicional fields (legacy mode)
+    if (!isCustomMapping) {
+      const ad1 = getCellStr(colMap["adicional_1"]);
+      const ad2 = getCellStr(colMap["adicional_2"]);
+      const ad3 = getCellStr(colMap["adicional_3"]);
+      const ad4 = getCellStr(colMap["adicional_4"]);
+      if (ad1) obsParts.push(`Adicional 1: ${ad1}`);
+      if (ad2) obsParts.push(`Adicional 2: ${ad2}`);
+      if (ad3) obsParts.push(`Adicional 3: ${ad3}`);
+      if (ad4) obsParts.push(`Adicional 4: ${ad4}`);
+    }
+
     const externalIdCol = isCustomMapping ? colMap["external_id"] : colMap["cod_devedor"];
     const cidadeCol = isCustomMapping ? colMap["cidade"] : colMap["cidade"];
     const ufCol = isCustomMapping ? colMap["uf"] : colMap["estado"];
@@ -301,7 +322,7 @@ const parseRows = (
       valor_entrada: valorEntrada,
       valor_parcela: valorParcela,
       valor_pago: valorPago,
-      data_vencimento: dataVencimento,
+      data_vencimento: dataVencimento || undefined,
       status,
       status_raw: statusOriginal || undefined,
       phone: fone1 || undefined,
