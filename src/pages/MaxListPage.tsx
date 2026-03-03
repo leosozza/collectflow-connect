@@ -53,7 +53,7 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
 };
 
 const ALLOWED_SLUGS = ["maxfama", "temis"];
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 200;
 
 interface MaxSystemItem {
   ContractNumber: string;
@@ -536,7 +536,11 @@ const MaxListPage = () => {
       valor_parcela: record.valor_parcela || 0,
       data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
       data_pagamento: record.data_pagamento || null,
-      external_id: record.external_id ? String(record.external_id) : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`,
+      external_id: record.cod_titulo
+        ? String(record.cod_titulo)
+        : record.external_id
+          ? String(record.external_id)
+          : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`,
       cod_contrato: record.cod_contrato || "",
       numero_parcela: record.numero_parcela || 1,
       total_parcelas: record.numero_parcela || 1,
@@ -585,7 +589,18 @@ const MaxListPage = () => {
       }
     });
 
-    const records = allRecords.filter((r) => r.cpf && r.nome_completo);
+    const validRecords = allRecords.filter((r) => r.cpf && r.nome_completo);
+
+    // Deduplicate by external_id, keeping last occurrence
+    const deduplicatedMap = new Map<string, typeof validRecords[0]>();
+    for (const r of validRecords) {
+      deduplicatedMap.set(r.external_id, r);
+    }
+    const duplicatesRemoved = validRecords.length - deduplicatedMap.size;
+    const records = [...deduplicatedMap.values()];
+    if (duplicatesRemoved > 0) {
+      console.log(`[MaxList] Removed ${duplicatesRemoved} duplicate external_id records`);
+    }
 
     const session = await supabase.auth.getSession();
     const token = session.data.session?.access_token || "";
