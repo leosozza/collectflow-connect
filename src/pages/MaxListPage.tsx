@@ -422,10 +422,20 @@ const MaxListPage = () => {
     DT_PAGAMENTO: "PaymentDateEffected",
     STATUS: "IsCancelled",
     NOME_MODELO: "ModelName",
+    MODEL_NAME: "ModelName",
     OBSERVACOES: "Observations",
     COD_TITULO: "Id",
     DADOS_ADICIONAIS: "Producer",
     DESCONTO: "Discount",
+    // Chaves legadas adicionais
+    CREDOR: "__CREDOR__",       // valor fixo, será ignorado
+    TITULO: "Id",               // mapeado para cod_titulo/external_id
+    ANO_VENCIMENTO: "__ANO_VENCIMENTO__",
+    NUMERO: "__NUMERO__",
+    COMPLEMENTO: "__COMPLEMENTO__",
+    ESTADO: "__ESTADO__",
+    TP_TITULO: "__TP_TITULO__",
+    VL_ATUALIZADO: "Value",     // valor atualizado → Value da API
   };
 
   const API_FIELD_NAMES = new Set([
@@ -445,13 +455,18 @@ const MaxListPage = () => {
 
     // Convert legacy keys to API keys
     const migrated: Record<string, string> = {};
+    // Fix known incorrect targets during migration
+    const TARGET_FIXES: Record<string, string> = {
+      "custom:nome_do_modelo": "model_name",
+    };
     for (const [oldKey, systemField] of Object.entries(mapping)) {
       const newKey = LEGACY_TO_API_KEYS[oldKey] || LEGACY_TO_API_KEYS[oldKey.toUpperCase()];
+      const fixedTarget = TARGET_FIXES[systemField] || systemField;
       if (newKey) {
-        migrated[newKey] = systemField;
+        migrated[newKey] = fixedTarget;
       } else {
         // Keep as-is if no mapping found
-        migrated[oldKey] = systemField;
+        migrated[oldKey] = fixedTarget;
       }
     }
     console.log("[MaxList] Migrated legacy mapping keys to API format", { original: mapping, migrated });
@@ -553,7 +568,7 @@ const MaxListPage = () => {
       email: record.email || null,
       valor_saldo: record.valor_saldo ?? null,
       observacoes: record.observacoes || null,
-      model_name: record.model_name || null,
+      model_name: record.model_name || (rawItem as any).ModelName || null,
       dados_adicionais: record.dados_adicionais || null,
       cod_titulo: record.cod_titulo ? String(record.cod_titulo) : null,
       custom_data: Object.keys(custom_data).length > 0 ? custom_data : undefined,
