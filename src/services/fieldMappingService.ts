@@ -15,7 +15,7 @@ export interface FieldMapping {
 export const SYSTEM_FIELDS = [
   { value: "nome_completo", label: "Nome Completo", required: true },
   { value: "cpf", label: "CPF/CNPJ", required: true },
-  { value: "credor", label: "Credor", required: false },
+  { value: "credor", label: "Credor", required: true },
   { value: "external_id", label: "Código Devedor", required: false },
   { value: "phone", label: "Telefone 1", required: false },
   { value: "phone2", label: "Telefone 2", required: false },
@@ -32,7 +32,7 @@ export const SYSTEM_FIELDS = [
   { value: "valor_pago", label: "Valor Pago", required: false },
   { value: "valor_atualizado", label: "Valor Atualizado", required: false },
   { value: "valor_saldo", label: "Valor Saldo", required: false },
-  { value: "data_vencimento", label: "Data Vencimento", required: true },
+  { value: "data_vencimento", label: "Data Vencimento", required: false },
   { value: "data_pagamento", label: "Data Pagamento", required: false },
   { value: "status", label: "Status", required: false },
   { value: "cod_contrato", label: "Cód. Contrato", required: false },

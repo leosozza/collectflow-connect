@@ -212,7 +212,7 @@ export const bulkCreateClients = async (
     valor_entrada: number;
     valor_parcela: number;
     valor_pago: number;
-    data_vencimento: string;
+    data_vencimento?: string;
     status: "pendente" | "pago" | "quebrado";
     status_cobranca_id?: string;
     [key: string]: any;
@@ -228,10 +228,12 @@ export const bulkCreateClients = async (
     throw new Error(`Dados inválidos encontrados:\n${firstErrors}${errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : ""}`);
   }
 
+  const today = new Date().toISOString().slice(0, 10);
   const records = valid.map((c) => {
     const { status_raw, ...rest } = c as any;
     return {
       ...rest,
+      data_vencimento: rest.data_vencimento || today,
       operator_id: operatorId,
     };
   });
