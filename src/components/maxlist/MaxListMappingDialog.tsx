@@ -73,6 +73,8 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
           COD_TITULO: "cod_titulo",
           ANO_VENCIMENTO: "ano_vencimento",
           TP_TITULO: "tp_titulo",
+          NOME_MODELO: "model_name",
+          OBSERVACOES: "observacoes",
         };
         sourceHeaders.forEach((h) => {
           const upper = h.toUpperCase().trim();

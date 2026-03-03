@@ -67,6 +67,11 @@ interface MaxSystemItem {
   CellPhone1: string | null;
   CellPhone2: string | null;
   HomePhone: string | null;
+  ModelName: string | null;
+  Email: string | null;
+  Observations: string | null;
+  NetValue: number | null;
+  Discount: number | null;
 }
 
 interface MappedRecord {
@@ -98,6 +103,8 @@ interface MappedRecord {
   VL_ATUALIZADO: number | null;
   TP_TITULO: string | null;
   STATUS: string;
+  NOME_MODELO: string | null;
+  OBSERVACOES: string | null;
 }
 
 function removeTimestamp(dateStr: string | null): string {
@@ -128,7 +135,7 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     FONE_1: item.CellPhone1 ?? "",
     FONE_2: item.CellPhone2 ?? "",
     FONE_3: item.HomePhone ?? "",
-    EMAIL: null,
+    EMAIL: item.Email || null,
     ENDERECO: null,
     NUMERO: null,
     COMPLEMENTO: null,
@@ -143,10 +150,12 @@ function mapItem(item: MaxSystemItem): MappedRecord {
     DT_VENCIMENTO: dtVenc,
     ANO_VENCIMENTO: extractYear(dtVenc),
     VL_TITULO: item.Value,
-    VL_SALDO: null,
+    VL_SALDO: item.NetValue ?? null,
     VL_ATUALIZADO: null,
     TP_TITULO: null,
     STATUS: formatStatus(item.IsCancelled),
+    NOME_MODELO: item.ModelName || null,
+    OBSERVACOES: item.Observations || null,
   };
 }
 
