@@ -1,52 +1,39 @@
 
 
-## Plano: Corrigir SOURCE_HEADERS do Settings para usar nomes reais do payload da API
+## Plano: Dois mapeamentos separados no Settings do MaxList
 
-### Problema
-O `MaxListSettingsDialog` e o `MaxListMappingDialog` usam nomes de campos estilo planilha (ex: `NOME_DEVEDOR`, `CNPJ_CPF`, `FONE_1`) como campos de origem. Porém, o payload real da API do MaxSystem usa nomes diferentes (ex: `ResponsibleName`, `ResponsibleCPF`, `CellPhone1`). O mapeamento deve ser feito dos **nomes reais da API** para os campos do sistema.
+### Contexto
+O `MaxListSettingsDialog` atualmente mostra apenas o mapeamento da API (campos como `ResponsibleName`, `ModelName`). O usuário quer que ele também mostre o mapeamento de planilha (campos como `NOME_DEVEDOR`, `CNPJ_CPF`), permitindo configurar ambos independentemente.
 
-### Mapeamento correto (API → Sistema)
+### Alterações em `src/components/maxlist/MaxListSettingsDialog.tsx`
 
-| Campo API (payload)       | Campo Sistema (destino)    |
-|---------------------------|----------------------------|
-| ResponsibleName           | nome_completo              |
-| ResponsibleCPF            | cpf                        |
-| ContractNumber            | cod_contrato               |
-| IdRecord                  | external_id                |
-| CellPhone1                | phone                      |
-| CellPhone2                | phone2                     |
-| HomePhone                 | phone3                     |
-| Email                     | email                      |
-| Number                    | numero_parcela             |
-| Value                     | valor_parcela              |
-| NetValue                  | valor_saldo                |
-| Discount                  | (novo campo ou ignorar)    |
-| PaymentDateQuery          | data_vencimento            |
-| PaymentDateEffected       | data_pagamento             |
-| IsCancelled               | status                     |
-| ModelName                 | custom:nome_do_modelo      |
-| Observations              | observacoes                |
-| Id                        | cod_titulo                 |
-| Producer                  | (novo ou dados_adicionais) |
+**1. Adicionar constante `SPREADSHEET_HEADERS`** com os nomes de colunas típicos de planilhas:
+```
+NOME_DEVEDOR, CNPJ_CPF, COD_CONTRATO, COD_DEVEDOR,
+FONE_1, FONE_2, FONE_3, EMAIL,
+NUM_PARCELA, VL_PARCELA, VL_SALDO, DESCONTO,
+DT_VENCIMENTO, DT_PAGAMENTO, STATUS,
+NOME_MODELO, OBSERVACOES, COD_TITULO, DADOS_ADICIONAIS
+```
 
-### Alterações
+**2. Adicionar `DEFAULT_SPREADSHEET_MAP`** mapeando esses nomes para campos do sistema (similar ao auto-map antigo).
 
-**1. `src/components/maxlist/MaxListSettingsDialog.tsx`**
-- Substituir `SOURCE_HEADERS` pelos nomes reais dos campos do payload da API
-- Atualizar `DEFAULT_AUTO_MAP` para mapear dos nomes da API para os campos do sistema
+**3. Gerenciar dois mapeamentos separados no state:**
+- `apiMapping` → salvo como `"MaxSystem - API"` com `source: "api"`
+- `spreadsheetMapping` → salvo como `"MaxSystem - Planilha"` com `source: "spreadsheet"`
 
-**2. `src/pages/MaxListPage.tsx`**
-- Atualizar `mapItem()` para, quando houver mapeamento salvo, aplicar o mapeamento diretamente dos campos da API (sem a conversão intermediária para nomes de planilha)
-- Atualizar o fluxo `handleSendToCRM` para usar os nomes de campo da API como chaves do `sourceHeaders`
+**4. Usar Tabs na UI** para separar os dois mapeamentos:
+- Aba "API" → mostra `SOURCE_HEADERS` (campos da API)
+- Aba "Planilha" → mostra `SPREADSHEET_HEADERS` (campos de planilha)
 
-**3. `src/components/maxlist/MaxListMappingDialog.tsx`**
-- Atualizar o `autoMap` default para usar nomes da API como chaves
+**5. Salvar ambos independentemente** na tabela `field_mappings`, cada um com seu `source` e `name`.
 
-### Arquivos a editar
+### Resultado
+O usuário configura uma vez os dois mapeamentos. Importações via API usam o mapeamento "API", importações via planilha usam o mapeamento "Planilha".
 
-| Arquivo | O que muda |
+### Arquivo a editar
+
+| Arquivo | Alteração |
 |---|---|
-| `src/components/maxlist/MaxListSettingsDialog.tsx` | SOURCE_HEADERS e DEFAULT_AUTO_MAP usam nomes da API |
-| `src/pages/MaxListPage.tsx` | mapItem aplica mapeamento salvo diretamente dos campos API |
-| `src/components/maxlist/MaxListMappingDialog.tsx` | autoMap usa nomes da API |
+| `src/components/maxlist/MaxListSettingsDialog.tsx` | Adicionar tabs com dois mapeamentos (API + Planilha) |
 
