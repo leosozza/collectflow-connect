@@ -41,44 +41,30 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
         setMapping(detected.mappings as Record<string, string>);
         toast.info(`Mapeamento "${detected.name}" aplicado automaticamente`);
       } else {
-        // Default mapping for MaxSystem
+        // Default mapping using real API field names
         const defaultMap: Record<string, string> = {};
         const autoMap: Record<string, string> = {
-          CREDOR: "credor",
-          COD_DEVEDOR: "external_id",
-          COD_CONTRATO: "cod_contrato",
-          NOME_DEVEDOR: "nome_completo",
-          
-          CNPJ_CPF: "cpf",
-          FONE_1: "phone",
-          FONE_2: "phone2",
-          FONE_3: "phone3",
-          EMAIL: "email",
-          ENDERECO: "endereco",
-          BAIRRO: "bairro",
-          CIDADE: "cidade",
-          ESTADO: "uf",
-          CEP: "cep",
-          NM_PARCELA: "numero_parcela",
-          DT_VENCIMENTO: "data_vencimento",
-          DT_PAGAMENTO: "data_pagamento",
-          VL_TITULO: "valor_parcela",
-          VL_SALDO: "valor_saldo",
-          VL_ATUALIZADO: "valor_atualizado",
-          STATUS: "status",
-          TITULO: "titulo",
-          NUMERO: "numero",
-          COMPLEMENTO: "complemento",
-          DADOS_ADICIONAIS: "dados_adicionais",
-          COD_TITULO: "cod_titulo",
-          ANO_VENCIMENTO: "ano_vencimento",
-          TP_TITULO: "tp_titulo",
-          NOME_MODELO: "model_name",
-          OBSERVACOES: "observacoes",
+          ResponsibleName: "nome_completo",
+          ResponsibleCPF: "cpf",
+          ContractNumber: "cod_contrato",
+          IdRecord: "external_id",
+          CellPhone1: "phone",
+          CellPhone2: "phone2",
+          HomePhone: "phone3",
+          Email: "email",
+          Number: "numero_parcela",
+          Value: "valor_parcela",
+          NetValue: "valor_saldo",
+          PaymentDateQuery: "data_vencimento",
+          PaymentDateEffected: "data_pagamento",
+          IsCancelled: "status",
+          ModelName: "model_name",
+          Observations: "observacoes",
+          Id: "cod_titulo",
+          Producer: "dados_adicionais",
         };
         sourceHeaders.forEach((h) => {
-          const upper = h.toUpperCase().trim();
-          if (autoMap[upper]) defaultMap[h] = autoMap[upper];
+          if (autoMap[h]) defaultMap[h] = autoMap[h];
         });
         setMapping(defaultMap);
       }
@@ -143,14 +129,14 @@ const MaxListMappingDialog = ({ open, onOpenChange, sourceHeaders, tenantId, onC
         ) : (
           <>
             <p className="text-sm text-muted-foreground mb-2">
-              Verifique o mapeamento dos campos do MaxSystem para os campos do sistema.
+              Verifique o mapeamento dos campos da API MaxSystem para os campos do sistema.
               Campos com <Badge variant="destructive" className="text-[10px] px-1 py-0">*</Badge> são obrigatórios.
             </p>
 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campo Origem (MaxSystem)</TableHead>
+                  <TableHead>Campo API (MaxSystem)</TableHead>
                   <TableHead className="w-8"></TableHead>
                   <TableHead>Campo Destino (Sistema)</TableHead>
                 </TableRow>
