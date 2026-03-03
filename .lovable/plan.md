@@ -1,42 +1,52 @@
 
 
-## Plano: Capturar ModelName (e outros campos) diretamente do Installments API
+## Plano: Corrigir SOURCE_HEADERS do Settings para usar nomes reais do payload da API
 
 ### Problema
-O endpoint `Installment` do MaxSystem **já retorna `ModelName`** no payload, mas:
-1. A interface `MaxSystemItem` (linha 56) não declara `ModelName`
-2. A função `mapItem()` (linha 119) não mapeia esse campo
-3. Outros campos úteis também são ignorados: `Email`, `Observations`, `NetValue`, `Discount`, `Producer`, `Origin`
+O `MaxListSettingsDialog` e o `MaxListMappingDialog` usam nomes de campos estilo planilha (ex: `NOME_DEVEDOR`, `CNPJ_CPF`, `FONE_1`) como campos de origem. Porém, o payload real da API do MaxSystem usa nomes diferentes (ex: `ResponsibleName`, `ResponsibleCPF`, `CellPhone1`). O mapeamento deve ser feito dos **nomes reais da API** para os campos do sistema.
 
-### Solução
-Adicionar `ModelName` (e opcionalmente outros campos relevantes) ao fluxo de dados do MaxList.
+### Mapeamento correto (API → Sistema)
 
-### Alterações em `src/pages/MaxListPage.tsx`
+| Campo API (payload)       | Campo Sistema (destino)    |
+|---------------------------|----------------------------|
+| ResponsibleName           | nome_completo              |
+| ResponsibleCPF            | cpf                        |
+| ContractNumber            | cod_contrato               |
+| IdRecord                  | external_id                |
+| CellPhone1                | phone                      |
+| CellPhone2                | phone2                     |
+| HomePhone                 | phone3                     |
+| Email                     | email                      |
+| Number                    | numero_parcela             |
+| Value                     | valor_parcela              |
+| NetValue                  | valor_saldo                |
+| Discount                  | (novo campo ou ignorar)    |
+| PaymentDateQuery          | data_vencimento            |
+| PaymentDateEffected       | data_pagamento             |
+| IsCancelled               | status                     |
+| ModelName                 | custom:nome_do_modelo      |
+| Observations              | observacoes                |
+| Id                        | cod_titulo                 |
+| Producer                  | (novo ou dados_adicionais) |
 
-**1. Atualizar `MaxSystemItem`** (linhas 56-70):
-- Adicionar `ModelName: string | null`
-- Adicionar `Email: string | null`
-- Adicionar `Observations: string | null`
-- Adicionar `NetValue: number`
-- Adicionar `Discount: number`
+### Alterações
 
-**2. Atualizar `MappedRecord`** (linhas 72-101):
-- Adicionar `NOME_MODELO: string | null`
-- Adicionar `OBSERVACOES: string | null`
-- Adicionar `VL_SALDO` usar `NetValue`
-- `EMAIL` usar `Email` da API
+**1. `src/components/maxlist/MaxListSettingsDialog.tsx`**
+- Substituir `SOURCE_HEADERS` pelos nomes reais dos campos do payload da API
+- Atualizar `DEFAULT_AUTO_MAP` para mapear dos nomes da API para os campos do sistema
 
-**3. Atualizar `mapItem()`** (linhas 119-151):
-- Mapear `NOME_MODELO: item.ModelName || null`
-- Mapear `EMAIL: item.Email || null`
-- Mapear `OBSERVACOES: item.Observations || null`
-- Mapear `VL_SALDO: item.NetValue || null`
+**2. `src/pages/MaxListPage.tsx`**
+- Atualizar `mapItem()` para, quando houver mapeamento salvo, aplicar o mapeamento diretamente dos campos da API (sem a conversão intermediária para nomes de planilha)
+- Atualizar o fluxo `handleSendToCRM` para usar os nomes de campo da API como chaves do `sourceHeaders`
 
-Isso elimina a necessidade de fazer chamadas extras para obter o `ModelName` — ele já vem na listagem.
+**3. `src/components/maxlist/MaxListMappingDialog.tsx`**
+- Atualizar o `autoMap` default para usar nomes da API como chaves
 
 ### Arquivos a editar
 
-| Arquivo | Alteração |
+| Arquivo | O que muda |
 |---|---|
-| `src/pages/MaxListPage.tsx` | Adicionar campos à interface, mapeamento e exibição |
+| `src/components/maxlist/MaxListSettingsDialog.tsx` | SOURCE_HEADERS e DEFAULT_AUTO_MAP usam nomes da API |
+| `src/pages/MaxListPage.tsx` | mapItem aplica mapeamento salvo diretamente dos campos API |
+| `src/components/maxlist/MaxListMappingDialog.tsx` | autoMap usa nomes da API |
 
