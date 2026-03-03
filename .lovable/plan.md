@@ -1,46 +1,41 @@
 
 
-## Problema
+## Problema Identificado
 
-O mapeamento salvo no banco de dados usa chaves no estilo **planilha** (`NOME_DEVEDOR`, `CNPJ_CPF`, `FONE_1`...), mas a função `buildRecordFromMapping` tenta ler essas chaves diretamente do item cru da API, onde os campos reais são `ResponsibleName`, `ResponsibleCPF`, `CellPhone1`, etc. Resultado: todos os valores vêm como `null` → CPF e Nome ausentes → 537 rejeitados.
+O erro do banco de dados é: **"ON CONFLICT DO UPDATE command cannot affect row a second time"**.
+
+Isso ocorre porque dentro do mesmo batch de 500 registros, existem `external_id` duplicados. Na linha 539, quando o `external_id` não vem da API, o fallback gera `${cod_contrato}-${numero_parcela}`, e se dois registros tiverem o mesmo contrato e parcela (ou ambos vazios), o Postgres rejeita o batch inteiro.
 
 ## Solução
 
-Duas correções necessárias:
+### `src/pages/MaxListPage.tsx`
 
-### 1. Atualizar o mapeamento salvo no banco de dados
-O registro existente (`id: 04807170-...`) precisa ser atualizado para usar as chaves corretas da API. Isso será feito automaticamente ao abrir as Configurações e salvar novamente, mas para resolver imediatamente, o código deve detectar e migrar mapeamentos antigos.
+**1. Deduplicar registros antes do upsert:**
+Após filtrar os registros válidos (com CPF e nome), agrupar por `external_id` mantendo apenas o último registro de cada chave. Isso evita duplicatas dentro do mesmo batch.
 
-### 2. `src/pages/MaxListPage.tsx` — Adicionar fallback de migração
-Na função `handleSendToCRM`, ao carregar o mapeamento salvo, verificar se as chaves são do formato antigo (planilha) e, se forem, converter automaticamente para o formato API antes de usar:
+**2. Melhorar o fallback de `external_id`:**
+Usar `cod_titulo` (campo `Id` da API) como fonte primária do external_id, pois é o identificador único real do título no MaxSystem. Fallback atual `${cod_contrato}-${numero_parcela}` é fraco demais.
 
-```text
-Mapa de conversão (chave antiga → chave nova):
-NOME_DEVEDOR    → ResponsibleName
-CNPJ_CPF        → ResponsibleCPF  
-COD_CONTRATO    → ContractNumber
-COD_DEVEDOR     → IdRecord
-FONE_1          → CellPhone1
-FONE_2          → CellPhone2
-FONE_3          → HomePhone
-EMAIL           → Email
-NM_PARCELA      → Number
-VL_TITULO       → Value
-VL_SALDO        → NetValue
-DT_VENCIMENTO   → PaymentDateQuery
-DT_PAGAMENTO    → PaymentDateEffected
-STATUS          → IsCancelled
-NOME_MODELO     → ModelName
-OBSERVACOES     → Observations
-COD_TITULO      → Id
-DADOS_ADICIONAIS → Producer
+Nova lógica (linha ~539):
+```
+external_id = record.cod_titulo 
+  ? String(record.cod_titulo) 
+  : record.external_id 
+    ? String(record.external_id) 
+    : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`
 ```
 
-A função criará um novo objeto de mapping convertendo as chaves antigas para as novas, mantendo os valores (campos do sistema) iguais. Se detectar que as chaves já são no formato API, usa direto sem conversão.
+**3. Reduzir BATCH_SIZE de 500 para 200:**
+Menor chance de colisão dentro do batch e mensagens de erro mais granulares.
 
-### Arquivos a editar
+**4. Adicionar deduplicação por `external_id` antes de enviar cada batch:**
+```typescript
+// Deduplicate by external_id, keeping last occurrence
+const deduplicated = [...new Map(records.map(r => [r.external_id, r])).values()];
+```
 
-| Arquivo | Alteração |
-|---|---|
-| `src/pages/MaxListPage.tsx` | Adicionar mapa de migração `LEGACY_TO_API_KEYS` e função `migrateLegacyMapping()` no fluxo `handleSendToCRM` |
+Registros duplicados removidos serão contabilizados no relatório.
+
+### Resultado
+Os 537 registros devem ser processados corretamente, sem erros de conflito de chave duplicada dentro do mesmo batch.
 
