@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trophy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Trophy, Download, Printer } from "lucide-react";
+import { exportToExcel, printSection } from "@/lib/exportUtils";
 
 interface OperatorRankingProps {
   clients: Client[];
@@ -38,11 +40,33 @@ const OperatorRanking = ({ clients, operators }: OperatorRankingProps) => {
       .sort((a, b) => b.received - a.received);
   }, [clients, operators]);
 
+  const handleExcel = () => {
+    const rows = ranking.map((op, idx) => ({
+      "#": idx + 1,
+      Operador: op.name,
+      Parcelas: op.count,
+      Recebido: op.received,
+      Quebra: op.broken,
+      "% Sucesso": op.pctReceived.toFixed(1) + "%",
+    }));
+    exportToExcel(rows, "Ranking", "ranking_operadores");
+  };
+
   return (
-    <div className="bg-card rounded-xl border border-border p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Trophy className="w-4 h-4 text-primary" />
-        <h3 className="text-sm font-semibold text-card-foreground">Ranking de Operadores</h3>
+    <div id="operator-ranking" className="bg-card rounded-xl border border-border p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Trophy className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-card-foreground">Ranking de Operadores</h3>
+        </div>
+        <div className="flex gap-1 print:hidden">
+          <Button variant="ghost" size="sm" onClick={handleExcel}>
+            <Download className="w-3.5 h-3.5 mr-1" /> Excel
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => printSection("operator-ranking")}>
+            <Printer className="w-3.5 h-3.5 mr-1" /> PDF
+          </Button>
+        </div>
       </div>
       <Table>
         <TableHeader>

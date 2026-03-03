@@ -3,6 +3,9 @@ import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { differenceInDays, parseISO } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Download, Printer } from "lucide-react";
+import { exportToExcel, printSection } from "@/lib/exportUtils";
 
 interface AgingReportProps {
   clients: Client[];
@@ -39,9 +42,30 @@ const AgingReport = ({ clients }: AgingReportProps) => {
   const totalOverdue = agingData.reduce((s, b) => s + b.total, 0);
   const totalCount = agingData.reduce((s, b) => s + b.count, 0);
 
+  const handleExcel = () => {
+    const rows = agingData.map((r) => ({
+      Faixa: r.label,
+      Quantidade: r.count,
+      "Valor Total": r.total,
+      "% do Total": totalOverdue > 0 ? ((r.total / totalOverdue) * 100).toFixed(1) + "%" : "0%",
+    }));
+    rows.push({ Faixa: "Total", Quantidade: totalCount, "Valor Total": totalOverdue, "% do Total": "100%" });
+    exportToExcel(rows, "Aging", "aging_carteira");
+  };
+
   return (
-    <div className="bg-card rounded-xl border border-border p-5">
-      <h3 className="text-sm font-semibold text-card-foreground mb-4">Aging da Carteira (Parcelas Vencidas)</h3>
+    <div id="aging-report" className="bg-card rounded-xl border border-border p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-card-foreground">Aging da Carteira (Parcelas Vencidas)</h3>
+        <div className="flex gap-1 print:hidden">
+          <Button variant="ghost" size="sm" onClick={handleExcel}>
+            <Download className="w-3.5 h-3.5 mr-1" /> Excel
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => printSection("aging-report")}>
+            <Printer className="w-3.5 h-3.5 mr-1" /> PDF
+          </Button>
+        </div>
+      </div>
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
