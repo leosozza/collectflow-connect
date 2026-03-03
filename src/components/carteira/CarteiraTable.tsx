@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
 import { formatCurrency, formatDate } from "@/lib/formatters";
-import { AlertTriangle, CalendarClock, Headset } from "lucide-react";
+import { AlertTriangle, CalendarClock, Headset, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -43,6 +44,25 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
         )}
         <h2 className="font-semibold text-card-foreground">{title}</h2>
         <span className="ml-auto text-sm text-muted-foreground">{clients.length} registros</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="print:hidden"
+          onClick={() => {
+            const rows = clients.map((c) => ({
+              Nome: c.nome_completo,
+              CPF: c.cpf,
+              Credor: c.credor,
+              Parcela: `${c.numero_parcela}/${c.total_parcelas}`,
+              Valor: Number(c.valor_parcela),
+              Vencimento: c.data_vencimento,
+              Score: (c as any).propensity_score ?? "",
+            }));
+            exportToExcel(rows, "Carteira", `carteira_${title.replace(/\s/g, "_").toLowerCase()}`);
+          }}
+        >
+          <Download className="w-3.5 h-3.5 mr-1" /> Excel
+        </Button>
       </div>
 
       {clients.length === 0 ? (

@@ -4,6 +4,7 @@ import { fetchClients } from "@/services/clientService";
 import { supabase } from "@/integrations/supabase/client";
 import { parseISO, differenceInDays } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Printer } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import * as XLSX from "xlsx";
@@ -11,6 +12,7 @@ import ReportFilters from "@/components/relatorios/ReportFilters";
 import EvolutionChart from "@/components/relatorios/EvolutionChart";
 import AgingReport from "@/components/relatorios/AgingReport";
 import OperatorRanking from "@/components/relatorios/OperatorRanking";
+import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
   const now = new Date();
@@ -37,7 +39,6 @@ const RelatoriosPage = () => {
     },
   });
 
-  // Fetch agreements with credor info for derived status
   const { data: agreements = [] } = useQuery({
     queryKey: ["agreements-report"],
     queryFn: async () => {
@@ -60,14 +61,12 @@ const RelatoriosPage = () => {
     return [...new Set(clients.map((c) => c.credor))].sort();
   }, [clients]);
 
-  // Build a map: credor name -> prazo_dias_acordo
   const credorPrazoMap = useMemo(() => {
     const map = new Map<string, number>();
     credoresData.forEach((c: any) => map.set(c.razao_social, c.prazo_dias_acordo ?? 30));
     return map;
   }, [credoresData]);
 
-  // Derive agreement status: pago / pendente / quebra (exclude cancelled)
   const agreementDerivedStatus = useMemo(() => {
     const today = new Date();
     return agreements.filter((a: any) => a.status !== "cancelled").map((a: any) => {
@@ -78,26 +77,16 @@ const RelatoriosPage = () => {
 
       let derivedStatus: "pago" | "pendente" | "quebra";
       if (a.status === "approved" || a.status === "completed") {
-        // Check if all installments for this CPF/credor are paid
         const relatedClients = clients.filter(
           (c) => c.cpf.replace(/\D/g, "") === cpf && c.credor === a.credor
         );
         const allPaid = relatedClients.length > 0 && relatedClients.every((c) => c.status === "pago");
-        if (allPaid) {
-          derivedStatus = "pago";
-        } else if (daysSinceFirstDue > prazo) {
-          derivedStatus = "quebra";
-        } else {
-          derivedStatus = "pendente";
-        }
+        if (allPaid) derivedStatus = "pago";
+        else if (daysSinceFirstDue > prazo) derivedStatus = "quebra";
+        else derivedStatus = "pendente";
       } else if (a.status === "pending") {
-        if (daysSinceFirstDue > prazo) {
-          derivedStatus = "quebra";
-        } else {
-          derivedStatus = "pendente";
-        }
+        derivedStatus = daysSinceFirstDue > prazo ? "quebra" : "pendente";
       } else {
-        // rejected/cancelled – treat as quebra
         derivedStatus = "quebra";
       }
 
@@ -105,7 +94,6 @@ const RelatoriosPage = () => {
     });
   }, [agreements, clients, credorPrazoMap]);
 
-  // CPFs matching selected agreement status filter
   const agreementFilteredCpfs = useMemo(() => {
     if (selectedStatus === "todos") return null;
     const cpfs = new Set<string>();
@@ -115,14 +103,12 @@ const RelatoriosPage = () => {
     return cpfs;
   }, [selectedStatus, agreementDerivedStatus]);
 
-  // Base set: all CPFs that have at least one active agreement (exclude cancelled/rejected)
   const allAgreementCpfs = useMemo(() => {
     return new Set(agreements.filter((a: any) => a.status !== "cancelled" && a.status !== "rejected").map((a: any) => a.client_cpf?.replace(/\D/g, "")));
   }, [agreements]);
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
-      // Only include clients that have agreements
       if (!allAgreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       const d = parseISO(c.data_vencimento);
       if (d.getFullYear() !== parseInt(selectedYear)) return false;
@@ -133,7 +119,6 @@ const RelatoriosPage = () => {
       if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
       if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
       if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
-      // Agreement status filter (pago/pendente/quebra)
       if (agreementFilteredCpfs !== null && !agreementFilteredCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
@@ -163,60 +148,78 @@ const RelatoriosPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Relatórios</h1>
           <p className="text-muted-foreground text-sm">Análise de desempenho e evolução da carteira</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportExcel}>
-            <Download className="w-4 h-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
-            <Printer className="w-4 h-4 mr-1" /> PDF
-          </Button>
-        </div>
       </div>
 
-      <ReportFilters
-        selectedYear={selectedYear}
-        setSelectedYear={setSelectedYear}
-        selectedMonth={selectedMonth}
-        setSelectedMonth={setSelectedMonth}
-        selectedCredor={selectedCredor}
-        setSelectedCredor={setSelectedCredor}
-        selectedOperator={selectedOperator}
-        setSelectedOperator={setSelectedOperator}
-        credores={credores}
-        operators={profiles}
-        selectedStatus={selectedStatus}
-        setSelectedStatus={setSelectedStatus}
-        selectedTipoDivida={selectedTipoDivida}
-        setSelectedTipoDivida={setSelectedTipoDivida}
-        selectedTipoDevedor={selectedTipoDevedor}
-        setSelectedTipoDevedor={setSelectedTipoDevedor}
-        quitacaoDe={quitacaoDe}
-        setQuitacaoDe={setQuitacaoDe}
-        quitacaoAte={quitacaoAte}
-        setQuitacaoAte={setQuitacaoAte}
-      />
+      <Tabs defaultValue="visao-geral">
+        <TabsList className="print:hidden">
+          <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
+          <TabsTrigger value="prestacao-contas">Prestação de Contas</TabsTrigger>
+        </TabsList>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Total Parcelas", value: filteredClients.length },
-          { label: "Total Recebido", value: formatCurrency(filteredClients.filter((c) => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0)) },
-          { label: "Total Quebra", value: formatCurrency(filteredClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0)) },
-          { label: "Pendentes", value: filteredClients.filter((c) => c.status === "pendente").length },
-        ].map((item) => (
-          <div key={item.label} className="bg-card rounded-xl border border-border p-4">
-            <p className="text-xs text-muted-foreground">{item.label}</p>
-            <p className="text-lg font-bold text-card-foreground">{item.value}</p>
+        <TabsContent value="visao-geral" className="space-y-6 mt-4">
+          <div className="flex justify-end gap-2 print:hidden">
+            <Button variant="outline" size="sm" onClick={exportExcel}>
+              <Download className="w-4 h-4 mr-1" /> Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 mr-1" /> PDF
+            </Button>
           </div>
-        ))}
-      </div>
 
-      <EvolutionChart clients={filteredClients} year={parseInt(selectedYear)} />
+          <ReportFilters
+            selectedYear={selectedYear}
+            setSelectedYear={setSelectedYear}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
+            selectedCredor={selectedCredor}
+            setSelectedCredor={setSelectedCredor}
+            selectedOperator={selectedOperator}
+            setSelectedOperator={setSelectedOperator}
+            credores={credores}
+            operators={profiles}
+            selectedStatus={selectedStatus}
+            setSelectedStatus={setSelectedStatus}
+            selectedTipoDivida={selectedTipoDivida}
+            setSelectedTipoDivida={setSelectedTipoDivida}
+            selectedTipoDevedor={selectedTipoDevedor}
+            setSelectedTipoDevedor={setSelectedTipoDevedor}
+            quitacaoDe={quitacaoDe}
+            setQuitacaoDe={setQuitacaoDe}
+            quitacaoAte={quitacaoAte}
+            setQuitacaoAte={setQuitacaoAte}
+          />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AgingReport clients={filteredClients} />
-        <OperatorRanking clients={filteredClients} operators={profiles} />
-      </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: "Total Parcelas", value: filteredClients.length },
+              { label: "Total Recebido", value: formatCurrency(filteredClients.filter((c) => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0)) },
+              { label: "Total Quebra", value: formatCurrency(filteredClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0)) },
+              { label: "Pendentes", value: filteredClients.filter((c) => c.status === "pendente").length },
+            ].map((item) => (
+              <div key={item.label} className="bg-card rounded-xl border border-border p-4">
+                <p className="text-xs text-muted-foreground">{item.label}</p>
+                <p className="text-lg font-bold text-card-foreground">{item.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <EvolutionChart clients={filteredClients} year={parseInt(selectedYear)} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AgingReport clients={filteredClients} />
+            <OperatorRanking clients={filteredClients} operators={profiles} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="prestacao-contas" className="mt-4">
+          <PrestacaoContas
+            clients={clients}
+            agreements={agreements}
+            operators={profiles}
+            credores={credores}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

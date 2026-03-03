@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search } from "lucide-react";
+import { Search, Download } from "lucide-react";
+import { exportToExcel } from "@/lib/exportUtils";
 
 const AcordosPage = () => {
   const { trackAction } = useActivityTracker();
@@ -247,6 +248,29 @@ const AcordosPage = () => {
             className="pl-9"
           />
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const rows = filteredAgreements.map((a) => ({
+              Cliente: a.client_name,
+              CPF: a.client_cpf,
+              Credor: a.credor,
+              "Valor Original": a.original_total,
+              "Valor Proposto": a.proposed_total,
+              "Desconto %": a.discount_percent ?? 0,
+              Parcelas: a.new_installments,
+              "Valor Parcela": a.new_installment_value,
+              "1º Vencimento": a.first_due_date,
+              Status: a.status,
+              "Data Criação": a.created_at,
+            }));
+            exportToExcel(rows, "Acordos", "acordos_exportacao");
+          }}
+        >
+          <Download className="w-4 h-4 mr-1" /> Excel
+        </Button>
       </div>
 
       {loading ? (
