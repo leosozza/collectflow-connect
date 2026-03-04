@@ -66,14 +66,23 @@ const DashboardPage = () => {
     },
   });
 
-  // Set of CPFs that have agreements — used to filter metrics (exclude cancelled/rejected)
+  // Only vigent agreements (pending/approved) for projected metrics
   const activeAgreements = useMemo(() => {
-    return agreements.filter((a: any) => a.status !== "cancelled" && a.status !== "rejected");
+    return agreements.filter((a: any) => a.status === "pending" || a.status === "approved");
   }, [agreements]);
 
   const agreementCpfs = useMemo(() => {
     return new Set(activeAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
   }, [activeAgreements]);
+
+  // CPFs from cancelled/overdue agreements for quebra calculation
+  const cancelledOverdueCpfs = useMemo(() => {
+    return new Set(
+      agreements
+        .filter((a: any) => a.status === "cancelled" || a.status === "overdue")
+        .map((a: any) => a.client_cpf?.replace(/\D/g, ""))
+    );
+  }, [agreements]);
 
   const canViewAll = permissions.canViewAllDashboard;
   const todayStr = format(now, "yyyy-MM-dd");
@@ -188,9 +197,18 @@ const DashboardPage = () => {
   const pagos = filteredClients.filter((c) => c.status === "pago");
   const quebrados = filteredClients.filter((c) => c.status === "quebrado");
 
+  // Total Projetado: only clients with active agreements (pending/approved)
   const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
   const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
-  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
+  
+  // Total Quebra: clients with status quebrado + clients from cancelled/overdue agreements
+  const quebraFromAgreements = useMemo(() => {
+    return clients
+      .filter(c => cancelledOverdueCpfs.has(c.cpf.replace(/\D/g, "")) && c.status !== "pago")
+      .reduce((s, c) => s + Number(c.valor_parcela), 0);
+  }, [clients, cancelledOverdueCpfs]);
+  
+  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0) + quebraFromAgreements;
   const totalEmAberto = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
 
   return (

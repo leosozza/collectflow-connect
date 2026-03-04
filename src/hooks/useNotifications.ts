@@ -58,6 +58,17 @@ export const useNotifications = () => {
             });
           }
 
+          // Agreement approval request toast
+          if (
+            newNotification.reference_type === "agreement" &&
+            newNotification.type === "warning"
+          ) {
+            toast.warning(newNotification.title, {
+              description: newNotification.message,
+              duration: 8000,
+            });
+          }
+
           queryClient.invalidateQueries({ queryKey: ["notifications"] });
         }
       )
