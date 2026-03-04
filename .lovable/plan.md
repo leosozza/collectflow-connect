@@ -1,28 +1,35 @@
 
 
-## Plano: Ajustar badges e status na tabela de Acordos
+## Plano: Corrigir filtro "Vigentes" e status de parcela vencida
+
+### Problema 1 — Flavia aparece em "Pagos" e "Vigentes"
+O filtro "Vigentes" inclui `pending` **e** `approved`. Como `approved` = "Pago", clientes pagos aparecem nos dois filtros. Correcao: "Vigentes" deve filtrar apenas `pending`.
+
+### Problema 2 — Parcela vencida mostra "Quebrado" em vez de "Vencida"
+O enum `client_status` no banco possui apenas: `pendente`, `pago`, `quebrado`. Nao existe `vencido`. Precisamos adicionar o valor `vencido` ao enum e derivar o status na UI para parcelas com vencimento ultrapassado.
 
 ### Alteracoes
 
-#### 1. `src/pages/AcordosPage.tsx` — Badges
-- Reordenar: Pagos, Vigentes, Vencidos, Aguardando Liberacao, Cancelados
-- Remover "Pendente" separado — unificar com "Vigentes" (pending + approved)
-- Remover contagem numerica dos badges
-- Remover borda/contorno — aplicar cor de fundo direto em todos (ativo ou nao), com destaque (ring/shadow) apenas no selecionado
-- Texto em negrito sempre
+#### 1. `src/pages/AcordosPage.tsx` — Filtro "Vigentes"
+- Mudar filtro "vigentes" de `pending || approved` para apenas `pending`
+- Assim "Pagos" mostra apenas `approved` e "Vigentes" mostra apenas `pending`
 
-#### 2. `src/components/acordos/AgreementsList.tsx` — Coluna Status
-- Trocar os labels de status para refletir o status real do acordo:
-  - `pending` → "Vigente" (laranja)
-  - `approved` → "Pago" (verde) — nao "Aprovado"
-  - `pending_approval` → "Aguardando Liberação" (azul)
-  - `overdue` → "Vencido" (amber)
-  - `cancelled` → "Cancelado" (vermelho)
+#### 2. Migration — Adicionar `vencido` ao enum `client_status`
+```sql
+ALTER TYPE public.client_status ADD VALUE IF NOT EXISTS 'vencido';
+```
+
+#### 3. `supabase/functions/auto-expire-agreements/index.ts` — Marcar parcelas vencidas
+- Alem de expirar acordos, atualizar parcelas (clients) com `status = 'pendente'` e `data_vencimento < hoje` para `status = 'vencido'`
+
+#### 4. `src/components/acordos/AgreementsList.tsx` e UI geral
+- Onde exibir status do cliente, tratar `vencido` com label "Vencida" e cor amber
 
 ### Arquivos
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/pages/AcordosPage.tsx` | Reordenar badges, remover contagens, estilo direto sem borda |
-| `src/components/acordos/AgreementsList.tsx` | Renomear labels de status (approved→Pago, pending→Vigente) |
+| `src/pages/AcordosPage.tsx` | Filtro vigentes = apenas `pending` |
+| Migration SQL | Adicionar `vencido` ao enum client_status |
+| `supabase/functions/auto-expire-agreements/index.ts` | Marcar clientes pendentes vencidos como `vencido` |
 
