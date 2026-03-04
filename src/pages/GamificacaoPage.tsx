@@ -100,28 +100,6 @@ const GamificacaoPage = () => {
         </Card>
       </div>
 
-      {/* Goal progress */}
-      {goalAmount > 0 && (
-        <Card className="border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Target className="w-4 h-4 text-primary" />
-              Meta do Mês
-              {goalProgress >= 100 && (
-                <Badge className="text-[10px] h-5 px-1.5 ml-1">🏆 Atingida!</Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between mb-2 text-sm">
-              <span className="text-muted-foreground">{formatCurrency(totalReceived)} recebido</span>
-              <span className="font-semibold text-foreground">{goalProgress}% de {formatCurrency(goalAmount)}</span>
-            </div>
-            <Progress value={goalProgress} className="h-3" />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Tabs */}
       <Tabs defaultValue={isTenantAdmin ? "ranking" : "goals"}>
         <TabsList className="w-full sm:w-auto flex-wrap">
