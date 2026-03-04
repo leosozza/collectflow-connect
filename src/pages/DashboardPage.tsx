@@ -71,19 +71,6 @@ const DashboardPage = () => {
     return agreements.filter((a: any) => a.status === "pending" || a.status === "approved");
   }, [agreements]);
 
-  const agreementCpfs = useMemo(() => {
-    return new Set(activeAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
-  }, [activeAgreements]);
-
-  // CPFs from cancelled/overdue agreements for quebra calculation
-  const cancelledOverdueCpfs = useMemo(() => {
-    return new Set(
-      agreements
-        .filter((a: any) => a.status === "cancelled" || a.status === "overdue")
-        .map((a: any) => a.client_cpf?.replace(/\D/g, ""))
-    );
-  }, [agreements]);
-
   const canViewAll = permissions.canViewAllDashboard;
   const todayStr = format(now, "yyyy-MM-dd");
 
@@ -94,6 +81,19 @@ const DashboardPage = () => {
     }
     return items;
   }, [activeAgreements, canViewAll, profile?.user_id]);
+
+  const agreementCpfs = useMemo(() => {
+    return new Set(filteredAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
+  }, [filteredAgreements]);
+
+  // CPFs from cancelled/overdue agreements for quebra calculation
+  const cancelledOverdueCpfs = useMemo(() => {
+    return new Set(
+      agreements
+        .filter((a: any) => a.status === "cancelled" || a.status === "overdue")
+        .map((a: any) => a.client_cpf?.replace(/\D/g, ""))
+    );
+  }, [agreements]);
 
   const acordosDia = useMemo(() =>
     filteredAgreements.filter(a => a.created_at.startsWith(todayStr)).length,
@@ -358,13 +358,16 @@ const DashboardPage = () => {
                     <TableCell className="text-xs text-center">{client.numero_parcela}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
                     <TableCell className="text-xs text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        client.status === "pago" ? "bg-success/10 text-success border-success/30" :
-                        client.status === "quebrado" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                        "bg-warning/10 text-warning border-warning/30"
-                      }`}>
-                        {client.status === "pago" ? "Pago" : client.status === "quebrado" ? "Quebrado" : "Pendente"}
-                      </span>
+                      {(() => {
+                        const s = client.status as string;
+                        const cls = s === "pago" ? "bg-success/10 text-success border-success/30" :
+                          s === "quebrado" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                          s === "em_acordo" ? "bg-blue-100 text-blue-800 border-blue-300" :
+                          s === "vencido" ? "bg-amber-100 text-amber-800 border-amber-300" :
+                          "bg-warning/10 text-warning border-warning/30";
+                        const label = s === "pago" ? "Pago" : s === "quebrado" ? "Quebrado" : s === "em_acordo" ? "Em Acordo" : s === "vencido" ? "Vencido" : "Pendente";
+                        return <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}>{label}</span>;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">

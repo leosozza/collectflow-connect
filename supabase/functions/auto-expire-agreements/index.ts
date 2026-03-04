@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
     }
 
     // 3. Mark overdue client installments: pendente + data_vencimento < today → vencido
+    // NOTE: titles with status 'em_acordo' are NOT affected — they stay in agreement
     const { error: err3 } = await supabase
       .from("clients")
       .update({ status: "vencido" })
