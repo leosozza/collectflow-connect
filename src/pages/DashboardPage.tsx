@@ -160,6 +160,8 @@ const DashboardPage = () => {
     return clients.filter((c) => {
       // Only include clients with agreements
       if (!agreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
+      // Exclude titles already absorbed by an agreement
+      if ((c.status as string) === "em_acordo") return false;
       const d = parseISO(c.data_vencimento);
       if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
       if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
@@ -174,7 +176,8 @@ const DashboardPage = () => {
   const browseClients = useMemo(() => {
     return clients.filter((c) => 
       c.data_vencimento === browseDateStr && 
-      agreementCpfs.has(c.cpf.replace(/\D/g, ""))
+      agreementCpfs.has(c.cpf.replace(/\D/g, "")) &&
+      (c.status as string) !== "em_acordo"
     );
   }, [clients, browseDateStr, agreementCpfs]);
 

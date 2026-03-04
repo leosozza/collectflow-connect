@@ -90,7 +90,7 @@ export const createAgreement = async (
       .update({ status: "em_acordo" } as any)
       .eq("cpf", data.client_cpf)
       .eq("credor", data.credor)
-      .in("status", ["pendente", "vencido"]);
+      .in("status", ["pendente", "vencido", "quebrado"]);
   } catch (e) {
     console.error("Erro ao marcar títulos como em_acordo:", e);
   }
