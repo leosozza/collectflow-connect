@@ -8,19 +8,19 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/formatters";
-import { Target } from "lucide-react";
+import { Target, TrendingUp, Trophy } from "lucide-react";
+import { motion } from "framer-motion";
 
 /* ───── Gauge SVG Component ───── */
 const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; received: number; goal: number; monthLabel: string }) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
-  const cx = 200, cy = 190, r = 150;
-  const startAngle = 135; // degrees
-  const endAngle = 405;   // 135 + 270
+  const cx = 200, cy = 200, r = 160;
+  const startAngle = 135;
+  const endAngle = 405;
   const totalArc = 270;
 
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-  // arc path
   const arcPath = (from: number, to: number) => {
     const a1 = toRad(from), a2 = toRad(to);
     const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
@@ -29,66 +29,145 @@ const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; 
     return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
   };
 
-  // needle angle
   const needleAngle = startAngle + (clampedPct / 100) * totalArc;
-  const needleLen = r - 20;
+  const needleLen = r - 30;
   const nx = cx + needleLen * Math.cos(toRad(needleAngle));
   const ny = cy + needleLen * Math.sin(toRad(needleAngle));
 
-  // gradient stops: red(0%) → yellow(50%) → green(100%)
   const seg1End = startAngle + totalArc * 0.4;
   const seg2End = startAngle + totalArc * 0.7;
 
-  // date range
   const now = new Date();
   const firstDay = `01/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getFullYear()).slice(-2)}`;
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const lastDayStr = `${lastDay}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getFullYear()).slice(-2)}`;
 
+  // Dynamic color based on progress
+  const getProgressColor = () => {
+    if (clampedPct >= 100) return "#22c55e";
+    if (clampedPct >= 70) return "#22c55e";
+    if (clampedPct >= 40) return "#eab308";
+    return "#ef4444";
+  };
+
+  const progressColor = getProgressColor();
+  const filledAngle = startAngle + (clampedPct / 100) * totalArc;
+
   return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 400 260" className="w-full max-w-lg">
-        {/* Background arc */}
-        <path d={arcPath(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth="28" strokeLinecap="round" />
+    <div className="flex flex-col items-center gap-6">
+      <div className="relative w-full max-w-2xl mx-auto">
+        <svg viewBox="0 0 400 270" className="w-full drop-shadow-lg">
+          <defs>
+            <filter id="glow-red">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="glow-yellow">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="glow-green">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="needle-shadow">
+              <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.3" />
+            </filter>
+            <linearGradient id="arcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="45%" stopColor="#eab308" />
+              <stop offset="100%" stopColor="#22c55e" />
+            </linearGradient>
+          </defs>
 
-        {/* Red segment 0-40% */}
-        <path d={arcPath(startAngle, seg1End)} fill="none" stroke="#ef4444" strokeWidth="28" strokeLinecap="round" />
+          {/* Background track */}
+          <path d={arcPath(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth="32" strokeLinecap="round" opacity="0.4" />
 
-        {/* Yellow segment 40-70% */}
-        <path d={arcPath(seg1End, seg2End)} fill="none" stroke="#eab308" strokeWidth="28" strokeLinecap="round" />
+          {/* Red segment 0-40% */}
+          <path d={arcPath(startAngle, seg1End)} fill="none" stroke="#ef4444" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-red)" />
 
-        {/* Green segment 70-100% */}
-        <path d={arcPath(seg2End, endAngle)} fill="none" stroke="#22c55e" strokeWidth="28" strokeLinecap="round" />
+          {/* Yellow segment 40-70% */}
+          <path d={arcPath(seg1End, seg2End)} fill="none" stroke="#eab308" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-yellow)" />
 
-        {/* Needle */}
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="hsl(var(--foreground))" strokeWidth="3" strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r="8" fill="hsl(var(--foreground))" />
-        <circle cx={cx} cy={cy} r="4" fill="hsl(var(--background))" />
+          {/* Green segment 70-100% */}
+          <path d={arcPath(seg2End, endAngle)} fill="none" stroke="#22c55e" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-green)" />
 
-        {/* Percentage text */}
-        <text x={cx} y={cy - 30} textAnchor="middle" className="fill-foreground text-4xl font-bold" fontSize="42" fontWeight="700">
-          {clampedPct}%
-        </text>
+          {/* Tick marks */}
+          {[0, 25, 50, 75, 100].map((tick) => {
+            const angle = startAngle + (tick / 100) * totalArc;
+            const innerR = r + 22;
+            const outerR = r + 32;
+            const ix = cx + innerR * Math.cos(toRad(angle));
+            const iy = cy + innerR * Math.sin(toRad(angle));
+            const ox = cx + outerR * Math.cos(toRad(angle));
+            const oy = cy + outerR * Math.sin(toRad(angle));
+            const tx = cx + (outerR + 14) * Math.cos(toRad(angle));
+            const ty = cy + (outerR + 14) * Math.sin(toRad(angle));
+            return (
+              <g key={tick}>
+                <line x1={ix} y1={iy} x2={ox} y2={oy} stroke="hsl(var(--muted-foreground))" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+                <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fontSize="11" className="fill-muted-foreground" fontWeight="500">
+                  {tick}%
+                </text>
+              </g>
+            );
+          })}
 
-        {/* Labels */}
-        <text x={cx} y={cy + 5} textAnchor="middle" className="fill-muted-foreground" fontSize="13">
-          {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo"}
-        </text>
-      </svg>
+          {/* Animated needle */}
+          <motion.g
+            initial={{ rotate: startAngle, originX: cx, originY: cy }}
+            animate={{ rotate: needleAngle }}
+            transition={{ type: "spring", stiffness: 40, damping: 12, delay: 0.3 }}
+            style={{ transformOrigin: `${cx}px ${cy}px` }}
+          >
+            <line x1={cx} y1={cy} x2={cx + needleLen} y2={cy} stroke="hsl(var(--foreground))" strokeWidth="3.5" strokeLinecap="round" filter="url(#needle-shadow)" />
+          </motion.g>
+
+          {/* Center hub */}
+          <circle cx={cx} cy={cy} r="14" fill="hsl(var(--foreground))" />
+          <circle cx={cx} cy={cy} r="8" fill="hsl(var(--background))" />
+          <circle cx={cx} cy={cy} r="4" fill={progressColor} />
+
+          {/* Percentage text */}
+          <motion.text
+            x={cx} y={cy - 50}
+            textAnchor="middle"
+            fontSize="52"
+            fontWeight="800"
+            fill={progressColor}
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 0.4 }}
+          >
+            {clampedPct}%
+          </motion.text>
+
+          {/* Sub label */}
+          <text x={cx} y={cy - 20} textAnchor="middle" className="fill-muted-foreground" fontSize="13" fontWeight="500">
+            {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo mensal"}
+          </text>
+        </svg>
+      </div>
 
       {/* Info cards below gauge */}
-      <div className="grid grid-cols-2 gap-6 w-full max-w-lg mt-2">
-        <div className="bg-muted/50 rounded-xl p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Meta Recebimento</p>
-          <p className="text-xl font-bold text-foreground">{formatCurrency(goal)}</p>
+      <div className="grid grid-cols-2 gap-4 w-full max-w-lg mx-auto">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 text-center space-y-1">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <Target className="w-4 h-4 text-primary" />
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Meta Recebimento</p>
+          </div>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(goal)}</p>
         </div>
-        <div className="bg-muted/50 rounded-xl p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Realizado</p>
-          <p className="text-xl font-bold text-success">{formatCurrency(received)}</p>
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center space-y-1">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <TrendingUp className="w-4 h-4 text-green-500" />
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
+          </div>
+          <p className="text-2xl font-bold text-green-500">{formatCurrency(received)}</p>
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-3">
+      <p className="text-xs text-muted-foreground">
         Período: {firstDay} à {lastDayStr} • {monthLabel}
       </p>
     </div>
@@ -104,14 +183,12 @@ const GoalsTab = () => {
   const month = now.getMonth() + 1;
   const monthLabel = now.toLocaleString("pt-BR", { month: "long", year: "numeric" });
 
-  // Operator view: own goal
   const { data: myGoal } = useQuery({
     queryKey: ["my-goal", year, month],
     queryFn: () => fetchMyGoal(year, month),
     enabled: !isTenantAdmin,
   });
 
-  // Admin view: all goals + operators + points
   const { data: allGoals = [] } = useQuery({
     queryKey: ["goals", year, month, null],
     queryFn: () => fetchGoals(year, month, null),
@@ -174,15 +251,15 @@ const GoalsTab = () => {
     }
 
     return (
-      <Card className="border-border max-w-xl mx-auto">
-        <CardHeader className="pb-0">
-          <CardTitle className="text-base flex items-center gap-2 justify-center">
-            <Target className="w-5 h-5 text-primary" />
+      <Card className="border-border max-w-3xl mx-auto overflow-hidden">
+        <CardHeader className="pb-0 pt-6">
+          <CardTitle className="text-lg flex items-center gap-2 justify-center">
+            <Trophy className="w-5 h-5 text-primary" />
             Minha Meta do Mês
-            {progress >= 100 && <Badge className="text-xs h-5 px-2 ml-1">🏆 Atingida!</Badge>}
+            {progress >= 100 && <Badge className="text-xs h-5 px-2 ml-1 bg-green-500/10 text-green-500 border-green-500/20">🏆 Atingida!</Badge>}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-4 pb-6">
+        <CardContent className="pt-6 pb-8">
           <GaugeChart percent={progress} received={received} goal={goalAmount} monthLabel={monthLabel} />
         </CardContent>
       </Card>
