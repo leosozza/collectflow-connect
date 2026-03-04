@@ -21,11 +21,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled";
 
 const statusFilterConfig: { key: StatusFilter; label: string; color: string; selectedColor: string }[] = [
-  { key: "approved", label: "Pagos", color: "bg-green-200/60 text-green-800", selectedColor: "bg-green-200 text-green-900 ring-2 ring-green-400 shadow-sm" },
-  { key: "vigentes", label: "Vigentes", color: "bg-orange-200/60 text-orange-800", selectedColor: "bg-orange-200 text-orange-900 ring-2 ring-orange-400 shadow-sm" },
-  { key: "overdue", label: "Vencidos", color: "bg-amber-200/60 text-amber-800", selectedColor: "bg-amber-200 text-amber-900 ring-2 ring-amber-400 shadow-sm" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-blue-200/60 text-blue-800", selectedColor: "bg-blue-200 text-blue-900 ring-2 ring-blue-400 shadow-sm" },
-  { key: "cancelled", label: "Cancelados", color: "bg-red-200/60 text-red-800", selectedColor: "bg-red-200 text-red-900 ring-2 ring-red-400 shadow-sm" },
+  { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
 const AcordosPage = () => {
