@@ -18,15 +18,14 @@ import { Search, Download } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type StatusFilter = "vigentes" | "pending" | "pending_approval" | "overdue" | "cancelled" | "approved";
+type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled";
 
-const statusFilterConfig: { key: StatusFilter; label: string; color: string }[] = [
-  { key: "vigentes", label: "Vigentes", color: "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" },
-  { key: "approved", label: "Pagos", color: "bg-green-100 text-green-800 border-green-300 hover:bg-green-200" },
-  { key: "pending", label: "Pendente", color: "bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200" },
-  { key: "overdue", label: "Vencido", color: "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200" },
-  { key: "cancelled", label: "Cancelados", color: "bg-red-100 text-red-800 border-red-300 hover:bg-red-200" },
+const statusFilterConfig: { key: StatusFilter; label: string; color: string; selectedColor: string }[] = [
+  { key: "approved", label: "Pagos", color: "bg-green-200/60 text-green-800", selectedColor: "bg-green-200 text-green-900 ring-2 ring-green-400 shadow-sm" },
+  { key: "vigentes", label: "Vigentes", color: "bg-orange-200/60 text-orange-800", selectedColor: "bg-orange-200 text-orange-900 ring-2 ring-orange-400 shadow-sm" },
+  { key: "overdue", label: "Vencidos", color: "bg-amber-200/60 text-amber-800", selectedColor: "bg-amber-200 text-amber-900 ring-2 ring-amber-400 shadow-sm" },
+  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-blue-200/60 text-blue-800", selectedColor: "bg-blue-200 text-blue-900 ring-2 ring-blue-400 shadow-sm" },
+  { key: "cancelled", label: "Cancelados", color: "bg-red-200/60 text-red-800", selectedColor: "bg-red-200 text-red-900 ring-2 ring-red-400 shadow-sm" },
 ];
 
 const AcordosPage = () => {
@@ -150,14 +149,7 @@ const AcordosPage = () => {
 
   // Counts per status for badges
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      vigentes: 0, pending: 0, pending_approval: 0, overdue: 0, cancelled: 0, approved: 0,
-    };
-    agreements.forEach(a => {
-      if (a.status === "pending" || a.status === "approved") counts.vigentes++;
-      if (a.status in counts) counts[a.status]++;
-    });
-    return counts;
+    return {};
   }, [agreements]);
 
   // Metrics (exclude cancelled/rejected/overdue)
@@ -232,22 +224,15 @@ const AcordosPage = () => {
 
       {/* Status filter badges */}
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig.map(({ key, label, color }) => (
+        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-              statusFilter === key
-                ? `${color} ring-2 ring-offset-1 ring-current shadow-sm`
-                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+              statusFilter === key ? selectedColor : color
             }`}
           >
             {label}
-            {statusCounts[key] > 0 && (
-              <span className="ml-1.5 bg-background/50 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                {statusCounts[key]}
-              </span>
-            )}
           </button>
         ))}
       </div>

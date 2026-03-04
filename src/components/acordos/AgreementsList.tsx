@@ -21,18 +21,18 @@ interface AgreementsListProps {
 }
 
 const statusColors: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  pending_approval: "bg-orange-100 text-orange-800",
+  pending: "bg-orange-100 text-orange-800",
+  pending_approval: "bg-blue-100 text-blue-800",
   approved: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
-  cancelled: "bg-muted text-muted-foreground",
+  cancelled: "bg-red-100 text-red-800",
   overdue: "bg-amber-100 text-amber-800",
 };
 
 const statusLabels: Record<string, string> = {
-  pending: "Pendente",
+  pending: "Vigente",
   pending_approval: "Aguardando Liberação",
-  approved: "Aprovado",
+  approved: "Pago",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
   overdue: "Vencido",
