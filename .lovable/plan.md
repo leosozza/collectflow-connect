@@ -1,35 +1,75 @@
 
 
-## Plano: Corrigir filtro "Vigentes" e status de parcela vencida
+## Plano: Corrigir metricas do Dashboard por operador e revisar status de titulos ao formalizar acordo
 
-### Problema 1 — Flavia aparece em "Pagos" e "Vigentes"
-O filtro "Vigentes" inclui `pending` **e** `approved`. Como `approved` = "Pago", clientes pagos aparecem nos dois filtros. Correcao: "Vigentes" deve filtrar apenas `pending`.
+### Problema 1 — R$1.800 do VITOR
+O `totalProjetado` soma `valor_parcela` de TODOS os clientes que tem acordo ativo no sistema, sem filtrar pelo operador. O fluxo e:
+1. `filteredAgreements` filtra por `created_by` do operador (correto)
+2. `agreementCpfs` usa `activeAgreements` (TODOS os acordos ativos, nao filtrado) — **BUG**
+3. `filteredClients` cruza clientes com `agreementCpfs` global
+4. `totalProjetado` soma tudo sem filtro de operador
 
-### Problema 2 — Parcela vencida mostra "Quebrado" em vez de "Vencida"
-O enum `client_status` no banco possui apenas: `pendente`, `pago`, `quebrado`. Nao existe `vencido`. Precisamos adicionar o valor `vencido` ao enum e derivar o status na UI para parcelas com vencimento ultrapassado.
+**Correcao**: Usar `filteredAgreements` (ja filtrado por operador) para construir `agreementCpfs`, nao `activeAgreements`.
+
+### Problema 2 — Titulos nao mudam de status ao formalizar acordo
+Hoje, ao criar um acordo, os titulos originais permanecem `pendente`. Isso causa:
+- Duplicidade nos calculos (titulo pendente + acordo vigente)
+- Confusao visual no perfil do cliente
+
+**Proposta**: Quando um acordo e criado, marcar os titulos originais (mesmo CPF + credor) como `em_acordo`. Isso os remove das metricas de "pendente" sem perder o historico.
+
+Porem, adicionar um novo enum requer migration. Alternativa mais simples: usar o campo `observacoes` ou criar uma flag. Mas a solucao mais limpa e adicionar `em_acordo` ao enum `client_status`.
 
 ### Alteracoes
 
-#### 1. `src/pages/AcordosPage.tsx` — Filtro "Vigentes"
-- Mudar filtro "vigentes" de `pending || approved` para apenas `pending`
-- Assim "Pagos" mostra apenas `approved` e "Vigentes" mostra apenas `pending`
-
-#### 2. Migration — Adicionar `vencido` ao enum `client_status`
+#### 1. Migration — Adicionar `em_acordo` ao enum `client_status`
 ```sql
-ALTER TYPE public.client_status ADD VALUE IF NOT EXISTS 'vencido';
+ALTER TYPE public.client_status ADD VALUE IF NOT EXISTS 'em_acordo';
 ```
 
-#### 3. `supabase/functions/auto-expire-agreements/index.ts` — Marcar parcelas vencidas
-- Alem de expirar acordos, atualizar parcelas (clients) com `status = 'pendente'` e `data_vencimento < hoje` para `status = 'vencido'`
+#### 2. `src/services/agreementService.ts` — Ao criar acordo, marcar titulos
+No `createAgreement`, apos inserir o acordo, atualizar os titulos pendentes do mesmo CPF+credor para `em_acordo`:
+```typescript
+await supabase.from("clients")
+  .update({ status: "em_acordo" })
+  .eq("cpf", data.client_cpf)
+  .eq("credor", data.credor)
+  .in("status", ["pendente", "vencido"]);
+```
 
-#### 4. `src/components/acordos/AgreementsList.tsx` e UI geral
-- Onde exibir status do cliente, tratar `vencido` com label "Vencida" e cor amber
+#### 3. `src/services/agreementService.ts` — Ao cancelar acordo, reverter titulos
+No `cancelAgreement`, reverter titulos de `em_acordo` para `pendente` (ou `vencido` se vencidos):
+```typescript
+await supabase.from("clients")
+  .update({ status: "pendente" })
+  .eq("cpf", cpf)
+  .eq("credor", credor)
+  .eq("status", "em_acordo");
+```
+
+#### 4. `src/pages/DashboardPage.tsx` — Corrigir filtro por operador
+- Construir `agreementCpfs` a partir de `filteredAgreements` (filtrado por operador) em vez de `activeAgreements` (global)
+- Titulos `em_acordo` nao aparecem em "Pendentes" (ja saem automaticamente por nao terem status `pendente`)
+
+#### 5. UI — Tratar novo status `em_acordo`
+- No Dashboard e tabelas, exibir "Em Acordo" com cor azul/indigo
+- Na edge function `auto-expire-agreements`, NAO marcar titulos `em_acordo` como `vencido`
 
 ### Arquivos
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/pages/AcordosPage.tsx` | Filtro vigentes = apenas `pending` |
-| Migration SQL | Adicionar `vencido` ao enum client_status |
-| `supabase/functions/auto-expire-agreements/index.ts` | Marcar clientes pendentes vencidos como `vencido` |
+| Migration SQL | Adicionar `em_acordo` ao enum client_status |
+| `src/services/agreementService.ts` | Marcar titulos como `em_acordo` ao criar; reverter ao cancelar |
+| `src/pages/DashboardPage.tsx` | Usar `filteredAgreements` para `agreementCpfs`; tratar status `em_acordo` |
+| `supabase/functions/auto-expire-agreements/index.ts` | Excluir `em_acordo` da marcacao automatica de vencido |
+
+### Fluxo final de status dos titulos
+
+```text
+pendente → (acordo criado) → em_acordo → (acordo pago) → pago
+pendente → (venceu) → vencido → (acordo criado) → em_acordo
+em_acordo → (acordo cancelado) → pendente/vencido
+em_acordo → (pagamento registrado) → pago
+```
 
