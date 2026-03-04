@@ -1,44 +1,29 @@
 
 
-## Plano: Corrigir métricas do Dashboard — títulos `em_acordo` e `quebrado` ainda contabilizados
+## Plano: Fixar card "Total de Acordos" independente do filtro
 
-### Diagnóstico
+### Problema
+O card "Total de Acordos" (linha 220) usa `activeAgreements`, que é derivado de `filteredAgreements` — ou seja, muda conforme o filtro de status selecionado. O correto é mostrar sempre o total real de acordos ativos, independente do filtro.
 
-Dados da Flavia Josefa Gomes (CPF 07410345497):
-- **Acordo aprovado**: 6x R$172,43 — primeiro vencimento 06/04/2026
-- **Títulos originais**: 12 parcelas de R$118,10 + 1 de R$119,00 + 1 de R$500,00
+### Correção
 
-**Problema 1**: O título de 01/03/2026 (R$119,00) ficou com status `quebrado`, não foi convertido para `em_acordo` pela migration anterior (que só atualizou `pendente`/`vencido`).
+**`src/pages/AcordosPage.tsx`**:
+- Criar uma variável `totalActiveAgreements` baseada em `agreements` (sem filtro de status), excluindo apenas `cancelled` e `rejected`
+- Usar essa variável no card "Total de Acordos"
+- Manter `activeAgreements` (filtrado) para os cards "Pendentes" e "Pagos"
 
-**Problema 2**: O `filteredClients` no Dashboard inclui TODOS os títulos cujo CPF tenha acordo — inclusive os com status `em_acordo` e `quebrado`. O `totalProjetado` (linha 202) soma tudo isso, gerando os R$1.800.
-
-**Problema 3**: O `browseClients` (visão por dia) também mostra títulos `em_acordo`/`quebrado` que já foram substituídos pelo acordo.
-
-### Correções
-
-#### 1. Migration — Atualizar título quebrado da Flavia para `em_acordo`
-```sql
-UPDATE clients SET status = 'em_acordo' 
-WHERE cpf = '07410345497' AND credor = 'YBRASIL' AND status = 'quebrado';
-```
-Também atualizar a lógica do `createAgreement` para incluir `quebrado` na lista de status convertidos.
-
-#### 2. `src/services/agreementService.ts` — Incluir `quebrado` na conversão
-Ao criar acordo, converter também títulos `quebrado` (não só `pendente`/`vencido`):
 ```typescript
-.in("status", ["pendente", "vencido", "quebrado"])
+// Novo: total real independente do filtro
+const totalActiveCount = useMemo(() => 
+  agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
+  [agreements]
+);
+
+// Card usa totalActiveCount em vez de activeAgreements.length
+<StatCard title="Total de Acordos" value={String(totalActiveCount)} icon="agreement" />
 ```
-
-#### 3. `src/pages/DashboardPage.tsx` — Excluir `em_acordo` dos cálculos
-- `filteredClients`: filtrar fora títulos com status `em_acordo` (já representados pelo acordo)
-- `browseClients`: idem
-- `totalProjetado`: já corrige automaticamente ao excluir `em_acordo` de `filteredClients`
-
-### Arquivos
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL | Corrigir título quebrado → em_acordo |
-| `src/services/agreementService.ts` | Incluir `quebrado` nos status convertidos |
-| `src/pages/DashboardPage.tsx` | Excluir `em_acordo` de filteredClients e browseClients |
+| `src/pages/AcordosPage.tsx` | Separar contagem total dos acordos do filtro ativo |
 
