@@ -56,7 +56,7 @@ const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; 
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="relative w-full max-w-sm mx-auto">
-        <svg viewBox="0 0 260 180" className="w-full">
+        <svg viewBox="0 -15 260 210" className="w-full">
           <defs>
             <filter id="needle-shadow">
               <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.25" />
