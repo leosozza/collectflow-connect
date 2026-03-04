@@ -18,16 +18,6 @@ export interface RankingEntry extends OperatorPoints {
   position?: number;
 }
 
-export const ACHIEVEMENT_DEFINITIONS = [
-  { key: "first_payment", title: "Primeiro Recebimento", description: "Registrou o primeiro pagamento", icon: "🎯" },
-  { key: "ten_payments", title: "10 Pagamentos", description: "10 pagamentos acumulados no mês", icon: "🔟" },
-  { key: "no_breaks", title: "Sem Quebra no Mês", description: "Zero quebras no mês corrente", icon: "🛡️" },
-  { key: "goal_reached", title: "Meta Atingida", description: "100% da meta mensal atingida", icon: "🏆" },
-  { key: "top_receiver", title: "Top Recebedor", description: "1º no ranking mensal", icon: "👑" },
-  { key: "10k_received", title: "R$10k Recebidos", description: "Acumulado de R$10.000 recebidos", icon: "💰" },
-  { key: "50k_received", title: "R$50k Recebidos", description: "Acumulado de R$50.000 recebidos", icon: "💎" },
-];
-
 export const calculatePoints = (paymentsCount: number, totalReceived: number, breaksCount: number, achievementsCount: number, goalReached: boolean): number => {
   let points = 0;
   points += paymentsCount * 10;
@@ -126,7 +116,6 @@ export const grantAchievement = async (params: {
   description: string;
   icon: string;
 }): Promise<boolean> => {
-  // Idempotent: check if already exists
   const { data: existing } = await supabase
     .from("achievements")
     .select("id")
@@ -134,7 +123,7 @@ export const grantAchievement = async (params: {
     .eq("title", params.title)
     .maybeSingle();
 
-  if (existing) return false; // already granted
+  if (existing) return false;
 
   const { error } = await supabase.from("achievements").insert({
     profile_id: params.profile_id,
@@ -145,7 +134,7 @@ export const grantAchievement = async (params: {
   });
 
   if (error) throw error;
-  return true; // newly granted
+  return true;
 };
 
 export const fetchAllAchievements = async (profileId: string) => {
