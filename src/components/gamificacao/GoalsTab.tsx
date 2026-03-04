@@ -14,7 +14,7 @@ import { motion } from "framer-motion";
 /* ───── Gauge SVG Component ───── */
 const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; received: number; goal: number; monthLabel: string }) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
-  const cx = 200, cy = 200, r = 160;
+  const cx = 130, cy = 130, r = 100;
   const startAngle = 135;
   const endAngle = 405;
   const totalArc = 270;
@@ -54,59 +54,42 @@ const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; 
   const filledAngle = startAngle + (clampedPct / 100) * totalArc;
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="relative w-full max-w-2xl mx-auto">
-        <svg viewBox="0 0 400 270" className="w-full drop-shadow-lg">
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative w-full max-w-sm mx-auto">
+        <svg viewBox="0 0 260 180" className="w-full">
           <defs>
-            <filter id="glow-red">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-            <filter id="glow-yellow">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-            <filter id="glow-green">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
             <filter id="needle-shadow">
-              <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.3" />
+              <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.25" />
             </filter>
-            <linearGradient id="arcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#ef4444" />
-              <stop offset="45%" stopColor="#eab308" />
-              <stop offset="100%" stopColor="#22c55e" />
-            </linearGradient>
           </defs>
 
           {/* Background track */}
-          <path d={arcPath(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth="32" strokeLinecap="round" opacity="0.4" />
+          <path d={arcPath(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth="20" strokeLinecap="round" opacity="0.3" />
 
           {/* Red segment 0-40% */}
-          <path d={arcPath(startAngle, seg1End)} fill="none" stroke="#ef4444" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-red)" />
+          <path d={arcPath(startAngle, seg1End)} fill="none" stroke="#ef4444" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
 
           {/* Yellow segment 40-70% */}
-          <path d={arcPath(seg1End, seg2End)} fill="none" stroke="#eab308" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-yellow)" />
+          <path d={arcPath(seg1End, seg2End)} fill="none" stroke="#eab308" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
 
           {/* Green segment 70-100% */}
-          <path d={arcPath(seg2End, endAngle)} fill="none" stroke="#22c55e" strokeWidth="32" strokeLinecap="round" opacity="0.85" filter="url(#glow-green)" />
+          <path d={arcPath(seg2End, endAngle)} fill="none" stroke="#22c55e" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
 
           {/* Tick marks */}
           {[0, 25, 50, 75, 100].map((tick) => {
             const angle = startAngle + (tick / 100) * totalArc;
-            const innerR = r + 22;
-            const outerR = r + 32;
+            const innerR = r + 14;
+            const outerR = r + 20;
             const ix = cx + innerR * Math.cos(toRad(angle));
             const iy = cy + innerR * Math.sin(toRad(angle));
             const ox = cx + outerR * Math.cos(toRad(angle));
             const oy = cy + outerR * Math.sin(toRad(angle));
-            const tx = cx + (outerR + 14) * Math.cos(toRad(angle));
-            const ty = cy + (outerR + 14) * Math.sin(toRad(angle));
+            const tx = cx + (outerR + 10) * Math.cos(toRad(angle));
+            const ty = cy + (outerR + 10) * Math.sin(toRad(angle));
             return (
               <g key={tick}>
-                <line x1={ix} y1={iy} x2={ox} y2={oy} stroke="hsl(var(--muted-foreground))" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-                <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fontSize="11" className="fill-muted-foreground" fontWeight="500">
+                <line x1={ix} y1={iy} x2={ox} y2={oy} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+                <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fontSize="8" className="fill-muted-foreground" fontWeight="500">
                   {tick}%
                 </text>
               </g>
@@ -120,19 +103,19 @@ const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; 
             transition={{ type: "spring", stiffness: 40, damping: 12, delay: 0.3 }}
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           >
-            <line x1={cx} y1={cy} x2={cx + needleLen} y2={cy} stroke="hsl(var(--foreground))" strokeWidth="3.5" strokeLinecap="round" filter="url(#needle-shadow)" />
+            <line x1={cx} y1={cy} x2={cx + needleLen} y2={cy} stroke="hsl(var(--foreground))" strokeWidth="2.5" strokeLinecap="round" filter="url(#needle-shadow)" />
           </motion.g>
 
           {/* Center hub */}
-          <circle cx={cx} cy={cy} r="14" fill="hsl(var(--foreground))" />
-          <circle cx={cx} cy={cy} r="8" fill="hsl(var(--background))" />
-          <circle cx={cx} cy={cy} r="4" fill={progressColor} />
+          <circle cx={cx} cy={cy} r="8" fill="hsl(var(--foreground))" />
+          <circle cx={cx} cy={cy} r="5" fill="hsl(var(--background))" />
+          <circle cx={cx} cy={cy} r="2.5" fill={progressColor} />
 
           {/* Percentage text */}
           <motion.text
-            x={cx} y={cy - 50}
+            x={cx} y={cy - 32}
             textAnchor="middle"
-            fontSize="52"
+            fontSize="32"
             fontWeight="800"
             fill={progressColor}
             initial={{ opacity: 0, scale: 0.5 }}
@@ -143,31 +126,31 @@ const GaugeChart = ({ percent, received, goal, monthLabel }: { percent: number; 
           </motion.text>
 
           {/* Sub label */}
-          <text x={cx} y={cy - 20} textAnchor="middle" className="fill-muted-foreground" fontSize="13" fontWeight="500">
+          <text x={cx} y={cy - 14} textAnchor="middle" className="fill-muted-foreground" fontSize="9" fontWeight="500">
             {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo mensal"}
           </text>
         </svg>
       </div>
 
       {/* Info cards below gauge */}
-      <div className="grid grid-cols-2 gap-4 w-full max-w-lg mx-auto">
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 text-center space-y-1">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <Target className="w-4 h-4 text-primary" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Meta Recebimento</p>
+      <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Target className="w-3.5 h-3.5 text-primary" />
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Meta Recebimento</p>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(goal)}</p>
+          <p className="text-lg font-bold text-foreground">{formatCurrency(goal)}</p>
         </div>
-        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center space-y-1">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <TrendingUp className="w-4 h-4 text-green-500" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
+        <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-center">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-green-500" />
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
           </div>
-          <p className="text-2xl font-bold text-green-500">{formatCurrency(received)}</p>
+          <p className="text-lg font-bold text-green-500">{formatCurrency(received)}</p>
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[10px] text-muted-foreground">
         Período: {firstDay} à {lastDayStr} • {monthLabel}
       </p>
     </div>
