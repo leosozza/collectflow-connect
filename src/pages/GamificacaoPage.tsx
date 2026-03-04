@@ -3,19 +3,23 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
+import { fetchMyWallet } from "@/services/rivocoinService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/formatters";
-import { Trophy, Star, BarChart3, Target, Flame, Settings } from "lucide-react";
+import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3 } from "lucide-react";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
 import CampaignsTab from "@/components/gamificacao/CampaignsTab";
 import GoalsTab from "@/components/gamificacao/GoalsTab";
+import ShopTab from "@/components/gamificacao/ShopTab";
+import WalletTab from "@/components/gamificacao/WalletTab";
 import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
 import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
+import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
+import RankingManagementTab from "@/components/gamificacao/RankingManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
 
@@ -37,9 +41,10 @@ const GamificacaoPage = () => {
     queryFn: () => fetchRanking(year, month),
   });
 
-  const { data: goal } = useQuery({
-    queryKey: ["my-goal", year, month],
-    queryFn: () => fetchMyGoal(year, month),
+  const { data: wallet } = useQuery({
+    queryKey: ["rivocoin-wallet", profile?.id],
+    queryFn: () => fetchMyWallet(profile!.id),
+    enabled: !!profile?.id,
   });
 
   const { data: earnedAchievements = [] } = useQuery({
@@ -53,10 +58,9 @@ const GamificacaoPage = () => {
   const myMedal = myPosition && myPosition <= 3 ? medals[myPosition - 1] : myPosition ? `#${myPosition}` : "—";
 
   const totalReceived = myPoints?.total_received || 0;
-  const goalAmount = goal?.target_amount || 0;
-  const goalProgress = goalAmount > 0 ? Math.min(100, Math.round((totalReceived / goalAmount) * 100)) : 0;
   const points = myPoints?.points || 0;
   const achievementsCount = earnedAchievements.length;
+  const rivoBalance = wallet?.balance || 0;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -66,7 +70,7 @@ const GamificacaoPage = () => {
       </div>
 
       {/* My stats hero */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card className="border-border">
           <CardContent className="p-4 text-center">
             <div className="text-3xl mb-1">{myMedal}</div>
@@ -98,6 +102,14 @@ const GamificacaoPage = () => {
             <p className="text-xs text-muted-foreground mt-0.5">Recebido no mês</p>
           </CardContent>
         </Card>
+
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 text-center">
+            <Coins className="w-6 h-6 text-primary mx-auto mb-1" />
+            <p className="text-2xl font-bold text-foreground">{rivoBalance.toLocaleString("pt-BR")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">RivoCoins</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs */}
@@ -115,6 +127,12 @@ const GamificacaoPage = () => {
           <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
             <Target className="w-3.5 h-3.5" /> Metas
           </TabsTrigger>
+          <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
+            <ShoppingBag className="w-3.5 h-3.5" /> Loja
+          </TabsTrigger>
+          <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
+            <Coins className="w-3.5 h-3.5" /> Carteira
+          </TabsTrigger>
           {isTenantAdmin && (
             <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
               <Settings className="w-3.5 h-3.5" /> Gerenciar
@@ -131,11 +149,19 @@ const GamificacaoPage = () => {
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab isAdmin={isTenantAdmin} />
+          <AchievementsTab isAdmin={false} />
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">
           <GoalsTab />
+        </TabsContent>
+
+        <TabsContent value="shop" className="mt-4">
+          <ShopTab />
+        </TabsContent>
+
+        <TabsContent value="wallet" className="mt-4">
+          <WalletTab />
         </TabsContent>
 
         {isTenantAdmin && (
@@ -151,6 +177,12 @@ const GamificacaoPage = () => {
                 <TabsTrigger value="manage-goals" className="gap-1.5">
                   <Target className="w-3.5 h-3.5" /> Metas
                 </TabsTrigger>
+                <TabsTrigger value="manage-rankings" className="gap-1.5">
+                  <Trophy className="w-3.5 h-3.5" /> Rankings
+                </TabsTrigger>
+                <TabsTrigger value="manage-shop" className="gap-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5" /> Loja
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="manage-campaigns" className="mt-4">
@@ -163,6 +195,14 @@ const GamificacaoPage = () => {
 
               <TabsContent value="manage-goals" className="mt-4">
                 <GoalsManagementTab />
+              </TabsContent>
+
+              <TabsContent value="manage-rankings" className="mt-4">
+                <RankingManagementTab />
+              </TabsContent>
+
+              <TabsContent value="manage-shop" className="mt-4">
+                <ShopManagementTab />
               </TabsContent>
             </Tabs>
           </TabsContent>
