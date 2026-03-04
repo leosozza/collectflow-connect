@@ -7,16 +7,27 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, updateAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
 import StatCard from "@/components/StatCard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Search, Download } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type StatusFilter = "vigentes" | "pending" | "pending_approval" | "overdue" | "cancelled" | "approved";
+
+const statusFilterConfig: { key: StatusFilter; label: string; color: string }[] = [
+  { key: "vigentes", label: "Vigentes", color: "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" },
+  { key: "approved", label: "Pagos", color: "bg-green-100 text-green-800 border-green-300 hover:bg-green-200" },
+  { key: "pending", label: "Pendente", color: "bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200" },
+  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200" },
+  { key: "overdue", label: "Vencido", color: "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200" },
+  { key: "cancelled", label: "Cancelados", color: "bg-red-100 text-red-800 border-red-300 hover:bg-red-200" },
+];
 
 const AcordosPage = () => {
   const { trackAction } = useActivityTracker();
@@ -26,7 +37,7 @@ const AcordosPage = () => {
   const { toast } = useToast();
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("todos");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("vigentes");
   const [credorFilter, setCredorFilter] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [editingAgreement, setEditingAgreement] = useState<Agreement | null>(null);
@@ -38,8 +49,7 @@ const AcordosPage = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const filters: { status?: string; created_by?: string } = {};
-      if (statusFilter !== "todos") filters.status = statusFilter;
+      const filters: { created_by?: string } = {};
       if (!isAdmin && user) filters.created_by = user.id;
       const data = await fetchAgreements(Object.keys(filters).length > 0 ? filters : undefined);
       setAgreements(data);
@@ -50,7 +60,7 @@ const AcordosPage = () => {
     }
   };
 
-  useEffect(() => { load(); }, [statusFilter, isAdmin, user?.id]);
+  useEffect(() => { load(); }, [isAdmin, user?.id]);
 
   const handleApprove = async (agreement: Agreement) => {
     if (!user || !profile) return;
@@ -122,30 +132,38 @@ const AcordosPage = () => {
   // Filtered agreements
   const filteredAgreements = useMemo(() => {
     let list = agreements;
+
+    // Status filter
+    if (statusFilter === "vigentes") {
+      list = list.filter(a => a.status === "pending" || a.status === "approved");
+    } else {
+      list = list.filter(a => a.status === statusFilter);
+    }
+
     if (credorFilter !== "todos") list = list.filter(a => a.credor === credorFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(a => a.client_name.toLowerCase().includes(q) || a.client_cpf.toLowerCase().includes(q));
     }
     return list;
-  }, [agreements, credorFilter, searchQuery]);
+  }, [agreements, statusFilter, credorFilter, searchQuery]);
 
-  // Metrics (exclude cancelled/rejected)
-  const activeAgreements = filteredAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
+  // Counts per status for badges
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      vigentes: 0, pending: 0, pending_approval: 0, overdue: 0, cancelled: 0, approved: 0,
+    };
+    agreements.forEach(a => {
+      if (a.status === "pending" || a.status === "approved") counts.vigentes++;
+      if (a.status in counts) counts[a.status]++;
+    });
+    return counts;
+  }, [agreements]);
+
+  // Metrics (exclude cancelled/rejected/overdue)
+  const activeAgreements = filteredAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected" && a.status !== "overdue");
   const pending = activeAgreements.filter(a => a.status === "pending" || a.status === "pending_approval").length;
   const paid = activeAgreements.filter(a => a.status === "approved").length;
-  const pendingApproval = filteredAgreements.filter(a => a.status === "pending_approval");
-
-  const renderAgreementsList = (items: Agreement[]) => (
-    <AgreementsList
-      agreements={items}
-      isAdmin={isAdmin}
-      onApprove={handleApprove}
-      onReject={handleReject}
-      onCancel={handleCancel}
-      onEdit={handleEditOpen}
-    />
-  );
 
   const editDialog = (
     <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
@@ -212,21 +230,29 @@ const AcordosPage = () => {
         <StatCard title="Pagos" value={String(paid)} icon="received" />
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filtrar status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="pending_approval">Aguardando Liberação</SelectItem>
-            <SelectItem value="approved">Aprovado</SelectItem>
-            <SelectItem value="rejected">Rejeitado</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Status filter badges */}
+      <div className="flex flex-wrap gap-2">
+        {statusFilterConfig.map(({ key, label, color }) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(key)}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === key
+                ? `${color} ring-2 ring-offset-1 ring-current shadow-sm`
+                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+            }`}
+          >
+            {label}
+            {statusCounts[key] > 0 && (
+              <span className="ml-1.5 bg-background/50 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                {statusCounts[key]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
+      <div className="flex flex-wrap gap-4 items-center">
         <Select value={credorFilter} onValueChange={setCredorFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filtrar credor" />
@@ -275,27 +301,15 @@ const AcordosPage = () => {
 
       {loading ? (
         <p className="text-muted-foreground">Carregando...</p>
-      ) : isAdmin ? (
-        <Tabs defaultValue="todos">
-          <TabsList>
-            <TabsTrigger value="todos">Todos os Acordos</TabsTrigger>
-            <TabsTrigger value="liberacao">
-              Aguardando Liberação {pendingApproval.length > 0 && `(${pendingApproval.length})`}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="todos">
-            {renderAgreementsList(filteredAgreements)}
-          </TabsContent>
-          <TabsContent value="liberacao">
-            {pendingApproval.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">Nenhum acordo aguardando liberação.</p>
-            ) : (
-              renderAgreementsList(pendingApproval)
-            )}
-          </TabsContent>
-        </Tabs>
       ) : (
-        renderAgreementsList(filteredAgreements)
+        <AgreementsList
+          agreements={filteredAgreements}
+          isAdmin={isAdmin}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onCancel={handleCancel}
+          onEdit={handleEditOpen}
+        />
       )}
 
       {editDialog}

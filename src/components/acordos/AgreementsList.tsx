@@ -26,6 +26,7 @@ const statusColors: Record<string, string> = {
   approved: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
   cancelled: "bg-muted text-muted-foreground",
+  overdue: "bg-amber-100 text-amber-800",
 };
 
 const statusLabels: Record<string, string> = {
@@ -34,6 +35,7 @@ const statusLabels: Record<string, string> = {
   approved: "Aprovado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
+  overdue: "Vencido",
 };
 
 const activeStatuses = ["pending", "pending_approval", "approved"];
@@ -77,7 +79,6 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    {/* Admin: Aprovar/Rejeitar */}
                     {isAdmin && (a.status === "pending" || a.status === "pending_approval") && (
                       <>
                         <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
@@ -88,13 +89,11 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                         </Button>
                       </>
                     )}
-                    {/* Editar - visible for active agreements */}
                     {activeStatuses.includes(a.status) && onEdit && (
                       <Button size="sm" variant="ghost" onClick={() => onEdit(a)} title="Editar">
                         <Pencil className="w-4 h-4 text-muted-foreground" />
                       </Button>
                     )}
-                    {/* Cancelar - visible for active agreements */}
                     {activeStatuses.includes(a.status) && (
                       <Button size="sm" variant="ghost" onClick={() => setCancelId(a.id)} title="Cancelar">
                         <Trash2 className="w-4 h-4 text-destructive" />
