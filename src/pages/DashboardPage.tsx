@@ -284,7 +284,7 @@ const DashboardPage = () => {
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-sm font-semibold text-success">
           {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
         </span>
       </div>
