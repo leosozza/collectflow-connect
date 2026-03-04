@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
 
   const oneDayAgoStr = oneDayAgo.toISOString().split("T")[0];
   const sixDaysAgoStr = sixDaysAgo.toISOString().split("T")[0];
+  const todayStr = now.toISOString().split("T")[0];
 
   try {
     // 1. Mark as overdue: pending/approved with first_due_date < 1 day ago
@@ -80,6 +81,15 @@ Deno.serve(async (req) => {
       }));
       await supabase.from("notifications").insert(notifications);
     }
+
+    // 3. Mark overdue client installments: pendente + data_vencimento < today → vencido
+    const { error: err3 } = await supabase
+      .from("clients")
+      .update({ status: "vencido" })
+      .eq("status", "pendente")
+      .lt("data_vencimento", todayStr);
+
+    if (err3) throw err3;
 
     return new Response(
       JSON.stringify({

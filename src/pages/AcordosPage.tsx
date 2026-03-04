@@ -134,7 +134,7 @@ const AcordosPage = () => {
 
     // Status filter
     if (statusFilter === "vigentes") {
-      list = list.filter(a => a.status === "pending" || a.status === "approved");
+      list = list.filter(a => a.status === "pending");
     } else {
       list = list.filter(a => a.status === statusFilter);
     }
