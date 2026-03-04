@@ -3231,7 +3231,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "operador"
-      client_status: "pendente" | "pago" | "quebrado" | "vencido"
+      client_status: "pendente" | "pago" | "quebrado" | "vencido" | "em_acordo"
       tenant_role:
         | "super_admin"
         | "admin"
@@ -3366,7 +3366,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operador"],
-      client_status: ["pendente", "pago", "quebrado", "vencido"],
+      client_status: ["pendente", "pago", "quebrado", "vencido", "em_acordo"],
       tenant_role: [
         "super_admin",
         "admin",

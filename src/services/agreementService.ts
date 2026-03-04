@@ -83,10 +83,21 @@ export const createAgreement = async (
   const agreement = result as Agreement;
   logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
 
+  // Mark original titles as "em_acordo" to prevent double-counting
+  try {
+    await supabase
+      .from("clients")
+      .update({ status: "em_acordo" } as any)
+      .eq("cpf", data.client_cpf)
+      .eq("credor", data.credor)
+      .in("status", ["pendente", "vencido"]);
+  } catch (e) {
+    console.error("Erro ao marcar títulos como em_acordo:", e);
+  }
+
   // Notify admins when agreement requires approval
   if (options?.requiresApproval) {
     try {
-      // Get all admin users from the same tenant
       const { data: adminUsers } = await supabase
         .from("tenant_users")
         .select("user_id")
@@ -169,13 +180,34 @@ export const updateAgreement = async (
 };
 
 export const cancelAgreement = async (id: string): Promise<void> => {
-  // Only update agreement status — original titles remain untouched for future negotiations
+  // Fetch agreement details to revert titles
+  const { data: agreement } = await supabase
+    .from("agreements")
+    .select("client_cpf, credor")
+    .eq("id", id)
+    .single();
+
   const { error } = await supabase
     .from("agreements")
     .update({ status: "cancelled" } as any)
     .eq("id", id);
 
   if (error) throw error;
+
+  // Revert titles from em_acordo back to pendente
+  if (agreement) {
+    try {
+      await supabase
+        .from("clients")
+        .update({ status: "pendente" } as any)
+        .eq("cpf", agreement.client_cpf)
+        .eq("credor", agreement.credor)
+        .eq("status", "em_acordo");
+    } catch (e) {
+      console.error("Erro ao reverter títulos:", e);
+    }
+  }
+
   logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
 };
 
