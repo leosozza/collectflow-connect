@@ -67,6 +67,7 @@ const DashboardPage = () => {
   });
 
   // Only vigent agreements (pending/approved) for projected metrics
+  // Filter only active (vigent) agreements
   const activeAgreements = useMemo(() => {
     return agreements.filter((a: any) => a.status === "pending" || a.status === "approved");
   }, [agreements]);
