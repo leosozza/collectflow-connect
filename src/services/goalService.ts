@@ -35,10 +35,18 @@ export const fetchMyGoal = async (year: number, month: number): Promise<Operator
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Get profile.id (operator_id is profiles.id, not auth.uid)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  if (!profile) return null;
+
   const { data, error } = await supabase
     .from("operator_goals")
     .select("*")
-    .eq("operator_id", user.id)
+    .eq("operator_id", profile.id)
     .eq("year", year)
     .eq("month", month)
     .maybeSingle();
