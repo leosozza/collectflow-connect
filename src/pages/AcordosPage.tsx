@@ -152,7 +152,13 @@ const AcordosPage = () => {
     return {};
   }, [agreements]);
 
-  // Metrics (exclude cancelled/rejected/overdue)
+  // Total real independente do filtro
+  const totalActiveCount = useMemo(() => 
+    agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
+    [agreements]
+  );
+
+  // Metrics from filtered view
   const activeAgreements = filteredAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected" && a.status !== "overdue");
   const pending = activeAgreements.filter(a => a.status === "pending" || a.status === "pending_approval").length;
   const paid = activeAgreements.filter(a => a.status === "approved").length;
@@ -217,7 +223,7 @@ const AcordosPage = () => {
       <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Total de Acordos" value={String(activeAgreements.length)} icon="agreement" />
+        <StatCard title="Total de Acordos" value={String(totalActiveCount)} icon="agreement" />
         <StatCard title="Pendentes" value={String(pending)} icon="receivable" />
         <StatCard title="Pagos" value={String(paid)} icon="received" />
       </div>
