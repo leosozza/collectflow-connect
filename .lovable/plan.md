@@ -1,45 +1,43 @@
 
 
-## Plano: Dividir banner principal e adicionar "Total Negociado no Mês"
+## Plano: Corrigir exibição de metas do operador + Gauge visual
 
-### O que muda
+### Problema identificado
 
-No `DashboardPage.tsx`, o banner laranja "Total Projetado no Mês" (que ocupa 100% da largura) será dividido em dois cards lado a lado (grid 2 colunas):
+Bug critico: O admin salva metas com `operator_id = profiles.id`, mas `fetchMyGoal` busca com `auth.uid()` (que é `user_id`, campo diferente). O RLS também usa `auth.uid()`, então nunca encontra a meta do operador.
 
-1. **Total Projetado no Mês** — mantém o cálculo atual (`totalProjetado`)
-2. **Total Negociado no Mês** — novo card que soma `proposed_total` de todos os acordos criados no mês corrente (usando `filteredAgreements` filtrado pelo mês atual)
+### Alterações
 
-### Cálculo do novo valor
+#### 1. `src/services/goalService.ts` — Corrigir fetchMyGoal
+Usar `profile.id` em vez de `user.id`. Buscar o profile primeiro e usar o `profiles.id` como `operator_id`.
 
 ```typescript
-const totalNegociado = useMemo(() => {
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
-  return filteredAgreements
-    .filter(a => { const d = new Date(a.created_at); return d >= monthStart && d <= monthEnd; })
-    .reduce((sum, a) => sum + Number(a.proposed_total || 0), 0);
-}, [filteredAgreements]);
+// Antes: .eq("operator_id", user.id)  ← auth.uid, errado
+// Depois: buscar profile.id via profiles.user_id = user.id, 
+//         e filtrar .eq("operator_id", profile.id)
 ```
 
-Obs: `proposed_total` já é retornado na query de `agreements` existente — basta adicioná-lo ao `select`.
+#### 2. RLS da tabela `operator_goals` — Corrigir policy do operador
+Alterar de `operator_id = auth.uid()` para `operator_id = get_my_profile_id()` (função já existente no banco).
 
-### Layout
+#### 3. `src/pages/GamificacaoPage.tsx` — Reordenar abas
+Para operadores: colocar aba "Metas" como primeiro item (defaultValue="goals"). Manter a ordem atual para admins.
 
-Trocar o div único por um grid de 2 colunas:
-```
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-  <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-    Total Projetado no Mês: {totalProjetado}
-  </div>
-  <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-    Total Negociado no Mês: {totalNegociado}
-  </div>
-</div>
-```
+#### 4. `src/components/gamificacao/GoalsTab.tsx` — Gauge de acelerador
+Substituir o card simples do operador por um componente visual de gauge (velocímetro) grande, com:
+- Arco colorido (vermelho → amarelo → verde) desenhado com SVG
+- Ponteiro indicando a porcentagem atual
+- Texto "Meta Recebimento" com valor da meta
+- Texto "Realizado" com valor recebido
+- Período do mês (01/MM/AA à último dia/MM/AA)
+- Card grande, centralizado
 
 ### Arquivos
 
 | Arquivo | Alteração |
 |---|---|
-| `src/pages/DashboardPage.tsx` | Adicionar `proposed_total` ao select de agreements, calcular `totalNegociado`, dividir banner em grid 2 colunas |
+| `src/services/goalService.ts` | Corrigir `fetchMyGoal` para usar `profiles.id` |
+| `src/pages/GamificacaoPage.tsx` | Aba Metas como default para operadores |
+| `src/components/gamificacao/GoalsTab.tsx` | Gauge SVG grande para visualização do operador |
+| Migration SQL | Corrigir RLS policy de `operator_goals` para usar `get_my_profile_id()` |
 
