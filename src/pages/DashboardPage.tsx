@@ -60,7 +60,7 @@ const DashboardPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("agreements")
-        .select("id, created_at, created_by, status, client_cpf");
+        .select("id, created_at, created_by, status, client_cpf, proposed_total");
       if (error) throw error;
       return data || [];
     },
@@ -176,6 +176,14 @@ const DashboardPage = () => {
     });
   };
 
+  const totalNegociado = useMemo(() => {
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+    return filteredAgreements
+      .filter(a => { const d = new Date(a.created_at); return d >= monthStart && d <= monthEnd; })
+      .reduce((sum, a) => sum + Number((a as any).proposed_total || 0), 0);
+  }, [filteredAgreements]);
+
   const pendentes = filteredClients.filter((c) => c.status === "pendente");
   const pagos = filteredClients.filter((c) => c.status === "pago");
   const quebrados = filteredClients.filter((c) => c.status === "quebrado");
@@ -247,10 +255,16 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stat: Total Projetado */}
-      <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-        <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Projetado no Mês</p>
-        <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+      {/* Main stats: Total Projetado + Total Negociado */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
+          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Projetado no Mês</p>
+          <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+        </div>
+        <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
+          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Negociado no Mês</p>
+          <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalNegociado)}</p>
+        </div>
       </div>
 
       {/* Vencimentos strip */}
