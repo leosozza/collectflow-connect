@@ -1,23 +1,20 @@
 
 
-## Plano: Remover coluna Modelo da Carteira e exibir no perfil do cliente
+## Plano: Selecionar e importar todos os registros em lotes de 1000
 
-### Alterações
+### Problema
+Atualmente o MaxList limita a exibição e seleção a 1000 registros (`data.slice(0, 1000)`). O "selecionar todos" só marca os primeiros 1000, e registros além disso são ignorados na importação.
 
-**1. `src/pages/CarteiraPage.tsx`**
-- Remover a `<TableHead>Modelo</TableHead>` (linha 636)
-- Remover a `<TableCell>` correspondente que exibe `observacoes?.replace(...)` (linhas 670-672)
-- Manter a sequência das colunas restantes: Checkbox → Nome → CPF → Credor → 1º Vencimento → Valor Total → Score → Status Cobrança → Ações
+### Alterações em `src/pages/MaxListPage.tsx`
 
-**2. `src/pages/ClientDetailPage.tsx`**
-- Remover a coluna "Modelo" da tabela de títulos (linha 212 `<TableHead>Modelo</TableHead>` e linha 235-237 `<TableCell>`)
+1. **Remover o limite de 1000 na visualização da tabela**: trocar `data.slice(0, 1000)` por exibir todos os registros (a tabela já usa ScrollArea, suporta scroll)
 
-**3. `src/components/client-detail/ClientDetailHeader.tsx`**
-- Na seção "Mais informações do devedor", adicionar um `<InfoItem>` para "Modelo" no grid de Identificação (após Cod. Contrato), exibindo `client.model_name`
-- O campo `model_name` já existe na tabela `clients` do banco de dados
+2. **Ajustar `toggleAll`**: ao clicar "selecionar todos", selecionar TODOS os índices de `data` (não apenas os primeiros 1000)
 
-### Observações
-- O campo `model_name` já é populado durante a importação via MaxList (campo `ModelName` ou `Model_Name` do payload)
-- Nenhuma alteração no banco de dados necessária
-- A coluna `model_name` já consta no schema da tabela `clients`
+3. **Importação em lotes automáticos**: o `handleMappingConfirmed` já processa em lotes de `BATCH_SIZE = 200`. Nenhuma alteração necessária na lógica de envio — ela já itera sobre todos os `records` selecionados. O gargalo era apenas a seleção, não o envio.
+
+4. **Indicador visual**: mostrar no badge de contagem quantos estão selecionados vs total (ex: "5.432 selecionados de 5.432")
+
+### Resumo
+A única mudança real é remover o `slice(0, 1000)` e ajustar o `toggleAll` para selecionar todos os índices de `data`. A importação já funciona em lotes de 200, então todos serão enviados corretamente.
 
