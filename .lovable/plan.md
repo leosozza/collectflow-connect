@@ -1,36 +1,50 @@
 
 
-## Diagnóstico: Valores R$ 0,00 em todos os títulos
+## Plano: Corrigir perfil do devedor com múltiplos contratos e cálculos financeiros
 
-### Causa raiz
-Todos os 1.000 registros no banco de dados têm `valor_parcela = 0.00`, porém `valor_saldo` contém os valores corretos (ex: 100, 680, 4200...). Isso ocorre porque a API MaxSystem retorna `Value = 0` e `NetValue = valor real`. Durante a importação, `Value` é mapeado para `valor_parcela` (que fica 0) e `NetValue` é mapeado para `valor_saldo` (que fica correto).
+### Problemas identificados
 
-O problema está em três camadas: a importação não usa o campo correto como fallback, e a exibição depende exclusivamente de `valor_parcela`.
+1. **Modelo e Cod.Contrato**: O header mostra apenas `client.model_name` e `client.cod_contrato` do primeiro registro. Quando há múltiplos contratos (mesmo CPF, credores/modelos diferentes), precisa mostrar todos os valores distintos.
 
-### Correções
+2. **Cálculos financeiros incorretos no header** (seção "Mais informações"):
+   - **Saldo Devedor**: mostra `client.valor_saldo` de apenas 1 registro. Deveria somar `valor_saldo` de todos os registros pendentes.
+   - **Total Pago**: soma `valor_pago` de todos — OK.
+   - **Valor Atualizado**: mostra `client.valor_atualizado` de 1 registro. Deveria somar de todos.
+   - **Em Aberto**: usa fallback correto, mas precisa considerar `valor_atualizado` quando disponível.
 
-**1. `src/pages/MaxListPage.tsx` — Importação**
-- Na função `buildRecordFromMapping` (linha ~550), alterar a lógica de `valor_parcela` para usar `valor_saldo` como fallback quando `valor_parcela` é 0:
-  ```
-  valor_parcela: record.valor_parcela || record.valor_saldo || 0
-  ```
+3. **Valor Atualizado não é calculado**: O campo `valor_atualizado` no banco está sempre 0. Deveria ser calculado com base nos juros e multa do credor vinculado, aplicados sobre o saldo em atraso.
 
-**2. `src/pages/ClientDetailPage.tsx` — Exibição dos títulos**
-- Na tabela de títulos (linhas ~230-237), usar `valor_saldo` como fallback:
-  ```
-  const valorEfetivo = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-  ```
-- Aplicar esse valor efetivo em: coluna Valor, cálculo de Saldo Devedor, e `totalAberto`
+4. **AgreementCalculator `originalTotal`**: usa `valor_parcela` sem fallback para `valor_saldo`.
 
-**3. `src/components/carteira/CarteiraTable.tsx` — Tabela da Carteira**
-- No agrupamento (`grouped`), usar o mesmo fallback ao calcular `valorTotal`
+### Correções em `src/components/client-detail/ClientDetailHeader.tsx`
 
-**4. `src/pages/CarteiraPage.tsx` — Carteira principal**
-- Verificar se o cálculo de valor total na tabela principal também usa o fallback
+1. **Múltiplos contratos**: Extrair valores distintos de `model_name` e `cod_contrato` de `clients[]` e exibi-los separados por " / "
+   ```
+   const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ");
+   const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ");
+   ```
 
-**5. Dados existentes (opcional)**
-- Os dados já importados continuarão mostrando valores corretos via fallback para `valor_saldo`. Novas importações já populam `valor_parcela` corretamente.
+2. **Saldo Devedor agregado**: Somar `valor_saldo` de todos os registros pendentes
+   ```
+   const totalSaldo = clients.filter(c => c.status === "pendente")
+     .reduce((sum, c) => sum + (Number(c.valor_saldo) || 0), 0);
+   ```
 
-### Resumo
-A alteração principal é usar `Number(c.valor_parcela) || Number(c.valor_saldo) || 0` em todos os pontos de exibição de valor, e na importação para garantir que futuras importações preencham `valor_parcela` corretamente.
+3. **Valor Atualizado agregado**: Somar `valor_atualizado` de todos os pendentes. Se for 0, calcular dinamicamente usando juros/multa do credor:
+   - Buscar regras do credor (`juros_mes`, `multa`)
+   - Para cada parcela pendente vencida: `valorBase + (valorBase * multa/100) + (valorBase * juros_mes/100 * mesesAtraso)`
+   - Parcelas não vencidas mantêm o valor original
+
+4. **Em Aberto**: Usar `valor_atualizado` calculado como base quando disponível
+
+### Correções em `src/components/client-detail/AgreementCalculator.tsx`
+
+5. **`originalTotal`**: Adicionar fallback `valor_saldo`
+   ```
+   .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+   ```
+
+### Arquivos alterados
+- `src/components/client-detail/ClientDetailHeader.tsx`
+- `src/components/client-detail/AgreementCalculator.tsx`
 
