@@ -173,9 +173,15 @@ const CarteiraPage = () => {
     return map;
   }, [tiposStatus]);
 
-  const displayClients = useMemo(() => {
+  // Grouped client type for CPF aggregation
+  interface GroupedClient extends Client {
+    valor_total: number;
+    parcelas_count: number;
+    allIds: string[];
+  }
+
+  const displayClients = useMemo((): GroupedClient[] => {
     let filtered = clients;
-    // Search is now applied server-side in fetchClients, no client-side filter needed
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
@@ -206,7 +212,34 @@ const CarteiraPage = () => {
     if (filters.cadastroAte) {
       filtered = filtered.filter(c => c.created_at <= filters.cadastroAte + "T23:59:59");
     }
-    const sorted = [...filtered].sort((a, b) => {
+
+    // Group by CPF
+    const groupMap = new Map<string, Client[]>();
+    filtered.forEach(c => {
+      const key = c.cpf.replace(/\D/g, "");
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(c);
+    });
+
+    const grouped: GroupedClient[] = Array.from(groupMap.values()).map(group => {
+      // Find earliest due date
+      const earliest = group.reduce((min, c) => c.data_vencimento < min.data_vencimento ? c : min, group[0]);
+      // Sum all valor_parcela
+      const valorTotal = group.reduce((sum, c) => sum + Number(c.valor_parcela), 0);
+      // Highest propensity score
+      const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
+
+      return {
+        ...earliest,
+        valor_total: valorTotal,
+        valor_parcela: valorTotal,
+        parcelas_count: group.length,
+        propensity_score: maxScore || null,
+        allIds: group.map(c => c.id),
+      };
+    });
+
+    const sorted = [...grouped].sort((a, b) => {
       let cmp = 0;
       if (sortField === "created_at") {
         cmp = (a.created_at || "").localeCompare(b.created_at || "");
@@ -347,15 +380,14 @@ const CarteiraPage = () => {
       toast.error("Nenhum dado para exportar");
       return;
     }
-    const rows = displayClients.map((c) => ({
+    const rows = displayClients.map((c: any) => ({
       Nome: c.nome_completo,
       CPF: c.cpf,
       Credor: c.credor,
-      Parcela: c.numero_parcela,
-      Vencimento: formatDate(c.data_vencimento),
-      "Valor Parcela": Number(c.valor_parcela),
-      "Valor Pago": Number(c.valor_pago),
-      Status: c.status,
+      "1º Vencimento": formatDate(c.data_vencimento),
+      "Valor Total": Number(c.valor_total ?? c.valor_parcela),
+      Parcelas: c.parcelas_count ?? 1,
+      Score: c.propensity_score ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -364,22 +396,35 @@ const CarteiraPage = () => {
     toast.success("Exportado com sucesso!");
   };
 
+  const allClientIds = useMemo(() => {
+    const ids: string[] = [];
+    displayClients.forEach((c: any) => {
+      (c.allIds || [c.id]).forEach((id: string) => ids.push(id));
+    });
+    return ids;
+  }, [displayClients]);
+
   const toggleSelectAll = () => {
-    if (selectedIds.size === displayClients.length) {
+    if (selectedIds.size === allClientIds.length && allClientIds.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(displayClients.map((c) => c.id)));
+      setSelectedIds(new Set(allClientIds));
     }
   };
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (groupClient: any) => {
+    const ids: string[] = groupClient.allIds || [groupClient.id];
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    const allSelected = ids.every((id: string) => next.has(id));
+    if (allSelected) {
+      ids.forEach((id: string) => next.delete(id));
+    } else {
+      ids.forEach((id: string) => next.add(id));
+    }
     setSelectedIds(next);
   };
 
-  const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
+  const selectedClients = clients.filter((c) => selectedIds.has(c.id));
 
   const handleBulkDelete = async () => {
     setPasswordError("");
@@ -506,7 +551,7 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
-              {permissions.canDeleteCarteira && selectedIds.size === displayClients.length && displayClients.length > 0 && (
+              {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -584,7 +629,7 @@ const CarteiraPage = () => {
                 <TableRow className="bg-muted/50">
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.size === displayClients.length && displayClients.length > 0}
+                        checked={selectedIds.size === allClientIds.length && allClientIds.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
@@ -596,15 +641,13 @@ const CarteiraPage = () => {
                     </TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Credor</TableHead>
-                    <TableHead className="text-center">Parcela</TableHead>
                     <TableHead>
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("data_vencimento")}>
-                        Vencimento <SortIcon field="data_vencimento" />
+                        1º Vencimento <SortIcon field="data_vencimento" />
                       </button>
                     </TableHead>
-                    <TableHead className="text-right">Valor da Parcela</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
                     <TableHead className="text-center">Score</TableHead>
-                    <TableHead className="text-center">Pagamento</TableHead>
                     <TableHead className="text-center">
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors mx-auto" onClick={() => toggleSort("status_cobranca")}>
                         Status Cobrança <SortIcon field="status_cobranca" />
@@ -614,12 +657,14 @@ const CarteiraPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayClients.map((client) => (
-                    <TableRow key={client.id} className={`transition-colors ${selectedIds.has(client.id) ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                  {displayClients.map((client) => {
+                    const groupSelected = (client.allIds || [client.id]).every((id: string) => selectedIds.has(id));
+                    return (
+                    <TableRow key={client.id} className={`transition-colors ${groupSelected ? "bg-primary/5" : "hover:bg-muted/30"}`}>
                       <TableCell>
                         <Checkbox
-                          checked={selectedIds.has(client.id)}
-                          onCheckedChange={() => toggleSelect(client.id)}
+                          checked={groupSelected}
+                          onCheckedChange={() => toggleSelect(client)}
                         />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -635,14 +680,10 @@ const CarteiraPage = () => {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
                       <TableCell className="text-muted-foreground">{client.credor}</TableCell>
-                      <TableCell className="text-center">{client.numero_parcela}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(client.valor_total ?? client.valor_parcela))}</TableCell>
                       <TableCell className="text-center">
                         <PropensityBadge score={(client as any).propensity_score} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {getStatusIcon(client)}
                       </TableCell>
                       <TableCell className="text-center">
                         {client.status_cobranca_id && statusMap.has(client.status_cobranca_id) ? (
@@ -693,7 +734,8 @@ const CarteiraPage = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
