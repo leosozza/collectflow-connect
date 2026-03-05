@@ -280,15 +280,14 @@ const MaxListPage = () => {
     }
   }, [tiposStatus, selectedStatusCobrancaId]);
 
-  const visibleData = data.slice(0, 1000);
-  const allVisibleSelected = visibleData.length > 0 && visibleData.every((_, i) => selectedIndexes.has(i));
+  const allSelected = data.length > 0 && selectedIndexes.size === data.length;
   const someSelected = selectedIndexes.size > 0;
 
   const toggleAll = () => {
-    if (allVisibleSelected) {
+    if (allSelected) {
       setSelectedIndexes(new Set());
     } else {
-      setSelectedIndexes(new Set(visibleData.map((_, i) => i)));
+      setSelectedIndexes(new Set(data.map((_, i) => i)));
     }
   };
 
@@ -933,7 +932,7 @@ const MaxListPage = () => {
               Preview ({data.length.toLocaleString("pt-BR")} registros)
               {someSelected && (
                 <Badge variant="outline" className="ml-2">
-                  {selectedIndexes.size} selecionados
+                  {selectedIndexes.size} de {data.length} selecionados
                 </Badge>
               )}
             </CardTitle>
@@ -946,7 +945,7 @@ const MaxListPage = () => {
                     <TableRow>
                       <TableHead className="w-10 sticky left-0 bg-background z-10">
                         <Checkbox
-                          checked={allVisibleSelected}
+                          checked={allSelected}
                           onCheckedChange={toggleAll}
                           aria-label="Selecionar todos"
                         />
@@ -963,7 +962,7 @@ const MaxListPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visibleData.map((item, i) => (
+                    {data.map((item, i) => (
                       <TableRow key={i} className={selectedIndexes.has(i) ? "bg-accent/30" : ""}>
                         <TableCell className="sticky left-0 bg-background z-10">
                           <Checkbox
