@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchProducts, createOrder, ShopProduct } from "@/services/shopService";
 import { fetchMyWallet, spendRivoCoins } from "@/services/rivocoinService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,35 @@ const ShopTab = () => {
         product_id: product.id,
         price_paid: product.price_rivocoins,
       });
+
+      // Notify admins, gerentes, supervisors
+      try {
+        const { data: responsaveis } = await supabase
+          .from("tenant_users")
+          .select("user_id")
+          .eq("tenant_id", tenantUser.tenant_id)
+          .in("role", ["admin", "super_admin", "gerente", "supervisor"]);
+
+        if (responsaveis && responsaveis.length > 0) {
+          const operatorName = profile.full_name || "Operador";
+          const notifications = responsaveis
+            .filter((r) => r.user_id !== profile.user_id)
+            .map((r) => ({
+              tenant_id: tenantUser.tenant_id,
+              user_id: r.user_id,
+              title: "Nova compra na Loja",
+              message: `${operatorName} comprou "${product.name}" por ${product.price_rivocoins.toLocaleString("pt-BR")} RivoCoins`,
+              type: "info",
+              reference_type: "shop_order",
+            }));
+
+          if (notifications.length > 0) {
+            await supabase.from("notifications").insert(notifications as any);
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao enviar notificações de compra:", e);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rivocoin-wallet"] });
