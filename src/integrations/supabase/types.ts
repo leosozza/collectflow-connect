@@ -1117,6 +1117,7 @@ export type Database = {
           gateway_token: string | null
           honorarios_grade: Json | null
           id: string
+          indice_correcao_monetaria: string | null
           inscricao_estadual: string | null
           juros_mes: number | null
           multa: number | null
@@ -1170,6 +1171,7 @@ export type Database = {
           gateway_token?: string | null
           honorarios_grade?: Json | null
           id?: string
+          indice_correcao_monetaria?: string | null
           inscricao_estadual?: string | null
           juros_mes?: number | null
           multa?: number | null
@@ -1223,6 +1225,7 @@ export type Database = {
           gateway_token?: string | null
           honorarios_grade?: Json | null
           id?: string
+          indice_correcao_monetaria?: string | null
           inscricao_estadual?: string | null
           juros_mes?: number | null
           multa?: number | null
