@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, Headset, ChevronDown, Pencil } from "lucide-react";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
+import { differenceInMonths } from "date-fns";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -138,6 +139,54 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const pagas = clients.filter((c) => c.status === "pago").length;
   const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
+  // Aggregate multi-contract values
+  const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ") || "—";
+  const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ") || "—";
+
+  // Aggregate financial values from all pending records
+  const pendentes = clients.filter(c => c.status === "pendente" || c.status === "vencido");
+  const totalSaldo = pendentes.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
+
+  // Fetch credor rules for dynamic interest calculation
+  const credorName = client.credor;
+  const { data: credorData } = useQuery({
+    queryKey: ["credor_rules_header", tenant?.id, credorName],
+    queryFn: async () => {
+      if (!tenant?.id || !credorName) return null;
+      const { data } = await supabase
+        .from("credores")
+        .select("juros_mes, multa, razao_social, nome_fantasia")
+        .eq("tenant_id", tenant.id);
+      if (!data) return null;
+      const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const credorNorm = normalize(credorName);
+      return data.find(c =>
+        normalize(c.razao_social) === credorNorm ||
+        (c.nome_fantasia && normalize(c.nome_fantasia) === credorNorm)
+      ) || null;
+    },
+    enabled: !!tenant?.id && !!credorName,
+  });
+
+  // Calculate valor atualizado dynamically using credor rules
+  const totalAtualizado = useMemo(() => {
+    const jurosMes = Number(credorData?.juros_mes) || 0;
+    const multa = Number(credorData?.multa) || 0;
+    const today = new Date();
+
+    return pendentes.reduce((sum, c) => {
+      const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
+      const vencimento = new Date(c.data_vencimento);
+      if (vencimento >= today || (jurosMes === 0 && multa === 0)) {
+        return sum + valorBase;
+      }
+      const meses = Math.max(1, differenceInMonths(today, vencimento));
+      const comMulta = valorBase * (multa / 100);
+      const comJuros = valorBase * (jurosMes / 100) * meses;
+      return sum + valorBase + comMulta + comJuros;
+    }, 0);
+  }, [pendentes, credorData]);
+
   // Lookup names
   const statusCobrancaNome = (tiposStatus as any[]).find((t) => t.id === client.status_cobranca_id)?.nome;
   const tipoDividaNome = (tiposDivida as any[]).find((t) => t.id === client.tipo_divida_id)?.nome;
@@ -209,8 +258,8 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
               {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
                 <InfoItem label="Cod. Devedor" value={client.external_id} />
-                <InfoItem label="Cod. Contrato" value={client.cod_contrato} />
-                <InfoItem label="Modelo" value={client.model_name} />
+                <InfoItem label="Cod. Contrato" value={codContratos} />
+                <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
                 <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
                 
@@ -236,8 +285,8 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
               {/* Valores */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
                 <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
-                <InfoItem label="Saldo Devedor" value={client.valor_saldo != null ? formatCurrency(Number(client.valor_saldo)) : null} />
-                <InfoItem label="Valor Atualizado" value={client.valor_atualizado != null ? formatCurrency(Number(client.valor_atualizado)) : null} />
+                <InfoItem label="Saldo Devedor" value={formatCurrency(totalSaldo)} />
+                <InfoItem label="Valor Atualizado" value={<span className="font-semibold">{formatCurrency(totalAtualizado)}</span>} />
                 <InfoItem label="Em Aberto" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
               </div>
 

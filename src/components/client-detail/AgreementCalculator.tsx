@@ -79,7 +79,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const originalTotal = useMemo(() => {
     return pendentes
       .filter((c) => selectedIds.has(c.id))
-      .reduce((sum, c) => sum + Number(c.valor_parcela), 0);
+      .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
   }, [pendentes, selectedIds]);
 
   // Calculate aging days from oldest selected parcela
@@ -320,7 +320,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     </TableCell>
                     <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                     <TableCell>{formatDate(c.data_vencimento)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela) || Number(c.valor_saldo) || 0)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
