@@ -189,10 +189,10 @@ const CarteiraPage = () => {
       filtered = filtered.filter(c => c.status === "pago");
     }
     if (filters.valorAbertoDe > 0) {
-      filtered = filtered.filter(c => (c.valor_parcela - c.valor_pago) >= filters.valorAbertoDe);
+      filtered = filtered.filter(c => ((Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - c.valor_pago) >= filters.valorAbertoDe);
     }
     if (filters.valorAbertoAte > 0) {
-      filtered = filtered.filter(c => (c.valor_parcela - c.valor_pago) <= filters.valorAbertoAte);
+      filtered = filtered.filter(c => ((Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - c.valor_pago) <= filters.valorAbertoAte);
     }
     if (filters.semContato) {
       filtered = filtered.filter(c => !contactedClientIds.has(c.id));
@@ -225,7 +225,7 @@ const CarteiraPage = () => {
       // Find earliest due date
       const earliest = group.reduce((min, c) => c.data_vencimento < min.data_vencimento ? c : min, group[0]);
       // Sum all valor_parcela
-      const valorTotal = group.reduce((sum, c) => sum + Number(c.valor_parcela), 0);
+      const valorTotal = group.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
       // Highest propensity score
       const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
 
