@@ -946,7 +946,7 @@ const MaxListPage = () => {
                       <TableHead className="w-10 sticky left-0 bg-background z-10">
                         <Checkbox
                           checked={allSelected}
-                          onCheckedChange={toggleAll}
+                          onCheckedChange={() => toggleAll()}
                           aria-label="Selecionar todos"
                         />
                       </TableHead>
