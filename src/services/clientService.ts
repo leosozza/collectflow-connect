@@ -35,6 +35,7 @@ export interface Client {
   status_cobranca_locked_by: string | null;
   status_cobranca_locked_at: string | null;
   data_quitacao: string | null;
+  valor_saldo: number | null;
 }
 
 export interface ClientFormData {

@@ -41,7 +41,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
     });
     return Array.from(map.values()).map(group => {
       const earliest = group.reduce((min, c) => c.data_vencimento < min.data_vencimento ? c : min, group[0]);
-      const valorTotal = group.reduce((sum, c) => sum + Number(c.valor_parcela), 0);
+      const valorTotal = group.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
       const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
       return {
         ...earliest,

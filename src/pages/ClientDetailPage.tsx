@@ -118,7 +118,7 @@ const ClientDetailPage = () => {
   const first = clients[0];
   const totalAberto = clients
     .filter((c) => c.status === "pendente")
-    .reduce((sum, c) => sum + Number(c.valor_parcela), 0);
+    .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
   const pendentes = clients.filter((c) => c.status === "pendente");
   const lastAgreement = agreements[0] || null;
 
@@ -227,12 +227,13 @@ const ClientDetailPage = () => {
                         : c.status === "quebrado"
                         ? "bg-muted text-muted-foreground border-muted"
                         : "bg-warning/10 text-warning border-warning/30";
-                      const saldoDevedor = Math.max(0, Number(c.valor_parcela) - Number(c.valor_pago));
+                      const valorEfetivo = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+                      const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
                         <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>
                           <TableCell className="text-center">

@@ -547,7 +547,7 @@ const MaxListPage = () => {
       nome_completo: (record.nome_completo || "").trim(),
       cpf: record.cpf || "",
       credor: "YBRASIL",
-      valor_parcela: record.valor_parcela || 0,
+      valor_parcela: record.valor_parcela || record.valor_saldo || 0,
       data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
       data_pagamento: record.data_pagamento || null,
       external_id: record.cod_titulo
@@ -559,7 +559,7 @@ const MaxListPage = () => {
       numero_parcela: record.numero_parcela || 1,
       total_parcelas: record.numero_parcela || 1,
       valor_entrada: 0,
-      valor_pago: hasPagamento ? (record.valor_parcela || 0) : 0,
+      valor_pago: hasPagamento ? (record.valor_parcela || record.valor_saldo || 0) : 0,
       status: hasPagamento ? "pago" : isCancelado ? "quebrado" : "pendente",
       phone: record.phone || "",
       phone2: record.phone2 || "",
