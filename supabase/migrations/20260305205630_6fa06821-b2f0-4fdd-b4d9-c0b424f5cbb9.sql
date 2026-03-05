@@ -1,0 +1,1 @@
+ALTER TABLE public.credores ADD COLUMN indice_correcao_monetaria text DEFAULT NULL;

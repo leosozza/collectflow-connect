@@ -179,6 +179,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         juros_mes: parseFloat(form.juros_mes) || 0,
         multa: parseFloat(form.multa) || 0,
         prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
+        indice_correcao_monetaria: form.indice_correcao_monetaria || null,
       });
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Regras de negociação salvas!");
@@ -521,6 +522,40 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? ""} onChange={e => set("juros_mes", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("juros_mes", Math.max(0, parseFloat(form.juros_mes) || 0))} /></div>
                 <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? ""} onChange={e => set("multa", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("multa", Math.max(0, parseFloat(form.multa) || 0))} /></div>
                 <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="number" min={1} value={form.prazo_dias_acordo ?? ""} onChange={e => set("prazo_dias_acordo", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || 30))} /></div>
+              </div>
+
+              {/* Índice de Correção Monetária */}
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Índice de Correção Monetária</p>
+                    <p className="text-xs text-muted-foreground">Índice oficial para atualização monetária da dívida</p>
+                  </div>
+                  <Switch
+                    checked={!!form.indice_correcao_monetaria}
+                    onCheckedChange={(checked) => set("indice_correcao_monetaria", checked ? "IPCA" : null)}
+                  />
+                </div>
+                {form.indice_correcao_monetaria && (
+                  <Select value={form.indice_correcao_monetaria} onValueChange={v => set("indice_correcao_monetaria", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o índice" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TJ/SP">Taxa de Juros - São Paulo (TJ/SP)</SelectItem>
+                      <SelectItem value="TJ/MG">Taxa de Juros - Minas Gerais (TJ/MG)</SelectItem>
+                      <SelectItem value="TJ/RJ">Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)</SelectItem>
+                      <SelectItem value="TJ/PR">Taxa de Juros - Paraná (TJ/PR)</SelectItem>
+                      <SelectItem value="INPC">Índice Nacional de Preços ao Consumidor (INPC)</SelectItem>
+                      <SelectItem value="IGPM">Índice Geral de Preços do Mercado (IGPM)</SelectItem>
+                      <SelectItem value="INCC">Índice Nacional de Custo da Construção (INCC)</SelectItem>
+                      <SelectItem value="IPCA">Índice de Preços ao Consumidor Amplo (IPCA)</SelectItem>
+                      <SelectItem value="UFIR">Unidade Fiscal de Referência (UFIR)</SelectItem>
+                      <SelectItem value="SELIC">Sistema Especial de Liquidação e Custódia (SELIC)</SelectItem>
+                      <SelectItem value="IGP-DI">Índice Geral de Preços - Disponibilidade Interna (IGP-DI)</SelectItem>
+                      <SelectItem value="TBF">Taxa Básica Financeira (TBF)</SelectItem>
+                      <SelectItem value="TR">Taxa Referencial (TR)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
