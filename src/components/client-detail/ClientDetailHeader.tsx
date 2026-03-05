@@ -210,6 +210,7 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
                 <InfoItem label="Cod. Devedor" value={client.external_id} />
                 <InfoItem label="Cod. Contrato" value={client.cod_contrato} />
+                <InfoItem label="Modelo" value={client.model_name} />
                 <InfoItem label="Credor" value={client.credor} />
                 <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
                 
