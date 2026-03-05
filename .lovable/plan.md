@@ -1,20 +1,15 @@
 
 
-## Plano: Selecionar e importar todos os registros em lotes de 1000
+## Plano: Corrigir checkbox "Selecionar Todos" no MaxList
 
-### Problema
-Atualmente o MaxList limita a exibição e seleção a 1000 registros (`data.slice(0, 1000)`). O "selecionar todos" só marca os primeiros 1000, e registros além disso são ignorados na importação.
+### Diagnóstico
+O problema está na forma como o `onCheckedChange` é passado para o `Checkbox`. O Radix Checkbox espera `(checked: boolean | "indeterminate") => void`, mas `toggleAll` é passado diretamente sem wrapper. Além disso, com datasets grandes, a renderização de todas as linhas simultaneamente pode travar a UI.
 
-### Alterações em `src/pages/MaxListPage.tsx`
+### Correção em `src/pages/MaxListPage.tsx`
 
-1. **Remover o limite de 1000 na visualização da tabela**: trocar `data.slice(0, 1000)` por exibir todos os registros (a tabela já usa ScrollArea, suporta scroll)
+1. **Wrapper no `onCheckedChange`**: trocar `onCheckedChange={toggleAll}` por `onCheckedChange={() => toggleAll()}` para garantir a chamada correta
 
-2. **Ajustar `toggleAll`**: ao clicar "selecionar todos", selecionar TODOS os índices de `data` (não apenas os primeiros 1000)
+2. **Mesma correção no checkbox individual**: garantir consistência nos handlers de checkbox
 
-3. **Importação em lotes automáticos**: o `handleMappingConfirmed` já processa em lotes de `BATCH_SIZE = 200`. Nenhuma alteração necessária na lógica de envio — ela já itera sobre todos os `records` selecionados. O gargalo era apenas a seleção, não o envio.
-
-4. **Indicador visual**: mostrar no badge de contagem quantos estão selecionados vs total (ex: "5.432 selecionados de 5.432")
-
-### Resumo
-A única mudança real é remover o `slice(0, 1000)` e ajustar o `toggleAll` para selecionar todos os índices de `data`. A importação já funciona em lotes de 200, então todos serão enviados corretamente.
+Alteração mínima — apenas ajustar a linha do checkbox header (linha ~949).
 
