@@ -1,31 +1,48 @@
 
 
-## Plano: Notificação de compra na loja para responsáveis
+## Plano: Agrupar clientes por CPF na Carteira
 
 ### Problema
-Quando um operador compra na loja, nenhuma notificação é enviada. O admin/supervisor/gerente só descobre ao verificar manualmente a aba de pedidos.
+Hoje a tabela em `/carteira` exibe uma linha por parcela. O usuário quer ver **uma linha por cliente (agrupado por CPF)**, com o primeiro vencimento visível. As parcelas individuais ficam acessíveis ao entrar no perfil do cliente.
 
-### Solução
-Ao criar um pedido na loja, enviar uma notificação (sininho) para todos os admins e gerentes do tenant, e para o supervisor direto do operador (líder da equipe).
+### Alterações
 
-### Alteração
+**`src/pages/CarteiraPage.tsx`**
 
-**`src/components/gamificacao/ShopTab.tsx`** — após `createOrder`, chamar uma função que insere notificações para os responsáveis:
+1. **Criar agrupamento por CPF** no `displayClients` (useMemo): após filtrar e ordenar, agrupar por CPF usando um `Map<string, Client[]>`, mantendo de cada grupo:
+   - `nome_completo`, `cpf`, `credor` (do primeiro registro)
+   - `data_vencimento`: menor data de vencimento do grupo (primeiro vencimento)
+   - `valor_total`: soma de `valor_parcela` de todas as parcelas do grupo
+   - `total_parcelas`: contagem de registros no grupo
+   - `propensity_score`: maior score do grupo
+   - `status_cobranca_id`: do primeiro registro
+   - Um `id` representativo (primeiro registro, usado para seleção/ações)
+   - Lista de IDs originais para seleção em massa
 
-1. Buscar todos os profiles do tenant com role `admin`, `gerente`, ou `supervisor`
-2. Inserir uma notificação para cada um via `supabase.from("notifications").insert(...)` com:
-   - `type: "info"`
-   - `reference_type: "shop_order"`
-   - `title: "Nova compra na Loja"`
-   - `message: "{nome do operador} comprou {nome do produto} por {X} RivoCoins"`
-3. O sininho já escuta notificações em tempo real (`useNotifications` com realtime subscription), então aparecerá instantaneamente
+2. **Remover colunas** da tabela:
+   - "Parcela" (coluna `numero_parcela`)
+   - "Pagamento" (coluna com ícone de status pago/pendente/quebrado)
 
-### Alternativa (mais robusta)
-Criar um trigger no banco na tabela `shop_orders` (INSERT) que insere notificações automaticamente via função `SECURITY DEFINER`. Isso garante que funcione mesmo se a compra vier de outro fluxo futuro.
+3. **Ajustar coluna "Vencimento"**: exibir o primeiro (menor) vencimento do cliente agrupado
 
-**Recomendação**: implementar no código do frontend por simplicidade, já que a compra só acontece pelo ShopTab.
+4. **Ajustar coluna "Valor"**: exibir valor total das parcelas pendentes do grupo
 
-| Arquivo | Alteração |
-|---|---|
-| `src/components/gamificacao/ShopTab.tsx` | Após criar pedido, buscar responsáveis e inserir notificações |
+5. **Manter navegação**: clicar no nome continua levando a `/carteira/:cpf` (perfil do cliente com todas as parcelas)
+
+6. **Ajustar seleção**: checkbox seleciona todos os IDs do grupo (para bulk actions como WhatsApp/Discador funcionarem com todas as parcelas)
+
+7. **Ajustar export Excel**: exportar dados agrupados
+
+**`src/components/carteira/CarteiraTable.tsx`** (se usado em outro lugar)
+- Mesma lógica: remover coluna Parcela, agrupar por CPF
+
+### Estrutura da linha agrupada
+
+| Modelo | Nome | CPF | Credor | Vencimento (1º) | Valor Total | Score | Status Cobrança | Ações |
+|--------|------|-----|--------|-----------------|-------------|-------|-----------------|-------|
+
+### Observações
+- Nenhuma alteração no banco de dados
+- O perfil do cliente (`/carteira/:cpf`) já exibe todas as parcelas individuais
+- Filtros continuam funcionando normalmente (aplicados antes do agrupamento)
 
