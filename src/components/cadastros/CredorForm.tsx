@@ -168,19 +168,21 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingNegociacao(true);
     try {
-      await upsertCredor({
-        id: editing.id,
-        tenant_id: tenant!.id,
-        parcelas_min: parseInt(form.parcelas_min) || 1,
-        parcelas_max: parseInt(form.parcelas_max) || 12,
-        entrada_minima_valor: parseFloat(form.entrada_minima_valor) || 0,
-        entrada_minima_tipo: form.entrada_minima_tipo || "percent",
-        desconto_maximo: parseFloat(form.desconto_maximo) || 0,
-        juros_mes: parseFloat(form.juros_mes) || 0,
-        multa: parseFloat(form.multa) || 0,
-        prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
-        indice_correcao_monetaria: form.indice_correcao_monetaria || null,
-      });
+      const { error } = await supabase
+        .from("credores" as any)
+        .update({
+          parcelas_min: parseInt(form.parcelas_min) || 1,
+          parcelas_max: parseInt(form.parcelas_max) || 12,
+          entrada_minima_valor: parseFloat(form.entrada_minima_valor) || 0,
+          entrada_minima_tipo: form.entrada_minima_tipo || "percent",
+          desconto_maximo: parseFloat(form.desconto_maximo) || 0,
+          juros_mes: parseFloat(form.juros_mes) || 0,
+          multa: parseFloat(form.multa) || 0,
+          prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
+          indice_correcao_monetaria: form.indice_correcao_monetaria || null,
+        } as any)
+        .eq("id", editing.id);
+      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Regras de negociação salvas!");
     } catch {
