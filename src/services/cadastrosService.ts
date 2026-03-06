@@ -21,7 +21,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Try exact match on razao_social
   const { data: byRazao } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria")
     .eq("tenant_id", tenantId)
     .eq("razao_social", credorName)
     .limit(1)
