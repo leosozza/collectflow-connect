@@ -77,11 +77,32 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
   const numParcels = typeof numParcelas === "number" && numParcelas > 0 ? numParcelas : 1;
 
+  // Calculate original total with juros/multa/correção based on oldest selected parcela
   const originalTotal = useMemo(() => {
-    return pendentes
-      .filter((c) => selectedIds.has(c.id))
-      .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
-  }, [pendentes, selectedIds]);
+    const selected = pendentes.filter((c) => selectedIds.has(c.id));
+    if (selected.length === 0) return 0;
+
+    const valorBruto = selected.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+
+    if (!credorRules || (credorRules.juros_mes === 0 && credorRules.multa === 0)) {
+      return valorBruto;
+    }
+
+    // Use oldest selected parcela for aging calculation
+    const oldest = selected.reduce((min, c) => {
+      const d = new Date(c.data_vencimento);
+      return d < min ? d : min;
+    }, new Date(selected[0].data_vencimento));
+    
+    const now = new Date();
+    const mesesAtraso = Math.max(0, (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth()));
+
+    // Apply: valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+    const comMulta = valorBruto * (credorRules.multa / 100);
+    const comJuros = valorBruto * (credorRules.juros_mes / 100) * mesesAtraso;
+    
+    return valorBruto + comMulta + comJuros;
+  }, [pendentes, selectedIds, credorRules]);
 
   // Calculate aging days from oldest selected parcela
   const agingDays = useMemo(() => {
