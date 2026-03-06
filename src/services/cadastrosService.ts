@@ -10,6 +10,7 @@ export interface CredorRulesResult {
   juros_mes: number;
   multa: number;
   aging_discount_tiers: any[];
+  indice_correcao_monetaria: string | null;
 }
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");

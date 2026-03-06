@@ -212,12 +212,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setNotes("Modelo: Cartão sem juros/multa");
   };
 
-  // Detect if agreement is out of standard — if no credorRules found, require approval
+  // Detect if agreement is out of standard — no rules = automatic approval
   const outOfStandard = useMemo(() => {
     if (!credorRules) {
-      if (numDiscountPercent > 0 || numParcels > 1) {
-        return { isOut: true, reasons: ["Credor sem regras de negociação cadastradas — requer liberação"] };
-      }
       return { isOut: false, reasons: [] as string[] };
     }
     const reasons: string[] = [];
