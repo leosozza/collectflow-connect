@@ -64,6 +64,7 @@ function mapCredorRules(data: any): CredorRulesResult {
     juros_mes: Number(data.juros_mes) || 0,
     multa: Number(data.multa) || 0,
     aging_discount_tiers: (data.aging_discount_tiers as any[]) || [],
+    indice_correcao_monetaria: data.indice_correcao_monetaria || null,
   };
 }
 
