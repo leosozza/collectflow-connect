@@ -33,6 +33,7 @@ interface CredorRules {
   entrada_minima_valor: number;
   entrada_minima_tipo: string;
   aging_discount_tiers: AgingTier[];
+  indice_correcao_monetaria: string | null;
 }
 
 interface AgreementCalculatorProps {
@@ -76,11 +77,32 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
   const numParcels = typeof numParcelas === "number" && numParcelas > 0 ? numParcelas : 1;
 
+  // Calculate original total with juros/multa/correção based on oldest selected parcela
   const originalTotal = useMemo(() => {
-    return pendentes
-      .filter((c) => selectedIds.has(c.id))
-      .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
-  }, [pendentes, selectedIds]);
+    const selected = pendentes.filter((c) => selectedIds.has(c.id));
+    if (selected.length === 0) return 0;
+
+    const valorBruto = selected.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+
+    if (!credorRules || (credorRules.juros_mes === 0 && credorRules.multa === 0)) {
+      return valorBruto;
+    }
+
+    // Use oldest selected parcela for aging calculation
+    const oldest = selected.reduce((min, c) => {
+      const d = new Date(c.data_vencimento);
+      return d < min ? d : min;
+    }, new Date(selected[0].data_vencimento));
+    
+    const now = new Date();
+    const mesesAtraso = Math.max(0, (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth()));
+
+    // Apply: valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+    const comMulta = valorBruto * (credorRules.multa / 100);
+    const comJuros = valorBruto * (credorRules.juros_mes / 100) * mesesAtraso;
+    
+    return valorBruto + comMulta + comJuros;
+  }, [pendentes, selectedIds, credorRules]);
 
   // Calculate aging days from oldest selected parcela
   const agingDays = useMemo(() => {
@@ -190,12 +212,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setNotes("Modelo: Cartão sem juros/multa");
   };
 
-  // Detect if agreement is out of standard — if no credorRules found, require approval
+  // Detect if agreement is out of standard — no rules = automatic approval
   const outOfStandard = useMemo(() => {
     if (!credorRules) {
-      if (numDiscountPercent > 0 || numParcels > 1) {
-        return { isOut: true, reasons: ["Credor sem regras de negociação cadastradas — requer liberação"] };
-      }
       return { isOut: false, reasons: [] as string[] };
     }
     const reasons: string[] = [];
@@ -378,9 +397,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       <Card>
         <CardContent className="pt-6 space-y-5">
           {/* Original total */}
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <span className="text-sm font-medium">Total Original ({selectedIds.size} parcelas)</span>
-            <span className="text-lg font-bold">{formatCurrency(originalTotal)}</span>
+          <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Total Atualizado ({selectedIds.size} parcelas)</span>
+              <span className="text-lg font-bold">{formatCurrency(originalTotal)}</span>
+            </div>
+            {credorRules && (credorRules.juros_mes > 0 || credorRules.multa > 0) && (
+              <p className="text-[10px] text-muted-foreground">
+                Inclui: {credorRules.multa > 0 ? `Multa ${credorRules.multa}%` : ""}{credorRules.multa > 0 && credorRules.juros_mes > 0 ? " + " : ""}{credorRules.juros_mes > 0 ? `Juros ${credorRules.juros_mes}%/mês (${agingDays} dias)` : ""}
+                {credorRules.indice_correcao_monetaria ? ` • Correção: ${credorRules.indice_correcao_monetaria}` : ""}
+              </p>
+            )}
           </div>
 
           {/* Discount */}

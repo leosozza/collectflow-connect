@@ -77,10 +77,7 @@ const NegotiationPanel = ({
   // Detect if out of standard — if no credorRules found, require approval
   const outOfStandard = useMemo(() => {
     if (!credorRules) {
-      // No rules configured = always require approval when there's a discount or multiple installments
-      if (numDiscount > 0 || numInstallments > 1) {
-        return { isOut: true, reasons: ["Credor sem regras de negociação cadastradas — requer liberação"] };
-      }
+      // No rules configured = automatic approval
       return { isOut: false, reasons: [] as string[] };
     }
     const reasons: string[] = [];

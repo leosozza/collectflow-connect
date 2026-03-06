@@ -10,6 +10,7 @@ export interface CredorRulesResult {
   juros_mes: number;
   multa: number;
   aging_discount_tiers: any[];
+  indice_correcao_monetaria: string | null;
 }
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -20,7 +21,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Try exact match on razao_social
   const { data: byRazao } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria")
     .eq("tenant_id", tenantId)
     .eq("razao_social", credorName)
     .limit(1)
@@ -30,7 +31,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Try exact match on nome_fantasia
   const { data: byFantasia } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria")
     .eq("tenant_id", tenantId)
     .eq("nome_fantasia", credorName)
     .limit(1)
@@ -40,7 +41,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Fallback: fetch all credores for tenant and normalize match
   const { data: all } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, razao_social, nome_fantasia")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria, razao_social, nome_fantasia")
     .eq("tenant_id", tenantId);
   if (all && Array.isArray(all)) {
     const target = normalize(credorName);
@@ -63,6 +64,7 @@ function mapCredorRules(data: any): CredorRulesResult {
     juros_mes: Number(data.juros_mes) || 0,
     multa: Number(data.multa) || 0,
     aging_discount_tiers: (data.aging_discount_tiers as any[]) || [],
+    indice_correcao_monetaria: data.indice_correcao_monetaria || null,
   };
 }
 
