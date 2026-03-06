@@ -33,6 +33,7 @@ interface CredorRules {
   entrada_minima_valor: number;
   entrada_minima_tipo: string;
   aging_discount_tiers: AgingTier[];
+  indice_correcao_monetaria: string | null;
 }
 
 interface AgreementCalculatorProps {
