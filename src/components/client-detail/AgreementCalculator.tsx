@@ -397,9 +397,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       <Card>
         <CardContent className="pt-6 space-y-5">
           {/* Original total */}
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <span className="text-sm font-medium">Total Original ({selectedIds.size} parcelas)</span>
-            <span className="text-lg font-bold">{formatCurrency(originalTotal)}</span>
+          <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Total Atualizado ({selectedIds.size} parcelas)</span>
+              <span className="text-lg font-bold">{formatCurrency(originalTotal)}</span>
+            </div>
+            {credorRules && (credorRules.juros_mes > 0 || credorRules.multa > 0) && (
+              <p className="text-[10px] text-muted-foreground">
+                Inclui: {credorRules.multa > 0 ? `Multa ${credorRules.multa}%` : ""}{credorRules.multa > 0 && credorRules.juros_mes > 0 ? " + " : ""}{credorRules.juros_mes > 0 ? `Juros ${credorRules.juros_mes}%/mês (${agingDays} dias)` : ""}
+                {credorRules.indice_correcao_monetaria ? ` • Correção: ${credorRules.indice_correcao_monetaria}` : ""}
+              </p>
+            )}
           </div>
 
           {/* Discount */}
