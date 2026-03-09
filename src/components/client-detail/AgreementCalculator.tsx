@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,34 +7,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck, Loader2, Zap, CreditCard, Banknote, AlertTriangle } from "lucide-react";
+import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
-
-interface AgingTier {
-  min_days: number;
-  max_days: number;
-  discount_percent: number;
-}
-
-interface CredorRules {
-  desconto_maximo: number;
-  juros_mes: number;
-  multa: number;
-  parcelas_max: number;
-  parcelas_min: number;
-  entrada_minima_valor: number;
-  entrada_minima_tipo: string;
-  aging_discount_tiers: AgingTier[];
-  indice_correcao_monetaria: string | null;
-}
 
 interface AgreementCalculatorProps {
   clients: any[];
@@ -45,213 +30,170 @@ interface AgreementCalculatorProps {
   hasActiveAgreement?: boolean;
 }
 
+interface SimulatedInstallment {
+  number: number;
+  method: string;
+  dueDate: string;
+  value: number;
+}
+
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
   const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
-  const [discountPercent, setDiscountPercent] = useState<number | "">(0);
-  const [discountValue, setDiscountValue] = useState<number | "">(0);
-  const [entradaValue, setEntradaValue] = useState<number | "">(0);
+  const [calcDate, setCalcDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [jurosPercent, setJurosPercent] = useState<number>(0);
+  const [multaPercent, setMultaPercent] = useState<number>(0);
+  const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
+  const [descontoPercent, setDescontoPercent] = useState<number>(0);
+
+  // Agreement form
   const [entradaDate, setEntradaDate] = useState("");
-  const [numParcelas, setNumParcelas] = useState<number | "">(1);
+  const [entradaValue, setEntradaValue] = useState<number | "">(0);
+  const [numParcelas, setNumParcelas] = useState<number>(1);
+  const [formaPagto, setFormaPagto] = useState("BOLETO");
+  const [intervalo, setIntervalo] = useState("mensal");
   const [firstDueDate, setFirstDueDate] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Simulation state
+  const [simulated, setSimulated] = useState(false);
+  const [simulatedInstallments, setSimulatedInstallments] = useState<SimulatedInstallment[]>([]);
+
   const [submitting, setSubmitting] = useState(false);
   const [enrichingAddress, setEnrichingAddress] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
-  const [activeModel, setActiveModel] = useState<string | null>(null);
 
-  // Fetch credor rules (robust matching)
+  // Fetch credor rules
   useEffect(() => {
     if (!profile?.tenant_id || !credor) return;
     fetchCredorRules(profile.tenant_id, credor).then((rules) => {
-      if (rules) setCredorRules(rules);
+      if (rules) {
+        setCredorRules(rules);
+        setJurosPercent(rules.juros_mes || 0);
+        setMultaPercent(rules.multa || 0);
+        setDescontoPercent(rules.desconto_maximo || 0);
+      }
     });
   }, [profile?.tenant_id, credor]);
 
-  // Numeric helpers
-  const numDiscountPercent = typeof discountPercent === "number" ? discountPercent : 0;
-  const numDiscountValue = typeof discountValue === "number" ? discountValue : 0;
+  // Reset simulation when params change
+  useEffect(() => {
+    setSimulated(false);
+    setSimulatedInstallments([]);
+  }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradaValue, numParcelas, firstDueDate, formaPagto, intervalo]);
+
   const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
-  const numParcels = typeof numParcelas === "number" && numParcelas > 0 ? numParcelas : 1;
 
-  // Calculate original total with juros/multa/correção based on oldest selected parcela
-  const originalTotal = useMemo(() => {
-    const selected = pendentes.filter((c) => selectedIds.has(c.id));
-    if (selected.length === 0) return 0;
+  // Per-row calculations
+  const rowCalcs = useMemo(() => {
+    const refDate = new Date(calcDate + "T00:00:00");
+    return pendentes.map((c) => {
+      const venc = new Date(c.data_vencimento + "T00:00:00");
+      const atraso = Math.max(0, Math.floor((refDate.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)));
+      const mesesAtraso = Math.max(0, (refDate.getFullYear() - venc.getFullYear()) * 12 + (refDate.getMonth() - venc.getMonth()));
+      const valorOriginal = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+      const valorBase = valorOriginal;
+      const jurosVal = valorBase * (jurosPercent / 100) * mesesAtraso;
+      const multaVal = atraso > 0 ? valorBase * (multaPercent / 100) : 0;
+      const honorariosVal = valorBase * (honorariosPercent / 100);
+      const total = valorBase + jurosVal + multaVal + honorariosVal;
+      return { id: c.id, atraso, valorOriginal, valorBase, jurosVal, multaVal, honorariosVal, total };
+    });
+  }, [pendentes, calcDate, jurosPercent, multaPercent, honorariosPercent]);
 
-    const valorBruto = selected.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+  // Totals from selected rows
+  const totals = useMemo(() => {
+    const selected = rowCalcs.filter((r) => selectedIds.has(r.id));
+    const totalOriginal = selected.reduce((s, r) => s + r.valorOriginal, 0);
+    const totalBase = selected.reduce((s, r) => s + r.valorBase, 0);
+    const totalJuros = selected.reduce((s, r) => s + r.jurosVal, 0);
+    const totalMulta = selected.reduce((s, r) => s + r.multaVal, 0);
+    const totalHonorarios = selected.reduce((s, r) => s + r.honorariosVal, 0);
+    const totalBruto = selected.reduce((s, r) => s + r.total, 0);
+    const descontoVal = totalBruto * (descontoPercent / 100);
+    const totalAtualizado = Math.max(0, totalBruto - descontoVal);
+    return { totalOriginal, totalBase, totalJuros, totalMulta, totalHonorarios, totalBruto, descontoVal, totalAtualizado };
+  }, [rowCalcs, selectedIds, descontoPercent]);
 
-    if (!credorRules || (credorRules.juros_mes === 0 && credorRules.multa === 0)) {
-      return valorBruto;
-    }
-
-    // Use oldest selected parcela for aging calculation
-    const oldest = selected.reduce((min, c) => {
-      const d = new Date(c.data_vencimento);
-      return d < min ? d : min;
-    }, new Date(selected[0].data_vencimento));
-    
-    const now = new Date();
-    const mesesAtraso = Math.max(0, (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth()));
-
-    // Apply: valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-    const comMulta = valorBruto * (credorRules.multa / 100);
-    const comJuros = valorBruto * (credorRules.juros_mes / 100) * mesesAtraso;
-    
-    return valorBruto + comMulta + comJuros;
-  }, [pendentes, selectedIds, credorRules]);
-
-  // Calculate aging days from oldest selected parcela
-  const agingDays = useMemo(() => {
-    const selected = pendentes.filter(c => selectedIds.has(c.id));
-    if (selected.length === 0) return 0;
-    const oldest = selected.reduce((min, c) => {
-      const d = new Date(c.data_vencimento);
-      return d < min ? d : min;
-    }, new Date(selected[0].data_vencimento));
-    const diff = Math.floor((Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  }, [pendentes, selectedIds]);
-
-  const DEFAULT_DISCOUNT = 10;
-
-  const getAgingDiscount = () => {
-    if (!credorRules) return DEFAULT_DISCOUNT;
-    if (credorRules.aging_discount_tiers.length === 0) {
-      return credorRules.desconto_maximo || DEFAULT_DISCOUNT;
-    }
-    const tier = credorRules.aging_discount_tiers.find(
-      t => agingDays >= t.min_days && agingDays <= t.max_days
-    );
-    return tier ? tier.discount_percent : credorRules.desconto_maximo || DEFAULT_DISCOUNT;
-  };
-
-  const proposedTotal = useMemo(() => {
-    return Math.max(0, originalTotal - numDiscountValue);
-  }, [originalTotal, numDiscountValue]);
-
-  const remainingAfterEntrada = useMemo(() => {
-    return Math.max(0, proposedTotal - numEntrada);
-  }, [proposedTotal, numEntrada]);
-
-  const installmentValue = useMemo(() => {
-    return remainingAfterEntrada / numParcels;
-  }, [remainingAfterEntrada, numParcels]);
+  const remainingAfterEntrada = Math.max(0, totals.totalAtualizado - numEntrada);
+  const installmentValue = numParcelas > 0 ? remainingAfterEntrada / numParcelas : 0;
 
   const toggleId = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === pendentes.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(pendentes.map((c) => c.id)));
-    }
+    if (selectedIds.size === pendentes.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(pendentes.map((c) => c.id)));
   };
 
-  const handleDiscountPercent = (pct: number | "") => {
-    setDiscountPercent(pct);
-    const numPct = typeof pct === "number" ? pct : 0;
-    setDiscountValue(Number(((originalTotal * numPct) / 100).toFixed(2)));
-  };
-
-  const handleDiscountValue = (val: number | "") => {
-    setDiscountValue(val);
-    const numVal = typeof val === "number" ? val : 0;
-    if (originalTotal > 0) {
-      setDiscountPercent(Number(((numVal / originalTotal) * 100).toFixed(2)));
-    }
-  };
-
-  // Model 1: À vista com desconto aging
-  const applyModel1 = () => {
-    const disc = getAgingDiscount();
-    handleDiscountPercent(disc);
-    setEntradaValue(0);
-    setEntradaDate("");
-    setNumParcelas(1);
-    setActiveModel("avista");
-    setNotes("Modelo: À Vista com desconto");
-  };
-
-  // Model 2: Entrada 30% + 5 parcelas
-  const applyModel2 = () => {
-    const disc = getAgingDiscount();
-    handleDiscountPercent(disc);
-    const proposedAfterDiscount = Math.max(0, originalTotal - Number(((originalTotal * disc) / 100).toFixed(2)));
-    const entrada = Number((proposedAfterDiscount * 0.3).toFixed(2));
-    setEntradaValue(entrada);
-    setNumParcelas(5);
-    setActiveModel("entrada");
-    setNotes("Modelo: Entrada 30% + 5 parcelas");
-  };
-
-  // Model 3: Cartão - sem juros/multa, parcelado máximo
-  const applyModel3 = () => {
-    if (!credorRules) return;
-    // Remove juros e multa do total
-    const jurosMulta = originalTotal * ((credorRules.juros_mes + credorRules.multa) / 100);
-    const valorSemJurosMulta = Math.max(0, originalTotal - jurosMulta);
-    const discVal = originalTotal - valorSemJurosMulta;
-    const discPct = originalTotal > 0 ? Number(((discVal / originalTotal) * 100).toFixed(2)) : 0;
-    setDiscountPercent(discPct);
-    setDiscountValue(Number(discVal.toFixed(2)));
-    setEntradaValue(0);
-    setEntradaDate("");
-    setNumParcelas(credorRules.parcelas_max || 12);
-    setActiveModel("cartao");
-    setNotes("Modelo: Cartão sem juros/multa");
-  };
-
-  // Detect if agreement is out of standard — no rules = automatic approval
-  const outOfStandard = useMemo(() => {
-    if (!credorRules) {
-      return { isOut: false, reasons: [] as string[] };
-    }
-    const reasons: string[] = [];
-    if (credorRules.desconto_maximo > 0 && numDiscountPercent > credorRules.desconto_maximo) {
-      reasons.push(`Desconto ${numDiscountPercent}% excede o máximo de ${credorRules.desconto_maximo}%`);
-    }
-    if (credorRules.parcelas_max > 0 && numParcels > credorRules.parcelas_max) {
-      reasons.push(`Parcelas ${numParcels}x excede o máximo de ${credorRules.parcelas_max}x`);
-    }
-    if (credorRules.entrada_minima_valor > 0 && numEntrada > 0) {
-      if (credorRules.entrada_minima_tipo === "percent") {
-        const minEntrada = proposedTotal * (credorRules.entrada_minima_valor / 100);
-        if (numEntrada < minEntrada) {
-          reasons.push(`Entrada R$ ${numEntrada.toFixed(2)} abaixo do mínimo de ${credorRules.entrada_minima_valor}% (R$ ${minEntrada.toFixed(2)})`);
-        }
-      } else {
-        if (numEntrada < credorRules.entrada_minima_valor) {
-          reasons.push(`Entrada R$ ${numEntrada.toFixed(2)} abaixo do mínimo de R$ ${credorRules.entrada_minima_valor.toFixed(2)}`);
-        }
-      }
-    }
-    return { isOut: reasons.length > 0, reasons };
-  }, [credorRules, numDiscountPercent, numParcels, numEntrada, proposedTotal]);
-
-  const handleSubmit = async () => {
-    if (!user || !profile?.tenant_id) {
-      toast.error("Usuário não autenticado");
-      return;
-    }
-    if (selectedIds.size === 0) {
-      toast.error("Selecione ao menos uma parcela");
-      return;
-    }
+  const handleSimulate = useCallback(() => {
     if (!firstDueDate) {
       toast.error("Informe a data do 1º vencimento");
       return;
     }
+    if (selectedIds.size === 0) {
+      toast.error("Selecione ao menos um título");
+      return;
+    }
+
+    const installments: SimulatedInstallment[] = [];
+
+    // Add entrada as installment 0 if present
+    if (numEntrada > 0 && entradaDate) {
+      installments.push({
+        number: 0,
+        method: formaPagto,
+        dueDate: entradaDate,
+        value: numEntrada,
+      });
+    }
+
+    const baseDate = new Date(firstDueDate + "T00:00:00");
+    for (let i = 0; i < numParcelas; i++) {
+      const d = new Date(baseDate);
+      if (intervalo === "mensal") {
+        d.setMonth(d.getMonth() + i);
+      } else if (intervalo === "quinzenal") {
+        d.setDate(d.getDate() + i * 15);
+      } else {
+        d.setDate(d.getDate() + i * 7);
+      }
+      installments.push({
+        number: i + 1,
+        method: formaPagto,
+        dueDate: d.toISOString().split("T")[0],
+        value: installmentValue,
+      });
+    }
+
+    setSimulatedInstallments(installments);
+    setSimulated(true);
+  }, [firstDueDate, selectedIds, numEntrada, entradaDate, formaPagto, numParcelas, intervalo, installmentValue]);
+
+  // Out-of-standard detection
+  const outOfStandard = useMemo(() => {
+    if (!credorRules) return { isOut: false, reasons: [] as string[] };
+    const reasons: string[] = [];
+    if (credorRules.desconto_maximo > 0 && descontoPercent > credorRules.desconto_maximo) {
+      reasons.push(`Desconto ${descontoPercent}% excede máx ${credorRules.desconto_maximo}%`);
+    }
+    if (credorRules.parcelas_max > 0 && numParcelas > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${numParcelas}x excede máx ${credorRules.parcelas_max}x`);
+    }
+    return { isOut: reasons.length > 0, reasons };
+  }, [credorRules, descontoPercent, numParcelas]);
+
+  const handleSubmit = async () => {
+    if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
+    if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
     setSubmitting(true);
     setEnrichingAddress(true);
@@ -265,10 +207,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         client_cpf: cpf,
         client_name: clientName,
         credor,
-        original_total: originalTotal,
-        proposed_total: proposedTotal,
-        discount_percent: numDiscountPercent,
-        new_installments: numParcels,
+        original_total: totals.totalOriginal,
+        proposed_total: totals.totalAtualizado,
+        discount_percent: descontoPercent,
+        new_installments: numParcelas,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
         entrada_value: numEntrada > 0 ? numEntrada : undefined,
@@ -281,10 +223,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         approvalReason: outOfStandard.reasons.join("; "),
       } : undefined);
 
-      toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gerado com sucesso!");
+      toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
       onAgreementCreated();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao gerar acordo");
+      toast.error(err.message || "Erro ao gravar acordo");
     } finally {
       setSubmitting(false);
       setEnrichingAddress(false);
@@ -292,256 +234,289 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
+  const copyTitles = () => {
+    const selected = pendentes.filter((c) => selectedIds.has(c.id));
+    const text = selected.map((c) => `${c.numero_parcela}/${c.total_parcelas} - ${formatDate(c.data_vencimento)} - ${formatCurrency(Number(c.valor_parcela) || 0)}`).join("\n");
+    navigator.clipboard.writeText(text);
+    toast.success("Títulos copiados!");
+  };
+
+  const simulatedTotal = simulatedInstallments.reduce((s, i) => s + i.value, 0);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {hasActiveAgreement && (
         <Alert variant="destructive">
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription>
-            Este cliente já possui um acordo vigente. Para criar um novo acordo, cancele o anterior primeiro.
+            Este cliente já possui um acordo vigente. Cancele o anterior para criar um novo.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Parcelas selection */}
+      {/* ── Section 1: Parameters Bar ── */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calculator className="w-4 h-4" />
-            Selecione as parcelas para o acordo
-          </CardTitle>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calculator className="w-4 h-4" />
+              Cálculo
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
+              <Copy className="w-3 h-3" /> Copiar Títulos
+            </Button>
+          </div>
         </CardHeader>
+        <CardContent className="pb-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1 min-w-[130px]">
+              <Label className="text-[11px]">Data Cálculo</Label>
+              <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 w-[90px]">
+              <Label className="text-[11px]">% Juros/mês</Label>
+              <Input type="number" min={0} step={0.01} value={jurosPercent} onChange={(e) => setJurosPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 w-[90px]">
+              <Label className="text-[11px]">% Multa</Label>
+              <Input type="number" min={0} step={0.01} value={multaPercent} onChange={(e) => setMultaPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 w-[90px]">
+              <Label className="text-[11px]">% Honorários</Label>
+              <Input type="number" min={0} step={0.01} value={honorariosPercent} onChange={(e) => setHonorariosPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 w-[100px]">
+              <Label className="text-[11px]">% Desc. Cap.</Label>
+              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => setDescontoPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            </div>
+            <div className="ml-auto bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-2 text-right">
+              <span className="text-[10px] text-muted-foreground block">Valor Atualizado</span>
+              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(totals.totalAtualizado)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Section 2: Expanded Titles Table ── */}
+      <Card>
         <CardContent className="p-0">
           {pendentes.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground">Nenhuma parcela pendente</div>
+            <div className="p-6 text-center text-muted-foreground text-sm">Nenhum título pendente</div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={selectedIds.size === pendentes.length && pendentes.length > 0}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  <TableHead>Parcela</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendentes.map((c) => (
-                  <TableRow key={c.id} className={selectedIds.has(c.id) ? "bg-primary/5" : ""}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(c.id)}
-                        onCheckedChange={() => toggleId(c.id)}
-                      />
-                    </TableCell>
-                    <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
-                    <TableCell>{formatDate(c.data_vencimento)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(Number(c.valor_parcela) || Number(c.valor_saldo) || 0)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 text-[11px]">
+                    <TableHead className="w-8 px-2">
+                      <Checkbox checked={selectedIds.size === pendentes.length && pendentes.length > 0} onCheckedChange={toggleAll} />
+                    </TableHead>
+                    <TableHead className="px-2">Parc</TableHead>
+                    <TableHead className="px-2">Vencimento</TableHead>
+                    <TableHead className="px-2 text-right">Atraso</TableHead>
+                    <TableHead className="px-2 text-right">V. Original</TableHead>
+                    <TableHead className="px-2 text-right">Juros</TableHead>
+                    <TableHead className="px-2 text-right">Multa</TableHead>
+                    <TableHead className="px-2 text-right">Honorários</TableHead>
+                    <TableHead className="px-2 text-right font-semibold">Total</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {pendentes.map((c, idx) => {
+                    const row = rowCalcs[idx];
+                    const isSelected = selectedIds.has(c.id);
+                    return (
+                      <TableRow key={c.id} className={`text-xs ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
+                        <TableCell className="px-2">
+                          <Checkbox checked={isSelected} onCheckedChange={() => toggleId(c.id)} />
+                        </TableCell>
+                        <TableCell className="px-2 font-medium">{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                        <TableCell className="px-2">{formatDate(c.data_vencimento)}</TableCell>
+                        <TableCell className="px-2 text-right">
+                          <Badge variant={row.atraso > 30 ? "destructive" : "secondary"} className="text-[10px] px-1.5">
+                            {row.atraso}d
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-2 text-right">{formatCurrency(row.valorOriginal)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</TableCell>
+                        <TableCell className="px-2 text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {/* Totals row */}
+                  <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
+                    <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
+                    <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
+                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
+                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
+                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
+                    <TableCell className="px-2 text-right">{formatCurrency(totals.totalBruto)}</TableCell>
+                  </TableRow>
+                  {descontoPercent > 0 && (
+                    <TableRow className="text-xs">
+                      <TableCell colSpan={8} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
+                      <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Preset Models */}
-      <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Modelos de Acordo</CardTitle>
-            {agingDays > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Aging: {agingDays} dias em aberto • Desconto sugerido: {getAgingDiscount()}%
-              </p>
-            )}
+      {/* ── Section 3: Two-column — Form + Simulation ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Left: Agreement Form */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3">
-            <Button
-              variant={activeModel === "avista" ? "default" : "outline"}
-              className="flex flex-col items-center gap-1 h-auto py-3"
-              onClick={applyModel1}
-              type="button"
-            >
-              <Banknote className="w-5 h-5" />
-              <span className="text-xs font-medium">À Vista</span>
-              <span className="text-[10px] text-muted-foreground">{getAgingDiscount()}% desconto</span>
-            </Button>
-            <Button
-              variant={activeModel === "entrada" ? "default" : "outline"}
-              className="flex flex-col items-center gap-1 h-auto py-3"
-              onClick={applyModel2}
-              type="button"
-            >
-              <Zap className="w-5 h-5" />
-              <span className="text-xs font-medium">Entrada + Parcelas</span>
-              <span className="text-[10px] text-muted-foreground">30% + 5x</span>
-            </Button>
-            <Button
-              variant={activeModel === "cartao" ? "default" : "outline"}
-              className="flex flex-col items-center gap-1 h-auto py-3"
-              onClick={applyModel3}
-              type="button"
-              disabled={!credorRules}
-            >
-              <CreditCard className="w-5 h-5" />
-              <span className="text-xs font-medium">Cartão</span>
-              <span className="text-[10px] text-muted-foreground">{credorRules ? "Sem juros/multa" : "Requer regras"}</span>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Data Entrada</Label>
+                <Input type="date" value={entradaDate} onChange={(e) => setEntradaDate(e.target.value)} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Valor Entrada (R$)</Label>
+                <Input type="number" min={0} value={entradaValue} onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))} className="h-8 text-xs" placeholder="0,00" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Qtde Parcelas</Label>
+                <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Forma de Pagamento</Label>
+                <Select value={formaPagto} onValueChange={setFormaPagto}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BOLETO">Boleto</SelectItem>
+                    <SelectItem value="PIX">Pix</SelectItem>
+                    <SelectItem value="CARTAO">Cartão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Intervalo</Label>
+                <Select value={intervalo} onValueChange={setIntervalo}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                    <SelectItem value="semanal">Semanal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Vencto 1ª Parcela</Label>
+                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-8 text-xs" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px]">Observações</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas sobre o acordo..." rows={2} className="text-xs" />
+            </div>
+
+            <Button onClick={handleSimulate} className="w-full gap-2" variant="secondary" disabled={selectedIds.size === 0}>
+              <Play className="w-4 h-4" />
+              SIMULAR
             </Button>
           </CardContent>
         </Card>
 
-      {/* Calculator */}
-      <Card>
-        <CardContent className="pt-6 space-y-5">
-          {/* Original total */}
-          <div className="p-3 bg-muted/50 rounded-lg space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Total Atualizado ({selectedIds.size} parcelas)</span>
-              <span className="text-lg font-bold">{formatCurrency(originalTotal)}</span>
-            </div>
-            {credorRules && (credorRules.juros_mes > 0 || credorRules.multa > 0) && (
-              <p className="text-[10px] text-muted-foreground">
-                Inclui: {credorRules.multa > 0 ? `Multa ${credorRules.multa}%` : ""}{credorRules.multa > 0 && credorRules.juros_mes > 0 ? " + " : ""}{credorRules.juros_mes > 0 ? `Juros ${credorRules.juros_mes}%/mês (${agingDays} dias)` : ""}
-                {credorRules.indice_correcao_monetaria ? ` • Correção: ${credorRules.indice_correcao_monetaria}` : ""}
-              </p>
+        {/* Right: Simulation Results */}
+        <Card className={`transition-opacity ${simulated ? "opacity-100" : "opacity-40"}`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {simulated && simulatedInstallments.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 text-[11px]">
+                      <TableHead className="px-3">Parcela</TableHead>
+                      <TableHead className="px-3">Forma Pagto</TableHead>
+                      <TableHead className="px-3">Vencimento</TableHead>
+                      <TableHead className="px-3 text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {simulatedInstallments.map((inst) => (
+                      <TableRow key={inst.number} className="text-xs">
+                        <TableCell className="px-3 font-medium">
+                          {inst.number === 0 ? "Entrada" : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
+                        </TableCell>
+                        <TableCell className="px-3">
+                          <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
+                        </TableCell>
+                        <TableCell className="px-3">{formatDate(inst.dueDate)}</TableCell>
+                        <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-emerald-50 dark:bg-emerald-950/30 border-t-2 text-xs font-bold">
+                      <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
+                      <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
+                        {formatCurrency(simulatedTotal)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground text-xs">
+                Preencha as condições e clique em <strong>SIMULAR</strong> para visualizar as parcelas.
+              </div>
             )}
-          </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Discount */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Desconto (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={discountPercent}
-                onChange={(e) => handleDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Desconto (R$)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={discountValue}
-                onChange={(e) => handleDiscountValue(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="0,00"
-              />
-            </div>
-          </div>
+      {/* ── Section 4: Actions Bar ── */}
+      {outOfStandard.isOut && (
+        <Alert variant="destructive" className="border-orange-300 bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-300">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription className="text-xs">
+            <strong>Acordo fora do padrão:</strong> {outOfStandard.reasons.join("; ")}.
+            Será enviado para liberação.
+          </AlertDescription>
+        </Alert>
+      )}
 
-          {/* Entrada */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Valor de Entrada (R$)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={entradaValue}
-                onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))}
-                placeholder="0,00"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Data da Entrada</Label>
-              <Input
-                type="date"
-                value={entradaDate}
-                onChange={(e) => setEntradaDate(e.target.value)}
-              />
-            </div>
-          </div>
+      {enrichingAddress && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {addressStatus}
+        </div>
+      )}
 
-          {/* Parcelas */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Nº de Parcelas</Label>
-              <Input
-                type="number"
-                min={1}
-                value={numParcelas}
-                onChange={(e) => setNumParcelas(e.target.value === "" ? "" : Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Data 1º Vencimento</Label>
-              <Input
-                type="date"
-                value={firstDueDate}
-                onChange={(e) => setFirstDueDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <Label>Observações</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notas sobre o acordo..."
-              rows={3}
-            />
-          </div>
-
-          {/* Summary */}
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
-            <h4 className="font-semibold text-sm text-primary">Resumo do Acordo</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <span className="text-muted-foreground">Valor Original:</span>
-              <span className="text-right font-medium">{formatCurrency(originalTotal)}</span>
-              <span className="text-muted-foreground">Desconto:</span>
-              <span className="text-right font-medium text-green-600">- {formatCurrency(numDiscountValue)} ({numDiscountPercent}%)</span>
-              <span className="text-muted-foreground">Valor Proposto:</span>
-              <span className="text-right font-bold">{formatCurrency(proposedTotal)}</span>
-              {numEntrada > 0 && (
-                <>
-                  <span className="text-muted-foreground">Entrada:</span>
-                  <span className="text-right font-medium">{formatCurrency(numEntrada)}</span>
-                </>
-              )}
-              <span className="text-muted-foreground">Demais Parcelas:</span>
-              <span className="text-right font-medium">
-                {numParcels}x de {formatCurrency(installmentValue)}
-              </span>
-            </div>
-          </div>
-
-          {outOfStandard.isOut && (
-            <Alert variant="destructive" className="border-orange-300 bg-orange-50 text-orange-800">
-              <AlertTriangle className="w-4 h-4" />
-              <AlertDescription className="text-xs">
-                <strong>Acordo fora do padrão:</strong> {outOfStandard.reasons.join("; ")}. 
-                Será enviado para liberação por Supervisor/Gerente/Admin.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {enrichingAddress && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {addressStatus}
-            </div>
-          )}
-
-            <Button
-            onClick={handleSubmit}
-            disabled={submitting || selectedIds.size === 0 || !firstDueDate || hasActiveAgreement}
-            className="w-full gap-2"
-            size="lg"
-            variant={outOfStandard.isOut ? "outline" : "default"}
-          >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
-            {enrichingAddress ? addressStatus : submitting ? "Gerando..." : outOfStandard.isOut ? "Solicitar Liberação" : "Gerar Acordo"}
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex gap-3">
+        <Button
+          onClick={handleSubmit}
+          disabled={submitting || !simulated || hasActiveAgreement}
+          className="flex-1 gap-2"
+          size="lg"
+          variant={outOfStandard.isOut ? "outline" : "default"}
+        >
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+          {enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
+        </Button>
+      </div>
     </div>
   );
 };
