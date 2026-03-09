@@ -9,7 +9,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   super_admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete", "view_full_data"],
+    carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -28,7 +28,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete", "view_full_data"],
+    carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -47,7 +47,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   gerente: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import"],
+    carteira: ["view", "create", "import", "filter"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -66,7 +66,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   supervisor: {
     dashboard: ["view_all"],
     gamificacao: ["view"],
-    carteira: ["view", "create", "import"],
+    carteira: ["view", "create", "import", "filter"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -157,6 +157,7 @@ export function usePermissions() {
     canImportCarteira: has("carteira", "import"),
     canDeleteCarteira: has("carteira", "delete"),
     canViewFullData: has("carteira", "view_full_data"),
+    canFilterCarteira: has("carteira", "filter"),
 
     // Acordos
     canViewAcordos: hasAny("acordos"),
@@ -244,13 +245,14 @@ export const ACTION_LABELS: Record<string, string> = {
   delete: "Excluir",
   approve: "Aprovar/Rejeitar",
   manage: "Gerenciar",
+  filter: "Filtros Avançados",
   manage_admin: "Gerenciar (Administrativo)",
 };
 
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   dashboard: ["view_own", "view_all"],
   gamificacao: ["view", "manage"],
-  carteira: ["view", "create", "import", "delete", "view_full_data"],
+  carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
   acordos: ["view", "create", "approve"],
   relatorios: ["view"],
   analytics: ["view_own", "view_all"],

@@ -40,9 +40,10 @@ interface ClientFiltersProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
   onSearch?: () => void;
+  showAdvancedFilters?: boolean;
 }
 
-const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
+const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true }: ClientFiltersProps) => {
   const { tenant } = useTenant();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -91,19 +92,21 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
           <Search className="w-4 h-4" />
           Pesquisar
         </Button>
-        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="default" className="gap-1.5">
-              <Filter className="w-4 h-4" />
-              Filtros
-              {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </Button>
-          </CollapsibleTrigger>
-        </Collapsible>
+        {showAdvancedFilters && (
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="default" className="gap-1.5">
+                <Filter className="w-4 h-4" />
+                Filtros
+                {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </Collapsible>
+        )}
       </div>
 
       {/* Level 2: Collapsible advanced filters */}
-      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+      {showAdvancedFilters && <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleContent>
           <div className="space-y-4 pt-3 border-t border-border">
             {/* Linha 1: Selects */}
@@ -231,7 +234,7 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
             </div>
           </div>
         </CollapsibleContent>
-      </Collapsible>
+      </Collapsible>}
     </div>
   );
 };
