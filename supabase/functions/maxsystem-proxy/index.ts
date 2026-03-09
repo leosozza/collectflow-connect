@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+'${contractNumber}')`;
+      const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${contractNumber})`;
       const resp = await fetch(searchUrl);
       if (!resp.ok) {
         const text = await resp.text();
