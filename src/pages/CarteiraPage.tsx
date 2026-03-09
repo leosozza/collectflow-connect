@@ -591,6 +591,10 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-accent-foreground text-accent-foreground">
+                <UserPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
+              </Button>
               {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
                 <Button
                   variant="outline"
