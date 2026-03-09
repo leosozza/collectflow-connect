@@ -106,7 +106,7 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
       </div>
 
       {/* Level 2: Collapsible advanced filters */}
-      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+      {showAdvancedFilters && <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleContent>
           <div className="space-y-4 pt-3 border-t border-border">
             {/* Linha 1: Selects */}
