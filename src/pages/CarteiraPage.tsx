@@ -25,6 +25,7 @@ import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import DialerExportDialog from "@/components/carteira/DialerExportDialog";
 import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
+import AssignOperatorDialog from "@/components/carteira/AssignOperatorDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
