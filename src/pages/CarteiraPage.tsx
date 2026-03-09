@@ -235,7 +235,6 @@ const CarteiraPage = () => {
         if (!currentName || currentName === "Aguardando acionamento") {
           derivedStatusId = emDiaId;
         }
-        }
       }
       if (derivedStatusId !== c.status_cobranca_id) {
         return { ...c, status_cobranca_id: derivedStatusId };
