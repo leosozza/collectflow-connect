@@ -40,6 +40,7 @@ interface ClientFiltersProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
   onSearch?: () => void;
+  showAdvancedFilters?: boolean;
 }
 
 const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
