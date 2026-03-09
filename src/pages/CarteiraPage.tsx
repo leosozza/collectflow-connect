@@ -841,7 +841,17 @@ const CarteiraPage = () => {
         selectedClients={selectedClients}
       />
 
-      {/* Bulk delete with admin password */}
+      {/* Assign operator dialog */}
+      <AssignOperatorDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        selectedClientIds={Array.from(selectedIds)}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+        }}
+      />
+
       <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); setShowPassword(false); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
