@@ -1099,6 +1099,7 @@ export type Database = {
           aging_discount_tiers: Json | null
           bairro: string | null
           banco: string | null
+          carteira_mode: string | null
           cep: string | null
           cidade: string | null
           cnpj: string
@@ -1153,6 +1154,7 @@ export type Database = {
           aging_discount_tiers?: Json | null
           bairro?: string | null
           banco?: string | null
+          carteira_mode?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj: string
@@ -1207,6 +1209,7 @@ export type Database = {
           aging_discount_tiers?: Json | null
           bairro?: string | null
           banco?: string | null
+          carteira_mode?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj?: string
