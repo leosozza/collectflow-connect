@@ -249,7 +249,7 @@ export const ACTION_LABELS: Record<string, string> = {
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   dashboard: ["view_own", "view_all"],
   gamificacao: ["view", "manage"],
-  carteira: ["view", "create", "import", "delete"],
+  carteira: ["view", "create", "import", "delete", "view_full_data"],
   acordos: ["view", "create", "approve"],
   relatorios: ["view"],
   analytics: ["view_own", "view_all"],
