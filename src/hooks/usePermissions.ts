@@ -235,6 +235,7 @@ export const MODULE_LABELS: Record<string, string> = {
 };
 
 export const ACTION_LABELS: Record<string, string> = {
+  view: "Visualizar",
   view_full_data: "Ver Dados Completos",
   view_all: "Visualizar (Todos)",
   view_own: "Visualizar (Próprio)",
