@@ -429,7 +429,7 @@ const ClientDetailPage = () => {
       </Tabs>
 
       <Dialog open={showAcordoDialog} onOpenChange={setShowAcordoDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Formalizar Acordo</DialogTitle>
           </DialogHeader>
