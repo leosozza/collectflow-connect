@@ -33,6 +33,7 @@ interface Filters {
   valorAbertoDe: number;
   valorAbertoAte: number;
   semContato: boolean;
+  emDia: boolean;
 }
 
 interface ClientFiltersProps {
@@ -219,6 +220,13 @@ const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
                   onCheckedChange={(checked) => update("semContato", !!checked)}
                 />
                 <span className="text-sm text-foreground">Sem contato</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.emDia || false}
+                  onCheckedChange={(checked) => update("emDia", !!checked)}
+                />
+                <span className="text-sm text-foreground">Em dia</span>
               </label>
             </div>
           </div>
