@@ -207,7 +207,6 @@ const CarteiraPage = () => {
     // Exclude clients with active agreements (em_acordo status)
     let filtered = clients.filter(c => {
       if ((c as any).status === "em_acordo") return false;
-      if (agreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
 
@@ -288,8 +287,13 @@ const CarteiraPage = () => {
       // Highest propensity score
       const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
       // Use status_cobranca from the first pending record if available
+      const cpfClean = earliest.cpf.replace(/\D/g, "");
       const pendingRecord = group.find(c => c.status === "pendente" && c.status_cobranca_id);
-      const representativeStatusCobranca = pendingRecord?.status_cobranca_id || earliest.status_cobranca_id;
+      // If CPF has an active agreement, force "Acordo Vigente" status
+      const acordoVigenteId = agreementCpfs.has(cpfClean)
+        ? ([...statusMap.entries()].find(([_, v]) => v.nome === "Acordo Vigente")?.[0] || null)
+        : null;
+      const representativeStatusCobranca = acordoVigenteId || pendingRecord?.status_cobranca_id || earliest.status_cobranca_id;
 
       return {
         ...earliest,
