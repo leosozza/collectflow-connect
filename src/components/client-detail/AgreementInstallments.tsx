@@ -33,7 +33,28 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
   });
 
   // Generate virtual installments from agreement data
+  const hasEntrada = agreement.entrada_value > 0;
   const installments = [];
+
+  // Add entrada as first installment if applicable
+  if (hasEntrada) {
+    const entradaDueDate = agreement.entrada_date
+      ? new Date(agreement.entrada_date + "T00:00:00")
+      : new Date(agreement.first_due_date + "T00:00:00");
+    const cobranca = cobrancas.find((c: any) => {
+      const cDate = new Date(c.data_vencimento);
+      return cDate.getMonth() === entradaDueDate.getMonth() && cDate.getFullYear() === entradaDueDate.getFullYear();
+    });
+    installments.push({
+      number: 1,
+      dueDate: entradaDueDate,
+      value: agreement.entrada_value,
+      cobranca,
+      isEntrada: true,
+    });
+  }
+
+  // Add regular installments
   for (let i = 0; i < agreement.new_installments; i++) {
     const dueDate = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
     const cobranca = cobrancas.find((c: any) => {
@@ -41,12 +62,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
       return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
     });
     installments.push({
-      number: i + 1,
+      number: (hasEntrada ? 1 : 0) + i + 1,
       dueDate,
       value: agreement.new_installment_value,
       cobranca,
+      isEntrada: false,
     });
   }
+
+  const totalInstallments = installments.length;
 
   const handleDownloadBoleto = (url: string) => {
     window.open(url, "_blank");
@@ -80,7 +104,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
 
             return (
               <TableRow key={inst.number}>
-                <TableCell>{inst.number}/{agreement.new_installments}</TableCell>
+                <TableCell>
+                  {inst.isEntrada ? "Entrada" : `${inst.number}/${totalInstallments}`}
+                </TableCell>
                 <TableCell>{formatDate(inst.dueDate.toISOString().split("T")[0])}</TableCell>
                 <TableCell className="text-right">{formatCurrency(Number(inst.value))}</TableCell>
                 <TableCell className="text-center">

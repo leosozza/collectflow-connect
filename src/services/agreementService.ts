@@ -34,6 +34,8 @@ export interface AgreementFormData {
   new_installments: number;
   new_installment_value: number;
   first_due_date: string;
+  entrada_value?: number;
+  entrada_date?: string;
   notes?: string;
 }
 
