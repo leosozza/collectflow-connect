@@ -32,7 +32,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Try exact match on nome_fantasia
   const { data: byFantasia } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria, honorarios_grade")
     .eq("tenant_id", tenantId)
     .eq("nome_fantasia", credorName)
     .limit(1)
