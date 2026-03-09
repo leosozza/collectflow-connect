@@ -103,7 +103,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                 <TableHead>Nome</TableHead>
                 <TableHead>CPF</TableHead>
                 <TableHead>Credor</TableHead>
-                <TableHead className="text-right">Valor Total</TableHead>
+                
                 <TableHead>1º Vencimento</TableHead>
                 <TableHead className="text-center">Score</TableHead>
                 <TableHead className="text-center">Ação</TableHead>
@@ -131,9 +131,6 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                     </TableCell>
                     <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
                     <TableCell className="text-muted-foreground">{client.credor}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(client.valor_total)}
-                    </TableCell>
                     <TableCell>
                       <span className={isPast ? "text-destructive font-medium" : isToday ? "text-primary font-medium" : ""}>
                         {formatDate(client.data_vencimento)}

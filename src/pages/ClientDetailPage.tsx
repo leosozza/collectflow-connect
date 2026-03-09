@@ -116,9 +116,6 @@ const ClientDetailPage = () => {
   }
 
   const first = clients[0];
-  const totalAberto = clients
-    .filter((c) => c.status === "pendente" || c.status === "vencido")
-    .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
   const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
   const lastAgreement = agreements[0] || null;
 
@@ -184,7 +181,7 @@ const ClientDetailPage = () => {
         client={first}
         clients={clients}
         cpf={cpf || ""}
-        totalAberto={totalAberto}
+        agreements={agreements}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
       />
 
@@ -415,7 +412,9 @@ const ClientDetailPage = () => {
             client={first}
             clients={clients}
             cpf={cpf || ""}
-            totalAberto={totalAberto}
+            totalAberto={clients
+              .filter((c) => c.status !== "pago")
+              .reduce((sum, c) => sum + Math.max(0, (Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - Number(c.valor_pago)), 0)}
             lastAgreement={lastAgreement}
           />
         </TabsContent>

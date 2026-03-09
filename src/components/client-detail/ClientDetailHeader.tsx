@@ -22,7 +22,7 @@ interface ClientDetailHeaderProps {
   client: any;
   clients: any[];
   cpf: string;
-  totalAberto: number;
+  agreements: any[];
   onFormalizarAcordo: () => void;
 }
 
@@ -39,7 +39,7 @@ const InfoItem = ({ label, value, className }: { label: string; value: React.Rea
   </div>
 );
 
-const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAcordo }: ClientDetailHeaderProps) => {
+const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcordo }: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
@@ -135,7 +135,13 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
     window.open(`https://wa.me/${intlPhone}`, "_blank");
   };
 
-  const totalPago = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
+  // Total Pago: sum valor_pago from all records + proposed_total from approved agreements
+  const totalPagoRecords = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
+  const totalPagoAcordos = (agreements || [])
+    .filter((a: any) => a.status === "approved")
+    .reduce((sum: number, a: any) => sum + Number(a.proposed_total), 0);
+  const totalPago = totalPagoRecords + totalPagoAcordos;
+  
   const pagas = clients.filter((c) => c.status === "pago").length;
   const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
@@ -143,9 +149,9 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
   const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ") || "—";
   const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ") || "—";
 
-  // Aggregate financial values from all pending records
-  const pendentes = clients.filter(c => c.status === "pendente" || c.status === "vencido");
-  const totalSaldo = pendentes.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
+  // Saldo Devedor: all non-paid records
+  const naoPageos = clients.filter(c => c.status !== "pago");
+  const totalSaldo = naoPageos.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
 
   // Fetch credor rules for dynamic interest calculation
   const credorName = client.credor;
@@ -174,7 +180,7 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
     const multa = Number(credorData?.multa) || 0;
     const today = new Date();
 
-    return pendentes.reduce((sum, c) => {
+    return naoPageos.reduce((sum, c) => {
       const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
       const vencimento = new Date(c.data_vencimento);
       if (vencimento >= today || (jurosMes === 0 && multa === 0)) {
@@ -185,7 +191,10 @@ const ClientDetailHeader = ({ client, clients, cpf, totalAberto, onFormalizarAco
       const comJuros = valorBase * (jurosMes / 100) * meses;
       return sum + valorBase + comMulta + comJuros;
     }, 0);
-  }, [pendentes, credorData]);
+  }, [naoPageos, credorData]);
+
+  // Em Aberto: saldo total - pagamentos realizados
+  const totalAberto = Math.max(0, totalSaldo - totalPagoRecords);
 
   // Lookup names
   const statusCobrancaNome = (tiposStatus as any[]).find((t) => t.id === client.status_cobranca_id)?.nome;
