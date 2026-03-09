@@ -66,6 +66,11 @@ export const fetchClients = async (filters?: {
   dateTo?: string;
   operatorId?: string;
   search?: string;
+  cadastroDe?: string;
+  cadastroAte?: string;
+  tipoDevedorId?: string;
+  tipoDividaId?: string;
+  statusCobrancaId?: string;
 }): Promise<Client[]> => {
   let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
 
