@@ -738,7 +738,7 @@ const CarteiraPage = () => {
                         1º Vencimento <SortIcon field="data_vencimento" />
                       </button>
                     </TableHead>
-                    <TableHead className="text-right">Valor Total</TableHead>
+                    
                     <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-center">
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors mx-auto" onClick={() => toggleSort("status_cobranca")}>
