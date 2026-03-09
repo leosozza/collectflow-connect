@@ -92,15 +92,17 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
           <Search className="w-4 h-4" />
           Pesquisar
         </Button>
-        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="default" className="gap-1.5">
-              <Filter className="w-4 h-4" />
-              Filtros
-              {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </Button>
-          </CollapsibleTrigger>
-        </Collapsible>
+        {showAdvancedFilters && (
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="default" className="gap-1.5">
+                <Filter className="w-4 h-4" />
+                Filtros
+                {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </Collapsible>
+        )}
       </div>
 
       {/* Level 2: Collapsible advanced filters */}
