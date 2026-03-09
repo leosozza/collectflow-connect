@@ -117,9 +117,9 @@ const ClientDetailPage = () => {
 
   const first = clients[0];
   const totalAberto = clients
-    .filter((c) => c.status === "pendente")
+    .filter((c) => c.status === "pendente" || c.status === "vencido")
     .reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
-  const pendentes = clients.filter((c) => c.status === "pendente");
+  const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
   const lastAgreement = agreements[0] || null;
 
   const handleAgreementCreated = () => {
