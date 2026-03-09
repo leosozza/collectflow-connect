@@ -33,6 +33,7 @@ interface Filters {
   valorAbertoDe: number;
   valorAbertoAte: number;
   semContato: boolean;
+  emDia: boolean;
 }
 
 interface ClientFiltersProps {
