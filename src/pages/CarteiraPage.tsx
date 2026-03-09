@@ -17,7 +17,7 @@ import {
   ClientFormData,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import { Badge } from "@/components/ui/badge";
 import ClientFilters from "@/components/clients/ClientFilters";
@@ -25,10 +25,11 @@ import ClientForm from "@/components/clients/ClientForm";
 import ImportDialog from "@/components/clients/ImportDialog";
 import DialerExportDialog from "@/components/carteira/DialerExportDialog";
 import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
+import AssignOperatorDialog from "@/components/carteira/AssignOperatorDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -52,6 +53,9 @@ const CarteiraPage = () => {
   const permissions = usePermissions();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const carteiraMode = ((tenant?.settings as any)?.carteira_mode as string) || "open";
+  const profileId = profile?.id;
 
   const [filters, setFilters] = useState({
     status: "todos",
@@ -90,6 +94,7 @@ const CarteiraPage = () => {
   const [quitadosDeleteOpen, setQuitadosDeleteOpen] = useState(false);
   const [quitadosEmail, setQuitadosEmail] = useState("");
   const [quitadosDeleting, setQuitadosDeleting] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
@@ -183,6 +188,12 @@ const CarteiraPage = () => {
 
   const displayClients = useMemo((): GroupedClient[] => {
     let filtered = clients;
+
+    // Assignment mode: operators only see their assigned clients
+    if (carteiraMode === "assigned" && !permissions.canViewFullData && profileId) {
+      filtered = filtered.filter(c => c.operator_id === profileId);
+    }
+
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
@@ -275,7 +286,14 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, carteiraMode, permissions.canViewFullData, profileId]);
+
+  // Helper: should we show full data for this client?
+  const canSeeFullData = (client: any) => {
+    if (permissions.canViewFullData) return true;
+    if (carteiraMode === "assigned" && client.operator_id === profileId) return true;
+    return false;
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
@@ -573,6 +591,10 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-accent-foreground text-accent-foreground">
+                <UserPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
+              </Button>
               {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
                 <Button
                   variant="outline"
@@ -696,7 +718,7 @@ const CarteiraPage = () => {
                           {client.nome_completo}
                         </button>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
+                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(Number(client.valor_total ?? client.valor_parcela))}</TableCell>
@@ -819,7 +841,17 @@ const CarteiraPage = () => {
         selectedClients={selectedClients}
       />
 
-      {/* Bulk delete with admin password */}
+      {/* Assign operator dialog */}
+      <AssignOperatorDialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        selectedClientIds={Array.from(selectedIds)}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+        }}
+      />
+
       <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); setShowPassword(false); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

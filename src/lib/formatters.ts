@@ -46,3 +46,23 @@ export const formatPhone = (value: string): string => {
   if (nums.length <= 7) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
   return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
 };
+
+export const maskCPF = (cpf: string): string => {
+  const nums = cpf.replace(/\D/g, "");
+  if (nums.length < 5) return "***";
+  return `***.***.${ nums.slice(-5, -2)}-${nums.slice(-2)}`;
+};
+
+export const maskPhone = (phone: string): string => {
+  if (!phone) return "";
+  const nums = phone.replace(/\D/g, "");
+  if (nums.length < 4) return "****";
+  return `(**) ****-${nums.slice(-4)}`;
+};
+
+export const maskEmail = (email: string): string => {
+  if (!email) return "";
+  const [local, domain] = email.split("@");
+  if (!domain) return "***";
+  return `${local.charAt(0)}***@${domain}`;
+};

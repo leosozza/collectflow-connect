@@ -9,7 +9,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   super_admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete"],
+    carteira: ["view", "create", "import", "delete", "view_full_data"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -28,7 +28,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete"],
+    carteira: ["view", "create", "import", "delete", "view_full_data"],
     acordos: ["view", "create", "approve"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -156,6 +156,7 @@ export function usePermissions() {
     canCreateCarteira: has("carteira", "create"),
     canImportCarteira: has("carteira", "import"),
     canDeleteCarteira: has("carteira", "delete"),
+    canViewFullData: has("carteira", "view_full_data"),
 
     // Acordos
     canViewAcordos: hasAny("acordos"),
@@ -235,6 +236,7 @@ export const MODULE_LABELS: Record<string, string> = {
 
 export const ACTION_LABELS: Record<string, string> = {
   view: "Visualizar",
+  view_full_data: "Ver Dados Completos",
   view_all: "Visualizar (Todos)",
   view_own: "Visualizar (Próprio)",
   create: "Criar",
@@ -248,7 +250,7 @@ export const ACTION_LABELS: Record<string, string> = {
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   dashboard: ["view_own", "view_all"],
   gamificacao: ["view", "manage"],
-  carteira: ["view", "create", "import", "delete"],
+  carteira: ["view", "create", "import", "delete", "view_full_data"],
   acordos: ["view", "create", "approve"],
   relatorios: ["view"],
   analytics: ["view_own", "view_all"],
