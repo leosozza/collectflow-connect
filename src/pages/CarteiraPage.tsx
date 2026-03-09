@@ -204,7 +204,43 @@ const CarteiraPage = () => {
   }
 
   const displayClients = useMemo((): GroupedClient[] => {
-    let filtered = [...clients];
+    const today = new Date().toISOString().split("T")[0];
+
+    // Build reverse status name → id map for derivation
+    const statusNameToId = new Map<string, string>();
+    statusMap.forEach((v, id) => statusNameToId.set(v.nome, id));
+    const quitadoId = statusNameToId.get("Quitado");
+    const acordoVigenteIdDerived = statusNameToId.get("Acordo Vigente");
+    const quebraAcordoId = statusNameToId.get("Quebra de Acordo");
+    const aguardandoId = statusNameToId.get("Aguardando acionamento");
+    const emDiaId = statusNameToId.get("Em dia");
+
+    // Derive correct status_cobranca_id based on actual record status
+    let filtered = clients.map(c => {
+      let derivedStatusId = c.status_cobranca_id;
+      if (c.status === "pago" && quitadoId) {
+        derivedStatusId = quitadoId;
+      } else if (c.status === "em_acordo" && acordoVigenteIdDerived) {
+        derivedStatusId = acordoVigenteIdDerived;
+      } else if (c.status === "quebrado" && quebraAcordoId) {
+        derivedStatusId = quebraAcordoId;
+      } else if ((c.status === "pendente" || c.status === "vencido") && c.data_vencimento < today && aguardandoId) {
+        // Only override if not already set to a "locked" status like Em negociação
+        const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
+        if (!currentName || currentName === "Em dia") {
+          derivedStatusId = aguardandoId;
+        }
+      } else if (c.status === "pendente" && c.data_vencimento >= today && emDiaId) {
+        const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
+        if (!currentName || currentName === "Aguardando acionamento") {
+          derivedStatusId = emDiaId;
+        }
+      }
+      if (derivedStatusId !== c.status_cobranca_id) {
+        return { ...c, status_cobranca_id: derivedStatusId };
+      }
+      return c;
+    });
 
     // Assignment mode per creditor: operators only see their assigned clients for creditors in "assigned" mode
     if (!permissions.canViewFullData && profileId) {
