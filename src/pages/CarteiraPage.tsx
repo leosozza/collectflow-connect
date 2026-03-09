@@ -172,6 +172,24 @@ const CarteiraPage = () => {
     enabled: !!tenant?.id,
   });
 
+  const { data: credores = [] } = useQuery({
+    queryKey: ["credores", tenant?.id],
+    queryFn: () => fetchCredores(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  // Map credor name -> carteira_mode
+  const credorModeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    credores.forEach((c: any) => {
+      if (c.razao_social) map.set(c.razao_social, c.carteira_mode || "open");
+      if (c.nome_fantasia) map.set(c.nome_fantasia, c.carteira_mode || "open");
+    });
+    return map;
+  }, [credores]);
+
+  const getClientCarteiraMode = (client: any) => credorModeMap.get(client.credor) || "open";
+
   const statusMap = useMemo(() => {
     const map = new Map<string, { nome: string; cor: string }>();
     tiposStatus.forEach((t: any) => map.set(t.id, { nome: t.nome, cor: t.cor || "#6b7280" }));
