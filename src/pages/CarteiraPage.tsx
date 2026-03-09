@@ -232,7 +232,7 @@ const CarteiraPage = () => {
     }
     if (filters.emDia) {
       const today = new Date().toISOString().split("T")[0];
-      // Group all filtered by CPF+credor to check if ALL installments are in day
+      // Group all filtered by CPF+credor to check if ALL PENDING installments are in day
       const cpfCredorMap = new Map<string, Client[]>();
       filtered.forEach(c => {
         const key = `${c.cpf.replace(/\D/g, "")}|${c.credor}`;
@@ -242,9 +242,9 @@ const CarteiraPage = () => {
       const emDiaCpfs = new Set<string>();
       cpfCredorMap.forEach((group, key) => {
         const cpfClean = key.split("|")[0];
-        const allEmDia = group.every(c =>
-          c.data_vencimento >= today && c.status !== "pago" && c.status !== "quebrado"
-        );
+        // Only consider pending installments; ignore pago/quebrado
+        const pendentes = group.filter(c => c.status === "pendente");
+        const allEmDia = pendentes.length > 0 && pendentes.every(c => c.data_vencimento >= today);
         if (allEmDia && !agreementCpfs.has(cpfClean)) {
           emDiaCpfs.add(key);
         }
