@@ -234,7 +234,7 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
             </div>
           </div>
         </CollapsibleContent>
-      </Collapsible>
+      </Collapsible>}
     </div>
   );
 };

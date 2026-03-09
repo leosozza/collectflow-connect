@@ -692,7 +692,7 @@ const CarteiraPage = () => {
         </div>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} />
+      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
