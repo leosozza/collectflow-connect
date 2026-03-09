@@ -30,8 +30,10 @@ export const statusColors: Record<string, string> = {
 
 export const statusLabels: Record<string, string> = {
   pendente: "Pendente",
+  vencido: "Vencido",
   pago: "Pago",
   quebrado: "Quebrado",
+  em_acordo: "Em Acordo",
 };
 
 export const formatCEP = (value: string): string => {
