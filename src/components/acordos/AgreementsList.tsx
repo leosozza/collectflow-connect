@@ -72,7 +72,11 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 <TableCell>{a.credor}</TableCell>
                 <TableCell className="text-right">{formatCurrency(a.original_total)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(a.proposed_total)}</TableCell>
-                <TableCell className="text-center">{a.new_installments}x {formatCurrency(a.new_installment_value)}</TableCell>
+                <TableCell className="text-center">
+                  {(a as any).entrada_value > 0
+                    ? `Entrada ${formatCurrency((a as any).entrada_value)} + ${a.new_installments}x ${formatCurrency(a.new_installment_value)}`
+                    : `${a.new_installments}x ${formatCurrency(a.new_installment_value)}`}
+                </TableCell>
                 <TableCell>{format(new Date(a.first_due_date + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
                 <TableCell>
                   <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>

@@ -181,6 +181,8 @@ export type Database = {
           created_by: string
           credor: string
           discount_percent: number | null
+          entrada_date: string | null
+          entrada_value: number | null
           first_due_date: string
           id: string
           new_installment_value: number
@@ -204,6 +206,8 @@ export type Database = {
           created_by: string
           credor: string
           discount_percent?: number | null
+          entrada_date?: string | null
+          entrada_value?: number | null
           first_due_date: string
           id?: string
           new_installment_value?: number
@@ -227,6 +231,8 @@ export type Database = {
           created_by?: string
           credor?: string
           discount_percent?: number | null
+          entrada_date?: string | null
+          entrada_value?: number | null
           first_due_date?: string
           id?: string
           new_installment_value?: number

@@ -261,7 +261,6 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       setEnrichingAddress(false);
       setAddressStatus("");
 
-      const totalInstallments = numEntrada > 0 ? numParcels + 1 : numParcels;
       const data: AgreementFormData = {
         client_cpf: cpf,
         client_name: clientName,
@@ -269,9 +268,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         original_total: originalTotal,
         proposed_total: proposedTotal,
         discount_percent: numDiscountPercent,
-        new_installments: totalInstallments,
+        new_installments: numParcels,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
+        entrada_value: numEntrada > 0 ? numEntrada : undefined,
+        entrada_date: numEntrada > 0 && entradaDate ? entradaDate : undefined,
         notes: notes || undefined,
       };
 

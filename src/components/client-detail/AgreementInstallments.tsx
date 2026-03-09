@@ -104,7 +104,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
 
             return (
               <TableRow key={inst.number}>
-                <TableCell>{inst.number}/{agreement.new_installments}</TableCell>
+                <TableCell>
+                  {inst.isEntrada ? "Entrada" : `${inst.number}/${totalInstallments}`}
+                </TableCell>
                 <TableCell>{formatDate(inst.dueDate.toISOString().split("T")[0])}</TableCell>
                 <TableCell className="text-right">{formatCurrency(Number(inst.value))}</TableCell>
                 <TableCell className="text-center">
