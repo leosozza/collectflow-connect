@@ -54,6 +54,10 @@ const CarteiraPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  const carteiraMode = ((tenant?.settings as any)?.carteira_mode as string) || "open";
+  const profileId = profile?.id;
+  const navigate = useNavigate();
+
   const [filters, setFilters] = useState({
     status: "todos",
     credor: "todos",
