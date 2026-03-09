@@ -322,6 +322,30 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <div><Label>E-mail *</Label><Input type="email" value={form.email || ""} onChange={e => set("email", e.target.value)} /></div>
               <div><Label>Telefone *</Label><Input value={applyMask(form.telefone || "", "phone")} onChange={e => set("telefone", e.target.value)} placeholder="(00) 00000-0000" /></div>
             </div>
+
+            {/* Modo da Carteira */}
+            <div className="border-t border-border pt-4 space-y-3">
+              <Label className="text-sm font-medium">Modo da Carteira</Label>
+              <RadioGroup
+                value={form.carteira_mode || "open"}
+                onValueChange={(v) => set("carteira_mode", v)}
+                className="flex gap-6"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="open" id="mode-open" />
+                  <Label htmlFor="mode-open" className="cursor-pointer font-normal">Mar Aberto</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="assigned" id="mode-assigned" />
+                  <Label htmlFor="mode-assigned" className="cursor-pointer font-normal">Atribuição</Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                {form.carteira_mode === "assigned"
+                  ? "Operadores veem apenas clientes atribuídos a eles neste credor."
+                  : "Todos os operadores com permissão podem ver todos os clientes deste credor."}
+              </p>
+            </div>
             <Collapsible
               open={enderecoOpen}
               onOpenChange={setEnderecoOpen}

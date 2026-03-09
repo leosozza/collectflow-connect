@@ -194,46 +194,8 @@ const TenantSettingsPage = () => {
           </Card>
         </TabsContent>
 
-        {/* ABA CARTEIRA */}
-        <TabsContent value="carteira">
-          <Card>
-            <CardHeader>
-              <CardTitle>Modo da Carteira</CardTitle>
-              <CardDescription>Defina como operadores acessam os clientes</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Modo Atribuição</p>
-                  <p className="text-xs text-muted-foreground">
-                    {settings.carteira_mode === "assigned"
-                      ? "Operadores veem apenas clientes atribuídos a eles. Dados sensíveis ficam ocultos para clientes não atribuídos."
-                      : "Mar Aberto — todos os operadores com permissão podem ver todos os clientes."}
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.carteira_mode === "assigned"}
-                  onCheckedChange={async (checked) => {
-                    if (!tenant) return;
-                    try {
-                      await updateTenant(tenant.id, {
-                        settings: { ...settings, carteira_mode: checked ? "assigned" : "open" },
-                      });
-                      await refetch();
-                      toast({ title: checked ? "Modo Atribuição ativado" : "Modo Mar Aberto ativado" });
-                    } catch (err: any) {
-                      toast({ title: "Erro", description: err.message, variant: "destructive" });
-                    }
-                  }}
-                />
-              </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>Mar Aberto:</strong> Todos veem todos os clientes. Dados sensíveis dependem da permissão "Ver Dados Completos" no módulo Carteira.</p>
-                <p><strong>Atribuição:</strong> Operadores veem apenas clientes atribuídos. Admin/gerente veem todos. Operador vê dados completos apenas dos seus clientes.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+
+
 
         {/* ABA FINANCEIRO */}
         <TabsContent value="financeiro">
