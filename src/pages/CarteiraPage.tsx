@@ -188,6 +188,12 @@ const CarteiraPage = () => {
 
   const displayClients = useMemo((): GroupedClient[] => {
     let filtered = clients;
+
+    // Assignment mode: operators only see their assigned clients
+    if (carteiraMode === "assigned" && !permissions.canViewFullData && profileId) {
+      filtered = filtered.filter(c => c.operator_id === profileId);
+    }
+
     if (filters.semAcordo) {
       filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
     }
