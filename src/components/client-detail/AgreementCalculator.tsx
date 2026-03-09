@@ -332,8 +332,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                         <TableCell className="px-2 font-medium">{c.numero_parcela}/{c.total_parcelas}</TableCell>
                         <TableCell className="px-2">{formatDate(c.data_vencimento)}</TableCell>
                         <TableCell className="px-2 text-right">
-                          <Badge variant={row.atraso > 30 ? "destructive" : "secondary"} className="text-[10px] px-1.5">
-                            {row.atraso}d
+                          <Badge variant="secondary" className="text-[10px] px-1.5">
+                            {row.atraso}
                           </Badge>
                         </TableCell>
                         <TableCell className="px-2 text-right">{formatCurrency(row.valorOriginal)}</TableCell>
