@@ -135,7 +135,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     window.open(`https://wa.me/${intlPhone}`, "_blank");
   };
 
-  const totalPago = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
+  // Total Pago: sum valor_pago from all records + proposed_total from approved agreements
+  const totalPagoRecords = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
+  const totalPagoAcordos = (agreements || [])
+    .filter((a: any) => a.status === "approved")
+    .reduce((sum: number, a: any) => sum + Number(a.proposed_total), 0);
+  const totalPago = totalPagoRecords + totalPagoAcordos;
+  
   const pagas = clients.filter((c) => c.status === "pago").length;
   const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
@@ -143,9 +149,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ") || "—";
   const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ") || "—";
 
-  // Aggregate financial values from all pending records
-  const pendentes = clients.filter(c => c.status === "pendente" || c.status === "vencido");
-  const totalSaldo = pendentes.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
+  // Saldo Devedor: all non-paid records
+  const naoPageos = clients.filter(c => c.status !== "pago");
+  const totalSaldo = naoPageos.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
 
   // Fetch credor rules for dynamic interest calculation
   const credorName = client.credor;
