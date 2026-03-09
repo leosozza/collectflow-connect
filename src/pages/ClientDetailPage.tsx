@@ -412,7 +412,9 @@ const ClientDetailPage = () => {
             client={first}
             clients={clients}
             cpf={cpf || ""}
-            totalAberto={totalAberto}
+            totalAberto={clients
+              .filter((c) => c.status !== "pago")
+              .reduce((sum, c) => sum + Math.max(0, (Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - Number(c.valor_pago)), 0)}
             lastAgreement={lastAgreement}
           />
         </TabsContent>

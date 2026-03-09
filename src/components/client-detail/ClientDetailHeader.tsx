@@ -22,7 +22,7 @@ interface ClientDetailHeaderProps {
   client: any;
   clients: any[];
   cpf: string;
-  totalAberto: number;
+  agreements: any[];
   onFormalizarAcordo: () => void;
 }
 
