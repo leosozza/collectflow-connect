@@ -17,7 +17,7 @@ import {
   ClientFormData,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import { Badge } from "@/components/ui/badge";
 import ClientFilters from "@/components/clients/ClientFilters";
