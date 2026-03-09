@@ -268,30 +268,30 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           </div>
         </CardHeader>
         <CardContent className="pb-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1 min-w-[130px]">
-              <Label className="text-[11px]">Data Cálculo</Label>
-              <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-8 text-xs" />
+          <div className="flex items-end gap-2 flex-nowrap overflow-x-auto">
+            <div className="space-y-0.5 min-w-[120px]">
+              <Label className="text-[10px]">Data Cálculo</Label>
+              <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-7 text-xs px-2" />
             </div>
-            <div className="space-y-1 w-[90px]">
-              <Label className="text-[11px]">% Juros/mês</Label>
-              <Input type="number" min={0} step={0.01} value={jurosPercent} onChange={(e) => setJurosPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Juros</Label>
+              <Input type="number" min={0} step={0.01} value={jurosPercent} onChange={(e) => setJurosPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
             </div>
-            <div className="space-y-1 w-[90px]">
-              <Label className="text-[11px]">% Multa</Label>
-              <Input type="number" min={0} step={0.01} value={multaPercent} onChange={(e) => setMultaPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Multa</Label>
+              <Input type="number" min={0} step={0.01} value={multaPercent} onChange={(e) => setMultaPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
             </div>
-            <div className="space-y-1 w-[90px]">
-              <Label className="text-[11px]">% Honorários</Label>
-              <Input type="number" min={0} step={0.01} value={honorariosPercent} onChange={(e) => setHonorariosPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Honor.</Label>
+              <Input type="number" min={0} step={0.01} value={honorariosPercent} onChange={(e) => setHonorariosPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
             </div>
-            <div className="space-y-1 w-[100px]">
-              <Label className="text-[11px]">% Desc. Cap.</Label>
-              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => setDescontoPercent(Number(e.target.value) || 0)} className="h-8 text-xs" />
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Desc.</Label>
+              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => setDescontoPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
             </div>
-            <div className="ml-auto bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-2 text-right">
-              <span className="text-[10px] text-muted-foreground block">Valor Atualizado</span>
-              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(totals.totalAtualizado)}</span>
+            <div className="ml-auto flex items-center gap-2 whitespace-nowrap border border-border rounded-md px-3 py-1.5 bg-muted/50">
+              <span className="text-[10px] text-muted-foreground">Valor Atualizado</span>
+              <span className="text-sm font-bold text-foreground">{formatCurrency(totals.totalAtualizado)}</span>
             </div>
           </div>
         </CardContent>
