@@ -180,7 +180,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     const multa = Number(credorData?.multa) || 0;
     const today = new Date();
 
-    return pendentes.reduce((sum, c) => {
+    return naoPageos.reduce((sum, c) => {
       const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
       const vencimento = new Date(c.data_vencimento);
       if (vencimento >= today || (jurosMes === 0 && multa === 0)) {
@@ -191,7 +191,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       const comJuros = valorBase * (jurosMes / 100) * meses;
       return sum + valorBase + comMulta + comJuros;
     }, 0);
-  }, [pendentes, credorData]);
+  }, [naoPageos, credorData]);
+
+  // Em Aberto: saldo total - pagamentos realizados
+  const totalAberto = Math.max(0, totalSaldo - totalPagoRecords);
 
   // Lookup names
   const statusCobrancaNome = (tiposStatus as any[]).find((t) => t.id === client.status_cobranca_id)?.nome;
