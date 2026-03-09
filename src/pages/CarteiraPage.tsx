@@ -307,13 +307,14 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, carteiraMode, permissions.canViewFullData, profileId]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
     if (permissions.canViewFullData) return true;
-    if (carteiraMode === "assigned" && client.operator_id === profileId) return true;
-    return false;
+    const mode = getClientCarteiraMode(client);
+    if (mode === "assigned" && client.operator_id === profileId) return true;
+    return mode === "open";
   };
 
   const createMutation = useMutation({
