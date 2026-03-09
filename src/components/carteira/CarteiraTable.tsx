@@ -103,7 +103,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                 <TableHead>Nome</TableHead>
                 <TableHead>CPF</TableHead>
                 <TableHead>Credor</TableHead>
-                <TableHead className="text-right">Valor Total</TableHead>
+                
                 <TableHead>1º Vencimento</TableHead>
                 <TableHead className="text-center">Score</TableHead>
                 <TableHead className="text-center">Ação</TableHead>
