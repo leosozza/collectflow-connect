@@ -156,6 +156,7 @@ export function usePermissions() {
     canCreateCarteira: has("carteira", "create"),
     canImportCarteira: has("carteira", "import"),
     canDeleteCarteira: has("carteira", "delete"),
+    canViewFullData: has("carteira", "view_full_data"),
 
     // Acordos
     canViewAcordos: hasAny("acordos"),
