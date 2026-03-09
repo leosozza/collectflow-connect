@@ -770,7 +770,7 @@ const CarteiraPage = () => {
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(Number(client.valor_total ?? client.valor_parcela))}</TableCell>
+                      
                       <TableCell className="text-center">
                         <PropensityBadge score={(client as any).propensity_score} />
                       </TableCell>
