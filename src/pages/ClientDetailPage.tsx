@@ -181,7 +181,7 @@ const ClientDetailPage = () => {
         client={first}
         clients={clients}
         cpf={cpf || ""}
-        totalAberto={totalAberto}
+        agreements={agreements}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
       />
 
