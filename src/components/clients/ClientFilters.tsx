@@ -43,7 +43,7 @@ interface ClientFiltersProps {
   showAdvancedFilters?: boolean;
 }
 
-const ClientFilters = ({ filters, onChange, onSearch }: ClientFiltersProps) => {
+const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true }: ClientFiltersProps) => {
   const { tenant } = useTenant();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
