@@ -66,6 +66,7 @@ function mapCredorRules(data: any): CredorRulesResult {
     multa: Number(data.multa) || 0,
     aging_discount_tiers: (data.aging_discount_tiers as any[]) || [],
     indice_correcao_monetaria: data.indice_correcao_monetaria || null,
+    honorarios_grade: (data.honorarios_grade as any[]) || [],
   };
 }
 
