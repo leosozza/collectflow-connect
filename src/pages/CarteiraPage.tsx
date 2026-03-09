@@ -206,9 +206,13 @@ const CarteiraPage = () => {
   const displayClients = useMemo((): GroupedClient[] => {
     let filtered = clients;
 
-    // Assignment mode: operators only see their assigned clients
-    if (carteiraMode === "assigned" && !permissions.canViewFullData && profileId) {
-      filtered = filtered.filter(c => c.operator_id === profileId);
+    // Assignment mode per creditor: operators only see their assigned clients for creditors in "assigned" mode
+    if (!permissions.canViewFullData && profileId) {
+      filtered = filtered.filter(c => {
+        const mode = credorModeMap.get(c.credor) || "open";
+        if (mode === "assigned") return c.operator_id === profileId;
+        return true;
+      });
     }
 
     if (filters.semAcordo) {
