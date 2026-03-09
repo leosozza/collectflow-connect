@@ -282,9 +282,13 @@ const CarteiraPage = () => {
       const valorTotal = group.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
       // Highest propensity score
       const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
+      // Use status_cobranca from the first pending record if available
+      const pendingRecord = group.find(c => c.status === "pendente" && c.status_cobranca_id);
+      const representativeStatusCobranca = pendingRecord?.status_cobranca_id || earliest.status_cobranca_id;
 
       return {
         ...earliest,
+        status_cobranca_id: representativeStatusCobranca,
         valor_total: valorTotal,
         valor_parcela: valorTotal,
         parcelas_count: group.length,
