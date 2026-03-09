@@ -66,6 +66,11 @@ export const fetchClients = async (filters?: {
   dateTo?: string;
   operatorId?: string;
   search?: string;
+  cadastroDe?: string;
+  cadastroAte?: string;
+  tipoDevedorId?: string;
+  tipoDividaId?: string;
+  statusCobrancaId?: string;
 }): Promise<Client[]> => {
   let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
 
@@ -93,6 +98,21 @@ export const fetchClients = async (filters?: {
   }
   if (filters?.operatorId) {
     query = query.eq("operator_id", filters.operatorId);
+  }
+  if (filters?.cadastroDe) {
+    query = query.gte("created_at", filters.cadastroDe + "T00:00:00");
+  }
+  if (filters?.cadastroAte) {
+    query = query.lte("created_at", filters.cadastroAte + "T23:59:59");
+  }
+  if (filters?.tipoDevedorId) {
+    query = query.eq("tipo_devedor_id", filters.tipoDevedorId);
+  }
+  if (filters?.tipoDividaId) {
+    query = query.eq("tipo_divida_id", filters.tipoDividaId);
+  }
+  if (filters?.statusCobrancaId) {
+    query = query.eq("status_cobranca_id", filters.statusCobrancaId);
   }
 
   const { data, error } = await query;
