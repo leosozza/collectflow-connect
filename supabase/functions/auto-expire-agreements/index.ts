@@ -17,11 +17,8 @@ Deno.serve(async (req) => {
   const now = new Date();
   const oneDayAgo = new Date(now);
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-  const sixDaysAgo = new Date(now);
-  sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
 
   const oneDayAgoStr = oneDayAgo.toISOString().split("T")[0];
-  const sixDaysAgoStr = sixDaysAgo.toISOString().split("T")[0];
   const todayStr = now.toISOString().split("T")[0];
 
   try {
@@ -41,7 +38,6 @@ Deno.serve(async (req) => {
         .update({ status: "overdue" })
         .in("id", ids);
 
-      // Notify operators
       const notifications = toOverdue.map((a: any) => ({
         tenant_id: a.tenant_id,
         user_id: a.created_by,
@@ -54,36 +50,73 @@ Deno.serve(async (req) => {
       await supabase.from("notifications").insert(notifications);
     }
 
-    // 2. Cancel overdue agreements older than 5 days (first_due_date < 6 days ago)
-    const { data: toCancel, error: err2 } = await supabase
+    // 2. Cancel overdue agreements based on credor's prazo_dias_acordo
+    const { data: overdueAgreements, error: err2 } = await supabase
       .from("agreements")
-      .select("id, tenant_id, created_by, client_name, client_cpf")
-      .eq("status", "overdue")
-      .lt("first_due_date", sixDaysAgoStr);
+      .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date")
+      .eq("status", "overdue");
 
     if (err2) throw err2;
 
-    if (toCancel && toCancel.length > 0) {
-      const ids = toCancel.map((a: any) => a.id);
-      await supabase
-        .from("agreements")
-        .update({ status: "cancelled" })
-        .in("id", ids);
+    let cancelledCount = 0;
 
-      const notifications = toCancel.map((a: any) => ({
-        tenant_id: a.tenant_id,
-        user_id: a.created_by,
-        title: "Acordo cancelado automaticamente",
-        message: `O acordo de ${a.client_name} (${a.client_cpf}) foi cancelado após 5 dias de vencimento.`,
-        type: "error",
-        reference_type: "agreement",
-        reference_id: a.id,
-      }));
-      await supabase.from("notifications").insert(notifications);
+    if (overdueAgreements && overdueAgreements.length > 0) {
+      // Get unique credor names + tenant combos
+      const credorKeys = [...new Set(overdueAgreements.map((a: any) => `${a.tenant_id}|${a.credor}`))];
+      const tenantIds = [...new Set(overdueAgreements.map((a: any) => a.tenant_id))];
+
+      const { data: credores } = await supabase
+        .from("credores")
+        .select("razao_social, nome_fantasia, tenant_id, prazo_dias_acordo")
+        .in("tenant_id", tenantIds);
+
+      // Build lookup: "tenant_id|credor_name" -> prazo_dias_acordo
+      const prazoMap: Record<string, number | null> = {};
+      if (credores) {
+        for (const c of credores) {
+          if (c.razao_social) prazoMap[`${c.tenant_id}|${c.razao_social}`] = c.prazo_dias_acordo;
+          if (c.nome_fantasia) prazoMap[`${c.tenant_id}|${c.nome_fantasia}`] = c.prazo_dias_acordo;
+        }
+      }
+
+      const toCancel: any[] = [];
+      for (const a of overdueAgreements) {
+        const prazo = prazoMap[`${a.tenant_id}|${a.credor}`];
+        // If prazo is null/0, do NOT auto-cancel
+        if (!prazo || prazo <= 0) continue;
+
+        const dueDate = new Date(a.first_due_date);
+        const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays >= prazo) {
+          toCancel.push(a);
+        }
+      }
+
+      if (toCancel.length > 0) {
+        const ids = toCancel.map((a: any) => a.id);
+        await supabase
+          .from("agreements")
+          .update({ status: "cancelled" })
+          .in("id", ids);
+
+        const notifications = toCancel.map((a: any) => {
+          const prazo = prazoMap[`${a.tenant_id}|${a.credor}`];
+          return {
+            tenant_id: a.tenant_id,
+            user_id: a.created_by,
+            title: "Acordo cancelado automaticamente",
+            message: `O acordo de ${a.client_name} (${a.client_cpf}) foi cancelado após ${prazo} dias de vencimento.`,
+            type: "error",
+            reference_type: "agreement",
+            reference_id: a.id,
+          };
+        });
+        await supabase.from("notifications").insert(notifications);
+        cancelledCount = toCancel.length;
+      }
     }
 
     // 3. Mark overdue client installments: pendente + data_vencimento < today → vencido
-    // NOTE: titles with status 'em_acordo' are NOT affected — they stay in agreement
     const { error: err3 } = await supabase
       .from("clients")
       .update({ status: "vencido" })
@@ -95,7 +128,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         overdue: toOverdue?.length || 0,
-        cancelled: toCancel?.length || 0,
+        cancelled: cancelledCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
