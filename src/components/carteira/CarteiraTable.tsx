@@ -131,9 +131,6 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                     </TableCell>
                     <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
                     <TableCell className="text-muted-foreground">{client.credor}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(client.valor_total)}
-                    </TableCell>
                     <TableCell>
                       <span className={isPast ? "text-destructive font-medium" : isToday ? "text-primary font-medium" : ""}>
                         {formatDate(client.data_vencimento)}
