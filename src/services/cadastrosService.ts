@@ -11,6 +11,7 @@ export interface CredorRulesResult {
   multa: number;
   aging_discount_tiers: any[];
   indice_correcao_monetaria: string | null;
+  honorarios_grade: any[];
 }
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
