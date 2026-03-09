@@ -218,22 +218,23 @@ const CarteiraPage = () => {
     // Derive correct status_cobranca_id based on actual record status
     let filtered = clients.map(c => {
       let derivedStatusId = c.status_cobranca_id;
-      if (c.status === "pago" && quitadoId) {
+      const st = c.status as string;
+      if (st === "pago" && quitadoId) {
         derivedStatusId = quitadoId;
-      } else if (c.status === "em_acordo" && acordoVigenteIdDerived) {
+      } else if (st === "em_acordo" && acordoVigenteIdDerived) {
         derivedStatusId = acordoVigenteIdDerived;
-      } else if (c.status === "quebrado" && quebraAcordoId) {
+      } else if (st === "quebrado" && quebraAcordoId) {
         derivedStatusId = quebraAcordoId;
-      } else if ((c.status === "pendente" || c.status === "vencido") && c.data_vencimento < today && aguardandoId) {
-        // Only override if not already set to a "locked" status like Em negociação
+      } else if ((st === "pendente" || st === "vencido") && c.data_vencimento < today && aguardandoId) {
         const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
         if (!currentName || currentName === "Em dia") {
           derivedStatusId = aguardandoId;
         }
-      } else if (c.status === "pendente" && c.data_vencimento >= today && emDiaId) {
+      } else if (st === "pendente" && c.data_vencimento >= today && emDiaId) {
         const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
         if (!currentName || currentName === "Aguardando acionamento") {
           derivedStatusId = emDiaId;
+        }
         }
       }
       if (derivedStatusId !== c.status_cobranca_id) {
