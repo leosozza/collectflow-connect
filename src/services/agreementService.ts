@@ -206,15 +206,49 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
   if (error) throw error;
 
-  // Revert titles from em_acordo back to pendente
+  // Revert titles from em_acordo back to pendente and reset status_cobranca
   if (agreement) {
     try {
+      const today = new Date().toISOString().split("T")[0];
+      // Get status IDs for auto-assignment
+      const { data: emDiaStatus } = await supabase
+        .from("tipos_status")
+        .select("id")
+        .eq("nome", "Em dia")
+        .single();
+      const { data: aguardandoStatus } = await supabase
+        .from("tipos_status")
+        .select("id")
+        .eq("nome", "Aguardando acionamento")
+        .single();
+
+      // First revert to pendente
       await supabase
         .from("clients")
         .update({ status: "pendente" } as any)
         .eq("cpf", agreement.client_cpf)
         .eq("credor", agreement.credor)
         .eq("status", "em_acordo");
+
+      // Then set appropriate status_cobranca based on vencimento
+      if (emDiaStatus?.id) {
+        await supabase
+          .from("clients")
+          .update({ status_cobranca_id: emDiaStatus.id } as any)
+          .eq("cpf", agreement.client_cpf)
+          .eq("credor", agreement.credor)
+          .eq("status", "pendente")
+          .gte("data_vencimento", today);
+      }
+      if (aguardandoStatus?.id) {
+        await supabase
+          .from("clients")
+          .update({ status_cobranca_id: aguardandoStatus.id } as any)
+          .eq("cpf", agreement.client_cpf)
+          .eq("credor", agreement.credor)
+          .eq("status", "pendente")
+          .lt("data_vencimento", today);
+      }
     } catch (e) {
       console.error("Erro ao reverter títulos:", e);
     }
