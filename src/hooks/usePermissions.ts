@@ -245,6 +245,7 @@ export const ACTION_LABELS: Record<string, string> = {
   delete: "Excluir",
   approve: "Aprovar/Rejeitar",
   manage: "Gerenciar",
+  filter: "Filtros Avançados",
   manage_admin: "Gerenciar (Administrativo)",
 };
 
