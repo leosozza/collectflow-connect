@@ -47,7 +47,7 @@ interface AgreementCalculatorProps {
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
-  const pendentes = clients.filter((c) => c.status === "pendente");
+  const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
   const [discountPercent, setDiscountPercent] = useState<number | "">(0);
