@@ -368,32 +368,29 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Left: Agreement Form */}
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-1 pt-3">
             <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[11px]">Data Entrada</Label>
-                <Input type="date" value={entradaDate} onChange={(e) => setEntradaDate(e.target.value)} className="h-8 text-xs" />
+          <CardContent className="space-y-2 pb-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Data Entrada</Label>
+                <Input type="date" value={entradaDate} onChange={(e) => setEntradaDate(e.target.value)} className="h-7 text-xs px-2" />
               </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Valor Entrada (R$)</Label>
-                <Input type="number" min={0} value={entradaValue} onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))} className="h-8 text-xs" placeholder="0,00" />
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Valor Entrada</Label>
+                <Input type="number" min={0} value={entradaValue} onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))} className="h-7 text-xs px-2" placeholder="0,00" />
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Parcelas</Label>
+                <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-7 text-xs px-2" />
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[11px]">Qtde Parcelas</Label>
-                <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Forma de Pagamento</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Forma Pagto</Label>
                 <Select value={formaPagto} onValueChange={setFormaPagto}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="BOLETO">Boleto</SelectItem>
                     <SelectItem value="PIX">Pix</SelectItem>
@@ -401,15 +398,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[11px]">Intervalo</Label>
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Intervalo</Label>
                 <Select value={intervalo} onValueChange={setIntervalo}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mensal">Mensal</SelectItem>
                     <SelectItem value="quinzenal">Quinzenal</SelectItem>
@@ -417,19 +409,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Vencto 1ª Parcela</Label>
-                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-8 text-xs" />
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Vencto 1ª Parc.</Label>
+                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-7 text-xs px-2" />
               </div>
             </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px]">Observações</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas sobre o acordo..." rows={2} className="text-xs" />
+            <div className="space-y-0.5">
+              <Label className="text-[10px]">Observações</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." rows={1} className="text-xs min-h-[28px]" />
             </div>
-
-            <Button onClick={handleSimulate} className="w-full gap-2" variant="secondary" disabled={selectedIds.size === 0}>
-              <Play className="w-4 h-4" />
+            <Button onClick={handleSimulate} className="w-full gap-2 h-8 text-xs" variant="secondary" disabled={selectedIds.size === 0}>
+              <Play className="w-3 h-3" />
               SIMULAR
             </Button>
           </CardContent>
