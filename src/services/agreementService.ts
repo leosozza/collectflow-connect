@@ -83,11 +83,23 @@ export const createAgreement = async (
   const agreement = result as Agreement;
   logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
 
-  // Mark original titles as "em_acordo" to prevent double-counting
+  // Mark original titles as "em_acordo" and set status_cobranca to "Acordo Vigente"
   try {
+    // Fetch the "Acordo Vigente" status ID
+    const { data: acordoStatus } = await supabase
+      .from("tipos_status")
+      .select("id")
+      .eq("nome", "Acordo Vigente")
+      .single();
+
+    const updatePayload: any = { status: "em_acordo" };
+    if (acordoStatus?.id) {
+      updatePayload.status_cobranca_id = acordoStatus.id;
+    }
+
     await supabase
       .from("clients")
-      .update({ status: "em_acordo" } as any)
+      .update(updatePayload)
       .eq("cpf", data.client_cpf)
       .eq("credor", data.credor)
       .in("status", ["pendente", "vencido", "quebrado"]);
