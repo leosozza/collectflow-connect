@@ -1,64 +1,61 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+## Plano: Sistema de Atribuição de Clientes na Carteira
 
-### O que será feito
+### Resumo
+Criar um sistema de atribuição de operadores a clientes, com dois modos de operação configuráveis pelo admin: **"Mar Aberto"** (todos veem tudo) e **"Atribuição"** (operador vê apenas clientes atribuídos). Dados sensíveis (CPF, telefone, email) ficam ocultos para perfis sem permissão.
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+### Alterações
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+#### 1. Banco de Dados — Migração
+- Adicionar coluna `carteira_mode` na tabela `tenants` (ou usar o campo `settings` JSONB existente) para armazenar o modo: `"open"` (mar aberto, padrão) ou `"assigned"` (atribuição)
+- A coluna `operator_id` já existe na tabela `clients` — será usada para vincular clientes a operadores
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+#### 2. Permissões — `usePermissions.ts`
+- Adicionar ação `"view_full_data"` ao módulo `carteira` para controlar quem vê CPF/telefone/email completos
+- Admin e super_admin têm `view_full_data` por padrão
+- Operador só vê dados completos de clientes atribuídos a ele (quando em modo "Atribuição")
 
----
+#### 3. Configuração do Tenant — `TenantSettingsPage.tsx` ou `CadastrosPage.tsx`
+- Adicionar toggle no painel do admin para alternar entre modo "Mar Aberto" e "Atribuição"
+- Salvar no campo `settings` do tenant: `{ carteira_mode: "open" | "assigned" }`
 
-### Explicação das regras e lógicas de Negociação
+#### 4. Página Carteira — `CarteiraPage.tsx`
+- **Botão "Atribuir"**: Ao lado de WhatsApp e Discador na barra superior quando há seleção. Abre dialog para escolher operador
+- **Ocultação de dados**: Quando o usuário não tem permissão `view_full_data` no módulo `carteira` E o cliente não está atribuído a ele:
+  - CPF: `***.***.789-00` (mostra apenas últimos 5 caracteres)
+  - Telefone: `(**) ****-1234` 
+  - Email: `j***@email.com`
+- **Filtro por atribuição** (modo "Atribuição"): Operadores sem `view` completo veem apenas clientes com `operator_id` = seu profile_id
+- **Dialog de Atribuição**: Lista de operadores do tenant, permite selecionar e atribuir em lote via `UPDATE clients SET operator_id = X WHERE id IN (...)`
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+#### 5. Novo Componente — `AssignOperatorDialog.tsx`
+- Dialog com lista de operadores (busca `profiles` do tenant)
+- Botão confirmar que faz o update em lote
+- Mostra quantidade de clientes selecionados
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+#### 6. Hook `useTenant` / settings
+- Expor `carteiraMode` do tenant settings para uso nos componentes
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+### Lógica de visibilidade
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+```text
+Se modo = "open" (Mar Aberto):
+  → Todos os perfis com permissão carteira.view veem todos os clientes
+  → Dados sensíveis: visíveis se tem carteira.view_full_data OU é admin
+  
+Se modo = "assigned" (Atribuição):
+  → Admin/gerente: vê todos os clientes
+  → Operador: vê apenas clientes com operator_id = seu profile_id
+  → Dados sensíveis do cliente atribuído: sempre visíveis para o operador atribuído
+  → Dados de clientes não atribuídos (se visíveis): ocultados
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
-
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+### Arquivos alterados/criados
+- **Migração SQL**: Adicionar `carteira_mode` ou usar `settings` JSONB do tenant
+- `src/hooks/usePermissions.ts` — nova ação `view_full_data`
+- `src/pages/CarteiraPage.tsx` — botão Atribuir, lógica de ocultação, filtro por operador
+- `src/components/carteira/AssignOperatorDialog.tsx` — novo componente
+- `src/pages/CadastrosPage.tsx` ou `TenantSettingsPage.tsx` — toggle de modo
+- `src/lib/formatters.ts` — funções de mascaramento (maskCPF, maskPhone, maskEmail)
 
