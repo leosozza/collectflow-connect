@@ -363,15 +363,29 @@ const CarteiraPage = () => {
         statusNameMap.set(t.nome.toUpperCase().trim(), t.id);
       });
 
+      const today = new Date().toISOString().split("T")[0];
+      const emDiaStatusId = statusNameMap.get("EM DIA");
+      const aguardandoStatusId = statusNameMap.get("AGUARDANDO ACIONAMENTO");
+
       const enrichedRows = rows.map((row) => {
-        if (row.status_raw && !row.status_cobranca_id) {
-          const key = row.status_raw.toUpperCase().trim();
+        let enriched = { ...row };
+        if (enriched.status_raw && !enriched.status_cobranca_id) {
+          const key = enriched.status_raw.toUpperCase().trim();
           const matched = statusNameMap.get(key);
           if (matched) {
-            return { ...row, status_cobranca_id: matched };
+            enriched.status_cobranca_id = matched;
           }
         }
-        return row;
+        // Auto-assign Em dia / Aguardando acionamento if no status_cobranca_id set
+        if (!enriched.status_cobranca_id) {
+          const vencimento = enriched.data_vencimento || today;
+          if (vencimento >= today && emDiaStatusId) {
+            enriched.status_cobranca_id = emDiaStatusId;
+          } else if (vencimento < today && aguardandoStatusId) {
+            enriched.status_cobranca_id = aguardandoStatusId;
+          }
+        }
+        return enriched;
       });
 
       return bulkCreateClients(enrichedRows, profile!.id);
