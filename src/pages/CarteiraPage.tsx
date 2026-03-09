@@ -207,7 +207,6 @@ const CarteiraPage = () => {
     // Exclude clients with active agreements (em_acordo status)
     let filtered = clients.filter(c => {
       if ((c as any).status === "em_acordo") return false;
-      if (agreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
 
