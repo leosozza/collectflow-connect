@@ -42,7 +42,7 @@ export const fetchCredorRules = async (tenantId: string, credorName: string): Pr
   // Fallback: fetch all credores for tenant and normalize match
   const { data: all } = await supabase
     .from("credores" as any)
-    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria, razao_social, nome_fantasia")
+    .select("desconto_maximo, parcelas_max, parcelas_min, entrada_minima_valor, entrada_minima_tipo, juros_mes, multa, aging_discount_tiers, indice_correcao_monetaria, honorarios_grade, razao_social, nome_fantasia")
     .eq("tenant_id", tenantId);
   if (all && Array.isArray(all)) {
     const target = normalize(credorName);
