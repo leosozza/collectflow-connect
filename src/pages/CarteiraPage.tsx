@@ -198,6 +198,27 @@ const CarteiraPage = () => {
     if (filters.semContato) {
       filtered = filtered.filter(c => !contactedClientIds.has(c.id));
     }
+    if (filters.emDia) {
+      const today = new Date().toISOString().split("T")[0];
+      // Group all filtered by CPF+credor to check if ALL installments are in day
+      const cpfCredorMap = new Map<string, Client[]>();
+      filtered.forEach(c => {
+        const key = `${c.cpf.replace(/\D/g, "")}|${c.credor}`;
+        if (!cpfCredorMap.has(key)) cpfCredorMap.set(key, []);
+        cpfCredorMap.get(key)!.push(c);
+      });
+      const emDiaCpfs = new Set<string>();
+      cpfCredorMap.forEach((group, key) => {
+        const cpfClean = key.split("|")[0];
+        const allEmDia = group.every(c =>
+          c.data_vencimento >= today && c.status !== "pago" && c.status !== "quebrado"
+        );
+        if (allEmDia && !agreementCpfs.has(cpfClean)) {
+          emDiaCpfs.add(key);
+        }
+      });
+      filtered = filtered.filter(c => emDiaCpfs.has(`${c.cpf.replace(/\D/g, "")}|${c.credor}`));
+    }
     if (filters.tipoDevedorId) {
       filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
     }
