@@ -1,0 +1,1 @@
+ALTER TABLE public.credores ADD COLUMN carteira_mode text DEFAULT 'open';

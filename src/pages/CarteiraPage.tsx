@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchTiposStatus } from "@/services/cadastrosService";
+import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,6 @@ const CarteiraPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const carteiraMode = ((tenant?.settings as any)?.carteira_mode as string) || "open";
   const profileId = profile?.id;
 
   const [filters, setFilters] = useState({
@@ -173,6 +172,24 @@ const CarteiraPage = () => {
     enabled: !!tenant?.id,
   });
 
+  const { data: credores = [] } = useQuery({
+    queryKey: ["credores", tenant?.id],
+    queryFn: () => fetchCredores(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
+  // Map credor name -> carteira_mode
+  const credorModeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    credores.forEach((c: any) => {
+      if (c.razao_social) map.set(c.razao_social, c.carteira_mode || "open");
+      if (c.nome_fantasia) map.set(c.nome_fantasia, c.carteira_mode || "open");
+    });
+    return map;
+  }, [credores]);
+
+  const getClientCarteiraMode = (client: any) => credorModeMap.get(client.credor) || "open";
+
   const statusMap = useMemo(() => {
     const map = new Map<string, { nome: string; cor: string }>();
     tiposStatus.forEach((t: any) => map.set(t.id, { nome: t.nome, cor: t.cor || "#6b7280" }));
@@ -189,9 +206,13 @@ const CarteiraPage = () => {
   const displayClients = useMemo((): GroupedClient[] => {
     let filtered = clients;
 
-    // Assignment mode: operators only see their assigned clients
-    if (carteiraMode === "assigned" && !permissions.canViewFullData && profileId) {
-      filtered = filtered.filter(c => c.operator_id === profileId);
+    // Assignment mode per creditor: operators only see their assigned clients for creditors in "assigned" mode
+    if (!permissions.canViewFullData && profileId) {
+      filtered = filtered.filter(c => {
+        const mode = credorModeMap.get(c.credor) || "open";
+        if (mode === "assigned") return c.operator_id === profileId;
+        return true;
+      });
     }
 
     if (filters.semAcordo) {
@@ -286,13 +307,14 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, carteiraMode, permissions.canViewFullData, profileId]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
     if (permissions.canViewFullData) return true;
-    if (carteiraMode === "assigned" && client.operator_id === profileId) return true;
-    return false;
+    const mode = getClientCarteiraMode(client);
+    if (mode === "assigned" && client.operator_id === profileId) return true;
+    return mode === "open";
   };
 
   const createMutation = useMutation({
