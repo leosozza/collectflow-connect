@@ -204,11 +204,7 @@ const CarteiraPage = () => {
   }
 
   const displayClients = useMemo((): GroupedClient[] => {
-    // Exclude clients with active agreements (em_acordo status)
-    let filtered = clients.filter(c => {
-      if ((c as any).status === "em_acordo") return false;
-      return true;
-    });
+    let filtered = [...clients];
 
     // Assignment mode per creditor: operators only see their assigned clients for creditors in "assigned" mode
     if (!permissions.canViewFullData && profileId) {

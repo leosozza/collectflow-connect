@@ -99,6 +99,34 @@ Deno.serve(async (req) => {
           .update({ status: "cancelled" })
           .in("id", ids);
 
+        // Revert client records from em_acordo → pendente and set "Quebra de Acordo" status
+        // Get "Quebra de Acordo" status ID
+        const tenantIdsForCancel = [...new Set(toCancel.map((a: any) => a.tenant_id))];
+        const { data: quebraStatusList } = await supabase
+          .from("tipos_status")
+          .select("id, tenant_id")
+          .eq("nome", "Quebra de Acordo")
+          .in("tenant_id", tenantIdsForCancel);
+
+        const quebraStatusByTenant: Record<string, string> = {};
+        (quebraStatusList || []).forEach((s: any) => {
+          quebraStatusByTenant[s.tenant_id] = s.id;
+        });
+
+        for (const a of toCancel) {
+          const quebraId = quebraStatusByTenant[a.tenant_id];
+          const updateData: any = { status: "pendente" };
+          if (quebraId) {
+            updateData.status_cobranca_id = quebraId;
+          }
+          await supabase
+            .from("clients")
+            .update(updateData)
+            .eq("status", "em_acordo")
+            .eq("cpf", a.client_cpf)
+            .eq("tenant_id", a.tenant_id);
+        }
+
         const notifications = toCancel.map((a: any) => {
           const prazo = prazoMap[`${a.tenant_id}|${a.credor}`];
           return {
