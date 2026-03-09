@@ -66,7 +66,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [addressStatus, setAddressStatus] = useState("");
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
 
-  // Fetch credor rules
+  // Fetch credor rules and auto-fill honorários + aging discount
   useEffect(() => {
     if (!profile?.tenant_id || !credor) return;
     fetchCredorRules(profile.tenant_id, credor).then((rules) => {
@@ -74,7 +74,36 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         setCredorRules(rules);
         setJurosPercent(rules.juros_mes || 0);
         setMultaPercent(rules.multa || 0);
-        setDescontoPercent(rules.desconto_maximo || 0);
+
+        // Auto-calculate honorários from grade based on total original value
+        const totalOriginal = pendentes.reduce((s, c) => s + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+        if (rules.honorarios_grade && rules.honorarios_grade.length > 0) {
+          const matchedTier = rules.honorarios_grade.find((tier: any) => {
+            const parts = (tier.faixa || "").split("-").map(Number);
+            if (parts.length !== 2) return false;
+            return totalOriginal >= parts[0] && totalOriginal <= parts[1];
+          });
+          if (matchedTier) {
+            setHonorariosPercent(Number(matchedTier.honorario) || 0);
+          }
+        }
+
+        // Auto-calculate discount from aging tiers based on max delay
+        const refDate = new Date();
+        const maxAtraso = pendentes.reduce((max, c) => {
+          const venc = new Date(c.data_vencimento + "T00:00:00");
+          const atraso = Math.max(0, Math.floor((refDate.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)));
+          return Math.max(max, atraso);
+        }, 0);
+
+        if (rules.aging_discount_tiers && rules.aging_discount_tiers.length > 0) {
+          const matchedAging = rules.aging_discount_tiers.find((tier: any) =>
+            maxAtraso >= (tier.min_days || 0) && maxAtraso <= (tier.max_days || Infinity)
+          );
+          setDescontoPercent(matchedAging ? Number(matchedAging.discount_percent) || 0 : 0);
+        } else {
+          setDescontoPercent(0);
+        }
       }
     });
   }, [profile?.tenant_id, credor]);
@@ -289,6 +318,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">% Desc.</Label>
               <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => setDescontoPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
             </div>
+            {credorRules?.indice_correcao_monetaria && (
+              <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
+                <span className="text-[10px] text-muted-foreground">Índice</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{credorRules.indice_correcao_monetaria}</Badge>
+              </div>
+            )}
             <div className="ml-auto flex items-center gap-2 whitespace-nowrap border border-border rounded-md px-3 py-1.5 bg-muted/50">
               <span className="text-[10px] text-muted-foreground">Valor Atualizado</span>
               <span className="text-sm font-bold text-foreground">{formatCurrency(totals.totalAtualizado)}</span>
