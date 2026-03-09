@@ -196,6 +196,19 @@ const CarteiraPage = () => {
     return map;
   }, [tiposStatus]);
 
+  // Call auto-status-sync once on mount to fix stale status_cobranca_id in DB
+  const syncCalledRef = useRef(false);
+  useEffect(() => {
+    if (!syncCalledRef.current && tenant?.id) {
+      syncCalledRef.current = true;
+      supabase.functions.invoke("auto-status-sync").then(({ error }) => {
+        if (!error) {
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+        }
+      });
+    }
+  }, [tenant?.id, queryClient]);
+
   // Grouped client type for CPF aggregation
   interface GroupedClient extends Client {
     valor_total: number;
