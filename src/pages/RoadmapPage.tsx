@@ -274,7 +274,7 @@ Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama
     id: "serasa",
     title: "Negativação Serasa",
     description: "Estrutura criada. Falta: configuração real da API, testes de envio e cancelamento de registros.",
-    status: "planned",
+    status: "in_progress",
     progress: 25,
     category: "Integrações",
     lovablePrompt: `Finalizar a integração com Serasa para negativação de devedores.
