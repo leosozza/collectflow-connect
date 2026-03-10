@@ -186,6 +186,16 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/perfil"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <PerfilPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
             {/* Super Admin area with isolated layout */}
             <Route
               element={
@@ -202,6 +212,7 @@ const App = () => (
               <Route path="/admin/treinamentos" element={<AdminTreinamentosPage />} />
               <Route path="/admin/configuracoes" element={<AdminConfiguracoesPage />} />
               <Route path="/admin/relatorios" element={<AdminRelatoriosPage />} />
+              <Route path="/admin/perfil" element={<PerfilPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

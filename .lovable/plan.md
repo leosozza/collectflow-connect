@@ -1,51 +1,64 @@
 
 
-## Plano: Página de Perfil completa com Segurança e 2FA
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-### Problema
-1. A rota `/perfil` não existe no `App.tsx` — clicar no avatar leva ao 404
-2. A `PerfilPage` atual tem foto e nome, mas falta: alteração de senha, 2FA, e email de login
-3. Super Admin clica no avatar e também vai para `/perfil`, que não está nas rotas do admin
+### O que será feito
 
-### Alterações
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-**1. `src/App.tsx` — Registrar rotas `/perfil`**
-- Adicionar rota `/perfil` dentro das rotas tenant (com `AppLayout`)
-- Adicionar rota `/admin/perfil` dentro das rotas do Super Admin (com `SuperAdminLayout`)
-- Ambas apontam para `PerfilPage`
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-**2. `src/pages/PerfilPage.tsx` — Reescrever com abas**
-Reorganizar a página em tabs usando `Tabs` do Radix:
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-**Tab "Dados Pessoais"** (já existe parcialmente):
-- Foto de perfil (upload existente)
-- Nome, Bio, Aniversário
+---
 
-**Tab "Segurança"** (NOVA):
-- **Email de login** (somente leitura, vindo de `user.email`)
-- **Alterar senha**: campos senha atual não necessária (usa `supabase.auth.updateUser({ password })`)
-- **Autenticação de 2 fatores (TOTP)**:
-  - Botão "Ativar 2FA" → chama `supabase.auth.mfa.enroll({ factorType: 'totp' })`
-  - Mostra QR code para escanear
-  - Campo para digitar código de verificação → `supabase.auth.mfa.challengeAndVerify()`
-  - Se já ativo, mostra botão "Desativar 2FA" → `supabase.auth.mfa.unenroll()`
-- **Reset de senha**: botão que envia email de redefinição via `supabase.auth.resetPasswordForEmail()`
+### Explicação das regras e lógicas de Negociação
 
-**3. `src/components/SuperAdminLayout.tsx`**
-- Alterar o `navigate("/perfil")` para `navigate("/admin/perfil")`
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
 
-### Fluxo de 2FA
-1. Usuário clica "Ativar 2FA"
-2. Sistema chama `mfa.enroll()` e exibe QR code TOTP
-3. Usuário escaneia com Google Authenticator / Authy
-4. Digita o código de 6 dígitos
-5. Sistema verifica com `mfa.challengeAndVerify()` e confirma ativação
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
 
-### Arquivos
-- **Alterar**: `src/App.tsx` (2 rotas novas)
-- **Alterar**: `src/pages/PerfilPage.tsx` (reorganizar em tabs + tab segurança)
-- **Alterar**: `src/components/SuperAdminLayout.tsx` (fix navigate path)
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
 
-### Sem migrations necessárias
-Tudo usa APIs de autenticação existentes — sem tabelas novas.
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+```
+
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 
