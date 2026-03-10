@@ -64,7 +64,7 @@ const TenantSettingsPage = () => {
   const { tenant, plan, isTenantAdmin, refetch } = useTenant();
   const { toast } = useToast();
   const [name, setName] = useState(tenant?.name || "");
-  const [primaryColor, setPrimaryColor] = useState(tenant?.primary_color || "#F97316");
+  
   const [saving, setSaving] = useState(false);
   const [confirmService, setConfirmService] = useState<typeof SERVICE_CATALOG[0] | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
