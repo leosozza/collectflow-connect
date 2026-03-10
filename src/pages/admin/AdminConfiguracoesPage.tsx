@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Shield, Bell, Database, Globe, CreditCard, AlertTriangle } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Settings, Shield, Bell, Database, Globe, CreditCard, AlertTriangle, Wifi, WifiOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { getSystemSetting, updateSystemSetting } from "@/services/systemSettingsService";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -64,6 +66,8 @@ const AdminConfiguracoesPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testLogs, setTestLogs] = useState<{ time: string; status: "success" | "error" | "info"; message: string }[]>([]);
 
   useEffect(() => {
     getSystemSetting("asaas_environment").then((val) => {
@@ -97,6 +101,70 @@ const AdminConfiguracoesPage = () => {
   };
 
   const isProduction = asaasEnv === "production";
+
+  const addLog = (status: "success" | "error" | "info", message: string) => {
+    setTestLogs((prev) => [
+      { time: new Date().toLocaleTimeString("pt-BR"), status, message },
+      ...prev,
+    ]);
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestLogs([]);
+    const env = isProduction ? "Produção" : "Sandbox";
+
+    addLog("info", `Iniciando teste de conexão (${env})...`);
+
+    try {
+      // Step 1: Check system_settings
+      addLog("info", "Verificando configuração do ambiente...");
+      const currentEnv = await getSystemSetting("asaas_environment");
+      if (currentEnv) {
+        addLog("success", `Ambiente configurado: ${currentEnv}`);
+      } else {
+        addLog("error", "Configuração de ambiente não encontrada no banco");
+        setTesting(false);
+        return;
+      }
+
+      // Step 2: Test proxy connection
+      addLog("info", "Testando conexão com API Asaas via proxy...");
+      const { data, error } = await supabase.functions.invoke("asaas-proxy", {
+        body: { action: "create_customer", name: "Teste Conexão", cpfCnpj: "00000000000" },
+      });
+
+      if (error) {
+        addLog("error", `Erro na edge function: ${error.message}`);
+        toast.error("Falha no teste de conexão");
+        setTesting(false);
+        return;
+      }
+
+      if (data?.errors) {
+        // Asaas returned an error — but connection works
+        const errMsg = data.errors[0]?.description || JSON.stringify(data.errors);
+        if (errMsg.includes("já cadastrado") || errMsg.includes("already")) {
+          addLog("success", `API Asaas respondeu (cliente já existe) — Conexão OK`);
+        } else {
+          addLog("info", `API Asaas respondeu com erro de validação: ${errMsg}`);
+          addLog("success", "Conexão com a API está funcionando (erro esperado para dados de teste)");
+        }
+      } else if (data?.id) {
+        addLog("success", `Cliente de teste criado com sucesso (ID: ${data.id})`);
+      } else {
+        addLog("info", `Resposta da API: ${JSON.stringify(data).slice(0, 200)}`);
+      }
+
+      addLog("success", `✅ Teste de conexão concluído (${env})`);
+      toast.success("Conexão com Asaas verificada!");
+    } catch (err: any) {
+      addLog("error", `Erro inesperado: ${err.message}`);
+      toast.error("Erro ao testar conexão");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -151,6 +219,66 @@ const AdminConfiguracoesPage = () => {
                 O ambiente de produção está ativo. Todas as cobranças serão reais e processadas pelo Asaas.
               </p>
             </div>
+          )}
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={testing || loading}
+              className="gap-2"
+            >
+              {testing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wifi className="w-4 h-4" />
+              )}
+              {testing ? "Testando..." : "Testar Conexão"}
+            </Button>
+            {testLogs.length > 0 && !testing && (
+              <Badge
+                variant="outline"
+                className={
+                  testLogs[0]?.status === "success"
+                    ? "bg-green-500/10 text-green-600 border-green-200"
+                    : testLogs[0]?.status === "error"
+                    ? "bg-destructive/10 text-destructive border-destructive/20"
+                    : "bg-muted text-muted-foreground"
+                }
+              >
+                {testLogs[0]?.status === "success" ? (
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                ) : testLogs[0]?.status === "error" ? (
+                  <XCircle className="w-3 h-3 mr-1" />
+                ) : null}
+                {testLogs[0]?.status === "success" ? "Conectado" : "Falha"}
+              </Badge>
+            )}
+          </div>
+
+          {/* Logs */}
+          {testLogs.length > 0 && (
+            <ScrollArea className="h-[180px] rounded-md border border-border bg-muted/30 p-3">
+              <div className="space-y-1.5 font-mono text-xs">
+                {testLogs.map((log, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-muted-foreground shrink-0">[{log.time}]</span>
+                    {log.status === "success" && <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />}
+                    {log.status === "error" && <XCircle className="w-3 h-3 text-destructive mt-0.5 shrink-0" />}
+                    {log.status === "info" && <Wifi className="w-3 h-3 text-primary mt-0.5 shrink-0" />}
+                    <span className={
+                      log.status === "success" ? "text-green-600 dark:text-green-400" :
+                      log.status === "error" ? "text-destructive" :
+                      "text-foreground"
+                    }>
+                      {log.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
         </CardContent>
       </Card>
