@@ -49,7 +49,8 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
-  if (loading) {
+  const { isSuperAdmin, loading: tenantLoading } = useTenant();
+  if (loading || tenantLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex items-center gap-3">
@@ -60,6 +61,7 @@ const RootPage = () => {
     );
   }
   if (!user) return <LandingPage />;
+  if (isSuperAdmin) return <Navigate to="/admin" replace />;
   return (
     <ProtectedRoute requireTenant>
       <AppLayout>
