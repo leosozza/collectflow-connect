@@ -16,7 +16,6 @@ import {
   GraduationCap,
   Settings,
   BarChart3,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -84,23 +83,19 @@ const SuperAdminLayout = () => {
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          ${collapsed ? "w-16" : "w-64"} flex flex-col
-          bg-[hsl(222,47%,11%)] text-white
+          ${collapsed ? "w-16" : "w-64"} gradient-dark flex flex-col
           transform transition-all duration-200 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
         {/* Logo */}
-        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-start px-4"} py-5 border-b border-white/10`}>
+        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-start px-4"} py-5 border-b border-sidebar-border`}>
           {collapsed ? (
-            <Shield className="w-7 h-7 text-amber-400" />
+            <img src={rivoLogo} alt="RIVO" className="h-7 w-auto object-contain" />
           ) : (
-            <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6 text-amber-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-bold text-white tracking-wide">RIVO CONNECT</p>
-                <p className="text-[10px] text-amber-400 font-medium uppercase tracking-widest">Super Admin</p>
-              </div>
+            <div className="flex flex-col items-start gap-1">
+              <img src={rivoLogo} alt="RIVO CONNECT" className="h-24 w-auto object-contain" />
+              <p className="text-[10px] text-primary font-medium uppercase tracking-widest px-1">Super Admin</p>
             </div>
           )}
         </div>
@@ -118,8 +113,8 @@ const SuperAdminLayout = () => {
                 className={`
                   flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
                   ${active
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }
                 `}
               >
@@ -131,17 +126,17 @@ const SuperAdminLayout = () => {
         </nav>
 
         {/* Footer */}
-        <div className="px-2 py-4 border-t border-white/10">
+        <div className="px-2 py-4 border-t border-sidebar-border">
           {!collapsed && (
             <div className="px-4 py-2 mb-2">
-              <p className="text-sm font-medium text-white truncate">{profile?.full_name || "Super Admin"}</p>
-              <p className="text-xs text-amber-400/80">Super Administrador</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">{profile?.full_name || "Super Admin"}</p>
+              <p className="text-xs text-primary/80">Super Administrador</p>
             </div>
           )}
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}
-            className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white w-full transition-colors`}
+            className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent w-full transition-colors`}
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {!collapsed && "Sair"}
@@ -181,13 +176,13 @@ const SuperAdminLayout = () => {
             >
               <Avatar className="w-8 h-8">
                 <AvatarImage src={(profile as any)?.avatar_url} />
-                <AvatarFallback className="bg-amber-500/10 text-amber-600 text-xs font-semibold">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                   {(profile?.full_name || "SA").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-medium text-foreground leading-tight truncate max-w-[120px]">{profile?.full_name || "Super Admin"}</p>
-                <p className="text-[10px] text-amber-600 font-medium">Super Admin</p>
+                <p className="text-[10px] text-primary font-medium">Super Admin</p>
               </div>
             </button>
           </div>
