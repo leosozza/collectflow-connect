@@ -15,7 +15,6 @@ import {
 import type { ImportedRow } from "@/services/importService";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
-import { supabase } from "@/integrations/supabase/client";
 import ClientTable from "@/components/clients/ClientTable";
 import ClientForm from "@/components/clients/ClientForm";
 import ClientFilters from "@/components/clients/ClientFilters";
