@@ -67,7 +67,7 @@ const ConfiguracoesPage = () => {
       <div>
         {active === "integracao" && <IntegracaoPage />}
         {active === "auditoria" && <AuditoriaPage />}
-        {active === "roadmap" && <RoadmapPage />}
+        
         {active === "api_docs" && <ApiDocsPage />}
         {active === "maxlist" && <MaxListPage />}
       </div>
