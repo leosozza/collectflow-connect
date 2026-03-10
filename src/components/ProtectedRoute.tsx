@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
-  const { tenant, tenantUser, loading: tenantLoading } = useTenant();
+  const { tenant, tenantUser, isSuperAdmin, loading: tenantLoading } = useTenant();
   const location = useLocation();
 
   if (authLoading || tenantLoading) {
