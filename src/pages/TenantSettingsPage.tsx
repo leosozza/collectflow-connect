@@ -75,6 +75,7 @@ const TenantSettingsPage = () => {
   const [packages, setPackages] = useState<TokenPackage[]>([]);
   const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
   const settings = (tenant?.settings as Record<string, any>) || {};
