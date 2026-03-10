@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
-  const { tenant, tenantUser, loading: tenantLoading } = useTenant();
+  const { tenant, tenantUser, isSuperAdmin, loading: tenantLoading } = useTenant();
   const location = useLocation();
 
   if (authLoading || tenantLoading) {
@@ -32,10 +32,14 @@ const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps
     return <Navigate to="/" replace />;
   }
 
+  // Super admin bypass: never require tenant, redirect to /admin
+  if (requireTenant && isSuperAdmin) {
+    return <Navigate to="/admin" replace />;
+  }
+
   // requireTenant routes: no tenant found → onboarding
   if (requireTenant && !tenant) {
     if (tenantUser) {
-      // tenantUser resolved but tenant still loading — show spinner
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="flex items-center gap-3">

@@ -2,9 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { TenantProvider } from "@/hooks/useTenant";
+import { TenantProvider, useTenant } from "@/hooks/useTenant";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
@@ -49,7 +49,8 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
-  if (loading) {
+  const { isSuperAdmin, loading: tenantLoading } = useTenant();
+  if (loading || tenantLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex items-center gap-3">
@@ -60,6 +61,7 @@ const RootPage = () => {
     );
   }
   if (!user) return <LandingPage />;
+  if (isSuperAdmin) return <Navigate to="/admin" replace />;
   return (
     <ProtectedRoute requireTenant>
       <AppLayout>
