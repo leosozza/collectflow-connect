@@ -60,7 +60,7 @@ export const fetchAllTokenPackages = async (): Promise<TokenPackage[]> => {
 export const createTokenPackage = async (pkg: Partial<TokenPackage>): Promise<TokenPackage> => {
   const { data, error } = await supabase
     .from("token_packages")
-    .insert(pkg)
+    .insert(pkg as any)
     .select()
     .single();
   if (error) throw error;
