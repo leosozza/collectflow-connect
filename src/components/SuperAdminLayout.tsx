@@ -73,6 +73,7 @@ const SuperAdminLayout = () => {
     "/admin/treinamentos": "Treinamentos e Reuniões",
     "/admin/configuracoes": "Configurações do Sistema",
     "/admin/relatorios": "Relatórios e Análises",
+    "/admin/servicos": "Serviços e Tokens",
     "/admin/roadmap": "Roadmap",
   };
 
