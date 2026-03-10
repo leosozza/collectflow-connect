@@ -31,6 +31,7 @@ const navItems = [
   { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos" },
   { label: "Configurações do Sistema", icon: Settings, path: "/admin/configuracoes" },
   { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
+  { label: "Roadmap", icon: Map, path: "/admin/roadmap" },
 ];
 
 const SuperAdminLayout = () => {
