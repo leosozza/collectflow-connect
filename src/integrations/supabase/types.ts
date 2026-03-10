@@ -4029,10 +4029,20 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
-      onboard_tenant: {
-        Args: { _name: string; _plan_id: string; _slug: string }
-        Returns: string
-      }
+      onboard_tenant:
+        | {
+            Args: { _name: string; _plan_id: string; _slug: string }
+            Returns: string
+          }
+        | {
+            Args: {
+              _cnpj?: string
+              _name: string
+              _plan_id: string
+              _slug: string
+            }
+            Returns: string
+          }
       seed_default_permission_profiles: {
         Args: { _tenant_id: string }
         Returns: undefined
