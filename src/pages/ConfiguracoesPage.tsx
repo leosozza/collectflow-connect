@@ -27,7 +27,7 @@ const ConfiguracoesPage = () => {
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
     ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
-    ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
+    
     ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
     ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
   ];
