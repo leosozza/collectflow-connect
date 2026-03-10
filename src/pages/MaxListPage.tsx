@@ -739,6 +739,12 @@ const MaxListPage = () => {
 
     toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
 
+    // If auto status selected, run auto-status-sync to derive statuses
+    if (selectedStatusCobrancaId === "__auto__") {
+      toast.info("Derivando status automaticamente...");
+      await supabase.functions.invoke("auto-status-sync");
+    }
+
     setImporting(false);
     setImportProgress(100);
 
