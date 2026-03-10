@@ -38,6 +38,13 @@ import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
+import SuperAdminLayout from "./components/SuperAdminLayout";
+import AdminEquipesPage from "./pages/admin/AdminEquipesPage";
+import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
+import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
+import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
+import AdminRelatoriosPage from "./pages/admin/AdminRelatoriosPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
@@ -177,181 +184,23 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            {/* Super Admin area with isolated layout */}
             <Route
-              path="/admin/tenants"
               element={
                 <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <SuperAdminPage />
-                  </AppLayout>
+                  <SuperAdminLayout />
                 </ProtectedRoute>
               }
-            />
-            <Route
-              path="/tenant/configuracoes"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <TenantSettingsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/automacao"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AutomacaoPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/signs"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <SignsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/relatorios"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <RelatoriosPage />
-              </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/acordos"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AcordosPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AnalyticsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/landing" element={<LandingPage />} />
-            <Route path="/api-docs/public" element={<ApiDocsPublicPage />} />
-            <Route path="/portal/:tenantSlug" element={<PortalPage />} />
-            <Route path="/portal/:tenantSlug/checkout/:token" element={<PortalPage />} />
-            <Route path="/portal/:tenantSlug/termo/:token" element={<PortalPage />} />
-            <Route
-              path="/auditoria"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AuditoriaPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/atendimento/:id"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AtendimentoPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/perfil"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <PerfilPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/perfil/:userId"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <PerfilPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/roadmap"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <RoadmapPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/gamificacao"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <GamificacaoPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/api-docs"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ApiDocsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/maxlist"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <MaxListPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/central-empresa"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <TenantSettingsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/suporte"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <SupportAdminPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
+            >
+              <Route path="/admin" element={<AdminDashboardPage />} />
+              <Route path="/admin/suporte" element={<SupportAdminPage />} />
+              <Route path="/admin/tenants" element={<SuperAdminPage />} />
+              <Route path="/admin/equipes" element={<AdminEquipesPage />} />
+              <Route path="/admin/financeiro" element={<AdminFinanceiroPage />} />
+              <Route path="/admin/treinamentos" element={<AdminTreinamentosPage />} />
+              <Route path="/admin/configuracoes" element={<AdminConfiguracoesPage />} />
+              <Route path="/admin/relatorios" element={<AdminRelatoriosPage />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
           </TenantProvider>
