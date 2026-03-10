@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Cloud, Map, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
-import RoadmapPage from "@/pages/RoadmapPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
 import AuditoriaPage from "@/pages/AuditoriaPage";
