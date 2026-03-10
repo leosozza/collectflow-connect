@@ -236,7 +236,7 @@ const MaxListPage = () => {
   const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
+  const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]); // kept for compat
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
