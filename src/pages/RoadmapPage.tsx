@@ -639,7 +639,7 @@ Tabelas relacionadas: credores, agreements, clients`,
     id: "agente-ia-autonomo",
     title: "Agente IA Autônomo de Negociação",
     description: "LLM integrado via Edge Function que negocia em tempo real com contorno de objeções no contexto de cobrança.",
-    status: "planned",
+    status: "in_progress",
     progress: 15,
     category: "IA",
     lovablePrompt: `Evoluir o Agente IA do Contact Center para negociar de forma autônoma, aplicando políticas de desconto e contornando objeções.
