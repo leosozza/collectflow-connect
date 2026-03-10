@@ -1,70 +1,64 @@
 
 
-# Plano: Switch Sandbox/Produção Asaas + Secrets para ambos ambientes
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Contexto
-A integração Asaas ainda não foi implementada no código. Este plano cobre a configuração dos secrets para ambos os ambientes e um switch no Super Admin para alternar entre sandbox e produção.
+### O que será feito
 
-## 1. Secrets necessários (4 secrets)
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-| Secret | Descrição |
-|---|---|
-| `ASAAS_API_KEY_SANDBOX` | Chave da API Asaas em sandbox |
-| `ASAAS_API_KEY_PRODUCTION` | Chave da API Asaas em produção |
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-O ambiente ativo será armazenado na tabela `system_settings` (ou similar) no banco, controlado pelo Super Admin.
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-## 2. Migração SQL
+---
 
-Criar tabela `system_settings` (chave-valor global, acessível apenas por super_admin):
+### Explicação das regras e lógicas de Negociação
 
-```text
-system_settings
-├── id (uuid PK)
-├── key (text unique) — ex: "asaas_environment"
-├── value (text) — "sandbox" ou "production"
-├── updated_at, updated_by
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
 ```
 
-Inserir valor padrão: `asaas_environment = 'sandbox'`.
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-RLS: somente super_admin pode ler/escrever.
-
-## 3. UI Super Admin — Switch de Ambiente
-
-Adicionar no `AdminConfiguracoesPage.tsx` (ou `AdminFinanceiroPage.tsx`) um card "Gateway de Pagamento (Asaas)" com:
-
-- **Switch** com label "Sandbox / Produção" — salva na tabela `system_settings`
-- Badge indicando ambiente atual (amarelo para sandbox, verde para produção)
-- Alerta de confirmação ao mudar para produção
-
-## 4. Edge Functions — Leitura dinâmica do ambiente
-
-As edge functions `asaas-proxy` e `asaas-webhook` (a serem criadas) lerão o `system_settings.asaas_environment` e usarão o secret correspondente:
-
-```text
-if environment == "sandbox":
-  apiKey = ASAAS_API_KEY_SANDBOX
-  baseUrl = "https://sandbox.asaas.com/api/v3"
-else:
-  apiKey = ASAAS_API_KEY_PRODUCTION
-  baseUrl = "https://api.asaas.com/v3"
-```
-
-## 5. Arquivos a criar/editar
-
-| Arquivo | Ação |
-|---|---|
-| Migração SQL | Criar `system_settings` + seed |
-| `src/services/systemSettingsService.ts` | Criar — CRUD para system_settings |
-| `src/pages/admin/AdminConfiguracoesPage.tsx` | Editar — adicionar card Asaas com switch |
-| `supabase/functions/asaas-proxy/index.ts` | Criar — proxy com seleção dinâmica de ambiente |
-| `supabase/functions/asaas-webhook/index.ts` | Criar — webhook com seleção dinâmica |
-
-## Ordem
-
-1. Solicitar os 2 secrets ao usuário
-2. Migração SQL (`system_settings`)
-3. Service + UI do switch no Super Admin
-4. Edge Functions com lógica de ambiente dinâmico
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 

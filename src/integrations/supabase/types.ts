@@ -365,6 +365,50 @@ export type Database = {
         }
         Relationships: []
       }
+      asaas_customers: {
+        Row: {
+          asaas_customer_id: string
+          cpf_cnpj: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          asaas_customer_id: string
+          cpf_cnpj: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          asaas_customer_id?: string
+          cpf_cnpj?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asaas_customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -2038,9 +2082,14 @@ export type Database = {
       payment_records: {
         Row: {
           amount: number
+          asaas_payment_id: string | null
+          asaas_status: string | null
+          billing_type: string | null
+          boleto_url: string | null
           created_at: string
           created_by: string | null
           currency: string
+          due_date: string | null
           gateway_response: Json | null
           gateway_transaction_id: string | null
           id: string
@@ -2051,6 +2100,8 @@ export type Database = {
           payment_gateway: string | null
           payment_method: string | null
           payment_type: string
+          pix_copy_paste: string | null
+          pix_qr_code: string | null
           refunded_at: string | null
           status: string
           tenant_id: string
@@ -2060,9 +2111,14 @@ export type Database = {
         }
         Insert: {
           amount: number
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          billing_type?: string | null
+          boleto_url?: string | null
           created_at?: string
           created_by?: string | null
           currency?: string
+          due_date?: string | null
           gateway_response?: Json | null
           gateway_transaction_id?: string | null
           id?: string
@@ -2073,6 +2129,8 @@ export type Database = {
           payment_gateway?: string | null
           payment_method?: string | null
           payment_type: string
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
           refunded_at?: string | null
           status?: string
           tenant_id: string
@@ -2082,9 +2140,14 @@ export type Database = {
         }
         Update: {
           amount?: number
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          billing_type?: string | null
+          boleto_url?: string | null
           created_at?: string
           created_by?: string | null
           currency?: string
+          due_date?: string | null
           gateway_response?: Json | null
           gateway_transaction_id?: string | null
           id?: string
@@ -2095,6 +2158,8 @@ export type Database = {
           payment_gateway?: string | null
           payment_method?: string | null
           payment_type?: string
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
           refunded_at?: string | null
           status?: string
           tenant_id?: string
@@ -3157,6 +3222,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
+        }
+        Relationships: []
       }
       tenant_services: {
         Row: {

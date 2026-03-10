@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.wuzapi-proxy]
 verify_jwt = false
+
+[functions.asaas-proxy]
+verify_jwt = false
+
+[functions.asaas-webhook]
+verify_jwt = false
