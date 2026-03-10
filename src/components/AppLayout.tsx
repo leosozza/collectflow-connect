@@ -257,7 +257,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           )}
           {isSuperAdmin && (
             <Link
-              to="/suporte-admin"
+              to="/admin/suporte"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Suporte" : undefined}
               className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
