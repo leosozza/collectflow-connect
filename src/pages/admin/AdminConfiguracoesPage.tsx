@@ -284,6 +284,9 @@ const AdminConfiguracoesPage = () => {
         </CardContent>
       </Card>
 
+      {/* Go-Live Checklist */}
+      <GoLiveChecklist />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {configSections.map((section) => (
           <Card key={section.title}>
