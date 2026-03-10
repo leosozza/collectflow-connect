@@ -410,38 +410,7 @@ const CarteiraPage = () => {
 
   const importMutation = useMutation({
     mutationFn: (rows: ImportedRow[]) => {
-      // Resolve status_raw to status_cobranca_id using tipos_status
-      const statusNameMap = new Map<string, string>();
-      tiposStatus.forEach((t: any) => {
-        statusNameMap.set(t.nome.toUpperCase().trim(), t.id);
-      });
-
-      const today = new Date().toISOString().split("T")[0];
-      const emDiaStatusId = statusNameMap.get("EM DIA");
-      const aguardandoStatusId = statusNameMap.get("AGUARDANDO ACIONAMENTO");
-
-      const enrichedRows = rows.map((row) => {
-        let enriched = { ...row };
-        if (enriched.status_raw && !enriched.status_cobranca_id) {
-          const key = enriched.status_raw.toUpperCase().trim();
-          const matched = statusNameMap.get(key);
-          if (matched) {
-            enriched.status_cobranca_id = matched;
-          }
-        }
-        // Auto-assign Em dia / Aguardando acionamento if no status_cobranca_id set
-        if (!enriched.status_cobranca_id) {
-          const vencimento = enriched.data_vencimento || today;
-          if (vencimento >= today && emDiaStatusId) {
-            enriched.status_cobranca_id = emDiaStatusId;
-          } else if (vencimento < today && aguardandoStatusId) {
-            enriched.status_cobranca_id = aguardandoStatusId;
-          }
-        }
-        return enriched;
-      });
-
-      return bulkCreateClients(enrichedRows, profile!.id);
+      return bulkCreateClients(rows, profile!.id);
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
