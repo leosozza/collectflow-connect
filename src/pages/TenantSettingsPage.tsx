@@ -339,10 +339,41 @@ const TenantSettingsPage = () => {
               </CardContent>
             </Card>
 
+            {/* Pagamento */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Pagamento</CardTitle>
+                <CardDescription>Pague sua mensalidade via Cartão, PIX ou Boleto</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => setPaymentOpen(true)}>Pagar Mensalidade</Button>
+              </CardContent>
+            </Card>
+
+            {/* Histórico de Cobranças */}
+            {tenant && <PaymentHistoryCard tenantId={tenant.id} />}
+
             {tokens && (
               <div className="flex justify-end">
                 <Button variant="outline" onClick={() => setPurchaseOpen(true)}>Comprar Tokens</Button>
               </div>
+            )}
+
+            {tenant && (
+              <PaymentCheckoutDialog
+                open={paymentOpen}
+                onOpenChange={setPaymentOpen}
+                amount={(plan?.price_monthly || 0) + tenantServices.filter(ts => ts.status === "active").reduce((sum, ts) => {
+                  const ci = catalog.find(c => c.id === ts.service_id);
+                  const up = ts.unit_price_override ?? ci?.price ?? 0;
+                  return sum + (ci?.price_type === "per_unit" ? up * (ts.quantity || 1) : up);
+                }, 0)}
+                description={`Mensalidade ${plan?.name || "Plano"} + Serviços`}
+                tenantId={tenant.id}
+                tenantName={tenant.name}
+                paymentType="subscription"
+                onSuccess={loadData}
+              />
             )}
           </div>
         </TabsContent>
