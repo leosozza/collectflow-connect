@@ -664,7 +664,7 @@ const MaxListPage = () => {
           observacoes: r.observacoes || null,
           ...(r.custom_data ? { custom_data: r.custom_data } : {}),
           updated_at: new Date().toISOString(),
-          status_cobranca_id: selectedStatusCobrancaId || null,
+          status_cobranca_id: selectedStatusCobrancaId === "__auto__" ? null : (selectedStatusCobrancaId || null),
         }));
 
         // Track changes
