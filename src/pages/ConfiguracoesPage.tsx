@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Cloud, Map, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
 import IntegracaoPage from "@/pages/IntegracaoPage";
-import RoadmapPage from "@/pages/RoadmapPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
 import AuditoriaPage from "@/pages/AuditoriaPage";
@@ -28,7 +27,7 @@ const ConfiguracoesPage = () => {
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
     ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
-    ...(isTenantAdmin ? [{ key: "roadmap", label: "Roadmap", icon: Map }] : []),
+    
     ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
     ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
   ];
@@ -68,7 +67,7 @@ const ConfiguracoesPage = () => {
       <div>
         {active === "integracao" && <IntegracaoPage />}
         {active === "auditoria" && <AuditoriaPage />}
-        {active === "roadmap" && <RoadmapPage />}
+        
         {active === "api_docs" && <ApiDocsPage />}
         {active === "maxlist" && <MaxListPage />}
       </div>

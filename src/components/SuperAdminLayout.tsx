@@ -16,6 +16,7 @@ import {
   GraduationCap,
   Settings,
   BarChart3,
+  Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -30,6 +31,7 @@ const navItems = [
   { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos" },
   { label: "Configurações do Sistema", icon: Settings, path: "/admin/configuracoes" },
   { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
+  { label: "Roadmap", icon: Map, path: "/admin/roadmap" },
 ];
 
 const SuperAdminLayout = () => {
@@ -69,6 +71,7 @@ const SuperAdminLayout = () => {
     "/admin/treinamentos": "Treinamentos e Reuniões",
     "/admin/configuracoes": "Configurações do Sistema",
     "/admin/relatorios": "Relatórios e Análises",
+    "/admin/roadmap": "Roadmap",
   };
 
   return (
