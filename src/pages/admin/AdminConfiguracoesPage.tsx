@@ -66,6 +66,8 @@ const AdminConfiguracoesPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testLogs, setTestLogs] = useState<{ time: string; status: "success" | "error" | "info"; message: string }[]>([]);
 
   useEffect(() => {
     getSystemSetting("asaas_environment").then((val) => {
