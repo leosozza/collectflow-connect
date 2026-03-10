@@ -4054,6 +4054,30 @@ export type Database = {
         }
         Returns: string
       }
+      get_dashboard_stats: {
+        Args: { _month?: number; _user_id?: string; _year?: number }
+        Returns: {
+          acordos_dia: number
+          acordos_mes: number
+          total_negociado: number
+          total_pendente: number
+          total_projetado: number
+          total_quebra: number
+          total_recebido: number
+        }[]
+      }
+      get_dashboard_vencimentos: {
+        Args: { _target_date: string; _user_id?: string }
+        Returns: {
+          agreement_id: string
+          agreement_status: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          numero_parcela: number
+          valor_parcela: number
+        }[]
+      }
       get_my_permission_profile: {
         Args: never
         Returns: {
