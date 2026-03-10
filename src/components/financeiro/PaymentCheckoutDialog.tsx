@@ -103,10 +103,18 @@ const PaymentCheckoutDialog = ({
     setLoading(true);
 
     try {
+      // Validate CNPJ exists for tenant
+      const cpfCnpjToUse = cardCpf || tenantCnpj;
+      if (!cpfCnpjToUse) {
+        toast.error("CNPJ da empresa não cadastrado. Acesse a Central da Empresa para preencher.");
+        setLoading(false);
+        return;
+      }
+
       // 1. Ensure Asaas customer exists
       const customerResult = await createAsaasCustomer({
         name: tenantName,
-        cpfCnpj: cardCpf || "00000000000",
+        cpfCnpj: cpfCnpjToUse,
         email: cardEmail || undefined,
         phone: cardPhone || undefined,
       });

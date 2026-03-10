@@ -117,10 +117,20 @@ const OnboardingPage = () => {
                 />
                 <p className="text-xs text-muted-foreground">Usado para identificar sua empresa no sistema</p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="cnpj">CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  placeholder="00.000.000/0000-00"
+                  value={companyCnpj}
+                  onChange={(e) => setCompanyCnpj(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Necessário para emissão de cobranças e notas fiscais</p>
+              </div>
               <Button
                 className="w-full"
                 onClick={() => setStep(2)}
-                disabled={!companyName || !companySlug}
+                disabled={!companyName || !companySlug || !companyCnpj}
               >
                 Continuar
               </Button>

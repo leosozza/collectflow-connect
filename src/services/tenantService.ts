@@ -36,13 +36,15 @@ export const createTenant = async (
   name: string,
   slug: string,
   planId: string,
-  _userId: string
+  _userId: string,
+  cnpj?: string
 ): Promise<Tenant> => {
   // Use atomic SECURITY DEFINER function to create tenant + tenant_user + update profile
   const { data: tenantId, error } = await supabase.rpc("onboard_tenant", {
     _name: name,
     _slug: slug,
     _plan_id: planId,
+    _cnpj: cnpj || null,
   });
 
   if (error) throw error;
