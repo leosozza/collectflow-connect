@@ -38,6 +38,12 @@ import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
+import SuperAdminLayout from "./components/SuperAdminLayout";
+import AdminEquipesPage from "./pages/admin/AdminEquipesPage";
+import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
+import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
+import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
+import AdminRelatoriosPage from "./pages/admin/AdminRelatoriosPage";
 
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
