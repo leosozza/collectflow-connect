@@ -102,6 +102,70 @@ const AdminConfiguracoesPage = () => {
 
   const isProduction = asaasEnv === "production";
 
+  const addLog = (status: "success" | "error" | "info", message: string) => {
+    setTestLogs((prev) => [
+      { time: new Date().toLocaleTimeString("pt-BR"), status, message },
+      ...prev,
+    ]);
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestLogs([]);
+    const env = isProduction ? "Produção" : "Sandbox";
+
+    addLog("info", `Iniciando teste de conexão (${env})...`);
+
+    try {
+      // Step 1: Check system_settings
+      addLog("info", "Verificando configuração do ambiente...");
+      const currentEnv = await getSystemSetting("asaas_environment");
+      if (currentEnv) {
+        addLog("success", `Ambiente configurado: ${currentEnv}`);
+      } else {
+        addLog("error", "Configuração de ambiente não encontrada no banco");
+        setTesting(false);
+        return;
+      }
+
+      // Step 2: Test proxy connection
+      addLog("info", "Testando conexão com API Asaas via proxy...");
+      const { data, error } = await supabase.functions.invoke("asaas-proxy", {
+        body: { action: "create_customer", name: "Teste Conexão", cpfCnpj: "00000000000" },
+      });
+
+      if (error) {
+        addLog("error", `Erro na edge function: ${error.message}`);
+        toast.error("Falha no teste de conexão");
+        setTesting(false);
+        return;
+      }
+
+      if (data?.errors) {
+        // Asaas returned an error — but connection works
+        const errMsg = data.errors[0]?.description || JSON.stringify(data.errors);
+        if (errMsg.includes("já cadastrado") || errMsg.includes("already")) {
+          addLog("success", `API Asaas respondeu (cliente já existe) — Conexão OK`);
+        } else {
+          addLog("info", `API Asaas respondeu com erro de validação: ${errMsg}`);
+          addLog("success", "Conexão com a API está funcionando (erro esperado para dados de teste)");
+        }
+      } else if (data?.id) {
+        addLog("success", `Cliente de teste criado com sucesso (ID: ${data.id})`);
+      } else {
+        addLog("info", `Resposta da API: ${JSON.stringify(data).slice(0, 200)}`);
+      }
+
+      addLog("success", `✅ Teste de conexão concluído (${env})`);
+      toast.success("Conexão com Asaas verificada!");
+    } catch (err: any) {
+      addLog("error", `Erro inesperado: ${err.message}`);
+      toast.error("Erro ao testar conexão");
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
