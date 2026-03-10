@@ -17,6 +17,7 @@ import {
   Settings,
   BarChart3,
   Map,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
