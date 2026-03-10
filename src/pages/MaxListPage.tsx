@@ -236,7 +236,7 @@ const MaxListPage = () => {
   const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("");
+  const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]); // kept for compat
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
@@ -272,13 +272,7 @@ const MaxListPage = () => {
     enabled: !!tenant?.id && ALLOWED_SLUGS.includes(tenant.slug),
   });
 
-  useEffect(() => {
-    if (tiposStatus && !selectedStatusCobrancaId) {
-      const aguardando = tiposStatus.find((t) => t.nome.toLowerCase().includes("aguardando"));
-      if (aguardando) setSelectedStatusCobrancaId(aguardando.id);
-      else if (tiposStatus.length > 0) setSelectedStatusCobrancaId(tiposStatus[0].id);
-    }
-  }, [tiposStatus, selectedStatusCobrancaId]);
+  // No longer auto-select a status — default is "__auto__"
 
   const allSelected = data.length > 0 && selectedIndexes.size === data.length;
   const someSelected = selectedIndexes.size > 0;
@@ -670,7 +664,7 @@ const MaxListPage = () => {
           observacoes: r.observacoes || null,
           ...(r.custom_data ? { custom_data: r.custom_data } : {}),
           updated_at: new Date().toISOString(),
-          status_cobranca_id: selectedStatusCobrancaId || null,
+          status_cobranca_id: selectedStatusCobrancaId === "__auto__" ? null : (selectedStatusCobrancaId || null),
         }));
 
         // Track changes
@@ -744,6 +738,12 @@ const MaxListPage = () => {
     setShowImportResult(true);
 
     toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
+
+    // If auto status selected, run auto-status-sync to derive statuses
+    if (selectedStatusCobrancaId === "__auto__") {
+      toast.info("Derivando status automaticamente...");
+      await supabase.functions.invoke("auto-status-sync");
+    }
 
     setImporting(false);
     setImportProgress(100);
@@ -893,6 +893,7 @@ const MaxListPage = () => {
                     <SelectValue placeholder="Selecione o status" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__auto__">Não selecionar (automático)</SelectItem>
                     {tiposStatus?.map((ts) => (
                       <SelectItem key={ts.id} value={ts.id}>{ts.nome}</SelectItem>
                     ))}
