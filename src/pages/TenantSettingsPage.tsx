@@ -14,6 +14,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import TokenBalance from "@/components/tokens/TokenBalance";
+import PaymentCheckoutDialog from "@/components/financeiro/PaymentCheckoutDialog";
+import PaymentHistoryCard from "@/components/financeiro/PaymentHistoryCard";
 import TokenPurchaseDialog from "@/components/tokens/TokenPurchaseDialog";
 import TokenHistoryTable from "@/components/tokens/TokenHistoryTable";
 import ServiceCatalogGrid from "@/components/services/ServiceCatalogGrid";
