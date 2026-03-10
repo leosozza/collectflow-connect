@@ -270,7 +270,7 @@ const parseRows = (
       status = "quebrado";
     }
 
-    const statusOriginal = getCellStr(colMap["status"]).trim();
+    // status_raw removed — status is derived automatically post-import
 
     // Address
     const endParts = isCustomMapping
