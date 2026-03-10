@@ -206,6 +206,108 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/gamificacao"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <GamificacaoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/automacao"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AutomacaoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/relatorios"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <RelatoriosPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/acordos"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AcordosPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AnalyticsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/auditoria"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AuditoriaPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/atendimento"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <AtendimentoPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/signs"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <SignsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/maxlist"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <MaxListPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-docs"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <ApiDocsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/api-docs-public" element={<ApiDocsPublicPage />} />
+            <Route path="/portal" element={<PortalPage />} />
             {/* Super Admin area with isolated layout */}
             <Route
               element={
