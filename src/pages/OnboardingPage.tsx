@@ -49,7 +49,7 @@ const OnboardingPage = () => {
   };
 
   const handleCreate = async () => {
-    if (!user || !companyName || !companySlug || !selectedPlan) return;
+    if (!user || !companyName || !companySlug || !selectedPlan || !companyCnpj) return;
     setLoading(true);
     try {
       await createTenant(companyName, companySlug, selectedPlan, user.id);
