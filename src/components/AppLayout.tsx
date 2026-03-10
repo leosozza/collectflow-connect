@@ -240,21 +240,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               {!collapsed && "Configurações"}
             </Link>
           )}
-          {isSuperAdmin && (
-            <Link
-              to="/admin"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Área Admin" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname.startsWith("/admin")
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
-            >
-              <BarChart3 className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Área Admin"}
-            </Link>
-          )}
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}

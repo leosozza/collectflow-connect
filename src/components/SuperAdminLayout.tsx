@@ -138,14 +138,6 @@ const SuperAdminLayout = () => {
               <p className="text-xs text-amber-400/80">Super Administrador</p>
             </div>
           )}
-          <Link
-            to="/"
-            title={collapsed ? "Voltar ao Sistema" : undefined}
-            className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors mb-1`}
-          >
-            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && "Voltar ao Sistema"}
-          </Link>
           <button
             onClick={handleSignOut}
             title={collapsed ? "Sair" : undefined}
