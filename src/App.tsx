@@ -186,6 +186,16 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/perfil"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <PerfilPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
             {/* Super Admin area with isolated layout */}
             <Route
               element={
