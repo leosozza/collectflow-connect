@@ -33,6 +33,7 @@ const PaymentCheckoutDialog = ({
   description,
   tenantId,
   tenantName,
+  tenantCnpj,
   paymentType,
   tokenPackageId,
   tokensGranted,
