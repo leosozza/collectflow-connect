@@ -231,72 +231,117 @@ const TenantSettingsPage = () => {
 
         {/* ABA FINANCEIRO */}
         <TabsContent value="financeiro">
-          <Card>
-            <CardHeader>
-              <CardTitle>Plano Atual</CardTitle>
-              <CardDescription>Detalhes do seu plano e uso</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-lg font-bold">{plan?.name || "Sem plano"}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {plan ? formatCurrency(plan.price_monthly) + "/mês" : ""}
-                  </p>
-                </div>
-                <Badge>{tenant?.status === "active" ? "Ativo" : "Inativo"}</Badge>
-              </div>
-
-              {limits.max_users && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>Usuários</span>
-                    <span className="text-muted-foreground">Limite: {limits.max_users}</span>
+          <div className="space-y-6">
+            {/* Resumo Financeiro */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Resumo Financeiro</CardTitle>
+                <CardDescription>Visão geral do plano e custos mensais</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-center gap-6">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Plano</p>
+                    <p className="text-lg font-bold">{plan?.name || "Sem plano"}</p>
+                    {plan && <p className="text-sm text-muted-foreground">{formatCurrency(plan.price_monthly)}/mês</p>}
                   </div>
-                  <Progress value={0} className="h-2" />
-                </div>
-              )}
-
-              {limits.max_clients && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>Clientes</span>
-                    <span className="text-muted-foreground">Limite: {limits.max_clients?.toLocaleString()}</span>
-                  </div>
-                  <Progress value={0} className="h-2" />
-                </div>
-              )}
-
-              <div className="border-t border-border pt-4">
-                <p className="text-sm font-medium mb-2">Serviços Ativos</p>
-                <div className="flex flex-wrap gap-2">
-                  {tenantServices.filter(s => s.status === "active").map(ts => (
-                    <Badge key={ts.id} variant="secondary">
-                      {ts.service?.name || "Serviço"} 
-                      {ts.quantity > 1 ? ` (${ts.quantity}x)` : ""}
-                    </Badge>
-                  ))}
-                  {!tenantServices.some(s => s.status === "active") && (
-                    <p className="text-xs text-muted-foreground">Nenhum serviço adicional ativo</p>
+                  <Badge>{tenant?.status === "active" ? "Ativo" : "Inativo"}</Badge>
+                  {tokens && (
+                    <div className="ml-auto text-right">
+                      <p className="text-sm text-muted-foreground">Saldo de Tokens</p>
+                      <p className="text-lg font-bold">{tokens.token_balance.toLocaleString("pt-BR")}</p>
+                    </div>
                   )}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              {tokens && (
-                <div className="border-t border-border pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Saldo de Tokens</p>
-                      <p className="text-2xl font-bold">{tokens.token_balance.toLocaleString("pt-BR")}</p>
+            {/* Extrato de Serviços */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Extrato de Serviços Contratados</CardTitle>
+                <CardDescription>Detalhamento dos custos mensais da sua empresa</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const activeServices = tenantServices.filter(ts => ts.status === "active");
+                  const serviceRows = activeServices.map(ts => {
+                    const catalogItem = catalog.find(c => c.id === ts.service_catalog_id);
+                    const unitPrice = ts.unit_price_override ?? catalogItem?.price ?? 0;
+                    const qty = ts.quantity || 1;
+                    const subtotal = catalogItem?.price_type === "per_unit" ? unitPrice * qty : unitPrice;
+                    return {
+                      name: catalogItem?.name || "Serviço",
+                      category: catalogItem?.category || "-",
+                      quantity: qty,
+                      unitPrice,
+                      subtotal,
+                      priceType: catalogItem?.price_type || "fixed",
+                    };
+                  });
+                  const planPrice = plan?.price_monthly || 0;
+                  const servicesTotal = serviceRows.reduce((sum, r) => sum + r.subtotal, 0);
+                  const grandTotal = planPrice + servicesTotal;
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Serviço</th>
+                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Categoria</th>
+                            <th className="text-center py-3 px-4 font-medium text-muted-foreground">Qtd</th>
+                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">Valor Unit.</th>
+                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Plano base */}
+                          <tr className="border-b border-border/50">
+                            <td className="py-3 px-4 font-medium">{plan?.name || "Plano Base"}</td>
+                            <td className="py-3 px-4 text-muted-foreground">Plano</td>
+                            <td className="py-3 px-4 text-center">1</td>
+                            <td className="py-3 px-4 text-right">{formatCurrency(planPrice)}</td>
+                            <td className="py-3 px-4 text-right font-medium">{formatCurrency(planPrice)}</td>
+                          </tr>
+
+                          {serviceRows.map((row, i) => (
+                            <tr key={i} className="border-b border-border/50">
+                              <td className="py-3 px-4 font-medium">{row.name}</td>
+                              <td className="py-3 px-4 text-muted-foreground capitalize">{row.category}</td>
+                              <td className="py-3 px-4 text-center">{row.priceType === "per_unit" ? row.quantity : "-"}</td>
+                              <td className="py-3 px-4 text-right">{formatCurrency(row.unitPrice)}</td>
+                              <td className="py-3 px-4 text-right font-medium">{formatCurrency(row.subtotal)}</td>
+                            </tr>
+                          ))}
+
+                          {activeServices.length === 0 && (
+                            <tr className="border-b border-border/50">
+                              <td colSpan={5} className="py-3 px-4 text-center text-muted-foreground text-xs">
+                                Nenhum serviço adicional contratado
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-muted/50">
+                            <td colSpan={4} className="py-4 px-4 text-right font-bold text-base">Total Mensal</td>
+                            <td className="py-4 px-4 text-right font-bold text-base text-primary">{formatCurrency(grandTotal)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setPurchaseOpen(true)}>
-                      Comprar Tokens
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {tokens && (
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setPurchaseOpen(true)}>Comprar Tokens</Button>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         {/* ABA CONTRATO */}
