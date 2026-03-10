@@ -220,6 +220,66 @@ const AdminConfiguracoesPage = () => {
               </p>
             </div>
           )}
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={testing || loading}
+              className="gap-2"
+            >
+              {testing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wifi className="w-4 h-4" />
+              )}
+              {testing ? "Testando..." : "Testar Conexão"}
+            </Button>
+            {testLogs.length > 0 && !testing && (
+              <Badge
+                variant="outline"
+                className={
+                  testLogs[0]?.status === "success"
+                    ? "bg-green-500/10 text-green-600 border-green-200"
+                    : testLogs[0]?.status === "error"
+                    ? "bg-destructive/10 text-destructive border-destructive/20"
+                    : "bg-muted text-muted-foreground"
+                }
+              >
+                {testLogs[0]?.status === "success" ? (
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                ) : testLogs[0]?.status === "error" ? (
+                  <XCircle className="w-3 h-3 mr-1" />
+                ) : null}
+                {testLogs[0]?.status === "success" ? "Conectado" : "Falha"}
+              </Badge>
+            )}
+          </div>
+
+          {/* Logs */}
+          {testLogs.length > 0 && (
+            <ScrollArea className="h-[180px] rounded-md border border-border bg-muted/30 p-3">
+              <div className="space-y-1.5 font-mono text-xs">
+                {testLogs.map((log, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-muted-foreground shrink-0">[{log.time}]</span>
+                    {log.status === "success" && <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />}
+                    {log.status === "error" && <XCircle className="w-3 h-3 text-destructive mt-0.5 shrink-0" />}
+                    {log.status === "info" && <Wifi className="w-3 h-3 text-primary mt-0.5 shrink-0" />}
+                    <span className={
+                      log.status === "success" ? "text-green-600 dark:text-green-400" :
+                      log.status === "error" ? "text-destructive" :
+                      "text-foreground"
+                    }>
+                      {log.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </CardContent>
       </Card>
 
