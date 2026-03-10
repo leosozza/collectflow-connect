@@ -63,13 +63,8 @@ const ClientsPage = () => {
     queryFn: () => fetchClients(filters),
   });
 
-  
 
-  const { data: tiposStatus = [] } = useQuery({
-    queryKey: ["tipos_status", tenant?.id],
-    queryFn: () => fetchTiposStatus(tenant!.id),
-    enabled: !!tenant?.id,
-  });
+
 
   const createMutation = useMutation({
     mutationFn: (data: ClientFormData) => createClient(data, profile!.id),
