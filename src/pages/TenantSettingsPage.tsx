@@ -266,7 +266,7 @@ const TenantSettingsPage = () => {
                 {(() => {
                   const activeServices = tenantServices.filter(ts => ts.status === "active");
                   const serviceRows = activeServices.map(ts => {
-                    const catalogItem = catalog.find(c => c.id === ts.service_catalog_id);
+                    const catalogItem = catalog.find(c => c.id === ts.service_id);
                     const unitPrice = ts.unit_price_override ?? catalogItem?.price ?? 0;
                     const qty = ts.quantity || 1;
                     const subtotal = catalogItem?.price_type === "per_unit" ? unitPrice * qty : unitPrice;
