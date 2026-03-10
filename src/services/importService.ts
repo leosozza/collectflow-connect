@@ -11,8 +11,6 @@ export interface ImportedRow {
   valor_pago: number;
   data_vencimento?: string;
   status: "pendente" | "pago" | "quebrado";
-  status_raw?: string;
-  status_cobranca_id?: string;
   phone?: string;
   email?: string;
   endereco?: string;
