@@ -893,6 +893,7 @@ const MaxListPage = () => {
                     <SelectValue placeholder="Selecione o status" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__auto__">Não selecionar (automático)</SelectItem>
                     {tiposStatus?.map((ts) => (
                       <SelectItem key={ts.id} value={ts.id}>{ts.nome}</SelectItem>
                     ))}

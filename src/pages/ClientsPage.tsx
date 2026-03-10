@@ -119,18 +119,11 @@ const ClientsPage = () => {
 
   const importMutation = useMutation({
     mutationFn: (rows: ImportedRow[]) => {
-      const statusNameMap = new Map<string, string>();
-      tiposStatus.forEach((t: any) => statusNameMap.set(t.nome.toUpperCase().trim(), t.id));
-      const enrichedRows = rows.map((row) => {
-        if (row.status_raw && !row.status_cobranca_id) {
-          const matched = statusNameMap.get(row.status_raw.toUpperCase().trim());
-          if (matched) return { ...row, status_cobranca_id: matched };
-        }
-        return row;
-      });
-      return bulkCreateClients(enrichedRows, profile!.id);
+      return bulkCreateClients(rows, profile!.id);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Run auto-status-sync to derive statuses automatically
+      await supabase.functions.invoke("auto-status-sync");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Clientes importados com sucesso!");
       setImportOpen(false);

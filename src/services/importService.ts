@@ -322,7 +322,6 @@ const parseRows = (
       valor_pago: valorPago,
       data_vencimento: dataVencimento || undefined,
       status,
-      status_raw: statusOriginal || undefined,
       phone: fone1 || undefined,
       email: getCellStr(colMap["email"]) || undefined,
       endereco,

@@ -412,7 +412,9 @@ const CarteiraPage = () => {
     mutationFn: (rows: ImportedRow[]) => {
       return bulkCreateClients(rows, profile!.id);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (_data, variables) => {
+      // Run auto-status-sync to derive statuses automatically
+      await supabase.functions.invoke("auto-status-sync");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
       queryClient.invalidateQueries({ queryKey: ["import_logs"] });
