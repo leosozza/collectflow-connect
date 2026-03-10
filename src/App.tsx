@@ -45,7 +45,7 @@ import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
 import AdminRelatoriosPage from "./pages/admin/AdminRelatoriosPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
-
+import AdminServicosPage from "./pages/admin/AdminServicosPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
@@ -223,6 +223,7 @@ const App = () => (
               <Route path="/admin/configuracoes" element={<AdminConfiguracoesPage />} />
               <Route path="/admin/relatorios" element={<AdminRelatoriosPage />} />
               <Route path="/admin/roadmap" element={<RoadmapPage />} />
+              <Route path="/admin/servicos" element={<AdminServicosPage />} />
               <Route path="/admin/perfil" element={<PerfilPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

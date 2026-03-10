@@ -1,25 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { updateTenant } from "@/services/tenantService";
+import { fetchActiveServiceCatalog, fetchTenantServices, activateService, deactivateService, updateTenantServiceQuantity } from "@/services/serviceCatalogService";
+import { fetchTenantTokens, fetchTokenPackages, fetchTokenTransactions } from "@/services/tokenService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
-
-const SERVICE_CATALOG = [
-  { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp (1 instância + 1 agente IA incluso)", price: 99.0 },
-  { key: "whatsapp_extra_instance", label: "Instância WhatsApp Adicional", description: "Cada instância adicional de WhatsApp", price: 49.0 },
-  { key: "ai_agent", label: "Agente de IA Digital", description: "Agente inteligente para atendimento automatizado", price: null },
-  { key: "negativacao", label: "Negativação Serasa/Protesto", description: "Integração com Serasa e Protesto cartorial", price: null },
-  { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", price: null },
-];
+import TokenBalance from "@/components/tokens/TokenBalance";
+import TokenPurchaseDialog from "@/components/tokens/TokenPurchaseDialog";
+import TokenHistoryTable from "@/components/tokens/TokenHistoryTable";
+import ServiceCatalogGrid from "@/components/services/ServiceCatalogGrid";
+import type { ServiceCatalogItem, TenantService, TenantTokens, TokenPackage, TokenTransaction } from "@/types/tokens";
 
 const CONTRATO_PADRAO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE SOFTWARE
 
@@ -64,10 +62,51 @@ const TenantSettingsPage = () => {
   const { tenant, plan, isTenantAdmin, refetch } = useTenant();
   const { toast } = useToast();
   const [name, setName] = useState(tenant?.name || "");
-  
   const [saving, setSaving] = useState(false);
-  const [confirmService, setConfirmService] = useState<typeof SERVICE_CATALOG[0] | null>(null);
+
+  // Services state
+  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
+  const [tenantServices, setTenantServices] = useState<TenantService[]>([]);
+
+  // Tokens state
+  const [tokens, setTokens] = useState<TenantTokens | null>(null);
+  const [packages, setPackages] = useState<TokenPackage[]>([]);
+  const [transactions, setTransactions] = useState<TokenTransaction[]>([]);
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+
   const settings = (tenant?.settings as Record<string, any>) || {};
+  const limits = (plan?.limits as Record<string, any>) || {};
+  const contractSigned = !!settings.contract_signed_at;
+  const cancellationRequested = !!settings.cancellation_requested_at;
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    loadData();
+  }, [tenant?.id]);
+
+  const loadData = async () => {
+    if (!tenant?.id) return;
+    setLoadingData(true);
+    try {
+      const [catalogData, servicesData, tokensData, packagesData, txData] = await Promise.all([
+        fetchActiveServiceCatalog(),
+        fetchTenantServices(tenant.id),
+        fetchTenantTokens(tenant.id),
+        fetchTokenPackages(),
+        fetchTokenTransactions(tenant.id, { limit: 50 }),
+      ]);
+      setCatalog(catalogData);
+      setTenantServices(servicesData);
+      setTokens(tokensData);
+      setPackages(packagesData);
+      setTransactions(txData);
+    } catch (err) {
+      console.error("Error loading data:", err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
 
   if (!isTenantAdmin) {
     return (
@@ -91,23 +130,36 @@ const TenantSettingsPage = () => {
     }
   };
 
-  const handleToggleService = async (serviceKey: string, enabled: boolean) => {
+  const handleActivateService = async (serviceId: string, quantity: number) => {
     if (!tenant) return;
-    const currentServices = settings.services || {};
-    const newServices = { ...currentServices, [serviceKey]: enabled };
     try {
-      await updateTenant(tenant.id, { settings: { ...settings, services: newServices } });
-      await refetch();
-      toast({ title: enabled ? "Serviço ativado" : "Serviço desativado" });
+      await activateService(tenant.id, serviceId, quantity);
+      await loadData();
+      toast({ title: "Serviço ativado!" });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
   };
 
-  const handleContractService = async () => {
-    if (!confirmService || !tenant) return;
-    await handleToggleService(confirmService.key, true);
-    setConfirmService(null);
+  const handleDeactivateService = async (serviceId: string) => {
+    if (!tenant) return;
+    try {
+      await deactivateService(tenant.id, serviceId);
+      await loadData();
+      toast({ title: "Serviço desativado" });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleUpdateQuantity = async (serviceId: string, quantity: number) => {
+    if (!tenant) return;
+    try {
+      await updateTenantServiceQuantity(tenant.id, serviceId, quantity);
+      await loadData();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleCancelRequest = async () => {
@@ -136,12 +188,6 @@ const TenantSettingsPage = () => {
     }
   };
 
-  const limits = (plan?.limits as Record<string, any>) || {};
-  const contractSigned = !!settings.contract_signed_at;
-  const cancellationRequested = !!settings.cancellation_requested_at;
-  const services = settings.services || {};
-  const enabledServices = settings.enabled_services || {};
-
   return (
     <div className="space-y-6">
       <div>
@@ -155,6 +201,7 @@ const TenantSettingsPage = () => {
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
@@ -181,9 +228,6 @@ const TenantSettingsPage = () => {
             </CardContent>
           </Card>
         </TabsContent>
-
-
-
 
         {/* ABA FINANCEIRO */}
         <TabsContent value="financeiro">
@@ -224,18 +268,33 @@ const TenantSettingsPage = () => {
               )}
 
               <div className="border-t border-border pt-4">
-                <p className="text-sm font-medium mb-2">Serviços Adicionais Ativos</p>
+                <p className="text-sm font-medium mb-2">Serviços Ativos</p>
                 <div className="flex flex-wrap gap-2">
-                  {SERVICE_CATALOG.filter(s => services[s.key] || enabledServices[s.key]).map(s => (
-                    <Badge key={s.key} variant="secondary">
-                      {s.label} {s.price ? `- ${formatCurrency(s.price)}/mês` : ""}
+                  {tenantServices.filter(s => s.status === "active").map(ts => (
+                    <Badge key={ts.id} variant="secondary">
+                      {ts.service?.name || "Serviço"} 
+                      {ts.quantity > 1 ? ` (${ts.quantity}x)` : ""}
                     </Badge>
                   ))}
-                  {!SERVICE_CATALOG.some(s => services[s.key] || enabledServices[s.key]) && (
+                  {!tenantServices.some(s => s.status === "active") && (
                     <p className="text-xs text-muted-foreground">Nenhum serviço adicional ativo</p>
                   )}
                 </div>
               </div>
+
+              {tokens && (
+                <div className="border-t border-border pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Saldo de Tokens</p>
+                      <p className="text-2xl font-bold">{tokens.token_balance.toLocaleString("pt-BR")}</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setPurchaseOpen(true)}>
+                      Comprar Tokens
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -296,49 +355,43 @@ const TenantSettingsPage = () => {
         <TabsContent value="servicos">
           <Card>
             <CardHeader>
-              <CardTitle>Serviços Disponíveis</CardTitle>
+              <CardTitle>Catálogo de Serviços</CardTitle>
               <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {SERVICE_CATALOG.map(s => {
-                const isEnabledBySuperAdmin = !!enabledServices[s.key];
-                const isActiveByTenant = !!services[s.key];
-                const isActive = isEnabledBySuperAdmin || isActiveByTenant;
-
-                return (
-                  <div key={s.key} className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{s.label}</p>
-                        {isEnabledBySuperAdmin && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Incluso</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{s.description}</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      {isEnabledBySuperAdmin ? (
-                        <span className="text-xs text-primary font-medium">Ativo</span>
-                      ) : s.price !== null ? (
-                        <>
-                          <span className="text-sm font-semibold text-foreground">{formatCurrency(s.price)}/mês</span>
-                          {isActiveByTenant ? (
-                            <Switch checked onCheckedChange={() => handleToggleService(s.key, false)} />
-                          ) : (
-                            <Button size="sm" variant="outline" onClick={() => setConfirmService(s)}>
-                              Contratar
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Em breve</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <CardContent>
+              {loadingData ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+                  <span className="text-muted-foreground">Carregando serviços...</span>
+                </div>
+              ) : (
+                <ServiceCatalogGrid
+                  catalog={catalog}
+                  tenantServices={tenantServices}
+                  onActivate={handleActivateService}
+                  onDeactivate={handleDeactivateService}
+                  onUpdateQuantity={handleUpdateQuantity}
+                />
+              )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ABA TOKENS */}
+        <TabsContent value="tokens">
+          <div className="space-y-6">
+            <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Histórico de Transações</CardTitle>
+                <CardDescription>Todas as movimentações de tokens</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TokenHistoryTable transactions={transactions} loading={loadingData} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ABA CANCELAMENTO */}
@@ -396,21 +449,14 @@ const TenantSettingsPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* DIALOG: CONFIRMAR CONTRATAÇÃO */}
-      <AlertDialog open={!!confirmService} onOpenChange={(open) => !open && setConfirmService(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Contratação</AlertDialogTitle>
-            <AlertDialogDescription>
-              O valor de <strong>{confirmService?.price ? formatCurrency(confirmService.price) : ""}/mês</strong> será adicionado à sua próxima fatura, proporcional à data de contratação. Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleContractService}>Confirmar Contratação</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* DIALOG: COMPRAR TOKENS */}
+      <TokenPurchaseDialog
+        open={purchaseOpen}
+        onOpenChange={setPurchaseOpen}
+        packages={packages}
+        tenantId={tenant?.id || ""}
+        onPurchaseComplete={loadData}
+      />
     </div>
   );
 };

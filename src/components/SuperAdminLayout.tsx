@@ -17,6 +17,7 @@ import {
   Settings,
   BarChart3,
   Map,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -28,6 +29,7 @@ const navItems = [
   { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes" },
   { label: "Gestão Financeira", icon: DollarSign, path: "/admin/financeiro" },
   { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants" },
+  { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos" },
   { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos" },
   { label: "Configurações do Sistema", icon: Settings, path: "/admin/configuracoes" },
   { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
@@ -71,6 +73,7 @@ const SuperAdminLayout = () => {
     "/admin/treinamentos": "Treinamentos e Reuniões",
     "/admin/configuracoes": "Configurações do Sistema",
     "/admin/relatorios": "Relatórios e Análises",
+    "/admin/servicos": "Serviços e Tokens",
     "/admin/roadmap": "Roadmap",
   };
 
