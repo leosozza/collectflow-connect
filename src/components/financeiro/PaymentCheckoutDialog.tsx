@@ -17,6 +17,7 @@ interface PaymentCheckoutDialogProps {
   description: string;
   tenantId: string;
   tenantName: string;
+  tenantCnpj?: string;
   paymentType: "subscription" | "token_purchase";
   tokenPackageId?: string;
   tokensGranted?: number;
