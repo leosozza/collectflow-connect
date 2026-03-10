@@ -119,6 +119,98 @@ export type Database = {
           },
         ]
       }
+      admin_meetings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          duration_minutes: number
+          id: string
+          meeting_type: string
+          meeting_url: string | null
+          notes: string | null
+          participants_count: number
+          scheduled_at: string
+          status: string
+          tenant_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_type?: string
+          meeting_url?: string | null
+          notes?: string | null
+          participants_count?: number
+          scheduled_at: string
+          status?: string
+          tenant_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_type?: string
+          meeting_url?: string | null
+          notes?: string | null
+          participants_count?: number
+          scheduled_at?: string
+          status?: string
+          tenant_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_meetings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_staff: {
+        Row: {
+          created_at: string
+          department: string
+          full_name: string
+          id: string
+          role_title: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          department?: string
+          full_name: string
+          id?: string
+          role_title?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          full_name?: string
+          id?: string
+          role_title?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       agreement_signatures: {
         Row: {
           agreement_id: string
