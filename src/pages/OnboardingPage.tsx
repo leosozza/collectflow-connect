@@ -52,7 +52,7 @@ const OnboardingPage = () => {
     if (!user || !companyName || !companySlug || !selectedPlan || !companyCnpj) return;
     setLoading(true);
     try {
-      await createTenant(companyName, companySlug, selectedPlan, user.id);
+      await createTenant(companyName, companySlug, selectedPlan, user.id, companyCnpj);
       await refetch();
       toast({ title: "Empresa criada com sucesso!", description: "Bem-vindo ao CollectFlow Connect." });
       navigate("/");
