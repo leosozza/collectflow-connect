@@ -13,7 +13,7 @@ import {
   ClientFormData,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
-import { fetchTiposStatus } from "@/services/cadastrosService";
+import { useTenant } from "@/hooks/useTenant";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import ClientTable from "@/components/clients/ClientTable";
