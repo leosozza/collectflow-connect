@@ -443,6 +443,8 @@ Páginas:
 Sidebar do tenant (AppLayout.tsx) simplificada: link único "Área Admin" para /admin em vez dos dois links anteriores.`,
   },
 
+  {
+    id: "resend-email",
     title: "Configuração de E-mail — Resend API",
     description: "Configurar a API Resend para envio de e-mail com planilha de clientes quitados excluídos. Requer: conta Resend, validação de domínio e API Key.",
     status: "planned",
