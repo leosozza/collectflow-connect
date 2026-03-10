@@ -1,64 +1,66 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+## Plano: Área Administrativa Super Admin Isolada
 
-### O que será feito
-
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
-
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
-
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+Este é um projeto grande que será implementado em fases. A primeira fase foca na **infraestrutura** (layout separado, sidebar, rotas) e na **reorganização dos módulos existentes**. Módulos novos (Equipes SA, Treinamentos, Financeiro avançado) serão criados com estrutura básica e expandidos depois.
 
 ---
 
-### Explicação das regras e lógicas de Negociação
+### Fase 1 — Layout e Navegação Separados
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+**Criar `SuperAdminLayout.tsx`** — layout completamente independente do `AppLayout`:
+- Sidebar própria com cores diferenciadas (fundo mais escuro ou accent diferente para distinção visual)
+- Sidebar com os itens: Dashboard, Suporte, Gestão de Equipes, Gestão Financeira, Gestão de Inquilinos, Treinamentos e Reuniões, Configurações do Sistema, Relatórios
+- Header com título da página, avatar do super admin e botão de logout
+- Guard de acesso: se `!isSuperAdmin`, redireciona para `/`
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+**Atualizar `App.tsx`**:
+- Todas as rotas `/admin/*` usarão `SuperAdminLayout` em vez de `AppLayout`
+- Novas rotas:
+  - `/admin` → Dashboard SA (reutiliza `AdminDashboardPage`)
+  - `/admin/suporte` → Suporte (já existe `SupportAdminPage`)
+  - `/admin/tenants` → Gestão de Inquilinos (reutiliza `SuperAdminPage`)
+  - `/admin/equipes` → Gestão de Equipes SA (nova página)
+  - `/admin/financeiro` → Gestão Financeira (nova página)
+  - `/admin/treinamentos` → Treinamentos e Reuniões (nova página)
+  - `/admin/configuracoes` → Configurações do Sistema (nova página)
+  - `/admin/relatorios` → Relatórios e Análises (nova página)
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+---
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-```
+### Fase 2 — Páginas dos Módulos
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+**Páginas novas (estrutura inicial funcional):**
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+1. **`AdminEquipesPage`** — Gestão de equipes internas do super admin (colaboradores, cargos, permissões por cargo)
+2. **`AdminFinanceiroPage`** — Visão financeira dos tenants: MRR, ARR, churn, status de pagamento por tenant, histórico
+3. **`AdminTreinamentosPage`** — Agenda de reuniões, calendário, materiais de onboarding, registro de participantes
+4. **`AdminConfiguracoesPage`** — Configurações globais do sistema
+5. **`AdminRelatoriosPage`** — Relatórios e análises consolidados (crescimento, saúde do sistema)
+
+Cada página terá estrutura básica com layout de cards/tabelas e dados reais quando disponíveis no banco (tenants, agreements, etc.) ou placeholders para expansão futura.
+
+---
+
+### Fase 3 — Remoção do Super Admin do Sidebar Tenant
+
+- Remover os links "Painel Super Admin" e "Suporte" do `AppLayout.tsx` (sidebar dos tenants)
+- Super admins acessarão a área admin por `/admin` diretamente
+
+---
+
+### Arquivos criados
+- `src/components/SuperAdminLayout.tsx`
+- `src/pages/admin/AdminEquipesPage.tsx`
+- `src/pages/admin/AdminFinanceiroPage.tsx`
+- `src/pages/admin/AdminTreinamentosPage.tsx`
+- `src/pages/admin/AdminConfiguracoesPage.tsx`
+- `src/pages/admin/AdminRelatoriosPage.tsx`
+
+### Arquivos alterados
+- `src/App.tsx` — rotas `/admin/*` com `SuperAdminLayout`
+- `src/components/AppLayout.tsx` — remover links SA do sidebar
+
+### Sem alterações de banco de dados nesta fase
+Os módulos usarão tabelas existentes (`tenants`, `support_tickets`, `agreements`, `profiles`, etc.). Tabelas para equipes SA e treinamentos serão criadas quando os módulos forem expandidos.
 
