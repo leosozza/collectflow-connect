@@ -189,7 +189,7 @@ const App = () => (
             {/* Super Admin area with isolated layout */}
             <Route
               element={
-                <ProtectedRoute requireTenant>
+                <ProtectedRoute>
                   <SuperAdminLayout />
                 </ProtectedRoute>
               }
