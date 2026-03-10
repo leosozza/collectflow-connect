@@ -176,7 +176,7 @@ const SuperAdminLayout = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate("/perfil")}
+              onClick={() => navigate("/admin/perfil")}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
             >
               <Avatar className="w-8 h-8">
