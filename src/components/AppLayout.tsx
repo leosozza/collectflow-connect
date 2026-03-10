@@ -261,7 +261,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Suporte" : undefined}
               className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/suporte-admin"
+                location.pathname === "/admin/suporte"
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}

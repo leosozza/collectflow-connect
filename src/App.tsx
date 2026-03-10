@@ -343,7 +343,7 @@ const App = () => (
               }
             />
             <Route
-              path="/suporte-admin"
+              path="/admin/suporte"
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
