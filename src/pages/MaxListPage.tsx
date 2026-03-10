@@ -272,13 +272,7 @@ const MaxListPage = () => {
     enabled: !!tenant?.id && ALLOWED_SLUGS.includes(tenant.slug),
   });
 
-  useEffect(() => {
-    if (tiposStatus && !selectedStatusCobrancaId) {
-      const aguardando = tiposStatus.find((t) => t.nome.toLowerCase().includes("aguardando"));
-      if (aguardando) setSelectedStatusCobrancaId(aguardando.id);
-      else if (tiposStatus.length > 0) setSelectedStatusCobrancaId(tiposStatus[0].id);
-    }
-  }, [tiposStatus, selectedStatusCobrancaId]);
+  // No longer auto-select a status — default is "__auto__"
 
   const allSelected = data.length > 0 && selectedIndexes.size === data.length;
   const someSelected = selectedIndexes.size > 0;
