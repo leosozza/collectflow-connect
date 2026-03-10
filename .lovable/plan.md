@@ -1,64 +1,133 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Plano: Integração Asaas para Cobranças (CRM + Tokens)
 
-### O que será feito
+## Visão Geral
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
-
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
-
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+Integrar o gateway de pagamentos Asaas para cobrar planos mensais e tokens dos tenants, com suporte a **Cartão de Crédito**, **PIX** e **Boleto**. Super Admin gerencia e acompanha todas as cobranças. Tenants pagam pela Central da Empresa > Financeiro.
 
 ---
 
-### Explicação das regras e lógicas de Negociação
+## Fase 1: Secret da API Key do Asaas
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+Solicitar ao usuário a API Key do Asaas via ferramenta `add_secret` (nome: `ASAAS_API_KEY`). Também armazenar `ASAAS_ENVIRONMENT` (sandbox ou production).
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+---
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+## Fase 2: Tabela de Dados
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+**Migração SQL** — nova tabela `asaas_customers` e atualização de `payment_records`:
+
+```text
+asaas_customers
+├── id (uuid PK)
+├── tenant_id (FK tenants)
+├── asaas_customer_id (text unique) — ID do cliente no Asaas
+├── name, email, cpf_cnpj, phone
+├── created_at, updated_at
+
+payment_records (adicionar colunas)
+├── asaas_payment_id (text) — ID da cobrança no Asaas
+├── billing_type (text) — BOLETO, CREDIT_CARD, PIX
+├── asaas_status (text) — PENDING, CONFIRMED, RECEIVED, etc.
+├── pix_qr_code (text), pix_copy_paste (text)
+├── boleto_url (text), invoice_url (text)
+├── due_date (date)
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+RLS: tenant vê apenas seus registros; super_admin vê todos.
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+---
+
+## Fase 3: Edge Function `asaas-proxy`
+
+Uma edge function centralizada que faz proxy para a API Asaas:
+
+**Endpoints internos:**
+- `POST /customer` — Criar/buscar cliente no Asaas (usando CNPJ/CPF do tenant)
+- `POST /payment` — Criar cobrança (plano mensal ou compra de tokens)
+- `GET /payment/:id` — Consultar status
+- `GET /payment/:id/pixQrCode` — Obter QR Code PIX
+- `POST /payment/:id/tokenize` — Tokenizar cartão para cobranças recorrentes
+
+**Lógica:** Recebe ação via body, valida auth, chama `https://api.asaas.com/v3/...` com header `access_token`, salva resultado em `payment_records`.
+
+---
+
+## Fase 4: Edge Function `asaas-webhook`
+
+Recebe notificações do Asaas quando pagamento é confirmado:
+
+- Atualiza `payment_records.asaas_status`
+- Se `payment_type = 'token_purchase'` e status `CONFIRMED/RECEIVED` → chama RPC `add_tokens()`
+- Se `payment_type = 'subscription'` e status `CONFIRMED` → atualiza status do tenant
+- Cria notificação para o admin do tenant
+
+Config: `verify_jwt = false` no config.toml (webhook externo).
+
+---
+
+## Fase 5: UI Tenant — Central da Empresa > Financeiro
+
+Adicionar ao bloco existente da aba Financeiro em `TenantSettingsPage.tsx`:
+
+**Novo Card "Pagamento"** abaixo do extrato, com:
+- Botão "Pagar Mensalidade" (abre dialog)
+- Lista de cobranças recentes (de `payment_records` com dados Asaas)
+
+**Componente `src/components/financeiro/PaymentCheckoutDialog.tsx`:**
+- Step 1: Resumo do valor (plano + serviços)
+- Step 2: Escolha do método — 3 cards: Cartão, PIX, Boleto
+- Step 3 (Cartão): Form de número, validade, CVV, nome, CPF → chama `asaas-proxy` com `billingType: CREDIT_CARD` + `creditCard` + `creditCardHolderInfo`
+- Step 3 (PIX): Exibe QR Code + código copia-e-cola (retornado pela API)
+- Step 3 (Boleto): Exibe link do boleto + botão copiar linha digitável
+
+**Componente `src/components/financeiro/PaymentHistoryCard.tsx`:**
+- Tabela: Data | Tipo | Valor | Método | Status (badge colorido)
+- Status: Pendente (amarelo), Confirmado (verde), Vencido (vermelho)
+
+---
+
+## Fase 6: UI Super Admin — Gestão de Cobranças
+
+**Atualizar `src/pages/admin/AdminFinanceiroPage.tsx`:**
+
+Adicionar abaixo da tabela de faturamento existente:
+
+**Card "Cobranças Asaas":**
+- Filtros: status, método, período
+- Tabela: Tenant | Valor | Tipo | Método | Status | Data | Ações
+- Ações: Ver detalhes, Reenviar cobrança
+- KPIs adicionais: Total Recebido (mês), Total Pendente, Inadimplência
+
+**Card "Clientes Asaas":**
+- Lista de tenants com seus IDs Asaas vinculados
+- Botão para criar cliente Asaas manualmente
+
+---
+
+## Arquivos a Criar/Editar
+
+| Arquivo | Ação |
+|---|---|
+| Migração SQL | Criar tabela `asaas_customers`, alterar `payment_records` |
+| `supabase/functions/asaas-proxy/index.ts` | Criar — proxy para API Asaas |
+| `supabase/functions/asaas-webhook/index.ts` | Criar — webhook de confirmação |
+| `supabase/config.toml` | Adicionar `verify_jwt = false` para webhook |
+| `src/services/asaasService.ts` | Criar — chamadas ao proxy |
+| `src/components/financeiro/PaymentCheckoutDialog.tsx` | Criar — dialog de pagamento 3 steps |
+| `src/components/financeiro/PaymentHistoryCard.tsx` | Criar — histórico de cobranças |
+| `src/pages/TenantSettingsPage.tsx` | Editar — adicionar cards de pagamento na aba Financeiro |
+| `src/pages/admin/AdminFinanceiroPage.tsx` | Editar — adicionar gestão de cobranças Asaas |
+
+---
+
+## Ordem de Implementação
+
+1. Secret `ASAAS_API_KEY` (precisa ser configurada primeiro)
+2. Migração SQL (tabela + colunas)
+3. Edge Functions (proxy + webhook)
+4. Service TypeScript
+5. UI Tenant (checkout + histórico)
+6. UI Super Admin (gestão de cobranças)
 
