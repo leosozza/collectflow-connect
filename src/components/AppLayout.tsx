@@ -242,32 +242,17 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           )}
           {isSuperAdmin && (
             <Link
-              to="/admin/tenants"
+              to="/admin"
               onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Painel Super Admin" : undefined}
+              title={collapsed ? "Área Admin" : undefined}
               className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/admin/tenants"
+                location.pathname.startsWith("/admin")
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}
             >
               <BarChart3 className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Painel Super Admin"}
-            </Link>
-          )}
-          {isSuperAdmin && (
-            <Link
-              to="/admin/suporte"
-              onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Suporte" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/admin/suporte"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
-            >
-              <Headphones className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && "Suporte"}
+              {!collapsed && "Área Admin"}
             </Link>
           )}
           <button
