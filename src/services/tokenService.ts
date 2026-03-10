@@ -191,7 +191,7 @@ export const fetchPaymentRecords = async (tenantId: string): Promise<PaymentReco
 export const createPaymentRecord = async (record: Partial<PaymentRecord>): Promise<PaymentRecord> => {
   const { data, error } = await supabase
     .from("payment_records")
-    .insert(record)
+    .insert(record as any)
     .select()
     .single();
   if (error) throw error;
