@@ -177,6 +177,16 @@ const App = () => (
               }
             />
             <Route
+              path="/central-empresa"
+              element={
+                <ProtectedRoute requireTenant>
+                  <AppLayout>
+                    <TenantSettingsPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/integracao"
               element={
                 <ProtectedRoute requireTenant>
