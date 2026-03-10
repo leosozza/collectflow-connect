@@ -175,18 +175,6 @@ const TenantSettingsPage = () => {
                 <Input value={tenant?.slug || ""} disabled />
                 <p className="text-xs text-muted-foreground">O slug não pode ser alterado</p>
               </div>
-              <div className="space-y-2">
-                <Label>Cor primária</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={primaryColor}
-                    onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="w-10 h-10 rounded cursor-pointer border-0"
-                  />
-                  <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-32" />
-                </div>
-              </div>
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? "Salvando..." : "Salvar alterações"}
               </Button>
