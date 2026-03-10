@@ -28,6 +28,7 @@ const OnboardingPage = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [companySlug, setCompanySlug] = useState("");
+  const [companyCnpj, setCompanyCnpj] = useState("");
   const [selectedPlan, setSelectedPlan] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
