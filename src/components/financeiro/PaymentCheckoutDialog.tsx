@@ -17,6 +17,7 @@ interface PaymentCheckoutDialogProps {
   description: string;
   tenantId: string;
   tenantName: string;
+  tenantCnpj?: string;
   paymentType: "subscription" | "token_purchase";
   tokenPackageId?: string;
   tokensGranted?: number;
@@ -32,6 +33,7 @@ const PaymentCheckoutDialog = ({
   description,
   tenantId,
   tenantName,
+  tenantCnpj,
   paymentType,
   tokenPackageId,
   tokensGranted,
@@ -101,10 +103,18 @@ const PaymentCheckoutDialog = ({
     setLoading(true);
 
     try {
+      // Validate CNPJ exists for tenant
+      const cpfCnpjToUse = cardCpf || tenantCnpj;
+      if (!cpfCnpjToUse) {
+        toast.error("CNPJ da empresa não cadastrado. Acesse a Central da Empresa para preencher.");
+        setLoading(false);
+        return;
+      }
+
       // 1. Ensure Asaas customer exists
       const customerResult = await createAsaasCustomer({
         name: tenantName,
-        cpfCnpj: cardCpf || "00000000000",
+        cpfCnpj: cpfCnpjToUse,
         email: cardEmail || undefined,
         phone: cardPhone || undefined,
       });

@@ -28,6 +28,7 @@ const OnboardingPage = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [companySlug, setCompanySlug] = useState("");
+  const [companyCnpj, setCompanyCnpj] = useState("");
   const [selectedPlan, setSelectedPlan] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
@@ -48,10 +49,10 @@ const OnboardingPage = () => {
   };
 
   const handleCreate = async () => {
-    if (!user || !companyName || !companySlug || !selectedPlan) return;
+    if (!user || !companyName || !companySlug || !selectedPlan || !companyCnpj) return;
     setLoading(true);
     try {
-      await createTenant(companyName, companySlug, selectedPlan, user.id);
+      await createTenant(companyName, companySlug, selectedPlan, user.id, companyCnpj);
       await refetch();
       toast({ title: "Empresa criada com sucesso!", description: "Bem-vindo ao CollectFlow Connect." });
       navigate("/");
@@ -116,10 +117,20 @@ const OnboardingPage = () => {
                 />
                 <p className="text-xs text-muted-foreground">Usado para identificar sua empresa no sistema</p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="cnpj">CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  placeholder="00.000.000/0000-00"
+                  value={companyCnpj}
+                  onChange={(e) => setCompanyCnpj(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Necessário para emissão de cobranças e notas fiscais</p>
+              </div>
               <Button
                 className="w-full"
                 onClick={() => setStep(2)}
-                disabled={!companyName || !companySlug}
+                disabled={!companyName || !companySlug || !companyCnpj}
               >
                 Continuar
               </Button>

@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Settings, Shield, Bell, Database, Globe, CreditCard, AlertTriangle, Wifi, WifiOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import GoLiveChecklist from "@/components/admin/GoLiveChecklist";
 import { getSystemSetting, updateSystemSetting } from "@/services/systemSettingsService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -282,6 +283,9 @@ const AdminConfiguracoesPage = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Go-Live Checklist */}
+      <GoLiveChecklist />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {configSections.map((section) => (

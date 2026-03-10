@@ -1,68 +1,64 @@
 
 
-# Diagnóstico: Prontidão para Testes com Tenants Reais
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Estado Atual do Sistema
+### O que será feito
 
-| Recurso | Status | Detalhe |
-|---|---|---|
-| Tenant ativo (Temis) | 1 tenant, 6 usuários, 9.495 clientes, 2 credores, 3 acordos |
-| Planos | 3 ativos (Starter R$99,90 / Professional R$299,90 / Enterprise R$799,90) |
-| Onboarding | Funcional (cadastro empresa + seleção de plano) |
-| Auth | Login, signup, convites, reset password |
-| Asaas Gateway | Configurado em **Produção**, proxy e webhook prontos |
-| Tokens | Tabelas existem, mas **Temis não tem registro em tenant_tokens** (saldo = 0) |
-| Pagamentos | **0 payment_records**, **0 asaas_customers** |
-| Permissões | Permission profiles + RLS configurados |
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-## Gaps Críticos para Testes Reais
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-### 1. Inicialização automática de tenant_tokens no onboarding
-Quando um tenant é criado via `onboard_tenant`, nenhum registro é inserido em `tenant_tokens`. Isso faz com que consultas de saldo falhem silenciosamente. Precisa de um INSERT automático com saldo inicial (ex: 100 tokens de boas-vindas).
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-### 2. Webhook Asaas sem URL pública configurada
-O endpoint `asaas-webhook` existe, mas o Asaas precisa de uma URL de callback cadastrada no painel deles. Sem isso, pagamentos PIX/Boleto nunca serão confirmados automaticamente.
+---
 
-### 3. Fluxo de primeiro pagamento do tenant
-O `PaymentCheckoutDialog` cria um customer Asaas automaticamente, mas não há validação se o tenant tem CPF/CNPJ cadastrado. Sem esse dado, a criação do customer falha.
+### Explicação das regras e lógicas de Negociação
 
-### 4. E-mail de confirmação ativo
-Novos usuários precisam confirmar e-mail antes de logar. Para testes internos, pode ser necessário desabilitar temporariamente.
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
 
-## Plano de Implementacao
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
 
-### Fase 7A -- Preparar infraestrutura para tenant real
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
 
-1. **Alterar `onboard_tenant` RPC** para criar registro em `tenant_tokens` com saldo inicial configuravel (default 50 tokens de cortesia)
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+```
 
-2. **Adicionar campo `cnpj` na tabela `tenants`** para que o checkout Asaas funcione (criar customer com CPF/CNPJ valido)
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-3. **Adicionar campo CNPJ no OnboardingPage** (step 1, junto com nome e slug da empresa)
-
-4. **Validar CNPJ no PaymentCheckoutDialog** antes de tentar criar customer Asaas -- exibir alerta se nao preenchido, com link para Central da Empresa
-
-5. **Criar seed de tenant_tokens para tenant existente (Temis)** via migration, para nao quebrar o tenant atual
-
-### Fase 7B -- Checklist de go-live no Super Admin
-
-6. **Criar aba "Checklist Go-Live"** no AdminConfiguracoesPage com verificacoes automaticas:
-   - Secret `ASAAS_API_KEY_PRODUCTION` configurada
-   - Ambiente Asaas = production
-   - Planos cadastrados e ativos
-   - Webhook URL copiavel para colar no painel Asaas
-   - Teste de conexao (ja existe)
-
-### Arquivos a criar/editar
-
-| Arquivo | Acao |
-|---|---|
-| Migration SQL | ADD `cnpj` to tenants, INSERT tenant_tokens for Temis, ALTER `onboard_tenant` |
-| `src/pages/OnboardingPage.tsx` | Campo CNPJ no step 1 |
-| `src/services/tenantService.ts` | Passar CNPJ para `onboard_tenant` |
-| `src/components/financeiro/PaymentCheckoutDialog.tsx` | Validar CNPJ antes de checkout |
-| `src/pages/admin/AdminConfiguracoesPage.tsx` | Aba/card Checklist Go-Live |
-
-### Estimativa
-- 1 migration + 4 arquivos editados
-- Permite criar um segundo tenant real e testar o ciclo completo: signup -> onboarding -> primeiro pagamento -> consumo de tokens
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 
