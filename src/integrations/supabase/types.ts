@@ -2035,6 +2035,90 @@ export type Database = {
           },
         ]
       }
+      payment_records: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          gateway_response: Json | null
+          gateway_transaction_id: string | null
+          id: string
+          invoice_pdf_url: string | null
+          invoice_url: string | null
+          metadata: Json | null
+          paid_at: string | null
+          payment_gateway: string | null
+          payment_method: string | null
+          payment_type: string
+          refunded_at: string | null
+          status: string
+          tenant_id: string
+          token_package_id: string | null
+          tokens_granted: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          gateway_response?: Json | null
+          gateway_transaction_id?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          invoice_url?: string | null
+          metadata?: Json | null
+          paid_at?: string | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          payment_type: string
+          refunded_at?: string | null
+          status?: string
+          tenant_id: string
+          token_package_id?: string | null
+          tokens_granted?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          gateway_response?: Json | null
+          gateway_transaction_id?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          invoice_url?: string | null
+          metadata?: Json | null
+          paid_at?: string | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          payment_type?: string
+          refunded_at?: string | null
+          status?: string
+          tenant_id?: string
+          token_package_id?: string | null
+          tokens_granted?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_records_token_package_id_fkey"
+            columns: ["token_package_id"]
+            isOneToOne: false
+            referencedRelation: "token_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permission_profiles: {
         Row: {
           base_role: string
@@ -2739,6 +2823,119 @@ export type Database = {
           },
         ]
       }
+      service_catalog: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          display_order: number
+          icon: string | null
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          name: string
+          price: number
+          price_type: string
+          service_code: string
+          tokens_required: number
+          unit_label: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name: string
+          price?: number
+          price_type?: string
+          service_code: string
+          tokens_required?: number
+          unit_label?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name?: string
+          price?: number
+          price_type?: string
+          service_code?: string
+          tokens_required?: number
+          unit_label?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      service_usage_logs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          error_message: string | null
+          execution_time_ms: number | null
+          id: string
+          input_data: Json | null
+          output_data: Json | null
+          service_code: string
+          status: string
+          target_entity_id: string | null
+          target_entity_type: string | null
+          tenant_id: string
+          tokens_consumed: number
+          usage_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          input_data?: Json | null
+          output_data?: Json | null
+          service_code: string
+          status?: string
+          target_entity_id?: string | null
+          target_entity_type?: string | null
+          tenant_id: string
+          tokens_consumed?: number
+          usage_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          input_data?: Json | null
+          output_data?: Json | null
+          service_code?: string
+          status?: string
+          target_entity_id?: string | null
+          target_entity_type?: string | null
+          tenant_id?: string
+          tokens_consumed?: number
+          usage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_usage_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shop_orders: {
         Row: {
           admin_note: string | null
@@ -2961,6 +3158,128 @@ export type Database = {
           },
         ]
       }
+      tenant_services: {
+        Row: {
+          activated_at: string
+          cancelled_at: string | null
+          config: Json | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          notes: string | null
+          quantity: number
+          service_id: string
+          status: string
+          tenant_id: string
+          unit_price_override: number | null
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string
+          cancelled_at?: string | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          service_id: string
+          status?: string
+          tenant_id: string
+          unit_price_override?: number | null
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string
+          cancelled_at?: string | null
+          config?: Json | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          service_id?: string
+          status?: string
+          tenant_id?: string
+          unit_price_override?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "service_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_services_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_tokens: {
+        Row: {
+          auto_recharge_amount: number | null
+          auto_recharge_enabled: boolean | null
+          created_at: string
+          id: string
+          last_consumption_at: string | null
+          last_purchase_at: string | null
+          lifetime_consumed: number
+          lifetime_purchased: number
+          low_balance_threshold: number | null
+          reserved_balance: number
+          tenant_id: string
+          token_balance: number
+          updated_at: string
+        }
+        Insert: {
+          auto_recharge_amount?: number | null
+          auto_recharge_enabled?: boolean | null
+          created_at?: string
+          id?: string
+          last_consumption_at?: string | null
+          last_purchase_at?: string | null
+          lifetime_consumed?: number
+          lifetime_purchased?: number
+          low_balance_threshold?: number | null
+          reserved_balance?: number
+          tenant_id: string
+          token_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          auto_recharge_amount?: number | null
+          auto_recharge_enabled?: boolean | null
+          created_at?: string
+          id?: string
+          last_consumption_at?: string | null
+          last_purchase_at?: string | null
+          lifetime_consumed?: number
+          lifetime_purchased?: number
+          low_balance_threshold?: number | null
+          reserved_balance?: number
+          tenant_id?: string
+          token_balance?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_users: {
         Row: {
           created_at: string | null
@@ -3141,6 +3460,101 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tipos_status_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      token_packages: {
+        Row: {
+          bonus_tokens: number
+          created_at: string
+          description: string | null
+          discount_percentage: number | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          is_featured: boolean | null
+          name: string
+          price: number
+          token_amount: number
+        }
+        Insert: {
+          bonus_tokens?: number
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_featured?: boolean | null
+          name: string
+          price: number
+          token_amount: number
+        }
+        Update: {
+          bonus_tokens?: number
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_featured?: boolean | null
+          name?: string
+          price?: number
+          token_amount?: number
+        }
+        Relationships: []
+      }
+      token_transactions: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string | null
+          service_code: string | null
+          tenant_id: string
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          service_code?: string | null
+          tenant_id: string
+          transaction_type: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          service_code?: string | null
+          tenant_id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_transactions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -3406,6 +3820,47 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_tokens: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_metadata?: Json
+          p_reference_id?: string
+          p_tenant_id: string
+          p_transaction_type: string
+        }
+        Returns: {
+          error_message: string
+          new_balance: number
+          success: boolean
+          transaction_id: string
+        }[]
+      }
+      check_token_balance: {
+        Args: { p_required_amount: number; p_tenant_id: string }
+        Returns: {
+          current_balance: number
+          has_sufficient_balance: boolean
+          shortfall: number
+        }[]
+      }
+      consume_tokens: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_metadata?: Json
+          p_reference_id?: string
+          p_reference_type?: string
+          p_service_code: string
+          p_tenant_id: string
+        }
+        Returns: {
+          error_message: string
+          new_balance: number
+          success: boolean
+          transaction_id: string
+        }[]
+      }
       create_notification: {
         Args: {
           _message: string
@@ -3438,6 +3893,17 @@ export type Database = {
       get_my_profile_id: { Args: never; Returns: string }
       get_my_tenant_id: { Args: never; Returns: string }
       get_my_tenant_role: { Args: never; Returns: string }
+      get_tenant_token_summary: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          available: number
+          balance: number
+          last_30_days_consumed: number
+          reserved: number
+          total_consumed: number
+          total_purchased: number
+        }[]
+      }
       get_user_emails: {
         Args: never
         Returns: {
