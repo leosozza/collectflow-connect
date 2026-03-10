@@ -408,9 +408,41 @@ Integração:
 - Link na sidebar (AppLayout): "Painel Super Admin" → /admin/tenants, visível apenas para isSuperAdmin
 - RLS: super admin já tem acesso irrestrito via is_super_admin() function em todas as tabelas.`,
   },
-
   {
-    id: "resend-email",
+    id: "super-admin-area",
+    title: "Área Super Admin Isolada",
+    description: "Layout completamente separado para gestão do SaaS: sidebar própria com tema escuro, dashboard de gestão, suporte, gestão de equipes, financeiro (MRR/ARR/churn), gestão de inquilinos, treinamentos e reuniões, configurações do sistema e relatórios.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: `A Área Super Admin Isolada está implementada com layout independente e acesso exclusivo para super admins.
+
+Layout:
+- src/components/SuperAdminLayout.tsx — layout com sidebar escura (bg-[hsl(222,47%,11%)]) e tema âmbar, completamente separado do AppLayout
+- Guard de acesso: redireciona para / se !isSuperAdmin
+- Sidebar com 8 módulos: Dashboard, Suporte, Equipes, Financeiro, Inquilinos, Treinamentos, Configurações, Relatórios
+- Link "Voltar ao Sistema" para retornar à interface de tenant
+
+Rotas (em src/App.tsx):
+- /admin → AdminDashboardPage (dashboard executivo com KPIs globais)
+- /admin/suporte → SupportAdminPage (tickets e atendimentos)
+- /admin/tenants → SuperAdminPage (gestão de inquilinos)
+- /admin/equipes → AdminEquipesPage (colaboradores, cargos e permissões)
+- /admin/financeiro → AdminFinanceiroPage (MRR, ARR, churn, faturamento por tenant)
+- /admin/treinamentos → AdminTreinamentosPage (agenda de reuniões, onboarding)
+- /admin/configuracoes → AdminConfiguracoesPage (segurança, notificações, sistema)
+- /admin/relatorios → AdminRelatoriosPage (crescimento, saúde do sistema)
+
+Páginas:
+- src/pages/admin/AdminEquipesPage.tsx — gestão de equipes internas com cargos e permissões por cargo
+- src/pages/admin/AdminFinanceiroPage.tsx — métricas financeiras reais (MRR/ARR calculados dos planos dos tenants)
+- src/pages/admin/AdminTreinamentosPage.tsx — agenda de reuniões e treinamentos
+- src/pages/admin/AdminConfiguracoesPage.tsx — configurações globais com switches
+- src/pages/admin/AdminRelatoriosPage.tsx — relatórios com gráfico de crescimento de inquilinos
+
+Sidebar do tenant (AppLayout.tsx) simplificada: link único "Área Admin" para /admin em vez dos dois links anteriores.`,
+  },
+
     title: "Configuração de E-mail — Resend API",
     description: "Configurar a API Resend para envio de e-mail com planilha de clientes quitados excluídos. Requer: conta Resend, validação de domínio e API Key.",
     status: "planned",
