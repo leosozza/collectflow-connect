@@ -1,76 +1,64 @@
 
 
-# Correção do Dashboard — Métricas baseadas em Acordos Formalizados
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Problema
-O Dashboard usa `fetchClients()` que traz no máximo 1000 de 9.495 registros, e tenta calcular tudo no frontend. Além disso, precisa refletir **apenas acordos formalizados no Rivo**, não a carteira bruta importada.
+### O que será feito
 
-## Modelo de Dados Atual
-- **`agreements`**: contém `proposed_total`, `new_installments`, `new_installment_value`, `first_due_date`, `status`, `created_by`, `created_at`
-- **Parcelas do acordo são virtuais**: geradas com `first_due_date + addMonths(i)` — não há tabela `agreement_installments`
-- **`clients`**: títulos originais marcados como `em_acordo` quando acordo é criado; pagamentos distribuídos via `registerAgreementPayment`
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-## Plano de Correção
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-### 1. RPC `get_dashboard_stats` (Migration SQL)
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-Função que calcula tudo no banco, sem limite de linhas:
+---
 
-```text
-Parâmetros: _user_id uuid (nullable), _year int, _month int
-Retorna:
-  total_projetado     → SUM(proposed_total) de agreements ativos (pending/approved) com first_due_date no período
-  total_negociado     → SUM(proposed_total) de agreements criados no mês
-  total_recebido      → SUM(valor_pago) de clients cujo CPF tem acordo ativo
-  total_quebra        → SUM(proposed_total) de agreements cancelled/overdue
-  total_pendente      → total_projetado - total_recebido - total_quebra
-  acordos_dia         → COUNT agreements criados hoje
-  acordos_mes         → COUNT agreements criados no mês
+### Explicação das regras e lógicas de Negociação
+
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
 ```
 
-Quando `_user_id` não é null, filtra por `agreements.created_by = _user_id` (visão do operador).
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-### 2. RPC `get_dashboard_vencimentos` (Migration SQL)
-
-Gera parcelas virtuais dos acordos para uma data específica:
-
-```text
-Parâmetros: _target_date date, _user_id uuid (nullable)
-Retorna: lista de parcelas virtuais cujo vencimento cai naquela data
-  - agreement_id, client_cpf, client_name, credor
-  - numero_parcela, valor_parcela
-  - status do pagamento (verificado contra clients.valor_pago)
-```
-
-Lógica: para cada acordo ativo, gera N datas (first_due_date + i meses). Se alguma cai no `_target_date`, inclui na lista.
-
-**Nota técnica**: Como são parcelas virtuais (não estão em tabela), a função faz um loop `generate_series(0, new_installments-1)` e calcula `first_due_date + (i * interval '1 month')`.
-
-### 3. Refatorar `DashboardPage.tsx`
-
-| Antes | Depois |
-|---|---|
-| `fetchClients()` (1000 rows max) | `supabase.rpc('get_dashboard_stats', {...})` |
-| `useMemo` pesado com filtros | Dados já calculados pelo banco |
-| Card Vencimentos lê `clients` | `supabase.rpc('get_dashboard_vencimentos', { _target_date })` |
-| Tabela "Meus Clientes" filtra `clients` | Usa retorno da RPC de vencimentos |
-| Cache nunca invalida | `queryClient.invalidateQueries` após pagamento/quebra |
-
-### 4. Ações na tabela de vencimentos
-
-A tabela de "Meus Clientes" mostra parcelas virtuais do acordo. Os botões de "Pago" e "Quebra" continuam funcionando, chamando as funções existentes (`markAsPaid`, `markAsBroken`) que atuam nos registros da tabela `clients`.
-
-## Arquivos
-
-| Arquivo | Ação |
-|---|---|
-| Migration SQL | Criar RPCs `get_dashboard_stats` e `get_dashboard_vencimentos` |
-| `src/pages/DashboardPage.tsx` | Refatorar para usar RPCs; remover `fetchClients`; simplificar lógica |
-
-## Resultado Esperado
-- Métricas refletem **apenas acordos formalizados** no Rivo
-- Sem limite de 1000 linhas — cálculos feitos no banco
-- Vencimentos mostram parcelas do acordo (virtuais), não títulos importados
-- Performance superior — retorna ~10 números + ~5-20 linhas de vencimentos
-- Cache invalidado corretamente após ações
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 

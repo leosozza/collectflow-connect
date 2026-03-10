@@ -1,27 +1,23 @@
+
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchClients, Client } from "@/services/clientService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, CheckCircle2, XCircle, BarChart3, FileText, Clock } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { format, parseISO, startOfDay, startOfMonth, endOfMonth } from "date-fns";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { markAsPaid, markAsBroken } from "@/services/clientService";
-import PaymentDialog from "@/components/clients/PaymentDialog";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useNavigate } from "react-router-dom";
 import MiniRanking from "@/components/dashboard/MiniRanking";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useGamification } from "@/hooks/useGamification";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
 import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -35,151 +31,78 @@ const monthNames = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
+interface DashboardStats {
+  total_projetado: number;
+  total_negociado: number;
+  total_recebido: number;
+  total_quebra: number;
+  total_pendente: number;
+  acordos_dia: number;
+  acordos_mes: number;
+}
+
+interface VencimentoRow {
+  agreement_id: string;
+  client_cpf: string;
+  client_name: string;
+  credor: string;
+  numero_parcela: number;
+  valor_parcela: number;
+  agreement_status: string;
+}
+
 const DashboardPage = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const now = new Date();
-  const { checkAndGrantAchievements } = useGamification();
   const permissions = usePermissions();
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-  const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [browseDate, setBrowseDate] = useState(new Date());
   const [agendadosOpen, setAgendadosOpen] = useState(false);
   const { callbacks, count: agendadosCount, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => fetchClients(),
-  });
-
-  const { data: agreements = [] } = useQuery({
-    queryKey: ["dashboard-agreements"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agreements")
-        .select("id, created_at, created_by, status, client_cpf, proposed_total");
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Only vigent agreements (pending/approved) for projected metrics
-  // Filter only active (vigent) agreements
-  const activeAgreements = useMemo(() => {
-    return agreements.filter((a: any) => a.status === "pending" || a.status === "approved");
-  }, [agreements]);
-
   const canViewAll = permissions.canViewAllDashboard;
-  const todayStr = format(now, "yyyy-MM-dd");
 
-  const filteredAgreements = useMemo(() => {
-    let items = activeAgreements;
-    if (!canViewAll && profile?.user_id) {
-      items = items.filter(a => a.created_by === profile.user_id);
-    }
-    return items;
-  }, [activeAgreements, canViewAll, profile?.user_id]);
+  // Determine filter params for RPCs
+  const rpcUserId = canViewAll ? null : (profile?.user_id ?? null);
+  const filterYear = selectedYears.length === 1 ? parseInt(selectedYears[0]) : null;
+  const filterMonth = selectedMonths.length === 1 ? parseInt(selectedMonths[0]) + 1 : null; // month is 0-indexed in UI
 
-  const agreementCpfs = useMemo(() => {
-    return new Set(filteredAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
-  }, [filteredAgreements]);
-
-  // CPFs from cancelled/overdue agreements for quebra calculation
-  const cancelledOverdueCpfs = useMemo(() => {
-    return new Set(
-      agreements
-        .filter((a: any) => a.status === "cancelled" || a.status === "overdue")
-        .map((a: any) => a.client_cpf?.replace(/\D/g, ""))
-    );
-  }, [agreements]);
-
-  const acordosDia = useMemo(() =>
-    filteredAgreements.filter(a => a.created_at.startsWith(todayStr)).length,
-    [filteredAgreements, todayStr]
-  );
-
-  const acordosMes = useMemo(() => {
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
-    return filteredAgreements.filter(a => {
-      const d = new Date(a.created_at);
-      return d >= monthStart && d <= monthEnd;
-    }).length;
-  }, [filteredAgreements]);
-
-  // Compute month stats for gamification context
-  const computeMonthStats = () => {
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const monthClients = clients.filter(c => {
-      const d = parseISO(c.data_vencimento);
-      return d.getFullYear() === y && d.getMonth() === m && c.operator_id === profile?.id;
-    });
-    const paymentsThisMonth = monthClients.filter(c => c.status === "pago").length;
-    const breaksThisMonth = monthClients.filter(c => c.status === "quebrado").length;
-    const totalReceived = monthClients.filter(c => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0);
-    return { paymentsThisMonth, breaksThisMonth, totalReceived };
-  };
-
-  const paymentMutation = useMutation({
-    mutationFn: ({ client, valor }: { client: Client; valor: number }) =>
-      markAsPaid(client, valor),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Pagamento registrado!");
-      setPaymentClient(null);
-      // Trigger gamification check after data refreshes
-      setTimeout(() => {
-        const stats = computeMonthStats();
-        checkAndGrantAchievements({ ...stats, isGoalReached: false });
-      }, 1000);
+  // Dashboard stats from RPC
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats", rpcUserId, filterYear, filterMonth],
+    queryFn: async () => {
+      const params: Record<string, unknown> = {};
+      if (rpcUserId) params._user_id = rpcUserId;
+      if (filterYear) params._year = filterYear;
+      if (filterMonth) params._month = filterMonth;
+      
+      const { data, error } = await supabase.rpc("get_dashboard_stats", params as any);
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return row as DashboardStats;
     },
-    onError: () => toast.error("Erro ao registrar pagamento"),
   });
 
-  const breakMutation = useMutation({
-    mutationFn: (client: Client) => markAsBroken(client),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Quebra registrada!");
-      setTimeout(() => {
-        const stats = computeMonthStats();
-        checkAndGrantAchievements({ ...stats, isGoalReached: false });
-      }, 1000);
+  // Vencimentos from RPC
+  const browseDateStr = format(browseDate, "yyyy-MM-dd");
+  const { data: vencimentos = [] } = useQuery({
+    queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId],
+    queryFn: async () => {
+      const params: Record<string, unknown> = { _target_date: browseDateStr };
+      if (rpcUserId) params._user_id = rpcUserId;
+      
+      const { data, error } = await supabase.rpc("get_dashboard_vencimentos", params as any);
+      if (error) throw error;
+      return (data || []) as VencimentoRow[];
     },
-    onError: () => toast.error("Erro ao registrar quebra"),
   });
-
-  
-
-  // filteredClients: only clients that have an agreement (for metrics)
-  const filteredClients = useMemo(() => {
-    return clients.filter((c) => {
-      // Only include clients with agreements
-      if (!agreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
-      // Exclude titles already absorbed by an agreement
-      if ((c.status as string) === "em_acordo") return false;
-      const d = parseISO(c.data_vencimento);
-      if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
-      if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
-      return true;
-    });
-  }, [clients, selectedYears, selectedMonths, agreementCpfs]);
 
   const yearOptions = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
   const monthOptions = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);
-
-  const browseDateStr = format(browseDate, "yyyy-MM-dd");
-  const browseClients = useMemo(() => {
-    return clients.filter((c) => 
-      c.data_vencimento === browseDateStr && 
-      agreementCpfs.has(c.cpf.replace(/\D/g, "")) &&
-      (c.status as string) !== "em_acordo"
-    );
-  }, [clients, browseDateStr, agreementCpfs]);
 
   const navigateDate = (dir: number) => {
     setBrowseDate((prev) => {
@@ -189,31 +112,7 @@ const DashboardPage = () => {
     });
   };
 
-  const totalNegociado = useMemo(() => {
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
-    return filteredAgreements
-      .filter(a => { const d = new Date(a.created_at); return d >= monthStart && d <= monthEnd; })
-      .reduce((sum, a) => sum + Number((a as any).proposed_total || 0), 0);
-  }, [filteredAgreements]);
-
-  const pendentes = filteredClients.filter((c) => c.status === "pendente");
-  const pagos = filteredClients.filter((c) => c.status === "pago");
-  const quebrados = filteredClients.filter((c) => c.status === "quebrado");
-
-  // Total Projetado: only clients with active agreements (pending/approved)
-  const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
-  
-  // Total Quebra: clients with status quebrado + clients from cancelled/overdue agreements
-  const quebraFromAgreements = useMemo(() => {
-    return clients
-      .filter(c => cancelledOverdueCpfs.has(c.cpf.replace(/\D/g, "")) && c.status !== "pago")
-      .reduce((s, c) => s + Number(c.valor_parcela), 0);
-  }, [clients, cancelledOverdueCpfs]);
-  
-  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0) + quebraFromAgreements;
-  const totalEmAberto = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
+  const totalVencimentos = vencimentos.reduce((s, v) => s + Number(v.valor_parcela), 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -281,11 +180,15 @@ const DashboardPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
           <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Projetado no Mês</p>
-          <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalProjetado)}</p>
+          <p className="text-4xl font-bold text-primary-foreground tracking-tight">
+            {formatCurrency(stats?.total_projetado ?? 0)}
+          </p>
         </div>
         <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
           <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Negociado no Mês</p>
-          <p className="text-4xl font-bold text-primary-foreground tracking-tight">{formatCurrency(totalNegociado)}</p>
+          <p className="text-4xl font-bold text-primary-foreground tracking-tight">
+            {formatCurrency(stats?.total_negociado ?? 0)}
+          </p>
         </div>
       </div>
 
@@ -307,28 +210,28 @@ const DashboardPage = () => {
           </Button>
         </div>
         <span className="text-base font-semibold text-success">
-          {browseClients.length} registros • {formatCurrency(browseClients.reduce((s, c) => s + Number(c.valor_parcela), 0))}
+          {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
         </span>
       </div>
 
-      {/* Stat cards row + Mini Ranking */}
+      {/* Stat cards row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard title="Total Recebido" value={formatCurrency(totalRecebido)} icon="received" />
-        <StatCard title="Total de Quebra" value={formatCurrency(totalQuebra)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(totalEmAberto)} icon="receivable" />
-        <StatCard title="Acordos do Dia" value={String(acordosDia)} icon="agreement" />
-        <StatCard title="Acordos do Mês" value={String(acordosMes)} icon="agreement" />
+        <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
+        <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
+        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
+        <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
+        <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
 
       <MiniRanking />
 
-      {/* Meus Clientes table */}
+      {/* Meus Clientes table — virtual installments from agreements */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
-          <h2 className="text-sm font-semibold text-card-foreground">Meus Clientes</h2>
+          <h2 className="text-sm font-semibold text-card-foreground">Parcelas do Dia</h2>
         </div>
 
-        {browseClients.length === 0 ? (
+        {vencimentos.length === 0 ? (
           <div className="p-5 text-center text-muted-foreground text-xs">
             Nenhum vencimento para esta data
           </div>
@@ -343,62 +246,27 @@ const DashboardPage = () => {
                   <TableHead className="text-xs text-center">Parcela</TableHead>
                   <TableHead className="text-xs text-right">Valor da Parcela</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
-                  <TableHead className="text-xs text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {browseClients.map((client) => (
-                  <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
+                {vencimentos.map((v, idx) => (
+                  <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="text-xs font-medium">
                       <button
-                        onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                        onClick={() => navigate(`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`)}
                         className="text-primary hover:underline cursor-pointer text-left"
                       >
-                        {client.nome_completo}
+                        {v.client_name}
                       </button>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{client.cpf}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{client.credor}</TableCell>
-                    <TableCell className="text-xs text-center">{client.numero_parcela}</TableCell>
-                    <TableCell className="text-xs text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{v.client_cpf}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{v.credor}</TableCell>
+                    <TableCell className="text-xs text-center">{v.numero_parcela}</TableCell>
+                    <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
                     <TableCell className="text-xs text-center">
-                      {(() => {
-                        const s = client.status as string;
-                        const cls = s === "pago" ? "bg-success/10 text-success border-success/30" :
-                          s === "quebrado" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                          s === "em_acordo" ? "bg-blue-100 text-blue-800 border-blue-300" :
-                          s === "vencido" ? "bg-amber-100 text-amber-800 border-amber-300" :
-                          "bg-warning/10 text-warning border-warning/30";
-                        const label = s === "pago" ? "Pago" : s === "quebrado" ? "Quebrado" : s === "em_acordo" ? "Em Acordo" : s === "vencido" ? "Vencido" : "Pendente";
-                        return <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}>{label}</span>;
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-1">
-                        {client.status === "pendente" && (
-                          <>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-success hover:text-success hover:bg-success/10"
-                              onClick={() => setPaymentClient(client)}
-                              title="Registrar pagamento"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => breakMutation.mutate(client)}
-                              disabled={breakMutation.isPending}
-                              title="Registrar quebra"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-warning/10 text-warning border-warning/30">
+                        {v.agreement_status === "approved" ? "Aprovado" : "Pendente"}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -407,17 +275,6 @@ const DashboardPage = () => {
           </div>
         )}
       </div>
-
-      <PaymentDialog
-        client={paymentClient}
-        onClose={() => setPaymentClient(null)}
-        onConfirm={(valor) => {
-          if (paymentClient) {
-            paymentMutation.mutate({ client: paymentClient, valor });
-          }
-        }}
-        submitting={paymentMutation.isPending}
-      />
 
       <ScheduledCallbacksDialog
         open={agendadosOpen}
