@@ -54,7 +54,7 @@ const OnboardingPage = () => {
     try {
       await createTenant(companyName, companySlug, selectedPlan, user.id, companyCnpj);
       await refetch();
-      toast({ title: "Empresa criada com sucesso!", description: "Bem-vindo ao CollectFlow Connect." });
+      toast({ title: "Empresa criada com sucesso!", description: "Bem-vindo ao Rivo Connect." });
       navigate("/");
     } catch (err: any) {
       toast({ title: "Erro ao criar empresa", description: err.message, variant: "destructive" });
