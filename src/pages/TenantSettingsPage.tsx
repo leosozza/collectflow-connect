@@ -81,7 +81,7 @@ const TenantSettingsPage = () => {
     if (!tenant) return;
     setSaving(true);
     try {
-      await updateTenant(tenant.id, { name, primary_color: primaryColor });
+      await updateTenant(tenant.id, { name });
       await refetch();
       toast({ title: "Configurações salvas!" });
     } catch (err: any) {
