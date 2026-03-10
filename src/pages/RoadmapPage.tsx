@@ -447,7 +447,7 @@ Sidebar do tenant (AppLayout.tsx) simplificada: link único "Área Admin" para /
     id: "resend-email",
     title: "Configuração de E-mail — Resend API",
     description: "Configurar a API Resend para envio de e-mail com planilha de clientes quitados excluídos. Requer: conta Resend, validação de domínio e API Key.",
-    status: "planned",
+    status: "in_progress",
     progress: 50,
     category: "Integrações",
     lovablePrompt: `Finalizar a configuração do envio de e-mail via Resend para o relatório de clientes quitados.
