@@ -40,7 +40,7 @@ const AcordosPage = () => {
   const [credorFilter, setCredorFilter] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [editingAgreement, setEditingAgreement] = useState<Agreement | null>(null);
-  const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; notes: string }>>({});
+  const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; entrada_value: number; entrada_date: string; notes: string }>>({});
   const [editLoading, setEditLoading] = useState(false);
 
   const isAdmin = permissions.canApproveAcordos;
@@ -93,18 +93,33 @@ const AcordosPage = () => {
       new_installments: agreement.new_installments,
       new_installment_value: agreement.new_installment_value,
       first_due_date: agreement.first_due_date,
+      entrada_value: agreement.entrada_value || 0,
+      entrada_date: agreement.entrada_date || "",
       notes: agreement.notes || "",
     });
   };
 
+  const recalcInstallmentValue = (proposed: number, entrada: number, installments: number) => {
+    const remaining = Math.max(proposed - entrada, 0);
+    return installments > 0 ? Math.round((remaining / installments) * 100) / 100 : remaining;
+  };
+
   const handleEditProposed = (proposed: number) => {
     const installments = editForm.new_installments || 1;
-    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: proposed / installments });
+    const entrada = editForm.entrada_value || 0;
+    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditInstallments = (n: number) => {
     const proposed = editForm.proposed_total || 0;
-    setEditForm({ ...editForm, new_installments: n, new_installment_value: n > 0 ? proposed / n : proposed });
+    const entrada = editForm.entrada_value || 0;
+    setEditForm({ ...editForm, new_installments: n, new_installment_value: recalcInstallmentValue(proposed, entrada, n) });
+  };
+
+  const handleEditEntrada = (entrada: number) => {
+    const proposed = editForm.proposed_total || 0;
+    const installments = editForm.new_installments || 1;
+    setEditForm({ ...editForm, entrada_value: entrada, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditSubmit = async () => {
@@ -163,52 +178,110 @@ const AcordosPage = () => {
   const pending = activeAgreements.filter(a => a.status === "pending" || a.status === "pending_approval").length;
   const paid = activeAgreements.filter(a => a.status === "approved").length;
 
+  const statusLabels: Record<string, string> = { pending: "Vigente", approved: "Pago", overdue: "Vencido", pending_approval: "Aguardando Liberação", cancelled: "Cancelado", rejected: "Rejeitado" };
+  const statusColors: Record<string, string> = { pending: "bg-blue-100 text-blue-800", approved: "bg-green-100 text-green-800", overdue: "bg-red-100 text-red-800", pending_approval: "bg-yellow-100 text-yellow-800", cancelled: "bg-muted text-muted-foreground", rejected: "bg-muted text-muted-foreground" };
+
   const editDialog = (
     <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Acordo</DialogTitle>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle>Editar Acordo</DialogTitle>
+            {editingAgreement && (
+              <Badge className={statusColors[editingAgreement.status] || "bg-muted"}>
+                {statusLabels[editingAgreement.status] || editingAgreement.status}
+              </Badge>
+            )}
+          </div>
         </DialogHeader>
         {editingAgreement && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Cliente</Label>
-                <Input disabled value={editingAgreement.client_name} />
+          <div className="space-y-5">
+            {/* Info do cliente */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Cliente</span>
+                <span className="font-medium">{editingAgreement.client_name}</span>
               </div>
-              <div>
-                <Label>Credor</Label>
-                <Input disabled value={editingAgreement.credor} />
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">CPF</span>
+                <span className="font-medium">{editingAgreement.client_cpf}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Credor</span>
+                <span className="font-medium">{editingAgreement.credor}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Criado em</span>
+                <span className="font-medium">{new Date(editingAgreement.created_at).toLocaleDateString("pt-BR")}</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Valor Original (R$)</Label>
-                <Input disabled value={editingAgreement.original_total.toFixed(2)} />
+
+            {/* Valores */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Valores</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Valor Original</Label>
+                  <Input disabled value={`R$ ${editingAgreement.original_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                </div>
+                <div>
+                  <Label className="text-xs">Desconto</Label>
+                  <Input disabled value={`${editingAgreement.discount_percent ?? 0}%`} />
+                </div>
               </div>
               <div>
-                <Label>Valor Proposto (R$)</Label>
+                <Label className="text-xs">Valor do Acordo</Label>
                 <CurrencyInput value={editForm.proposed_total || 0} onValueChange={handleEditProposed} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Nº Parcelas</Label>
-                <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
-              </div>
-              <div>
-                <Label>Valor Parcela (R$)</Label>
-                <Input type="number" disabled value={(editForm.new_installment_value || 0).toFixed(2)} />
+
+            {/* Entrada */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Entrada</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Valor da Entrada</Label>
+                  <CurrencyInput value={editForm.entrada_value || 0} onValueChange={handleEditEntrada} />
+                </div>
+                <div>
+                  <Label className="text-xs">Data da Entrada</Label>
+                  <Input type="date" value={editForm.entrada_date || ""} onChange={e => setEditForm({ ...editForm, entrada_date: e.target.value })} />
+                </div>
               </div>
             </div>
-            <div>
-              <Label>Primeiro Vencimento</Label>
-              <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+
+            {/* Parcelamento */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Parcelamento</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Nº de Parcelas</Label>
+                  <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Valor da Parcela</Label>
+                  <Input disabled value={`R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">1º Vencimento das Parcelas</Label>
+                <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+              </div>
+              {/* Resumo visual */}
+              <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground text-center">
+                {(editForm.entrada_value || 0) > 0
+                  ? `Entrada R$ ${(editForm.entrada_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} + ${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                  : `${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                }
+              </div>
             </div>
+
+            {/* Observações */}
             <div>
-              <Label>Observações</Label>
+              <Label className="text-xs">Observações</Label>
               <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
             </div>
+
             <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? "Salvando..." : "Salvar Alterações"}
             </Button>

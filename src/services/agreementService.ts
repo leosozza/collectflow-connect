@@ -16,6 +16,8 @@ export interface Agreement {
   new_installments: number;
   new_installment_value: number;
   first_due_date: string;
+  entrada_value?: number;
+  entrada_date?: string;
   status: string;
   created_by: string;
   approved_by: string | null;
