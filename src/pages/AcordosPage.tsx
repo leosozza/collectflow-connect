@@ -93,18 +93,33 @@ const AcordosPage = () => {
       new_installments: agreement.new_installments,
       new_installment_value: agreement.new_installment_value,
       first_due_date: agreement.first_due_date,
+      entrada_value: agreement.entrada_value || 0,
+      entrada_date: agreement.entrada_date || "",
       notes: agreement.notes || "",
     });
   };
 
+  const recalcInstallmentValue = (proposed: number, entrada: number, installments: number) => {
+    const remaining = Math.max(proposed - entrada, 0);
+    return installments > 0 ? Math.round((remaining / installments) * 100) / 100 : remaining;
+  };
+
   const handleEditProposed = (proposed: number) => {
     const installments = editForm.new_installments || 1;
-    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: proposed / installments });
+    const entrada = editForm.entrada_value || 0;
+    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditInstallments = (n: number) => {
     const proposed = editForm.proposed_total || 0;
-    setEditForm({ ...editForm, new_installments: n, new_installment_value: n > 0 ? proposed / n : proposed });
+    const entrada = editForm.entrada_value || 0;
+    setEditForm({ ...editForm, new_installments: n, new_installment_value: recalcInstallmentValue(proposed, entrada, n) });
+  };
+
+  const handleEditEntrada = (entrada: number) => {
+    const proposed = editForm.proposed_total || 0;
+    const installments = editForm.new_installments || 1;
+    setEditForm({ ...editForm, entrada_value: entrada, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditSubmit = async () => {
