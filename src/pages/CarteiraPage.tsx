@@ -6,12 +6,10 @@ import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   fetchClients,
   createClient,
   updateClient,
-  deleteClient,
   bulkCreateClients,
   Client,
   ClientFormData,
@@ -30,7 +28,7 @@ import EnrichmentConfirmDialog from "@/components/carteira/EnrichmentConfirmDial
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail, UserPlus, Search } from "lucide-react";
+import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -40,10 +38,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -74,10 +68,10 @@ const CarteiraPage = () => {
     valorAbertoAte: 0,
     semContato: false,
     emDia: false,
+    higienizados: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialerOpen, setDialerOpen] = useState(false);
@@ -86,14 +80,6 @@ const CarteiraPage = () => {
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [sortField, setSortField] = useState<"created_at" | "data_vencimento" | "status_cobranca" | null>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [quitadosDeleteOpen, setQuitadosDeleteOpen] = useState(false);
-  const [quitadosEmail, setQuitadosEmail] = useState("");
-  const [quitadosDeleting, setQuitadosDeleting] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
@@ -302,6 +288,9 @@ const CarteiraPage = () => {
       });
       filtered = filtered.filter(c => emDiaCpfs.has(`${c.cpf.replace(/\D/g, "")}|${c.credor}`));
     }
+    if (filters.higienizados) {
+      filtered = filtered.filter(c => (c as any).enrichment_data != null);
+    }
     if (filters.tipoDevedorId) {
       filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
     }
@@ -367,7 +356,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.higienizados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
@@ -400,15 +389,9 @@ const CarteiraPage = () => {
     onError: () => toast.error("Erro ao atualizar cliente"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteClient(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Cliente excluído!");
-      setDeletingClient(null);
-    },
-    onError: () => toast.error("Erro ao excluir cliente"),
-  });
+  const hasAssignedCredor = useMemo(() => {
+    return [...credorModeMap.values()].some(m => m === "assigned");
+  }, [credorModeMap]);
 
   const importMutation = useMutation({
     mutationFn: (rows: ImportedRow[]) => {
@@ -533,90 +516,6 @@ const CarteiraPage = () => {
 
   const selectedClients = clients.filter((c) => selectedIds.has(c.id));
 
-  const handleBulkDelete = async () => {
-    setPasswordError("");
-    setBulkDeleting(true);
-    try {
-      // Verify admin password by re-authenticating with Supabase
-      const { error } = await supabase.auth.signInWithPassword({
-        email: profile?.user_id
-          ? (await supabase.auth.getUser()).data.user?.email ?? ""
-          : "",
-        password: adminPassword,
-      });
-      if (error) {
-        setPasswordError("Senha incorreta. Tente novamente.");
-        setBulkDeleting(false);
-        return;
-      }
-      // Delete all selected clients in batches of 100
-      const ids = Array.from(selectedIds);
-      const batchSize = 100;
-      for (let i = 0; i < ids.length; i += batchSize) {
-        const batch = ids.slice(i, i + batchSize);
-        const { error: deleteError } = await supabase
-          .from("clients")
-          .delete()
-          .in("id", batch);
-        if (deleteError) throw deleteError;
-      }
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success(`${ids.length} cliente(s) excluído(s) com sucesso!`);
-      setSelectedIds(new Set());
-      setBulkDeleteOpen(false);
-      setAdminPassword("");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao excluir clientes");
-    } finally {
-      setBulkDeleting(false);
-    }
-  };
-
-  const handleDeleteQuitados = async () => {
-    setQuitadosDeleting(true);
-    try {
-      const quitadosList = displayClients.filter(c => c.status === "pago");
-      if (quitadosList.length === 0) {
-        toast.error("Nenhum cliente quitado para excluir");
-        setQuitadosDeleting(false);
-        return;
-      }
-      const { data: { user } } = await supabase.auth.getUser();
-      const adminEmail = user?.email || "";
-      const { error: sendError } = await supabase.functions.invoke("send-quitados-report", {
-        body: {
-          clients: quitadosList.map(c => ({
-            nome_completo: c.nome_completo, cpf: c.cpf, credor: c.credor,
-            numero_parcela: c.numero_parcela, valor_parcela: c.valor_parcela,
-            valor_pago: c.valor_pago, data_vencimento: c.data_vencimento,
-            data_quitacao: (c as any).data_quitacao, status: c.status,
-          })),
-          recipientEmail: quitadosEmail,
-          adminEmail,
-        },
-      });
-      if (sendError) {
-        console.error("Erro ao enviar relatório:", sendError);
-        toast.error("Erro ao enviar relatório por e-mail, mas a exclusão continuará.");
-      }
-      const ids = quitadosList.map(c => c.id);
-      const batchSize = 100;
-      for (let i = 0; i < ids.length; i += batchSize) {
-        const batch = ids.slice(i, i + batchSize);
-        const { error: deleteError } = await supabase.from("clients").delete().in("id", batch);
-        if (deleteError) throw deleteError;
-      }
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success(`${quitadosList.length} cliente(s) quitado(s) excluído(s). Relatório enviado por e-mail.`);
-      setSelectedIds(new Set());
-      setQuitadosDeleteOpen(false);
-      setQuitadosEmail("");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao excluir clientes quitados");
-    } finally {
-      setQuitadosDeleting(false);
-    }
-  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -658,36 +557,16 @@ const CarteiraPage = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950">
-                <UserPlus className="w-4 h-4" />
-                <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
-              </Button>
+              {hasAssignedCredor && (
+                <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950">
+                  <UserPlus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
                 <Search className="w-4 h-4" />
                 <span className="hidden sm:inline">Higienizar</span> ({selectedIds.size})
               </Button>
-              {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setAdminPassword(""); setPasswordError(""); setBulkDeleteOpen(true); }}
-                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Excluir Todos</span> ({selectedIds.size})
-                </Button>
-              )}
-              {permissions.canDeleteCarteira && filters.quitados && displayClients.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setQuitadosEmail(""); setQuitadosDeleteOpen(true); }}
-                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Excluir Quitados</span> ({displayClients.length})
-                </Button>
-              )}
             </>
           )}
           <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} size="sm" className="gap-1.5">
@@ -833,15 +712,6 @@ const CarteiraPage = () => {
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeletingClient(client)}
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -868,27 +738,6 @@ const CarteiraPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deletingClient} onOpenChange={() => setDeletingClient(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir cliente</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir <strong>{deletingClient?.nome_completo}</strong>? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deletingClient && deleteMutation.mutate(deletingClient.id)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Import dialog */}
       <ImportDialog
@@ -923,108 +772,6 @@ const CarteiraPage = () => {
         }}
       />
 
-      <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setAdminPassword(""); setPasswordError(""); setShowPassword(false); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <ShieldAlert className="w-5 h-5" />
-              Excluir {selectedIds.size} cliente(s)
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Esta ação é <strong>irreversível</strong>. Todos os {selectedIds.size} registros selecionados serão permanentemente excluídos.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Para confirmar, insira sua senha de administrador:
-            </p>
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-password">Senha</Label>
-              <div className="relative">
-                <Input
-                  id="admin-password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Digite sua senha"
-                  value={adminPassword}
-                  onChange={(e) => { setAdminPassword(e.target.value); setPasswordError(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && adminPassword && handleBulkDelete()}
-                  autoFocus
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleBulkDelete}
-              disabled={!adminPassword || bulkDeleting}
-              className="gap-1.5"
-            >
-              {bulkDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              {bulkDeleting ? "Excluindo..." : "Confirmar Exclusão"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete quitados with email dialog */}
-      <Dialog open={quitadosDeleteOpen} onOpenChange={(open) => { if (!open) { setQuitadosDeleteOpen(false); setQuitadosEmail(""); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Mail className="w-5 h-5" />
-              Excluir Clientes Quitados
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Serão excluídos <strong>{displayClients.filter(c => c.status === "pago").length}</strong> cliente(s) quitado(s). 
-              Uma planilha com os dados será enviada por e-mail antes da exclusão.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              O relatório será enviado automaticamente para o e-mail do administrador logado. 
-              Informe um e-mail adicional se desejar:
-            </p>
-            <div className="space-y-1.5">
-              <Label htmlFor="quitados-email">E-mail adicional (opcional)</Label>
-              <Input
-                id="quitados-email"
-                type="email"
-                placeholder="email@exemplo.com"
-                value={quitadosEmail}
-                onChange={(e) => setQuitadosEmail(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setQuitadosDeleteOpen(false)} disabled={quitadosDeleting}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteQuitados}
-              disabled={quitadosDeleting}
-              className="gap-1.5"
-            >
-              {quitadosDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              {quitadosDeleting ? "Excluindo..." : "Excluir e Enviar Relatório"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <EnrichmentConfirmDialog
         open={enrichOpen}
