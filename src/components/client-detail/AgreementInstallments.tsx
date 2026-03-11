@@ -179,7 +179,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
                 </TableCell>
               </TableRow>
             );
-          })}
+          });
+          })()}
         </TableBody>
       </Table>
     </div>
