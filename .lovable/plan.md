@@ -1,64 +1,50 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Plano: Filtro "Higienizados", Atribuir condicional, Exclusão para Auditoria
 
-### O que será feito
+## 1. Filtro "Higienizados" na Carteira
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+Adicionar checkbox "Higienizados" ao lado de "Em dia" nos filtros (`ClientFilters.tsx`). Filtra clientes que possuem `enrichment_data IS NOT NULL` (campo JSONB preenchido pela higienização Target Data).
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+- Adicionar `higienizados: boolean` ao tipo `Filters` em `ClientFilters.tsx`
+- Adicionar estado inicial `higienizados: false` em `CarteiraPage.tsx`
+- No `displayClients` memo, filtrar `(c as any).enrichment_data != null` quando ativo
+- O `fetchClients` já retorna todos os campos, incluindo `enrichment_data`
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+## 2. Botão "Atribuir" condicional
 
----
+O botão "Atribuir" na barra de ações em lote só deve aparecer quando **pelo menos um credor** do tenant está configurado com `carteira_mode = "assigned"`. Credores em "Mar Aberto" (`open`) não precisam dessa funcionalidade.
 
-### Explicação das regras e lógicas de Negociação
+- Em `CarteiraPage.tsx`, derivar `hasAssignedCredor` do `credorModeMap`: `[...credorModeMap.values()].some(m => m === "assigned")`
+- Condicionar a renderização do botão "Atribuir" a `hasAssignedCredor`
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+## 3. Mover exclusão da Carteira para Auditoria
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+### Remover da Carteira:
+- Remover botão de excluir individual (Trash2) da coluna "Ações" na tabela
+- Remover botões "Excluir Todos" e "Excluir Quitados" da barra de ações
+- Remover os dialogs `bulkDeleteOpen` e `quitadosDeleteOpen` e toda lógica associada
+- Remover `deleteMutation`, `deletingClient`, estados de bulk delete, etc.
+- Manter a importação `deleteClient` pois será usada na nova página
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+### Criar aba "Exclusão" dentro de Auditoria:
+Transformar `AuditoriaPage.tsx` em componente com **tabs**: "Logs" (conteúdo atual) e "Exclusão de Dados".
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-```
+A aba "Exclusão de Dados" terá 3 seções:
+1. **Exclusão de Importação**: Lista as importações recentes (via `import_logs`), permite excluir todos os clientes de uma importação específica
+2. **Exclusão em Lote**: Filtros (credor, status, vencimento, CPF) + botão excluir com re-autenticação por senha
+3. **Exclusão Individual**: Campo de busca por nome/CPF, seleciona e exclui com confirmação
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+### Permissão:
+- Usar a permissão existente `canDeleteCarteira` (módulo `carteira`, ação `delete`) para controlar acesso à aba de exclusão
+- Admin do tenant tem acesso por padrão (já configurado nos ROLE_DEFAULTS)
+- Operadores/supervisores só veem se tiverem permissão `delete` atribuída
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+## Arquivos a editar
+
+| Arquivo | Ação |
+|---|---|
+| `src/components/clients/ClientFilters.tsx` | Adicionar checkbox "Higienizados" + campo no tipo Filters |
+| `src/pages/CarteiraPage.tsx` | Adicionar filtro higienizados, condicionar Atribuir, remover toda lógica de exclusão |
+| `src/pages/AuditoriaPage.tsx` | Reestruturar com tabs: Logs + Exclusão de Dados (3 seções) |
 
