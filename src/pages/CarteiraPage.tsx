@@ -26,10 +26,11 @@ import ImportDialog from "@/components/clients/ImportDialog";
 import DialerExportDialog from "@/components/carteira/DialerExportDialog";
 import WhatsAppBulkDialog from "@/components/carteira/WhatsAppBulkDialog";
 import AssignOperatorDialog from "@/components/carteira/AssignOperatorDialog";
+import EnrichmentConfirmDialog from "@/components/carteira/EnrichmentConfirmDialog";
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail, UserPlus } from "lucide-react";
+import { Edit, Trash2, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Eye, EyeOff, Mail, UserPlus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
@@ -94,6 +95,7 @@ const CarteiraPage = () => {
   const [quitadosEmail, setQuitadosEmail] = useState("");
   const [quitadosDeleting, setQuitadosDeleting] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [enrichOpen, setEnrichOpen] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
@@ -660,6 +662,10 @@ const CarteiraPage = () => {
                 <UserPlus className="w-4 h-4" />
                 <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
+                <Search className="w-4 h-4" />
+                <span className="hidden sm:inline">Higienizar</span> ({selectedIds.size})
+              </Button>
               {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
                 <Button
                   variant="outline"
@@ -1019,6 +1025,16 @@ const CarteiraPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EnrichmentConfirmDialog
+        open={enrichOpen}
+        onOpenChange={setEnrichOpen}
+        selectedClients={selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor }))}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+          setSelectedIds(new Set());
+        }}
+      />
     </div>
   );
 };
