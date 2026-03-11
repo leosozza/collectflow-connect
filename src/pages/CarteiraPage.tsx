@@ -382,27 +382,9 @@ const CarteiraPage = () => {
     onError: () => toast.error("Erro ao cadastrar cliente"),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<ClientFormData> }) =>
-      updateClient(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Cliente atualizado!");
-      setFormOpen(false);
-      setEditingClient(null);
-    },
-    onError: () => toast.error("Erro ao atualizar cliente"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteClient(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Cliente excluído!");
-      setDeletingClient(null);
-    },
-    onError: () => toast.error("Erro ao excluir cliente"),
-  });
+  const hasAssignedCredor = useMemo(() => {
+    return [...credorModeMap.values()].some(m => m === "assigned");
+  }, [credorModeMap]);
 
   const importMutation = useMutation({
     mutationFn: (rows: ImportedRow[]) => {
