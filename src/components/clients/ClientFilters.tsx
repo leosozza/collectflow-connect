@@ -34,6 +34,7 @@ interface Filters {
   valorAbertoAte: number;
   semContato: boolean;
   emDia: boolean;
+  higienizados: boolean;
 }
 
 interface ClientFiltersProps {
