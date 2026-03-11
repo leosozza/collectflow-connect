@@ -185,7 +185,7 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Negociado no Mês</p>
+          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
           <p className="text-4xl font-bold text-primary-foreground tracking-tight">
             {formatCurrency(stats?.total_negociado ?? 0)}
           </p>
