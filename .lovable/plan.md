@@ -1,64 +1,76 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Higienização pela Carteira — Seleção de Clientes
 
-### O que será feito
+## Conceito
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+Sim, é totalmente possível. A Carteira já tem toda a infraestrutura necessária: filtros avançados (credor, status, tipo devedor, etc.), agrupamento por CPF e seleção com checkboxes (`selectedIds`). Já existem ações em lote como WhatsApp, Discador e Atribuir que aparecem quando clientes são selecionados.
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+A higienização será mais uma **ação em lote** no mesmo padrão.
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+## Fluxo do Usuário
 
----
+1. Operador/Admin abre **Carteira**
+2. Filtra por credor, status, período, etc.
+3. Seleciona clientes via checkboxes (individual ou "selecionar todos")
+4. Clica no botão **"Higienizar" (N)** que aparece na barra de ações
+5. Dialog de confirmação mostra: quantidade de CPFs únicos, custo em tokens, saldo atual
+6. Confirma → sistema envia CPFs para Edge Function → atualiza cadastros → consome tokens
 
-### Explicação das regras e lógicas de Negociação
+## Implementação
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+### 1. Banco de Dados (Migration)
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+- Criar tabelas `enrichment_jobs` e `enrichment_logs` para rastrear jobs
+- Adicionar campos `phone2`, `phone3`, `enrichment_data` (JSONB) na tabela `clients`
+- Inserir serviço "Higienização" no `service_catalog` com `unit_price = 0.15`
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+### 2. Edge Function `targetdata-enrich`
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+- Recebe `{ tenant_id, cpfs[], job_id }`
+- Valida saldo de tokens
+- Chama Target Data API (`POST /v1/search/pf`) em lotes de 10 CPFs
+- Atualiza `clients`: telefones, email, endereço, cidade, UF, CEP
+- Consome tokens via RPC `consume_tokens` apenas por CPF com retorno
+- Registra resultados em `enrichment_logs`
+
+### 3. Frontend — Botão na Carteira (`CarteiraPage.tsx`)
+
+Adicionar na barra de ações (junto com WhatsApp, Discador, Atribuir):
+
+```text
+[WhatsApp (5)] [Discador (5)] [Atribuir (5)] [🔍 Higienizar (5)]
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+O botão abre um `EnrichmentConfirmDialog` que mostra:
+- N CPFs únicos selecionados
+- Custo: N × R$ 0,15 = R$ X,XX
+- Saldo atual: Y tokens
+- Botão confirmar (desabilitado se saldo insuficiente)
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+### 4. Dialog de Confirmação (`EnrichmentConfirmDialog.tsx`)
+
+- Calcula CPFs únicos dos `selectedIds`
+- Consulta saldo via `check_token_balance`
+- Ao confirmar: cria `enrichment_job`, invoca edge function, mostra progresso
+- Toast de sucesso com resumo (X atualizados, Y não encontrados)
+
+### 5. Super Admin — Preço por Tenant
+
+Usar infraestrutura existente de `tenant_services` + `service_catalog`. O serviço "Higienização" aparece automaticamente na gestão de serviços com `unit_price_override` editável por tenant.
+
+### 6. Secrets Necessários
+
+- `TARGETDATA_API_KEY` — chave da conta matrix RIVO
+- `TARGETDATA_API_SECRET` — secret da conta matrix
+
+### Arquivos
+
+| Arquivo | Ação |
+|---|---|
+| Migration SQL | Criar `enrichment_jobs`, `enrichment_logs`, alterar `clients`, inserir serviço no catálogo |
+| `supabase/functions/targetdata-enrich/index.ts` | Edge function de higienização |
+| `src/components/carteira/EnrichmentConfirmDialog.tsx` | Dialog de confirmação com custo/saldo |
+| `src/pages/CarteiraPage.tsx` | Adicionar botão "Higienizar" na barra de ações |
+| `src/pages/IntegracaoPage.tsx` | Aba "Higienização" para histórico/config (opcional, fase 2) |
 
