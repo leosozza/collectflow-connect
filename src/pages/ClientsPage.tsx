@@ -52,6 +52,7 @@ const ClientsPage = () => {
     valorAbertoAte: 0,
     semContato: false,
     emDia: false,
+    higienizados: false,
   });
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
