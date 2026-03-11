@@ -95,6 +95,7 @@ const CarteiraPage = () => {
   const [quitadosEmail, setQuitadosEmail] = useState("");
   const [quitadosDeleting, setQuitadosDeleting] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [enrichOpen, setEnrichOpen] = useState(false);
 
   const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
     if (sortField === field) {
