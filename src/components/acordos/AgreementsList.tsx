@@ -38,7 +38,7 @@ const statusLabels: Record<string, string> = {
   overdue: "Vencido",
 };
 
-const activeStatuses = ["pending", "pending_approval", "approved"];
+const activeStatuses = ["pending", "pending_approval", "approved", "overdue"];
 
 const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, onEdit }: AgreementsListProps) => {
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -83,7 +83,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    {isAdmin && (a.status === "pending" || a.status === "pending_approval") && (
+                    {isAdmin && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
                       <>
                         <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
                           <Check className="w-4 h-4 text-green-600" />
