@@ -572,28 +572,6 @@ const CarteiraPage = () => {
                 <Search className="w-4 h-4" />
                 <span className="hidden sm:inline">Higienizar</span> ({selectedIds.size})
               </Button>
-              {permissions.canDeleteCarteira && selectedIds.size === allClientIds.length && allClientIds.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setAdminPassword(""); setPasswordError(""); setBulkDeleteOpen(true); }}
-                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Excluir Todos</span> ({selectedIds.size})
-                </Button>
-              )}
-              {permissions.canDeleteCarteira && filters.quitados && displayClients.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setQuitadosEmail(""); setQuitadosDeleteOpen(true); }}
-                  className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Excluir Quitados</span> ({displayClients.length})
-                </Button>
-              )}
             </>
           )}
           <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} size="sm" className="gap-1.5">
