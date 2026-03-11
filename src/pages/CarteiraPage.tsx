@@ -11,7 +11,6 @@ import {
   fetchClients,
   createClient,
   updateClient,
-  deleteClient,
   bulkCreateClients,
   Client,
   ClientFormData,
