@@ -34,6 +34,7 @@ const monthNames = [
 interface DashboardStats {
   total_projetado: number;
   total_negociado: number;
+  total_negociado_mes: number;
   total_recebido: number;
   total_quebra: number;
   total_pendente: number;
