@@ -114,11 +114,26 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
           </TableRow>
         </TableHeader>
         <TableBody>
-          {installments.map((inst) => {
-            const isOverdue = inst.dueDate < new Date();
+          {(() => {
+            // Track cumulative paid to determine which installments are covered
+            let remainingPaid = totalPaidFromClients;
+            return installments.map((inst) => {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
+            const isOverdue = dueDay < today;
             const hasBoleto = inst.cobranca?.link_boleto;
             const hasPix = inst.cobranca?.pix_copia_cola;
-            const status = inst.cobranca?.status || (isOverdue ? "vencido" : "pendente");
+            
+            // Determine paid status: cobranca status OR manual payment from clients
+            const instValue = Number(inst.value);
+            let isPaidManually = false;
+            if (remainingPaid >= instValue) {
+              isPaidManually = true;
+              remainingPaid -= instValue;
+            } else {
+              remainingPaid = 0;
+            }
+            const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
 
             return (
               <TableRow key={inst.number}>
