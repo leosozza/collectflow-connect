@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
@@ -48,6 +49,12 @@ const AcordosPage = () => {
   const load = async () => {
     setLoading(true);
     try {
+      // Trigger auto-expire check before loading
+      try {
+        await supabase.functions.invoke("auto-expire-agreements");
+      } catch (_) {
+        // Non-blocking: if edge function fails, still load agreements
+      }
       const filters: { created_by?: string } = {};
       if (!isAdmin && user) filters.created_by = user.id;
       const data = await fetchAgreements(Object.keys(filters).length > 0 ? filters : undefined);
