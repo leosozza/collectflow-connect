@@ -38,7 +38,7 @@ const statusLabels: Record<string, string> = {
   overdue: "Vencido",
 };
 
-const activeStatuses = ["pending", "pending_approval", "approved"];
+const activeStatuses = ["pending", "pending_approval", "approved", "overdue"];
 
 const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, onEdit }: AgreementsListProps) => {
   const [cancelId, setCancelId] = useState<string | null>(null);
