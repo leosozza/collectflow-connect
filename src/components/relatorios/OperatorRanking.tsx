@@ -1,35 +1,42 @@
 import { useMemo } from "react";
-import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Trophy, Download, Printer } from "lucide-react";
 import { exportToExcel, printSection } from "@/lib/exportUtils";
 
+interface Agreement {
+  id: string;
+  proposed_total: number;
+  status: string;
+  created_by: string;
+}
+
 interface OperatorRankingProps {
-  clients: Client[];
+  agreements: Agreement[];
   operators: { id: string; name: string }[];
 }
 
-const OperatorRanking = ({ clients, operators }: OperatorRankingProps) => {
+const OperatorRanking = ({ agreements, operators }: OperatorRankingProps) => {
   const ranking = useMemo(() => {
     const map = new Map<string, { received: number; broken: number; total: number; count: number }>();
 
-    clients.forEach((c) => {
-      const opId = c.operator_id || "sem-operador";
+    agreements.forEach((a) => {
+      if (a.status === "rejected") return;
+      const opId = a.created_by || "sem-operador";
       if (!map.has(opId)) map.set(opId, { received: 0, broken: 0, total: 0, count: 0 });
       const entry = map.get(opId)!;
-      entry.total += Number(c.valor_parcela);
       entry.count += 1;
-      if (c.status === "pago") entry.received += Number(c.valor_pago);
-      if (c.status === "quebrado") entry.broken += Number(c.valor_parcela);
+      entry.total += Number(a.proposed_total);
+      if (a.status === "completed") entry.received += Number(a.proposed_total);
+      if (a.status === "cancelled") entry.broken += Number(a.proposed_total);
     });
 
     return Array.from(map.entries())
       .map(([opId, stats]) => {
         const op = operators.find((o) => o.id === opId);
         const resolved = stats.received + stats.broken;
-        const pctReceived = resolved > 0 ? (stats.received / (stats.received + stats.broken)) * 100 : 0;
+        const pctReceived = resolved > 0 ? (stats.received / resolved) * 100 : 0;
         return {
           id: opId,
           name: op?.name || "Sem operador",
@@ -38,13 +45,13 @@ const OperatorRanking = ({ clients, operators }: OperatorRankingProps) => {
         };
       })
       .sort((a, b) => b.received - a.received);
-  }, [clients, operators]);
+  }, [agreements, operators]);
 
   const handleExcel = () => {
     const rows = ranking.map((op, idx) => ({
       "#": idx + 1,
       Operador: op.name,
-      Parcelas: op.count,
+      Acordos: op.count,
       Recebido: op.received,
       Quebra: op.broken,
       "% Sucesso": op.pctReceived.toFixed(1) + "%",
@@ -73,7 +80,7 @@ const OperatorRanking = ({ clients, operators }: OperatorRankingProps) => {
           <TableRow className="bg-muted/50">
             <TableHead className="text-xs w-10">#</TableHead>
             <TableHead className="text-xs">Operador</TableHead>
-            <TableHead className="text-xs text-center">Parcelas</TableHead>
+            <TableHead className="text-xs text-center">Acordos</TableHead>
             <TableHead className="text-xs text-right">Recebido</TableHead>
             <TableHead className="text-xs text-right">Quebra</TableHead>
             <TableHead className="text-xs text-right">% Sucesso</TableHead>

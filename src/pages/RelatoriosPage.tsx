@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchClients } from "@/services/clientService";
 import { supabase } from "@/integrations/supabase/client";
-import { parseISO, differenceInDays } from "date-fns";
+import { useTenant } from "@/hooks/useTenant";
+import { parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Printer } from "lucide-react";
@@ -16,6 +17,7 @@ import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
   const now = new Date();
+  const { tenant } = useTenant();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [selectedCredor, setSelectedCredor] = useState("todos");
@@ -40,76 +42,45 @@ const RelatoriosPage = () => {
   });
 
   const { data: agreements = [] } = useQuery({
-    queryKey: ["agreements-report"],
+    queryKey: ["agreements-report", tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("agreements").select("*");
+      let query = supabase.from("agreements").select("*");
+      if (tenant?.id) query = query.eq("tenant_id", tenant.id);
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
-  });
-
-  const { data: credoresData = [] } = useQuery({
-    queryKey: ["credores-report"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("credores").select("razao_social, prazo_dias_acordo");
-      if (error) throw error;
-      return data || [];
-    },
+    enabled: !!tenant?.id,
   });
 
   const credores = useMemo(() => {
     return [...new Set(clients.map((c) => c.credor))].sort();
   }, [clients]);
 
-  const credorPrazoMap = useMemo(() => {
-    const map = new Map<string, number>();
-    credoresData.forEach((c: any) => map.set(c.razao_social, c.prazo_dias_acordo ?? 30));
-    return map;
-  }, [credoresData]);
+  // Filter agreements by selected filters
+  const filteredAgreements = useMemo(() => {
+    return agreements.filter((a: any) => {
+      if (a.status === "rejected") return false;
+      const d = parseISO(a.created_at);
+      if (d.getFullYear() !== parseInt(selectedYear)) return false;
+      if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
+      if (selectedCredor !== "todos" && a.credor !== selectedCredor) return false;
+      if (selectedOperator !== "todos" && a.created_by !== selectedOperator) return false;
 
-  const agreementDerivedStatus = useMemo(() => {
-    const today = new Date();
-    return agreements.filter((a: any) => a.status !== "cancelled").map((a: any) => {
-      const cpf = a.client_cpf?.replace(/\D/g, "") || "";
-      const prazo = credorPrazoMap.get(a.credor) ?? 30;
-      const firstDue = parseISO(a.first_due_date);
-      const daysSinceFirstDue = differenceInDays(today, firstDue);
-
-      let derivedStatus: "pago" | "pendente" | "quebra";
-      if (a.status === "approved" || a.status === "completed") {
-        const relatedClients = clients.filter(
-          (c) => c.cpf.replace(/\D/g, "") === cpf && c.credor === a.credor
-        );
-        const allPaid = relatedClients.length > 0 && relatedClients.every((c) => c.status === "pago");
-        if (allPaid) derivedStatus = "pago";
-        else if (daysSinceFirstDue > prazo) derivedStatus = "quebra";
-        else derivedStatus = "pendente";
-      } else if (a.status === "pending") {
-        derivedStatus = daysSinceFirstDue > prazo ? "quebra" : "pendente";
-      } else {
-        derivedStatus = "quebra";
+      // Status filter mapping
+      if (selectedStatus !== "todos") {
+        if (selectedStatus === "pago" && a.status !== "completed") return false;
+        if (selectedStatus === "pendente" && !["pending", "pending_approval", "approved", "overdue"].includes(a.status)) return false;
+        if (selectedStatus === "quebra" && a.status !== "cancelled") return false;
       }
 
-      return { cpf, credor: a.credor, derivedStatus };
+      return true;
     });
-  }, [agreements, clients, credorPrazoMap]);
+  }, [agreements, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedStatus]);
 
-  const agreementFilteredCpfs = useMemo(() => {
-    if (selectedStatus === "todos") return null;
-    const cpfs = new Set<string>();
-    agreementDerivedStatus
-      .filter((a) => a.derivedStatus === selectedStatus)
-      .forEach((a) => cpfs.add(a.cpf));
-    return cpfs;
-  }, [selectedStatus, agreementDerivedStatus]);
-
-  const allAgreementCpfs = useMemo(() => {
-    return new Set(agreements.filter((a: any) => a.status !== "cancelled" && a.status !== "rejected").map((a: any) => a.client_cpf?.replace(/\D/g, "")));
-  }, [agreements]);
-
+  // Filter clients for aging (still installment-based)
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
-      if (!allAgreementCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       const d = parseISO(c.data_vencimento);
       if (d.getFullYear() !== parseInt(selectedYear)) return false;
       if (selectedMonth !== "all" && d.getMonth() !== parseInt(selectedMonth)) return false;
@@ -119,21 +90,27 @@ const RelatoriosPage = () => {
       if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
       if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
       if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
-      if (agreementFilteredCpfs !== null && !agreementFilteredCpfs.has(c.cpf.replace(/\D/g, ""))) return false;
       return true;
     });
-  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte, agreementFilteredCpfs, allAgreementCpfs]);
+  }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte]);
+
+  // KPIs from agreements
+  const activeAgreements = filteredAgreements.filter((a: any) => a.status !== "cancelled");
+  const totalNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+  const totalRecebido = filteredAgreements.filter((a: any) => a.status === "completed").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+  const totalQuebra = filteredAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+  const totalPendente = activeAgreements.filter((a: any) => ["pending", "pending_approval", "approved", "overdue"].includes(a.status)).reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
 
   const exportExcel = () => {
-    const rows = filteredClients.map((c) => ({
-      Nome: c.nome_completo,
-      CPF: c.cpf,
-      Credor: c.credor,
-      Parcela: `${c.numero_parcela}/${c.total_parcelas}`,
-      "Valor Parcela": Number(c.valor_parcela),
-      "Valor Pago": Number(c.valor_pago),
-      Vencimento: c.data_vencimento,
-      Status: c.status,
+    const rows = filteredAgreements.map((a: any) => ({
+      Cliente: a.client_name,
+      CPF: a.client_cpf,
+      Credor: a.credor,
+      "Valor Original": Number(a.original_total),
+      "Valor Negociado": Number(a.proposed_total),
+      "1º Vencimento": a.first_due_date,
+      Status: a.status,
+      "Data Criação": a.created_at,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -191,10 +168,10 @@ const RelatoriosPage = () => {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: "Total Parcelas", value: filteredClients.length },
-              { label: "Total Recebido", value: formatCurrency(filteredClients.filter((c) => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0)) },
-              { label: "Total Quebra", value: formatCurrency(filteredClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0)) },
-              { label: "Pendentes", value: filteredClients.filter((c) => c.status === "pendente").length },
+              { label: "Total Acordos", value: activeAgreements.length },
+              { label: "Total Recebido", value: formatCurrency(totalRecebido) },
+              { label: "Total Quebra", value: formatCurrency(totalQuebra) },
+              { label: "Total Pendente", value: formatCurrency(totalPendente) },
             ].map((item) => (
               <div key={item.label} className="bg-card rounded-xl border border-border p-4">
                 <p className="text-xs text-muted-foreground">{item.label}</p>
@@ -203,11 +180,11 @@ const RelatoriosPage = () => {
             ))}
           </div>
 
-          <EvolutionChart clients={filteredClients} year={parseInt(selectedYear)} />
+          <EvolutionChart agreements={filteredAgreements} year={parseInt(selectedYear)} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <AgingReport clients={filteredClients} />
-            <OperatorRanking clients={filteredClients} operators={profiles} />
+            <OperatorRanking agreements={filteredAgreements} operators={profiles} />
           </div>
         </TabsContent>
 
