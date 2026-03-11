@@ -303,6 +303,9 @@ const CarteiraPage = () => {
       });
       filtered = filtered.filter(c => emDiaCpfs.has(`${c.cpf.replace(/\D/g, "")}|${c.credor}`));
     }
+    if (filters.higienizados) {
+      filtered = filtered.filter(c => (c as any).enrichment_data != null);
+    }
     if (filters.tipoDevedorId) {
       filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
     }
