@@ -20,7 +20,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
   const { data: cobrancas = [] } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
     queryFn: async () => {
-      const rawCpf = cpf.replace(/\D/g, "");
       const { data, error } = await supabase
         .from("negociarie_cobrancas" as any)
         .select("*")
@@ -31,6 +30,25 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
     },
     enabled: !!agreementId,
   });
+
+  // Fetch clients em_acordo for this CPF to detect manual payments
+  const { data: clientRecords = [] } = useQuery({
+    queryKey: ["agreement-client-payments", cpf, agreementId],
+    queryFn: async () => {
+      const rawCpf = cpf.replace(/\D/g, "");
+      const { data, error } = await supabase
+        .from("clients")
+        .select("valor_pago, valor_parcela, status")
+        .or(`cpf.eq.${rawCpf},cpf.eq.${cpf}`)
+        .in("status", ["em_acordo", "pago"]);
+      if (error) return [];
+      return (data as any[]) || [];
+    },
+    enabled: !!cpf,
+  });
+
+  // Calculate total paid from client records linked to this agreement
+  const totalPaidFromClients = clientRecords.reduce((sum: number, c: any) => sum + Number(c.valor_pago || 0), 0);
 
   // Generate virtual installments from agreement data
   const hasEntrada = agreement.entrada_value > 0;
