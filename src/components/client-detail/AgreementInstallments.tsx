@@ -20,7 +20,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
   const { data: cobrancas = [] } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
     queryFn: async () => {
-      const rawCpf = cpf.replace(/\D/g, "");
       const { data, error } = await supabase
         .from("negociarie_cobrancas" as any)
         .select("*")
@@ -31,6 +30,25 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
     },
     enabled: !!agreementId,
   });
+
+  // Fetch clients em_acordo for this CPF to detect manual payments
+  const { data: clientRecords = [] } = useQuery({
+    queryKey: ["agreement-client-payments", cpf, agreementId],
+    queryFn: async () => {
+      const rawCpf = cpf.replace(/\D/g, "");
+      const { data, error } = await supabase
+        .from("clients")
+        .select("valor_pago, valor_parcela, status")
+        .or(`cpf.eq.${rawCpf},cpf.eq.${cpf}`)
+        .in("status", ["em_acordo", "pago"]);
+      if (error) return [];
+      return (data as any[]) || [];
+    },
+    enabled: !!cpf,
+  });
+
+  // Calculate total paid from client records linked to this agreement
+  const totalPaidFromClients = clientRecords.reduce((sum: number, c: any) => sum + Number(c.valor_pago || 0), 0);
 
   // Generate virtual installments from agreement data
   const hasEntrada = agreement.entrada_value > 0;
@@ -96,11 +114,26 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
           </TableRow>
         </TableHeader>
         <TableBody>
-          {installments.map((inst) => {
-            const isOverdue = inst.dueDate < new Date();
+          {(() => {
+            // Track cumulative paid to determine which installments are covered
+            let remainingPaid = totalPaidFromClients;
+            return installments.map((inst) => {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
+            const isOverdue = dueDay < today;
             const hasBoleto = inst.cobranca?.link_boleto;
             const hasPix = inst.cobranca?.pix_copia_cola;
-            const status = inst.cobranca?.status || (isOverdue ? "vencido" : "pendente");
+            
+            // Determine paid status: cobranca status OR manual payment from clients
+            const instValue = Number(inst.value);
+            let isPaidManually = false;
+            if (remainingPaid >= instValue) {
+              isPaidManually = true;
+              remainingPaid -= instValue;
+            } else {
+              remainingPaid = 0;
+            }
+            const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
 
             return (
               <TableRow key={inst.number}>
@@ -146,7 +179,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
                 </TableCell>
               </TableRow>
             );
-          })}
+          });
+          })()}
         </TableBody>
       </Table>
     </div>
