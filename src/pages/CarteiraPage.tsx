@@ -74,6 +74,7 @@ const CarteiraPage = () => {
     valorAbertoAte: 0,
     semContato: false,
     emDia: false,
+    higienizados: false,
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
