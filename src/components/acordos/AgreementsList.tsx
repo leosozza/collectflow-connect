@@ -83,7 +83,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    {isAdmin && (a.status === "pending" || a.status === "pending_approval") && (
+                    {isAdmin && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
                       <>
                         <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
                           <Check className="w-4 h-4 text-green-600" />
