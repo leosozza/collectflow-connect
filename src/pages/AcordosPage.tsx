@@ -40,7 +40,7 @@ const AcordosPage = () => {
   const [credorFilter, setCredorFilter] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [editingAgreement, setEditingAgreement] = useState<Agreement | null>(null);
-  const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; notes: string }>>({});
+  const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; entrada_value: number; entrada_date: string; notes: string }>>({});
   const [editLoading, setEditLoading] = useState(false);
 
   const isAdmin = permissions.canApproveAcordos;
