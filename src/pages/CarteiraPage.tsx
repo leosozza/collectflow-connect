@@ -78,7 +78,6 @@ const CarteiraPage = () => {
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialerOpen, setDialerOpen] = useState(false);
@@ -87,14 +86,6 @@ const CarteiraPage = () => {
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [sortField, setSortField] = useState<"created_at" | "data_vencimento" | "status_cobranca" | null>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [quitadosDeleteOpen, setQuitadosDeleteOpen] = useState(false);
-  const [quitadosEmail, setQuitadosEmail] = useState("");
-  const [quitadosDeleting, setQuitadosDeleting] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
