@@ -32,21 +32,22 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
   );
 
   const credorAgreements = useMemo(
-    () => (selectedCredor ? agreements.filter((a: any) => a.credor === selectedCredor) : []),
+    () => (selectedCredor ? agreements.filter((a: any) => a.credor === selectedCredor && a.status !== "rejected") : []),
     [agreements, selectedCredor]
   );
 
-  // Summary
+  // Summary based on agreements
   const summary = useMemo(() => {
-    const total = credorClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const recebido = credorClients.filter((c) => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0);
-    const pendente = credorClients.filter((c) => c.status === "pendente").reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const quebra = credorClients.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0);
-    const taxa = total > 0 ? (recebido / total) * 100 : 0;
-    return { total: credorClients.length, valorTotal: total, recebido, pendente, quebra, taxa };
-  }, [credorClients]);
+    const activeAgreements = credorAgreements.filter((a: any) => a.status !== "cancelled");
+    const valorNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    const recebido = credorAgreements.filter((a: any) => a.status === "completed").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    const pendente = credorAgreements.filter((a: any) => ["pending", "pending_approval", "approved", "overdue"].includes(a.status)).reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    const quebra = credorAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    const taxa = (recebido + quebra) > 0 ? (recebido / (recebido + quebra)) * 100 : 0;
+    return { total: credorAgreements.length, valorNegociado, recebido, pendente, quebra, taxa };
+  }, [credorAgreements]);
 
-  // Aging
+  // Aging (still from parcels — correct for installment-level aging)
   const agingData = useMemo(() => {
     const overdue = credorClients.filter((c) => c.status === "pendente" && parseISO(c.data_vencimento) < today);
     return AGING_BUCKETS.map((b) => {
@@ -63,32 +64,34 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
     const total = credorAgreements.length;
     const aprovados = credorAgreements.filter((a: any) => a.status === "approved").length;
     const pendentes = credorAgreements.filter((a: any) => a.status === "pending" || a.status === "pending_approval").length;
-    const cancelados = credorAgreements.filter((a: any) => a.status === "cancelled" || a.status === "rejected").length;
+    const vencidos = credorAgreements.filter((a: any) => a.status === "overdue").length;
+    const pagos = credorAgreements.filter((a: any) => a.status === "completed").length;
+    const cancelados = credorAgreements.filter((a: any) => a.status === "cancelled").length;
     const valorOriginal = credorAgreements.reduce((s: number, a: any) => s + Number(a.original_total), 0);
-    const valorNegociado = credorAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-    return { total, aprovados, pendentes, cancelados, valorOriginal, valorNegociado };
+    const valorNegociado = credorAgreements.filter((a: any) => a.status !== "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    return { total, aprovados, pendentes, vencidos, pagos, cancelados, valorOriginal, valorNegociado };
   }, [credorAgreements]);
 
-  // Operator ranking
+  // Operator ranking based on agreements
   const opRanking = useMemo(() => {
     const map = new Map<string, { received: number; broken: number; count: number }>();
-    credorClients.forEach((c) => {
-      const opId = c.operator_id || "sem-operador";
+    credorAgreements.forEach((a: any) => {
+      const opId = a.created_by || "sem-operador";
       if (!map.has(opId)) map.set(opId, { received: 0, broken: 0, count: 0 });
       const e = map.get(opId)!;
       e.count++;
-      if (c.status === "pago") e.received += Number(c.valor_pago);
-      if (c.status === "quebrado") e.broken += Number(c.valor_parcela);
+      if (a.status === "completed") e.received += Number(a.proposed_total);
+      if (a.status === "cancelled") e.broken += Number(a.proposed_total);
     });
     return Array.from(map.entries())
       .map(([id, stats]) => ({ id, name: operators.find((o) => o.id === id)?.name || "Sem operador", ...stats }))
       .sort((a, b) => b.received - a.received);
-  }, [credorClients, operators]);
+  }, [credorAgreements, operators]);
 
   const handleExcel = () => {
     const resumoRows = [
-      { Indicador: "Total Parcelas", Valor: summary.total },
-      { Indicador: "Valor Total Carteira", Valor: summary.valorTotal },
+      { Indicador: "Total Acordos", Valor: summary.total },
+      { Indicador: "Valor Negociado", Valor: summary.valorNegociado },
       { Indicador: "Total Recebido", Valor: summary.recebido },
       { Indicador: "Total Pendente", Valor: summary.pendente },
       { Indicador: "Total Quebra", Valor: summary.quebra },
@@ -176,11 +179,11 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
       </div>
 
       <div id="prestacao-contas-content" className="space-y-6">
-        {/* Resumo */}
+        {/* Resumo based on agreements */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
-            { label: "Total Parcelas", value: summary.total },
-            { label: "Valor Carteira", value: formatCurrency(summary.valorTotal) },
+            { label: "Total Acordos", value: summary.total },
+            { label: "Valor Negociado", value: formatCurrency(summary.valorNegociado) },
             { label: "Recebido", value: formatCurrency(summary.recebido) },
             { label: "Pendente", value: formatCurrency(summary.pendente) },
             { label: "Quebra", value: formatCurrency(summary.quebra) },
@@ -195,7 +198,7 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
 
         {/* Aging */}
         <div className="bg-card rounded-xl border border-border p-5">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Aging da Carteira</h3>
+          <h3 className="text-sm font-semibold text-card-foreground mb-3">Aging da Carteira (Parcelas)</h3>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -221,13 +224,14 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
         {/* Acordos */}
         <div className="bg-card rounded-xl border border-border p-5">
           <h3 className="text-sm font-semibold text-card-foreground mb-3">Acordos</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
             {[
               { label: "Total", value: acordosSummary.total },
               { label: "Aprovados", value: acordosSummary.aprovados },
               { label: "Pendentes", value: acordosSummary.pendentes },
+              { label: "Vencidos", value: acordosSummary.vencidos },
+              { label: "Pagos", value: acordosSummary.pagos },
               { label: "Cancelados", value: acordosSummary.cancelados },
-              { label: "Valor Original", value: formatCurrency(acordosSummary.valorOriginal) },
               { label: "Valor Negociado", value: formatCurrency(acordosSummary.valorNegociado) },
             ].map((item) => (
               <div key={item.label} className="text-center">
@@ -238,7 +242,7 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
           </div>
         </div>
 
-        {/* Ranking operadores */}
+        {/* Ranking operadores based on agreements */}
         <div className="bg-card rounded-xl border border-border p-5">
           <h3 className="text-sm font-semibold text-card-foreground mb-3">Ranking de Operadores</h3>
           <Table>
@@ -246,7 +250,7 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
               <TableRow className="bg-muted/50">
                 <TableHead className="text-xs w-10">#</TableHead>
                 <TableHead className="text-xs">Operador</TableHead>
-                <TableHead className="text-xs text-center">Parcelas</TableHead>
+                <TableHead className="text-xs text-center">Acordos</TableHead>
                 <TableHead className="text-xs text-right">Recebido</TableHead>
                 <TableHead className="text-xs text-right">Quebra</TableHead>
               </TableRow>

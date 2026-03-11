@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
 import { formatCurrency } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -16,18 +17,20 @@ import {
 } from "recharts";
 import * as XLSX from "xlsx";
 
-interface ClientRow {
+interface AgreementRow {
   id: string;
-  operator_id: string | null;
-  valor_parcela: number;
-  valor_pago: number;
-  status: string;
-  data_vencimento: string;
-  nome_completo: string;
-  cpf: string;
+  client_cpf: string;
+  client_name: string;
   credor: string;
-  updated_at: string;
+  proposed_total: number;
+  original_total: number;
+  status: string;
   created_at: string;
+  created_by: string;
+  first_due_date: string;
+  new_installments: number;
+  new_installment_value: number;
+  entrada_value: number | null;
 }
 
 interface Profile {
@@ -42,10 +45,22 @@ const monthNames = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-const STATUS_COLORS = {
-  pago: "hsl(142, 71%, 45%)",
-  pendente: "hsl(38, 92%, 50%)",
-  quebrado: "hsl(0, 84%, 60%)",
+const STATUS_COLORS: Record<string, string> = {
+  approved: "hsl(142, 71%, 45%)",
+  completed: "hsl(142, 71%, 35%)",
+  pending: "hsl(38, 92%, 50%)",
+  pending_approval: "hsl(38, 70%, 60%)",
+  overdue: "hsl(24, 95%, 53%)",
+  cancelled: "hsl(0, 84%, 60%)",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  approved: "Vigentes",
+  completed: "Pagos",
+  pending: "Pendentes",
+  pending_approval: "Aguardando",
+  overdue: "Vencidos",
+  cancelled: "Cancelados",
 };
 
 const generateYearOptions = () => {
@@ -68,6 +83,7 @@ const InfoTooltip = ({ text }: { text: string }) => (
 
 const AnalyticsPage = () => {
   const { profile } = useAuth();
+  const { tenant } = useTenant();
   const navigate = useNavigate();
   const now = new Date();
 
@@ -78,136 +94,148 @@ const AnalyticsPage = () => {
 
   const isOperator = profile?.role !== "admin";
 
-  const { data: rawClients = [] } = useQuery({
-    queryKey: ["analytics-clients", isOperator ? profile?.id : "all"],
+  // Fetch agreements with all relevant fields, filtered by tenant
+  const { data: allAgreements = [] } = useQuery({
+    queryKey: ["analytics-agreements", tenant?.id, isOperator ? profile?.id : "all"],
     queryFn: async () => {
-      let query = supabase.from("clients").select("*");
+      let query = supabase
+        .from("agreements")
+        .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by, first_due_date, new_installments, new_installment_value, entrada_value")
+        .not("status", "in", "(rejected)");
+
+      if (tenant?.id) {
+        query = query.eq("tenant_id", tenant.id);
+      }
       if (isOperator && profile?.id) {
-        query = query.eq("operator_id", profile.id);
+        query = query.eq("created_by", profile.id);
       }
       const { data, error } = await query;
       if (error) throw error;
-      return data as ClientRow[];
+      return (data || []) as AgreementRow[];
     },
+    enabled: !!tenant?.id,
   });
 
-  const { data: analyticsAgreements = [] } = useQuery({
-    queryKey: ["analytics-agreements"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("agreements").select("client_cpf");
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Filter clients to only those with agreements
-  const agreementCpfSet = useMemo(() => {
-    return new Set(analyticsAgreements.map((a: any) => a.client_cpf?.replace(/\D/g, "")));
-  }, [analyticsAgreements]);
-
-  const allClients = useMemo(() => {
-    return rawClients.filter(c => agreementCpfSet.has(c.cpf.replace(/\D/g, "")));
-  }, [rawClients, agreementCpfSet]);
-
+  // Fetch operators filtered by tenant
   const { data: operators = [] } = useQuery({
-    queryKey: ["operators"],
+    queryKey: ["operators", tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").eq("role", "operador");
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .eq("tenant_id", tenant!.id);
       if (error) throw error;
-      return data as Profile[];
+      return (data || []) as Profile[];
     },
-    enabled: !isOperator,
+    enabled: !isOperator && !!tenant?.id,
   });
 
   const yearOpts = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
   const monthOpts = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);
   const operatorOpts = useMemo(() => operators.map((o) => ({ value: o.id, label: o.full_name || "Sem nome" })), [operators]);
-  const credorOpts = useMemo(() => [...new Set(allClients.map((c) => c.credor))].sort().map((c) => ({ value: c, label: c })), [allClients]);
+  const credorOpts = useMemo(() => [...new Set(allAgreements.map((a) => a.credor))].sort().map((c) => ({ value: c, label: c })), [allAgreements]);
 
-  const filteredClients = useMemo(() => {
-    return allClients.filter((c) => {
-      const d = parseISO(c.data_vencimento);
+  // Filter agreements by selected filters
+  const filteredAgreements = useMemo(() => {
+    return allAgreements.filter((a) => {
+      const d = parseISO(a.created_at);
       if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
       if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
-      if (selectedOperators.length > 0 && !selectedOperators.includes(c.operator_id || "")) return false;
-      if (selectedCredores.length > 0 && !selectedCredores.includes(c.credor)) return false;
+      if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
+      if (selectedCredores.length > 0 && !selectedCredores.includes(a.credor)) return false;
       return true;
     });
-  }, [allClients, selectedYears, selectedMonths, selectedOperators, selectedCredores]);
+  }, [allAgreements, selectedYears, selectedMonths, selectedOperators, selectedCredores]);
 
-  const pagos = filteredClients.filter((c) => c.status === "pago");
-  const quebrados = filteredClients.filter((c) => c.status === "quebrado");
-  const pendentes = filteredClients.filter((c) => c.status === "pendente");
-  const totalRecebido = pagos.reduce((s, c) => s + Number(c.valor_pago), 0);
+  // Exclude cancelled from active KPIs
+  const activeAgreements = filteredAgreements.filter((a) => a.status !== "cancelled");
+
+  // Status classifications
+  const pagos = activeAgreements.filter((a) => a.status === "completed");
+  const vigentes = activeAgreements.filter((a) => a.status === "approved");
+  const pendentes = activeAgreements.filter((a) => a.status === "pending" || a.status === "pending_approval");
+  const vencidos = activeAgreements.filter((a) => a.status === "overdue");
+  const cancelados = filteredAgreements.filter((a) => a.status === "cancelled");
+
+  const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
+  const totalRecebido = pagos.reduce((s, a) => s + Number(a.proposed_total), 0);
+  const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
+  const totalPendente = [...vigentes, ...pendentes, ...vencidos].reduce((s, a) => s + Number(a.proposed_total), 0);
 
   // KPIs
-  const totalInadimplencia = pendentes.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const totalPagosQuebrados = pagos.length + quebrados.length;
-  const taxaRecuperacao = totalPagosQuebrados > 0 ? ((pagos.length / totalPagosQuebrados) * 100).toFixed(1) : "0";
+  const totalResolvidos = pagos.length + cancelados.length;
+  const taxaRecuperacao = totalResolvidos > 0 ? ((pagos.length / totalResolvidos) * 100).toFixed(1) : "0";
   const ticketMedio = pagos.length > 0 ? totalRecebido / pagos.length : 0;
-  const totalProjetado = filteredClients.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const totalQuebra = quebrados.reduce((s, c) => s + Number(c.valor_parcela), 0);
-  const percentRecebimento = filteredClients.length > 0 ? ((pagos.length / filteredClients.length) * 100).toFixed(1) : "0";
+  const percentRecebimento = activeAgreements.length > 0 ? ((pagos.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
-  // Portfolio conversion rate
-  const contatados = filteredClients.filter((c) => c.operator_id != null);
-  const convertidos = contatados.filter((c) => c.status === "pago");
-  const taxaConversao = contatados.length > 0 ? (convertidos.length / contatados.length) * 100 : 0;
+  // Portfolio conversion rate (agreements that converted to completed vs total active)
+  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + pagos.length;
+  const taxaConversao = totalAtivos > 0 ? (pagos.length / totalAtivos) * 100 : 0;
 
-  // Evolution chart data
+  // Evolution chart data based on agreements.created_at
   const evolutionData = useMemo(() => {
     const years = selectedYears.length > 0 ? selectedYears.map(Number) : generateYearOptions();
-    const primaryYear = years[0];
     return monthLabels.map((label, monthIdx) => {
-      const mc = allClients.filter((c) => {
-        const d = parseISO(c.data_vencimento);
+      const monthAgreements = allAgreements.filter((a) => {
+        const d = parseISO(a.created_at);
         if (!years.includes(d.getFullYear()) || d.getMonth() !== monthIdx) return false;
-        if (selectedOperators.length > 0 && !selectedOperators.includes(c.operator_id || "")) return false;
-        if (selectedCredores.length > 0 && !selectedCredores.includes(c.credor)) return false;
+        if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
+        if (selectedCredores.length > 0 && !selectedCredores.includes(a.credor)) return false;
         return true;
       });
       return {
         name: label,
-        recebido: mc.filter((c) => c.status === "pago").reduce((s, c) => s + Number(c.valor_pago), 0),
-        quebra: mc.filter((c) => c.status === "quebrado").reduce((s, c) => s + Number(c.valor_parcela), 0),
-        projetado: mc.reduce((s, c) => s + Number(c.valor_parcela), 0),
+        negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
+        recebido: monthAgreements.filter((a) => a.status === "completed").reduce((s, a) => s + Number(a.proposed_total), 0),
+        quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
       };
     });
-  }, [allClients, selectedYears, selectedOperators, selectedCredores]);
+  }, [allAgreements, selectedYears, selectedOperators, selectedCredores]);
 
-  // Status pie
-  const statusPieData = [
-    { name: "Pagos", value: pagos.length, color: STATUS_COLORS.pago },
-    { name: "Pendentes", value: pendentes.length, color: STATUS_COLORS.pendente },
-    { name: "Quebrados", value: quebrados.length, color: STATUS_COLORS.quebrado },
-  ].filter((d) => d.value > 0);
+  // Status pie based on agreement statuses
+  const statusPieData = useMemo(() => {
+    const groups = [
+      { name: "Pagos", value: pagos.length, color: STATUS_COLORS.completed },
+      { name: "Vigentes", value: vigentes.length, color: STATUS_COLORS.approved },
+      { name: "Pendentes", value: pendentes.length, color: STATUS_COLORS.pending },
+      { name: "Vencidos", value: vencidos.length, color: STATUS_COLORS.overdue },
+      { name: "Cancelados", value: cancelados.length, color: STATUS_COLORS.cancelled },
+    ];
+    return groups.filter((d) => d.value > 0);
+  }, [pagos, vigentes, pendentes, vencidos, cancelados]);
 
-  // Top 5 credores
+  // Top 5 credores by pending value
   const top5Credores = useMemo(() => {
     const map = new Map<string, { credor: string; total: number }>();
-    filteredClients.filter((c) => c.status === "pendente").forEach((c) => {
-      if (!map.has(c.credor)) map.set(c.credor, { credor: c.credor, total: 0 });
-      map.get(c.credor)!.total += Number(c.valor_parcela);
+    [...vigentes, ...pendentes, ...vencidos].forEach((a) => {
+      if (!map.has(a.credor)) map.set(a.credor, { credor: a.credor, total: 0 });
+      map.get(a.credor)!.total += Number(a.proposed_total);
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
-  }, [filteredClients]);
+  }, [vigentes, pendentes, vencidos]);
 
-  // Heatmap data
+  // Heatmap by first_due_date day
   const heatmapData = useMemo(() => {
     const counts = new Array(31).fill(0);
-    filteredClients.forEach((c) => {
-      const day = parseISO(c.data_vencimento).getDate();
+    activeAgreements.forEach((a) => {
+      const day = parseISO(a.first_due_date).getDate();
       counts[day - 1] += 1;
     });
     const max = Math.max(...counts, 1);
     return counts.map((count, i) => ({ day: i + 1, count, intensity: count / max }));
-  }, [filteredClients]);
+  }, [activeAgreements]);
 
   // Export
   const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredClients.map((c) => ({
-      Nome: c.nome_completo, CPF: c.cpf, Credor: c.credor, Status: c.status,
-      Valor: c.valor_parcela, Vencimento: c.data_vencimento,
+    const ws = XLSX.utils.json_to_sheet(filteredAgreements.map((a) => ({
+      Cliente: a.client_name,
+      CPF: a.client_cpf,
+      Credor: a.credor,
+      Status: STATUS_LABELS[a.status] || a.status,
+      "Valor Negociado": Number(a.proposed_total),
+      "Valor Original": Number(a.original_total),
+      "1º Vencimento": a.first_due_date,
+      "Data Criação": a.created_at,
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Analytics");
@@ -232,7 +260,7 @@ const AnalyticsPage = () => {
               <MultiSelect options={operatorOpts} selected={selectedOperators} onChange={setSelectedOperators} allLabel="Todos Op." className="w-[120px]" />
             )}
             <MultiSelect options={credorOpts} selected={selectedCredores} onChange={setSelectedCredores} allLabel="Todos Cred." className="w-[120px]" />
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.print()} title="Exportar PDF">
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleExport} title="Exportar Excel">
               <Download className="w-4 h-4" />
             </Button>
           </div>
@@ -243,25 +271,25 @@ const AnalyticsPage = () => {
           {isOperator ? (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todas as parcelas (projeção total) no período filtrado." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor negociado de todos os acordos ativos no período." /></div>
                 <AlertTriangle className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Projetado</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(totalProjetado)}</p>
+                <p className="text-xs text-muted-foreground">Total Negociado</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(totalNegociado)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos valores de parcelas quebradas no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos cancelados (quebra)." /></div>
                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total de Quebra</p>
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalQuebra)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todos os valores efetivamente recebidos (status pago) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de parcelas pagas em relação ao total de parcelas filtradas." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos ativos." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">% de Recebimento</p>
                 <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
@@ -270,25 +298,25 @@ const AnalyticsPage = () => {
           ) : (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos valores de parcelas pendentes (em aberto) no período filtrado." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pendentes, vigentes e vencidos." /></div>
                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Inadimplência</p>
-                <p className="text-xl font-bold text-destructive">{formatCurrency(totalInadimplencia)}</p>
+                <p className="text-xs text-muted-foreground">Total Pendente</p>
+                <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de parcelas pagas em relação ao total de parcelas resolvidas (pagas + quebradas)." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos resolvidos (pagos + cancelados)." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
                 <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por parcela paga no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos pagos no período." /></div>
                 <Award className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Ticket Médio</p>
                 <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma de todos os valores efetivamente recebidos (status pago) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
@@ -301,7 +329,7 @@ const AnalyticsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Evolution line chart */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Evolução mês a mês do valor projetado, recebido e quebrado no ano selecionado." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Evolução mês a mês do valor negociado, recebido e quebrado baseado na data de criação do acordo." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Evolução Mensal ({selectedYears.length > 0 ? selectedYears.join(", ") : "Todos"})</h3>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={evolutionData}>
@@ -310,23 +338,23 @@ const AnalyticsPage = () => {
                 <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                 <RechartsTooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
                 <Legend />
-                <Line type="monotone" dataKey="projetado" name="Projetado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="recebido" name="Recebido" stroke={STATUS_COLORS.pago} strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="quebra" name="Quebra" stroke={STATUS_COLORS.quebrado} strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="negociado" name="Negociado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="recebido" name="Recebido" stroke={STATUS_COLORS.completed} strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="quebra" name="Quebra" stroke={STATUS_COLORS.cancelled} strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           {/* Portfolio conversion */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative flex flex-col">
-            <div className="absolute top-3 right-3"><InfoTooltip text="De todos os clientes que tiveram contato (operador atribuído), qual percentual foi convertido (status pago)." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Taxa de Conversão da Carteira</h3>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos que foram pagos (completed) em relação ao total de acordos ativos." /></div>
+            <h3 className="text-sm font-semibold text-card-foreground mb-3">Taxa de Conversão de Acordos</h3>
             <div className="flex-1 flex flex-col items-center justify-center gap-4">
               <p className="text-5xl font-bold text-primary">{taxaConversao.toFixed(1)}%</p>
               <Progress value={taxaConversao} className="w-3/4 h-3" />
               <div className="flex gap-6 text-xs text-muted-foreground">
-                <span>Contatados: <strong className="text-foreground">{contatados.length}</strong></span>
-                <span>Convertidos: <strong className="text-foreground">{convertidos.length}</strong></span>
+                <span>Total Ativos: <strong className="text-foreground">{totalAtivos}</strong></span>
+                <span>Pagos: <strong className="text-foreground">{pagos.length}</strong></span>
               </div>
             </div>
           </div>
@@ -336,7 +364,7 @@ const AnalyticsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Status pie */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Proporção visual entre parcelas pagas, pendentes e quebradas no período." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Proporção visual entre os status dos acordos no período." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Distribuição de Status</h3>
             {statusPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
@@ -344,7 +372,7 @@ const AnalyticsPage = () => {
                   <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" stroke="none">
                     {statusPieData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                   </Pie>
-                  <RechartsTooltip formatter={(value: number, name: string) => [`${value} parcelas`, name]} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} />
+                  <RechartsTooltip formatter={(value: number, name: string) => [`${value} acordos`, name]} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -353,10 +381,10 @@ const AnalyticsPage = () => {
             )}
           </div>
 
-          {/* Top 5 credores - hidden for operators */}
+          {/* Top 5 credores */}
           {!isOperator && (
             <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-              <div className="absolute top-3 right-3"><InfoTooltip text="Os 5 credores com maior valor total pendente na carteira filtrada." /></div>
+              <div className="absolute top-3 right-3"><InfoTooltip text="Os 5 credores com maior valor em acordos pendentes/vigentes/vencidos." /></div>
               <h3 className="text-sm font-semibold text-card-foreground mb-3">Top 5 Maiores Credores</h3>
               {top5Credores.length > 0 ? (
                 <div className="space-y-2">
@@ -378,7 +406,7 @@ const AnalyticsPage = () => {
 
           {/* Heatmap */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Concentração de vencimentos por dia do mês. Quanto mais escuro, mais vencimentos naquele dia." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Concentração de vencimentos por dia do mês baseado no 1º vencimento dos acordos." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Heatmap de Vencimentos</h3>
             <div className="grid grid-cols-7 gap-1">
               {heatmapData.map((d) => (
@@ -391,7 +419,7 @@ const AnalyticsPage = () => {
                       : `hsl(24, 95%, ${70 - d.intensity * 40}%)`,
                     color: d.intensity > 0.5 ? "white" : "hsl(var(--foreground))",
                   }}
-                  title={`Dia ${d.day}: ${d.count} vencimentos`}
+                  title={`Dia ${d.day}: ${d.count} acordos`}
                 >
                   {d.day}
                 </div>
