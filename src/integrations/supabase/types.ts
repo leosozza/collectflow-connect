@@ -4060,6 +4060,7 @@ export type Database = {
           acordos_dia: number
           acordos_mes: number
           total_negociado: number
+          total_negociado_mes: number
           total_pendente: number
           total_projetado: number
           total_quebra: number

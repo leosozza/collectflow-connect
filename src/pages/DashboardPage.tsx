@@ -34,6 +34,7 @@ const monthNames = [
 interface DashboardStats {
   total_projetado: number;
   total_negociado: number;
+  total_negociado_mes: number;
   total_recebido: number;
   total_quebra: number;
   total_pendente: number;
@@ -176,18 +177,24 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stats: Total Projetado + Total Negociado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total Projetado no Mês</p>
-          <p className="text-4xl font-bold text-primary-foreground tracking-tight">
+      {/* Main stats: 3 cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
+          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Colchão de Acordos</p>
+          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
             {formatCurrency(stats?.total_projetado ?? 0)}
           </p>
         </div>
-        <div className="rounded-2xl gradient-orange p-6 text-center shadow-lg">
-          <p className="text-sm text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
-          <p className="text-4xl font-bold text-primary-foreground tracking-tight">
+        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
+          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
+          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
             {formatCurrency(stats?.total_negociado ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
+          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total Negociado no Mês</p>
+          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
+            {formatCurrency(stats?.total_negociado_mes ?? 0)}
           </p>
         </div>
       </div>
