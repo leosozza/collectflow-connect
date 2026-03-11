@@ -6,7 +6,6 @@ import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   fetchClients,
   createClient,
