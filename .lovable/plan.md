@@ -1,64 +1,81 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Plano: Múltiplas Correções e Melhorias
 
-### O que será feito
+## 1. Dashboard — Filtro por Operador + Renomear labels
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+**Arquivo:** `src/pages/DashboardPage.tsx`
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+- Adicionar query para buscar lista de operadores (profiles do tenant)
+- Adicionar `MultiSelect` de operadores ao lado dos filtros de ano/mês (visível apenas para admin com `canViewAll`)
+- Passar o `selectedOperator` para as RPCs `get_dashboard_stats` e `get_dashboard_vencimentos` via `_user_id`
+- Renomear `allLabel` de "Todos Anos" → "Ano" e "Todos Meses" → "Mês"
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+## 2. Atribuir cliente ao operador ao formalizar acordo
 
----
+**Arquivo:** `src/services/agreementService.ts`
 
-### Explicação das regras e lógicas de Negociação
+- Na função `createAgreement`, após marcar títulos como "em_acordo", atualizar `operator_id` dos registros do CPF/credor para o `userId` que criou o acordo
+- Buscar o `profile.id` do criador (pois `operator_id` usa `profiles.id`, não `auth.uid`) e fazer update nos clients correspondentes
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+## 3. Histórico — Nome do responsável + origem da ocorrência
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+**Arquivo:** `src/components/client-detail/ClientUpdateHistory.tsx`
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+- Fazer JOIN com `profiles` via `updated_by` para exibir o nome do responsável
+- Quando `updated_by` é null e `source` indica ação automática, exibir label como "Ação da Régua", "Sistema", etc.
+- Adicionar mapeamento de sources automáticas: `regua` → "Ação da Régua", `whatsapp_auto` → "WhatsApp Automático", `email_auto` → "E-mail Automático"
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
+## 4. Acordos com entrada — Contabilização correta
+
+**Arquivo:** `src/pages/AcordosPage.tsx` e `src/components/acordos/AgreementsList.tsx`
+
+- Verificar e corrigir a exibição de valores quando há entrada: o `proposed_total` deve incluir entrada + parcelas
+- Garantir que os cards de totais (Total de Acordos, valor) considerem `entrada_value` corretamente
+- Validar que a listagem mostra formato "Entrada R$ X + Nx R$ Y" para todos os perfis
+
+## Detalhes técnicos
+
+### Dashboard — Operador filter
+```typescript
+// Nova query para operadores
+const { data: operators = [] } = useQuery({
+  queryKey: ["dashboard-operators", profile?.tenant_id],
+  queryFn: async () => {
+    const { data } = await supabase.from("profiles")
+      .select("user_id, full_name")
+      .eq("tenant_id", profile!.tenant_id);
+    return (data || []).map(p => ({ value: p.user_id, label: p.full_name || "Sem nome" }));
+  },
+  enabled: !!profile?.tenant_id && canViewAll,
+});
+
+// Alterar rpcUserId para considerar operador selecionado
+const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
+const rpcUserId = canViewAll
+  ? (selectedOperators.length === 1 ? selectedOperators[0] : null)
+  : (profile?.user_id ?? null);
 ```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+
+### Atribuição automática
+```typescript
+// Em createAgreement, após marcar títulos como em_acordo:
+const { data: creatorProfile } = await supabase
+  .from("profiles").select("id").eq("user_id", userId).single();
+if (creatorProfile) {
+  await supabase.from("clients")
+    .update({ operator_id: creatorProfile.id })
+    .eq("cpf", data.client_cpf)
+    .eq("credor", data.credor);
+}
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
-
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+### Histórico com nome
+```typescript
+// Buscar profiles para mapear updated_by → nome
+const userIds = [...new Set(logs.filter(l => l.updated_by).map(l => l.updated_by))];
+const { data: profiles } = await supabase.from("profiles")
+  .select("user_id, full_name").in("user_id", userIds);
+// Exibir nome ou label de origem automática
+```
 
