@@ -1,64 +1,64 @@
 
 
-# Plano: Corrigir integração Target Data (URL + parsing da resposta)
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Problema identificado
+### O que será feito
 
-A edge function `targetdata-enrich` falha com **HTTP 404** em todas as requisições. Dois problemas raiz:
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-1. **URL errada**: O código usa `https://api.targetdata.com.br/v1/search/pf` mas a documentação oficial define a URL base como `https://api.targetdata.com.br/api`, resultando na URL correta: `https://api.targetdata.com.br/api/v1/search/pf`
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-2. **Parsing da resposta incorreto**: O código espera campos planos (`telefones`, `celular`, `email`) mas a API retorna uma estrutura aninhada:
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-```text
-{
-  "header": { "amount_found": 1, ... },
-  "results": [
-    {
-      "cadastral": { "nr_cpf": "...", "nm_completo": "..." },
-      "contato": {
-        "telefone": [
-          { "nr_ddd": "43", "nr_telefone": "988319530", "ds_tipo_telefone": "Movel" }
-        ],
-        "endereco": [
-          { "ds_logradouro": "...", "ds_bairro": "...", "ds_cidade": "...", "sg_uf": "...", "nr_cep": "..." }
-        ],
-        "email": [
-          { "ds_email": "exemplo@email.com" }
-        ]
-      }
-    }
-  ]
-}
+---
+
+### Explicação das regras e lógicas de Negociação
+
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
 ```
 
-## Solução
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-### Arquivo: `supabase/functions/targetdata-enrich/index.ts`
-
-1. **Corrigir URL**: `/v1/search/pf` → `/api/v1/search/pf`
-2. **Corrigir parsing da resposta**: Extrair resultados de `response.results[]`
-3. **Corrigir match por CPF**: Comparar via `result.cadastral.nr_cpf`
-4. **Corrigir extração de telefones**: Ler de `contato.telefone[]` com campos `nr_ddd` + `nr_telefone` e `ds_tipo_telefone`
-5. **Corrigir extração de emails**: Ler de `contato.email[]` com campo `ds_email`
-6. **Corrigir extração de endereço**: Ler de `contato.endereco[]` com campos `ds_logradouro`, `ds_bairro`, `ds_cidade`, `sg_uf`, `nr_cep`
-
-### Lógica de priorização de telefones (mantida)
-
-```text
-Prioridade 1: Movel (celular) → provável WhatsApp
-Prioridade 2: Fixo
-Prioridade 3: Outros
-```
-
-O campo `ds_tipo_telefone` da API já indica "Movel" ou "Fixo", eliminando a necessidade de inferir pelo número.
-
-### Também atualizar: `src/components/carteira/EnrichmentConfirmDialog.tsx`
-
-A função `extractFromDataReturned` precisa ser atualizada para parsear a nova estrutura `contato.telefone[]` / `contato.email[]` da API, para que a tabela de logs exiba os dados corretamente.
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/functions/targetdata-enrich/index.ts` | Corrigir URL, parsing de resposta, extração de dados |
-| `src/components/carteira/EnrichmentConfirmDialog.tsx` | Atualizar `extractFromDataReturned` para nova estrutura |
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 
