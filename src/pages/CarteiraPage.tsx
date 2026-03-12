@@ -566,7 +566,7 @@ const CarteiraPage = () => {
               )}
               <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
                 <Search className="w-4 h-4" />
-                <span className="hidden sm:inline">Higienizar</span> ({selectedIds.size})
+                <span className="hidden sm:inline">Higienizar</span> ({uniqueSelectedCpfs})
               </Button>
             </>
           )}
