@@ -297,7 +297,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           </div>
         </CardHeader>
         <CardContent className="pb-3">
-          <div className="flex items-end gap-2 flex-nowrap overflow-x-auto">
+          <div className="flex items-end gap-2 flex-wrap">
             <div className="space-y-0.5 min-w-[120px]">
               <Label className="text-[10px]">Data Cálculo</Label>
               <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-7 text-xs px-2" />
