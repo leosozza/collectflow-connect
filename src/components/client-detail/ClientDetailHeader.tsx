@@ -374,8 +374,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     </span>
                   ) : null
                 } />
-                  ) : null
-                } />
               </div>
 
               {/* Endereço */}
