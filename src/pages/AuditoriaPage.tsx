@@ -4,7 +4,7 @@ import { fetchAuditLogs, AuditLog } from "@/services/auditService";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FileText, Download, User, Clock, Trash2, Search, Loader2, ShieldAlert, Eye, EyeOff } from "lucide-react";
+import { FileText, Download, User, Clock, Trash2, Search, Loader2, ShieldAlert, Eye, EyeOff, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
