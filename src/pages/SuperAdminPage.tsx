@@ -87,7 +87,19 @@ const SuperAdminPage = () => {
 
   useEffect(() => {
     loadTenants();
+    loadPlansAndServices();
   }, []);
+
+  const loadPlansAndServices = async () => {
+    try {
+      const { data: plansData } = await supabase.from("plans").select("id, name, slug, price_monthly, limits").eq("is_active", true).order("price_monthly", { ascending: true });
+      setAvailablePlans((plansData as PlanOption[]) || []);
+      const { data: svcData } = await supabase.from("service_catalog").select("*").eq("is_active", true).order("name");
+      setCatalogServices(svcData || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const activeTenants = useMemo(() => {
     const active = tenants.filter(t => t.status !== "deleted");
