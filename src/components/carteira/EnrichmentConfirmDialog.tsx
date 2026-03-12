@@ -43,6 +43,26 @@ interface EnrichmentLog {
 
 const COST_PER_CLIENT = 0.15;
 
+const extractFromDataReturned = (raw: any) => {
+  const phones: string[] = [];
+  if (Array.isArray(raw?.telefones)) {
+    raw.telefones.forEach((t: any) => {
+      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
+      if (num) phones.push(num);
+    });
+  } else if (raw?.celular) phones.push(String(raw.celular));
+
+  const emails: string[] = [];
+  if (Array.isArray(raw?.emails)) {
+    raw.emails.forEach((e: any) => {
+      const addr = typeof e === "string" ? e : e.email || "";
+      if (addr) emails.push(addr);
+    });
+  } else if (raw?.email) emails.push(raw.email);
+
+  return { phones, emails, error: raw?.error || null };
+};
+
 const EnrichmentConfirmDialog = ({
   open,
   onOpenChange,
