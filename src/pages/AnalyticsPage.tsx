@@ -236,11 +236,11 @@ const AnalyticsPage = () => {
   const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
   const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
-  // Portfolio conversion rate (agreements that converted to completed vs total active)
-  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + pagos.length;
-  const taxaConversao = totalAtivos > 0 ? (pagos.length / totalAtivos) * 100 : 0;
+  // Portfolio conversion rate: agreements with payments > 0 vs total active
+  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + acordosComPagamento.length;
+  const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
 
-  // Evolution chart data based on agreements.created_at
+  // Evolution chart data based on agreements.created_at with real payments
   const evolutionData = useMemo(() => {
     const years = selectedYears.length > 0 ? selectedYears.map(Number) : generateYearOptions();
     return monthLabels.map((label, monthIdx) => {
@@ -254,7 +254,7 @@ const AnalyticsPage = () => {
       return {
         name: label,
         negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
-        recebido: monthAgreements.filter((a) => a.status === "completed").reduce((s, a) => s + Number(a.proposed_total), 0),
+        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number((a as any).total_pago || 0), 0),
         quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
       };
     });
