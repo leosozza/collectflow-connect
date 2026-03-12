@@ -1,64 +1,62 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Corrigir: Permissões do Perfil não aplicadas na prática
 
-### O que será feito
+## Problema
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+O sistema possui **duas fontes de permissão desconectadas**:
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+| Componente | O que faz | Tabela |
+|---|---|---|
+| UserPermissionsTab (UI) | Salva permissões em **permission_profiles** | `permission_profiles` |
+| usePermissions (hook) | Lê permissões de **user_permissions** | `user_permissions` |
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+O hook `usePermissions` nunca consulta `permission_profiles`. Por isso, qualquer alteração feita na tela de permissões **não tem efeito**.
 
----
+## Solução
 
-### Explicação das regras e lógicas de Negociação
+Alterar o `usePermissions` para:
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+1. Chamar o RPC `get_my_permission_profile` (já existe no banco)
+2. Se o usuário tiver um perfil de permissão atribuído (`permission_profile_id`), usar as permissões desse perfil como base
+3. Se não tiver perfil atribuído, manter o fallback para os defaults hardcoded por role
+4. Manter os overrides individuais (`user_permissions`) como camada final (caso existam)
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+## Arquivo
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+| Arquivo | Ação |
+|---|---|
+| `src/hooks/usePermissions.ts` | Adicionar query para `get_my_permission_profile`, usar como fonte primária de permissões |
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+## Lógica de prioridade
+
+```text
+1. Perfil de permissão atribuído (permission_profiles) → fonte primária
+2. Se não tem perfil → ROLE_DEFAULTS hardcoded (fallback)
+3. Overrides individuais (user_permissions) → aplicados por cima
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+## Detalhes técnicos
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+```typescript
+// Nova query no usePermissions
+const { data: permProfile } = useQuery({
+  queryKey: ["my-permission-profile", tenantUser?.user_id],
+  queryFn: async () => {
+    const { data } = await supabase.rpc("get_my_permission_profile");
+    return data?.[0] ?? null;
+  },
+  enabled: !!tenantUser,
+});
+
+// Build effective permissions
+const base = permProfile?.permissions
+  ? permProfile.permissions   // from assigned profile
+  : ROLE_DEFAULTS[role];      // fallback to hardcoded
+
+// Then apply individual overrides on top
+for (const override of overrides) {
+  base[override.module] = override.actions;
+}
+```
 
