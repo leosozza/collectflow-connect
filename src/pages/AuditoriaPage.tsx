@@ -42,6 +42,7 @@ const entityLabels: Record<string, string> = {
   expense: "Despesa",
   user: "Usuário",
   settings: "Configurações",
+  enrichment_job: "Job de Higienização",
 };
 
 /* ─── Logs Tab (existing content) ─── */
