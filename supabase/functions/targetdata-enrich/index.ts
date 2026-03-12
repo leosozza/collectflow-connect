@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
         try { responseData = JSON.parse(responseText); } catch { /* ignore */ }
 
         // Check for IP restriction error
-        if (responseData?.code_error === 1099 || responseText.includes("IP não autorizado") || responseText.includes("IP nao autorizado")) {
+        if (responseData?.code_error === 1099 || responseData?.header?.code_error === 1099 || responseText.includes("IP não autorizado") || responseText.includes("IP nao autorizado")) {
           return new Response(
             JSON.stringify({
               success: false,
