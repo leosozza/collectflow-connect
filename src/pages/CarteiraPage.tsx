@@ -515,6 +515,7 @@ const CarteiraPage = () => {
   };
 
   const selectedClients = clients.filter((c) => selectedIds.has(c.id));
+  const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
 
   return (
@@ -551,21 +552,21 @@ const CarteiraPage = () => {
             <>
               <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
                 <MessageSquare className="w-4 h-4" />
-                <span className="hidden sm:inline">WhatsApp</span> ({selectedIds.size})
+                <span className="hidden sm:inline">WhatsApp</span> ({uniqueSelectedCpfs})
               </Button>
               <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
                 <Phone className="w-4 h-4" />
-                <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
+                <span className="hidden sm:inline">Discador</span> ({uniqueSelectedCpfs})
               </Button>
               {hasAssignedCredor && (
                 <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950">
                   <UserPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Atribuir</span> ({selectedIds.size})
+                  <span className="hidden sm:inline">Atribuir</span> ({uniqueSelectedCpfs})
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
                 <Search className="w-4 h-4" />
-                <span className="hidden sm:inline">Higienizar</span> ({selectedIds.size})
+                <span className="hidden sm:inline">Higienizar</span> ({uniqueSelectedCpfs})
               </Button>
             </>
           )}
