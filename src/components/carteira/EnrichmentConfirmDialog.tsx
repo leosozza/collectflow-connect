@@ -3,6 +3,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { checkTokenBalance } from "@/services/tokenService";
 import { formatCurrency } from "@/lib/formatters";
+import { logAction } from "@/services/auditService";
+import { exportToExcel } from "@/lib/exportUtils";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,13 +16,29 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Search, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Search, AlertTriangle, CheckCircle2, Loader2, Copy, Download,
+} from "lucide-react";
 
 interface EnrichmentConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedClients: { id: string; cpf: string; credor?: string }[];
   onComplete: () => void;
+}
+
+interface EnrichmentLog {
+  id: string;
+  cpf: string;
+  status: string;
+  phones_found: string[] | null;
+  emails_found: string[] | null;
+  error_message: string | null;
 }
 
 const COST_PER_CLIENT = 0.15;
@@ -35,6 +53,7 @@ const EnrichmentConfirmDialog = ({
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [logs, setLogs] = useState<EnrichmentLog[]>([]);
   const [progress, setProgress] = useState<{
     total: number;
     enriched: number;
@@ -42,7 +61,6 @@ const EnrichmentConfirmDialog = ({
     status: string;
   } | null>(null);
 
-  // Get unique CPFs
   const uniqueCpfs = Array.from(
     new Set(selectedClients.map((c) => c.cpf.replace(/\D/g, "")))
   );
@@ -53,6 +71,7 @@ const EnrichmentConfirmDialog = ({
     if (open && tenant?.id) {
       setLoading(true);
       setProgress(null);
+      setLogs([]);
       checkTokenBalance(tenant.id, tokensNeeded)
         .then((result: any) => {
           setBalance(result?.current_balance ?? 0);
@@ -69,7 +88,6 @@ const EnrichmentConfirmDialog = ({
     setProcessing(true);
 
     try {
-      // Create enrichment job
       const { data: job, error: jobError } = await supabase
         .from("enrichment_jobs" as any)
         .insert({
@@ -85,7 +103,6 @@ const EnrichmentConfirmDialog = ({
 
       const jobId = (job as any).id;
 
-      // Invoke edge function
       const { error: fnError } = await supabase.functions.invoke(
         "targetdata-enrich",
         {
@@ -100,7 +117,7 @@ const EnrichmentConfirmDialog = ({
 
       if (fnError) throw fnError;
 
-      // Poll for results
+      // Fetch final job status
       const { data: finalJob } = await supabase
         .from("enrichment_jobs" as any)
         .select("*")
@@ -108,15 +125,51 @@ const EnrichmentConfirmDialog = ({
         .single();
 
       const fj = finalJob as any;
+      const enriched = fj?.enriched || 0;
+      const failed = fj?.failed || 0;
+
       setProgress({
         total: fj?.total_clients || uniqueCpfs.length,
-        enriched: fj?.enriched || 0,
-        failed: fj?.failed || 0,
+        enriched,
+        failed,
         status: fj?.status || "completed",
       });
 
+      // Fetch enrichment logs for this job
+      const { data: jobLogs } = await supabase
+        .from("enrichment_logs" as any)
+        .select("*")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: true });
+
+      if (jobLogs) {
+        setLogs(
+          (jobLogs as any[]).map((l) => ({
+            id: l.id,
+            cpf: l.cpf,
+            status: l.status,
+            phones_found: l.phones_found,
+            emails_found: l.emails_found,
+            error_message: l.error_message,
+          }))
+        );
+      }
+
+      // Audit log
+      await logAction({
+        action: "enrichment",
+        entity_type: "enrichment_job",
+        entity_id: jobId,
+        details: {
+          cpfs: uniqueCpfs.length,
+          enriched,
+          failed,
+          cost: totalCost,
+        },
+      });
+
       toast.success(
-        `Higienização concluída! ${fj?.enriched || 0} clientes atualizados.`
+        `Higienização concluída! ${enriched} clientes atualizados.`
       );
       onComplete();
     } catch (err: any) {
@@ -126,9 +179,32 @@ const EnrichmentConfirmDialog = ({
     }
   };
 
+  const handleCopyLog = () => {
+    const lines = logs.map((l) => {
+      const status = l.status === "success" ? "✅" : "❌";
+      const phones = l.phones_found?.length ? l.phones_found.join(", ") : "-";
+      const emails = l.emails_found?.length ? l.emails_found.join(", ") : "-";
+      return `${status} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${l.error_message ? ` | Erro: ${l.error_message}` : ""}`;
+    });
+    const header = `Higienização — ${progress?.enriched || 0} atualizados, ${progress?.failed || 0} falhos de ${progress?.total || 0} total`;
+    navigator.clipboard.writeText(`${header}\n${"─".repeat(60)}\n${lines.join("\n")}`);
+    toast.success("Log copiado para a área de transferência");
+  };
+
+  const handleExportExcel = () => {
+    const rows = logs.map((l) => ({
+      CPF: l.cpf,
+      Status: l.status === "success" ? "Atualizado" : "Não encontrado",
+      Telefones: l.phones_found?.join(", ") || "-",
+      Emails: l.emails_found?.join(", ") || "-",
+      Erro: l.error_message || "-",
+    }));
+    exportToExcel(rows, "Higienização", `higienizacao_${new Date().toISOString().slice(0, 10)}`);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Search className="w-5 h-5 text-primary" />
@@ -146,27 +222,66 @@ const EnrichmentConfirmDialog = ({
               <CheckCircle2 className="w-5 h-5 text-green-500" />
               <span className="font-medium">Higienização concluída</span>
             </div>
+
+            {/* Summary cards */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="bg-muted rounded-lg p-3">
-                <p className="text-2xl font-bold text-foreground">
-                  {progress.total}
-                </p>
+                <p className="text-2xl font-bold text-foreground">{progress.total}</p>
                 <p className="text-xs text-muted-foreground">Total CPFs</p>
               </div>
               <div className="bg-green-50 dark:bg-green-950 rounded-lg p-3">
-                <p className="text-2xl font-bold text-green-600">
-                  {progress.enriched}
-                </p>
+                <p className="text-2xl font-bold text-green-600">{progress.enriched}</p>
                 <p className="text-xs text-muted-foreground">Atualizados</p>
               </div>
               <div className="bg-red-50 dark:bg-red-950 rounded-lg p-3">
-                <p className="text-2xl font-bold text-red-500">
-                  {progress.failed}
-                </p>
+                <p className="text-2xl font-bold text-red-500">{progress.failed}</p>
                 <p className="text-xs text-muted-foreground">Não encontrados</p>
               </div>
             </div>
-            <DialogFooter>
+
+            {/* Detailed logs table */}
+            {logs.length > 0 && (
+              <ScrollArea className="h-[260px] rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-xs">CPF</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                      <TableHead className="text-xs">Telefones</TableHead>
+                      <TableHead className="text-xs">Email</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {logs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs font-mono">{log.cpf}</TableCell>
+                        <TableCell>
+                          {log.status === "success" ? (
+                            <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700">Atualizado</Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-[10px]">Não encontrado</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {log.phones_found?.join(", ") || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {log.emails_found?.join(", ") || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" size="sm" onClick={handleCopyLog} disabled={logs.length === 0} className="gap-1.5">
+                <Copy className="w-3.5 h-3.5" /> Copiar Log
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={logs.length === 0} className="gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Exportar Excel
+              </Button>
               <Button onClick={() => onOpenChange(false)}>Fechar</Button>
             </DialogFooter>
           </div>

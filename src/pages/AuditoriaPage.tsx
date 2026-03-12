@@ -33,6 +33,7 @@ const actionLabels: Record<string, string> = {
   payment: "Pagamento",
   break: "Quebra",
   import: "Importação",
+  enrichment: "Higienização",
 };
 
 const entityLabels: Record<string, string> = {

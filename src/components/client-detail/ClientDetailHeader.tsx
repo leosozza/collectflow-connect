@@ -17,6 +17,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 interface ClientDetailHeaderProps {
   client: any;
