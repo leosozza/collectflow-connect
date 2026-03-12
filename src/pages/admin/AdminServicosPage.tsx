@@ -11,11 +11,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Package, Coins } from "lucide-react";
+import { Plus, Pencil, Package, Coins, CreditCard } from "lucide-react";
 import { fetchServiceCatalog, createService, updateService } from "@/services/serviceCatalogService";
 import { fetchAllTokenPackages, createTokenPackage, updateTokenPackage } from "@/services/tokenService";
+import { supabase } from "@/integrations/supabase/client";
 import type { ServiceCatalogItem, ServiceCatalogCreateInput, ServiceCatalogUpdateInput, ServiceCategory, ServicePriceType, TokenPackage } from "@/types/tokens";
 import { CATEGORY_LABELS } from "@/types/tokens";
+
+interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  price_monthly: number;
+  limits: Record<string, any>;
+  is_active: boolean;
+}
 
 const AdminServicosPage = () => {
   const { toast } = useToast();
@@ -23,6 +33,7 @@ const AdminServicosPage = () => {
   // Catalog state
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
   const [packages, setPackages] = useState<TokenPackage[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Service form
@@ -54,6 +65,18 @@ const AdminServicosPage = () => {
     display_order: 0,
   });
 
+  // Plan form
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [planForm, setPlanForm] = useState({
+    name: "",
+    slug: "",
+    price_monthly: 0,
+    max_users: 6,
+    max_clients: 500,
+    is_custom: false,
+  });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -64,6 +87,8 @@ const AdminServicosPage = () => {
       const [c, p] = await Promise.all([fetchServiceCatalog(), fetchAllTokenPackages()]);
       setCatalog(c);
       setPackages(p);
+      const { data: plansData } = await supabase.from("plans").select("*").order("price_monthly", { ascending: true });
+      setPlans((plansData as Plan[]) || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -178,6 +203,61 @@ const AdminServicosPage = () => {
     }
   };
 
+  // Plan CRUD
+  const openEditPlan = (p: Plan) => {
+    setEditingPlan(p);
+    const limits = p.limits || {};
+    setPlanForm({
+      name: p.name,
+      slug: p.slug,
+      price_monthly: p.price_monthly,
+      max_users: limits.max_users || 6,
+      max_clients: limits.max_clients || 500,
+      is_custom: !!limits.custom,
+    });
+    setPlanDialogOpen(true);
+  };
+
+  const handleSavePlan = async () => {
+    if (!editingPlan) return;
+    try {
+      const existingLimits = editingPlan.limits || {};
+      const newLimits = {
+        ...existingLimits,
+        max_users: planForm.max_users,
+        max_clients: planForm.max_clients,
+        custom: planForm.is_custom,
+      };
+      const { error } = await supabase
+        .from("plans")
+        .update({
+          name: planForm.name,
+          price_monthly: planForm.price_monthly,
+          limits: newLimits,
+        } as any)
+        .eq("id", editingPlan.id);
+      if (error) throw error;
+      toast({ title: "Plano atualizado!" });
+      setPlanDialogOpen(false);
+      await loadData();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleTogglePlan = async (p: Plan) => {
+    try {
+      const { error } = await supabase
+        .from("plans")
+        .update({ is_active: !p.is_active } as any)
+        .eq("id", p.id);
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
   const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
   if (loading) {
@@ -193,7 +273,7 @@ const AdminServicosPage = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Gestão de Serviços</h1>
-        <p className="text-muted-foreground">Gerencie catálogo de serviços e pacotes de tokens</p>
+        <p className="text-muted-foreground">Gerencie catálogo de serviços, pacotes de tokens e planos</p>
       </div>
 
       <Tabs defaultValue="catalogo">
@@ -203,6 +283,9 @@ const AdminServicosPage = () => {
           </TabsTrigger>
           <TabsTrigger value="pacotes">
             <Coins className="w-4 h-4 mr-1.5" /> Pacotes de Tokens
+          </TabsTrigger>
+          <TabsTrigger value="planos">
+            <CreditCard className="w-4 h-4 mr-1.5" /> Planos
           </TabsTrigger>
         </TabsList>
 
@@ -315,6 +398,66 @@ const AdminServicosPage = () => {
                         </TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* PLANOS */}
+        <TabsContent value="planos">
+          <Card>
+            <CardHeader>
+              <CardTitle>Planos de Assinatura</CardTitle>
+              <CardDescription>{plans.length} planos cadastrados</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="border border-border rounded-lg overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Slug</TableHead>
+                      <TableHead>Preço Mensal</TableHead>
+                      <TableHead className="text-right">Max Usuários</TableHead>
+                      <TableHead className="text-right">Max Clientes</TableHead>
+                      <TableHead>Ativo</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {plans.map((p) => {
+                      const limits = p.limits || {};
+                      const isCustom = !!limits.custom;
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.slug}</TableCell>
+                          <TableCell>
+                            {isCustom ? (
+                              <Badge variant="secondary">Personalizado</Badge>
+                            ) : (
+                              formatCurrency(p.price_monthly)
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCustom ? "Sob consulta" : limits.max_users || "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isCustom ? "Sob consulta" : (limits.max_clients || 0).toLocaleString("pt-BR")}
+                          </TableCell>
+                          <TableCell>
+                            <Switch checked={p.is_active} onCheckedChange={() => handleTogglePlan(p)} />
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => openEditPlan(p)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -441,6 +584,58 @@ const AdminServicosPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPkgDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSavePkg}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PLAN DIALOG */}
+      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Plano</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Nome</Label>
+              <Input value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Slug</Label>
+              <Input value={planForm.slug} disabled />
+              <p className="text-xs text-muted-foreground">O slug não pode ser alterado</p>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <Switch checked={planForm.is_custom} onCheckedChange={(v) => setPlanForm({ ...planForm, is_custom: v })} />
+              <Label>Plano personalizado (Enterprise)</Label>
+            </div>
+            {!planForm.is_custom && (
+              <>
+                <div className="space-y-1">
+                  <Label>Preço Mensal (R$)</Label>
+                  <Input type="number" step="0.01" value={planForm.price_monthly} onChange={(e) => setPlanForm({ ...planForm, price_monthly: Number(e.target.value) })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Max Usuários</Label>
+                    <Input type="number" value={planForm.max_users} onChange={(e) => setPlanForm({ ...planForm, max_users: Number(e.target.value) })} />
+                    <p className="text-xs text-muted-foreground">Inclui operadores + admin</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Max Clientes</Label>
+                    <Input type="number" value={planForm.max_clients} onChange={(e) => setPlanForm({ ...planForm, max_clients: Number(e.target.value) })} />
+                  </div>
+                </div>
+              </>
+            )}
+            {planForm.is_custom && (
+              <p className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                Planos personalizados têm limites definidos individualmente por tenant na aba de gerenciamento.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSavePlan}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

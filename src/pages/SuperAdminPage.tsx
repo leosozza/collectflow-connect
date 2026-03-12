@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -39,12 +40,13 @@ interface TenantRow {
   deleted_at?: string;
 }
 
-const SERVICE_CATALOG = [
-  { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp (1 instância + 1 agente IA incluso)", price: 99.0 },
-  { key: "ai_agent", label: "Agente de IA Digital", description: "Agente inteligente para atendimento automatizado", price: null },
-  { key: "negativacao", label: "Negativação Serasa/Protesto", description: "Integração com Serasa e Protesto cartorial", price: null },
-  { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", price: null },
-];
+interface PlanOption {
+  id: string;
+  name: string;
+  slug: string;
+  price_monthly: number;
+  limits: Record<string, any>;
+}
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -66,7 +68,12 @@ const SuperAdminPage = () => {
   const [newClientName, setNewClientName] = useState("");
   const [newClientSlug, setNewClientSlug] = useState("");
   const [newClientCnpj, setNewClientCnpj] = useState("");
+  const [newClientPlanId, setNewClientPlanId] = useState("");
+  const [newClientOperators, setNewClientOperators] = useState(5);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
+  const [catalogServices, setCatalogServices] = useState<any[]>([]);
+  const [editPlanId, setEditPlanId] = useState("");
 
   const loadTenants = async () => {
     try {
@@ -81,7 +88,19 @@ const SuperAdminPage = () => {
 
   useEffect(() => {
     loadTenants();
+    loadPlansAndServices();
   }, []);
+
+  const loadPlansAndServices = async () => {
+    try {
+      const { data: plansData } = await supabase.from("plans").select("id, name, slug, price_monthly, limits").eq("is_active", true).order("price_monthly", { ascending: true });
+      setAvailablePlans((plansData as PlanOption[]) || []);
+      const { data: svcData } = await supabase.from("service_catalog").select("*").eq("is_active", true).order("name");
+      setCatalogServices(svcData || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const activeTenants = useMemo(() => {
     const active = tenants.filter(t => t.status !== "deleted");
@@ -207,6 +226,9 @@ const SuperAdminPage = () => {
     setEditSlug(tenant.slug);
     const svcs = (tenant.settings as any)?.enabled_services || {};
     setExtraInstances(svcs.whatsapp_extra_instances || 0);
+    // Find plan_id for tenant
+    const tenantFull = tenants.find(t => t.id === tenant.id) as any;
+    setEditPlanId(tenantFull?.plan_id || "");
     setManageSheet(tenant);
   };
 
@@ -226,28 +248,31 @@ const SuperAdminPage = () => {
   };
 
   const createNewClient = async () => {
-    if (!newClientName || !newClientSlug) {
-      toast({ title: "Preencha nome e slug", variant: "destructive" });
+    if (!newClientName || !newClientSlug || !newClientPlanId) {
+      toast({ title: "Preencha nome, slug e plano", variant: "destructive" });
       return;
     }
     setCreatingClient(true);
     try {
-      const { data: plans } = await supabase.from("plans").select("id").eq("is_active", true).limit(1);
-      const planId = plans?.[0]?.id;
-      if (!planId) throw new Error("Nenhum plano disponível");
+      const selectedPlan = availablePlans.find(p => p.id === newClientPlanId);
+      const isEnterprise = selectedPlan?.limits?.custom;
+      const settings = isEnterprise ? { max_operators: newClientOperators } : {};
 
       const { error } = await supabase.from("tenants").insert({
         name: newClientName,
         slug: newClientSlug,
         cnpj: newClientCnpj || null,
-        plan_id: planId,
+        plan_id: newClientPlanId,
         status: "active",
+        settings,
       } as any);
       if (error) throw error;
       toast({ title: "Cliente criado com sucesso!" });
       setNewClientName("");
       setNewClientSlug("");
       setNewClientCnpj("");
+      setNewClientPlanId("");
+      setNewClientOperators(5);
       loadTenants();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -549,7 +574,33 @@ const SuperAdminPage = () => {
                 <Label>CNPJ (opcional)</Label>
                 <Input value={newClientCnpj} onChange={e => setNewClientCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
               </div>
-              <Button onClick={createNewClient} disabled={creatingClient} className="gap-1.5">
+              <div className="space-y-2">
+                <Label>Plano</Label>
+                <Select value={newClientPlanId} onValueChange={setNewClientPlanId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger>
+                  <SelectContent>
+                    {availablePlans.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} {p.limits?.custom ? "(Personalizado)" : `- ${formatCurrency(p.price_monthly)}/mês`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(() => {
+                const selectedPlan = availablePlans.find(p => p.id === newClientPlanId);
+                if (selectedPlan?.limits?.custom) {
+                  return (
+                    <div className="space-y-2">
+                      <Label>Número de operadores</Label>
+                      <Input type="number" min={1} value={newClientOperators} onChange={e => setNewClientOperators(Number(e.target.value))} />
+                      <p className="text-xs text-muted-foreground">Será salvo nas configurações do tenant</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <Button onClick={createNewClient} disabled={creatingClient || !newClientPlanId} className="gap-1.5">
                 <Plus className="w-4 h-4" />
                 {creatingClient ? "Criando..." : "Criar Empresa"}
               </Button>
@@ -588,24 +639,51 @@ const SuperAdminPage = () => {
 
             <Separator />
 
+            {/* PLANO */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Plano</h3>
+              <Select value={editPlanId} onValueChange={async (v) => {
+                try {
+                  const { error } = await supabase.from("tenants").update({ plan_id: v } as any).eq("id", manageSheet!.id);
+                  if (error) throw error;
+                  setEditPlanId(v);
+                  toast({ title: "Plano atualizado!" });
+                  loadTenants();
+                } catch (err: any) {
+                  toast({ title: "Erro", description: err.message, variant: "destructive" });
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger>
+                <SelectContent>
+                  {availablePlans.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.limits?.custom ? "(Personalizado)" : `- ${formatCurrency(p.price_monthly)}/mês`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
             {/* SERVIÇOS */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">Serviços</h3>
-              {SERVICE_CATALOG.map(svc => {
+              {catalogServices.map((svc: any) => {
                 const enabledServices = (manageSheet?.settings as any)?.enabled_services || {};
-                const isEnabled = !!enabledServices[svc.key];
+                const isEnabled = !!enabledServices[svc.service_code];
                 return (
-                  <div key={svc.key} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                  <div key={svc.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
                     <div className="flex-1 mr-3">
-                      <p className="text-sm font-medium">{svc.label}</p>
+                      <p className="text-sm font-medium">{svc.name}</p>
                       <p className="text-xs text-muted-foreground">{svc.description}</p>
                       <p className="text-xs font-semibold text-primary mt-1">
-                        {svc.price !== null ? `${formatCurrency(svc.price)}/mês` : "Valor a definir"}
+                        {formatCurrency(svc.price)}/{svc.price_type === "monthly" ? "mês" : svc.price_type}
                       </p>
                     </div>
                     <Switch
                       checked={isEnabled}
-                      onCheckedChange={(checked) => toggleService(svc.key, checked)}
+                      onCheckedChange={(checked) => toggleService(svc.service_code, checked)}
                     />
                   </div>
                 );
