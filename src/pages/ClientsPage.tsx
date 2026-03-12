@@ -23,6 +23,7 @@ import ImportDialog from "@/components/clients/ImportDialog";
 import { Button } from "@/components/ui/button";
 import { Plus, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import {
   Dialog,
   DialogContent,
