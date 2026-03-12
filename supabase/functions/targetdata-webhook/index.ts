@@ -6,33 +6,110 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function extractPhones(record: any): string[] {
-  const phones: string[] = [];
-  if (record.telefones && Array.isArray(record.telefones)) {
-    record.telefones.forEach((t: any) => {
-      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
-      if (num) phones.push(num.replace(/\D/g, ""));
-    });
-  } else if (record.celular) {
-    phones.push(String(record.celular).replace(/\D/g, ""));
+/** Classify phone from Target Data contato.telefone[] entry */
+function classifyTdPhone(entry: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any } {
+  const ddd = String(entry.nr_ddd || "").replace(/\D/g, "");
+  const num = String(entry.nr_telefone || "").replace(/\D/g, "");
+  const full = ddd + num;
+  const tipo = String(entry.ds_tipo_telefone || "").toLowerCase();
+
+  const isMobile = tipo.includes("movel") || tipo.includes("celular") || (full.length === 11 && full[2] === "9");
+  const isWhatsApp = isMobile && full.length === 11;
+
+  return {
+    number: full,
+    type: isMobile ? "celular" : "fixo",
+    priority: isMobile ? (isWhatsApp ? 1 : 2) : 3,
+    isWhatsApp,
+    raw: entry,
+  };
+}
+
+/** Extract all phones from a Target Data result object */
+function extractPhones(result: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] {
+  const phones: { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] = [];
+  const seen = new Set<string>();
+
+  // New nested schema: contato.telefone[]
+  const telefones = result?.contato?.telefone || [];
+  for (const t of telefones) {
+    const classified = classifyTdPhone(t);
+    if (classified.number.length >= 10 && !seen.has(classified.number)) {
+      seen.add(classified.number);
+      phones.push(classified);
+    }
   }
-  if (record.telefone_fixo) {
-    phones.push(String(record.telefone_fixo).replace(/\D/g, ""));
+
+  // Fallback: flat fields
+  if (phones.length === 0) {
+    if (result.telefones && Array.isArray(result.telefones)) {
+      result.telefones.forEach((t: any) => {
+        const num = typeof t === "string" ? t : t.numero || t.telefone || "";
+        const clean = num.replace(/\D/g, "");
+        if (clean && !seen.has(clean)) {
+          seen.add(clean);
+          phones.push({ number: clean, type: "desconhecido", priority: 3, isWhatsApp: false, raw: t });
+        }
+      });
+    } else if (result.celular) {
+      const clean = String(result.celular).replace(/\D/g, "");
+      if (clean) phones.push({ number: clean, type: "celular", priority: 1, isWhatsApp: clean.length === 11, raw: null });
+    }
+    if (result.telefone_fixo) {
+      const clean = String(result.telefone_fixo).replace(/\D/g, "");
+      if (clean && !seen.has(clean)) phones.push({ number: clean, type: "fixo", priority: 3, isWhatsApp: false, raw: null });
+    }
   }
+
+  phones.sort((a, b) => a.priority - b.priority);
   return phones;
 }
 
-function extractEmails(record: any): string[] {
+/** Extract emails from Target Data result */
+function extractEmails(result: any): string[] {
   const emails: string[] = [];
-  if (record.emails && Array.isArray(record.emails)) {
-    record.emails.forEach((e: any) => {
-      const addr = typeof e === "string" ? e : e.email || e.endereco || "";
-      if (addr) emails.push(addr);
-    });
-  } else if (record.email) {
-    emails.push(record.email);
+  // New nested schema
+  const list = result?.contato?.email || [];
+  for (const e of list) {
+    const addr = typeof e === "string" ? e : e.ds_email || "";
+    if (addr) emails.push(addr);
+  }
+  // Fallback: flat fields
+  if (emails.length === 0) {
+    if (result.emails && Array.isArray(result.emails)) {
+      result.emails.forEach((e: any) => {
+        const addr = typeof e === "string" ? e : e.email || e.endereco || "";
+        if (addr) emails.push(addr);
+      });
+    } else if (result.email) {
+      emails.push(result.email);
+    }
   }
   return emails;
+}
+
+/** Extract address from Target Data result */
+function extractAddress(result: any): { endereco: string | null; bairro: string | null; cidade: string | null; uf: string | null; cep: string | null } {
+  // New nested schema
+  const enderecos = result?.contato?.endereco || [];
+  if (enderecos.length > 0) {
+    const addr = enderecos[0];
+    return {
+      endereco: addr.ds_logradouro || null,
+      bairro: addr.ds_bairro || null,
+      cidade: addr.ds_cidade || null,
+      uf: addr.sg_uf || null,
+      cep: addr.nr_cep ? String(addr.nr_cep).replace(/\D/g, "") : null,
+    };
+  }
+  // Fallback: flat fields
+  return {
+    endereco: result.endereco || result.logradouro || null,
+    bairro: result.bairro || null,
+    cidade: result.cidade || result.municipio || null,
+    uf: result.uf || result.estado || null,
+    cep: result.cep ? String(result.cep).replace(/\D/g, "") : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -50,6 +127,7 @@ Deno.serve(async (req) => {
     if (webhookSecret) {
       const headerSecret = req.headers.get("x-webhook-secret") || "";
       if (headerSecret !== webhookSecret) {
+        console.error("[targetdata-webhook] Invalid webhook secret");
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -60,10 +138,10 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     console.log("[targetdata-webhook] Payload received:", JSON.stringify(payload).slice(0, 500));
 
-    // Accept both single record and array
-    const records: any[] = Array.isArray(payload.data || payload.results || payload)
-      ? (payload.data || payload.results || payload)
-      : payload.data ? [payload.data] : [payload];
+    // Accept both single record and array; support Target Data's { header, results[] }
+    const records: any[] = Array.isArray(payload.results || payload.data || payload)
+      ? (payload.results || payload.data || payload)
+      : payload.results ? [payload.results] : payload.data ? [payload.data] : [payload];
 
     const jobId = payload.job_id || payload.jobId || null;
     const tenantId = payload.tenant_id || payload.tenantId || null;
@@ -72,34 +150,31 @@ Deno.serve(async (req) => {
     let failedCount = 0;
 
     for (const record of records) {
-      const cpf = (record.cpf || record.documento || "").replace(/\D/g, "");
+      // Support both nested (cadastral.nr_cpf) and flat (cpf/documento)
+      const cpf = (record?.cadastral?.nr_cpf || record.cpf || record.documento || "").replace(/\D/g, "");
       if (!cpf) {
         failedCount++;
         continue;
       }
 
-      const phones = extractPhones(record);
+      const allPhones = extractPhones(record);
       const emails = extractEmails(record);
-      const endereco = record.endereco || record.logradouro || null;
-      const bairro = record.bairro || null;
-      const cidade = record.cidade || record.municipio || null;
-      const uf = record.uf || record.estado || null;
-      const cep = record.cep ? String(record.cep).replace(/\D/g, "") : null;
+      const address = extractAddress(record);
 
       const updateData: Record<string, any> = {
         enrichment_data: record,
         updated_at: new Date().toISOString(),
       };
 
-      if (phones.length > 0) updateData.phone = phones[0];
-      if (phones.length > 1) updateData.phone2 = phones[1];
-      if (phones.length > 2) updateData.phone3 = phones[2];
+      if (allPhones.length > 0) updateData.phone = allPhones[0].number;
+      if (allPhones.length > 1) updateData.phone2 = allPhones[1].number;
+      if (allPhones.length > 2) updateData.phone3 = allPhones[2].number;
       if (emails.length > 0) updateData.email = emails[0];
-      if (endereco) updateData.endereco = endereco;
-      if (bairro) updateData.bairro = bairro;
-      if (cidade) updateData.cidade = cidade;
-      if (uf) updateData.uf = uf;
-      if (cep) updateData.cep = cep;
+      if (address.endereco) updateData.endereco = address.endereco;
+      if (address.bairro) updateData.bairro = address.bairro;
+      if (address.cidade) updateData.cidade = address.cidade;
+      if (address.uf) updateData.uf = address.uf;
+      if (address.cep) updateData.cep = address.cep;
 
       // Build query — scope to tenant if provided
       let query = supabase
@@ -126,6 +201,27 @@ Deno.serve(async (req) => {
           });
         }
         continue;
+      }
+
+      // Save ALL phones to client_phones table
+      if (tenantId) {
+        for (let p = 0; p < allPhones.length; p++) {
+          const phone = allPhones[p];
+          await supabase.from("client_phones").upsert(
+            {
+              tenant_id: tenantId,
+              cpf,
+              phone_number: phone.number,
+              phone_type: phone.type,
+              priority: p + 1,
+              is_whatsapp: phone.isWhatsApp,
+              source: "targetdata",
+              raw_metadata: phone.raw || {},
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "tenant_id,cpf,phone_number" }
+          );
+        }
       }
 
       enrichedCount++;
