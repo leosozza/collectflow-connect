@@ -177,14 +177,24 @@ const OnboardingPage = () => {
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-primary" />
-                          Até {limits.max_users} usuários
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-primary" />
-                          Até {limits.max_clients?.toLocaleString()} clientes
-                        </li>
+                        {!limits.custom && (
+                          <>
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-primary" />
+                              {limits.max_users - 1} operadores + 1 admin
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <Check className="w-4 h-4 text-primary" />
+                              Até {limits.max_clients?.toLocaleString()} clientes
+                            </li>
+                          </>
+                        )}
+                        {limits.custom && (
+                          <li className="flex items-center gap-2">
+                            <Check className="w-4 h-4 text-primary" />
+                            Plano personalizado para sua operação
+                          </li>
+                        )}
                         {features.map((f: string) => (
                           <li key={f} className="flex items-center gap-2">
                             <Check className="w-4 h-4 text-primary" />
