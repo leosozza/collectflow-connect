@@ -14,16 +14,10 @@ const TargetDataTab = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("targetdata-enrich", {
-        body: {
-          tenant_id: "00000000-0000-0000-0000-000000000000",
-          cpfs: ["00000000000"],
-          job_id: "test-connection",
-          cost_per_client: 0,
-        },
+        body: { test_mode: true },
       });
 
       if (error) {
-        // Edge function invocation error
         const msg = error.message || JSON.stringify(error);
         if (msg.includes("Unauthorized") || msg.includes("401")) {
           addLog("error", "Falha de autenticação — verifique se está logado como super admin");
@@ -33,18 +27,32 @@ const TargetDataTab = () => {
         return;
       }
 
-      if (data?.error) {
-        if (data.error.includes("credentials")) {
-          addLog("error", "Credenciais Target Data não configuradas nos secrets");
-        } else {
-          addLog("info", `API retornou: ${data.error}`);
-          addLog("success", "Edge function respondeu — conexão com o serviço está ativa");
-        }
-      } else {
-        addLog("success", "Edge function targetdata-enrich respondeu com sucesso");
+      if (data?.error === "ip_not_authorized") {
+        addLog("error", "❌ IP não autorizado na API Target Data");
+        addLog("info", "Os Edge Functions usam IPs dinâmicos que mudam a cada execução.");
+        addLog("info", "Solicite à Target Data: desabilitar restrição de IP para sua API key, ou liberar o range de IPs do Supabase.");
+        return;
       }
 
-      addLog("success", "✅ Teste de conexão concluído");
+      if (data?.error === "connection_error") {
+        addLog("error", `Erro de conexão: ${data.message}`);
+        return;
+      }
+
+      if (data?.error === "api_error") {
+        addLog("error", `API retornou erro: ${data.message}`);
+        return;
+      }
+
+      if (data?.success) {
+        addLog("success", data.message || "Conexão estabelecida com sucesso");
+        addLog("success", "✅ Teste de conexão concluído");
+      } else if (data?.error) {
+        addLog("error", data.message || data.error);
+      } else {
+        addLog("success", "Edge function respondeu com sucesso");
+        addLog("success", "✅ Teste de conexão concluído");
+      }
     } catch (err: any) {
       addLog("error", `Erro: ${err.message}`);
     }

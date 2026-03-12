@@ -2,3 +2,6 @@ project_id = "gskbmiwblyqpmubthnpc"
 
 [functions.targetdata-webhook]
 verify_jwt = false
+
+[functions.targetdata-enrich]
+verify_jwt = false
