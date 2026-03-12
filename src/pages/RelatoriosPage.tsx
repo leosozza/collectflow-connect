@@ -12,7 +12,6 @@ import * as XLSX from "xlsx";
 import ReportFilters from "@/components/relatorios/ReportFilters";
 import EvolutionChart from "@/components/relatorios/EvolutionChart";
 import AgingReport from "@/components/relatorios/AgingReport";
-import OperatorRanking from "@/components/relatorios/OperatorRanking";
 import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
@@ -36,8 +35,8 @@ const RelatoriosPage = () => {
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name");
-      return (data || []).map((p) => ({ id: p.id, name: p.full_name || "Sem nome" }));
+      const { data } = await supabase.from("profiles").select("id, user_id, full_name");
+      return (data || []).map((p: any) => ({ id: p.user_id, profileId: p.id, name: p.full_name || "Sem nome" }));
     },
   });
 
@@ -182,10 +181,7 @@ const RelatoriosPage = () => {
 
           <EvolutionChart agreements={filteredAgreements} year={parseInt(selectedYear)} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <AgingReport clients={filteredClients} />
-            <OperatorRanking agreements={filteredAgreements} operators={profiles} />
-          </div>
+          <AgingReport clients={filteredClients} />
         </TabsContent>
 
         <TabsContent value="prestacao-contas" className="mt-4">
