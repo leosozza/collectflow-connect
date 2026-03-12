@@ -574,7 +574,33 @@ const SuperAdminPage = () => {
                 <Label>CNPJ (opcional)</Label>
                 <Input value={newClientCnpj} onChange={e => setNewClientCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
               </div>
-              <Button onClick={createNewClient} disabled={creatingClient} className="gap-1.5">
+              <div className="space-y-2">
+                <Label>Plano</Label>
+                <Select value={newClientPlanId} onValueChange={setNewClientPlanId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger>
+                  <SelectContent>
+                    {availablePlans.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} {p.limits?.custom ? "(Personalizado)" : `- ${formatCurrency(p.price_monthly)}/mês`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(() => {
+                const selectedPlan = availablePlans.find(p => p.id === newClientPlanId);
+                if (selectedPlan?.limits?.custom) {
+                  return (
+                    <div className="space-y-2">
+                      <Label>Número de operadores</Label>
+                      <Input type="number" min={1} value={newClientOperators} onChange={e => setNewClientOperators(Number(e.target.value))} />
+                      <p className="text-xs text-muted-foreground">Será salvo nas configurações do tenant</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <Button onClick={createNewClient} disabled={creatingClient || !newClientPlanId} className="gap-1.5">
                 <Plus className="w-4 h-4" />
                 {creatingClient ? "Criando..." : "Criar Empresa"}
               </Button>
