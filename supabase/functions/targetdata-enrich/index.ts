@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret, cpfs: ["00000000000"] }),
+            body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret, cpfs: ["46020967867"] }),
           },
           15000
         );
