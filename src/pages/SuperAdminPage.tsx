@@ -639,24 +639,51 @@ const SuperAdminPage = () => {
 
             <Separator />
 
+            {/* PLANO */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Plano</h3>
+              <Select value={editPlanId} onValueChange={async (v) => {
+                try {
+                  const { error } = await supabase.from("tenants").update({ plan_id: v } as any).eq("id", manageSheet!.id);
+                  if (error) throw error;
+                  setEditPlanId(v);
+                  toast({ title: "Plano atualizado!" });
+                  loadTenants();
+                } catch (err: any) {
+                  toast({ title: "Erro", description: err.message, variant: "destructive" });
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Selecione o plano" /></SelectTrigger>
+                <SelectContent>
+                  {availablePlans.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} {p.limits?.custom ? "(Personalizado)" : `- ${formatCurrency(p.price_monthly)}/mês`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
             {/* SERVIÇOS */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">Serviços</h3>
-              {SERVICE_CATALOG.map(svc => {
+              {catalogServices.map((svc: any) => {
                 const enabledServices = (manageSheet?.settings as any)?.enabled_services || {};
-                const isEnabled = !!enabledServices[svc.key];
+                const isEnabled = !!enabledServices[svc.service_code];
                 return (
-                  <div key={svc.key} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                  <div key={svc.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
                     <div className="flex-1 mr-3">
-                      <p className="text-sm font-medium">{svc.label}</p>
+                      <p className="text-sm font-medium">{svc.name}</p>
                       <p className="text-xs text-muted-foreground">{svc.description}</p>
                       <p className="text-xs font-semibold text-primary mt-1">
-                        {svc.price !== null ? `${formatCurrency(svc.price)}/mês` : "Valor a definir"}
+                        {formatCurrency(svc.price)}/{svc.price_type === "monthly" ? "mês" : svc.price_type}
                       </p>
                     </div>
                     <Switch
                       checked={isEnabled}
-                      onCheckedChange={(checked) => toggleService(svc.key, checked)}
+                      onCheckedChange={(checked) => toggleService(svc.service_code, checked)}
                     />
                   </div>
                 );
