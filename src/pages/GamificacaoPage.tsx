@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
@@ -26,9 +28,14 @@ const medals = ["🥇", "🥈", "🥉"];
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
+
+  useEffect(() => {
+    triggerGamificationUpdate();
+  }, [triggerGamificationUpdate]);
 
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],
