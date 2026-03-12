@@ -297,36 +297,68 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               {/* Telefones */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
                 <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
-                <InfoItem label="Telefone 2" value={
-                  client.phone2 ? (
-                    <span className="flex items-center gap-1">
-                      {formatPhone(client.phone2)}
-                      {client.enrichment_data && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
-                            <TooltipContent>Dado obtido via higienização</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </span>
-                  ) : null
-                } />
-                <InfoItem label="Telefone 3" value={
-                  client.phone3 ? (
-                    <span className="flex items-center gap-1">
-                      {formatPhone(client.phone3)}
-                      {client.enrichment_data && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
-                            <TooltipContent>Dado obtido via higienização</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </span>
-                  ) : null
-                } />
+                <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
+                <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Todos os Telefones</p>
+                  {allClientPhones.length > 0 ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                          <PhoneIcon className="w-3.5 h-3.5" />
+                          Ver todos ({allClientPhones.length})
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="start">
+                        <div className="p-3 border-b border-border">
+                          <p className="text-sm font-semibold text-foreground">Telefones encontrados</p>
+                          <p className="text-xs text-muted-foreground">Ordenados por prioridade (celular → fixo)</p>
+                        </div>
+                        <ScrollArea className="max-h-64">
+                          <div className="p-2 space-y-1">
+                            {(allClientPhones as any[]).map((p: any, idx: number) => (
+                              <div key={p.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 group">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}</span>
+                                  <span className="text-sm font-medium text-foreground">{formatPhone(p.phone_number)}</span>
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {p.phone_type === "celular" ? "Cel" : p.phone_type === "fixo" ? "Fixo" : p.phone_type}
+                                  </Badge>
+                                  {p.is_whatsapp && (
+                                    <Badge className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-500/20">
+                                      WhatsApp
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => {
+                                      const num = p.phone_number.replace(/\D/g, "");
+                                      const intl = num.startsWith("55") ? num : `55${num}`;
+                                      window.open(`https://wa.me/${intl}`, "_blank");
+                                    }}
+                                    title="Abrir WhatsApp"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 text-green-500" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
                 <InfoItem label="Email" value={
                   client.email ? (
                     <span className="flex items-center gap-1">
@@ -340,6 +372,8 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                         </TooltipProvider>
                       )}
                     </span>
+                  ) : null
+                } />
                   ) : null
                 } />
               </div>
