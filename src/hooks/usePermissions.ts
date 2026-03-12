@@ -107,6 +107,18 @@ export function usePermissions() {
   const { tenantUser, isSuperAdmin, loading: tenantLoading } = useTenant();
   const role = (tenantUser?.role as TenantRole) || "operador";
 
+  // Fetch assigned permission profile (primary source)
+  const { data: permProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ["my-permission-profile", tenantUser?.user_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_my_permission_profile");
+      if (error || !data || data.length === 0) return null;
+      return data[0] as { id: string; name: string; base_role: string; permissions: Record<string, string[]>; is_default: boolean };
+    },
+    enabled: !!tenantUser,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Fetch individual permission overrides
   const { data: overrides = [], isLoading: permLoading } = useQuery({
     queryKey: ["my-permissions", tenantUser?.user_id],
@@ -119,9 +131,11 @@ export function usePermissions() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Build effective permissions: start with role defaults, apply overrides
+  // Build effective permissions: profile → role defaults → individual overrides
   const effectivePermissions = (() => {
-    const base = { ...ROLE_DEFAULTS[role] };
+    const base: Record<string, string[]> = permProfile?.permissions
+      ? { ...permProfile.permissions }
+      : { ...ROLE_DEFAULTS[role] };
     for (const override of overrides) {
       base[override.module] = override.actions;
     }
