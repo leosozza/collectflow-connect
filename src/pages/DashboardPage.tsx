@@ -6,6 +6,8 @@ import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { GlassCalendar } from "@/components/ui/glass-calendar";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
