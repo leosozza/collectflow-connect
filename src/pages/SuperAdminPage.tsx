@@ -244,28 +244,31 @@ const SuperAdminPage = () => {
   };
 
   const createNewClient = async () => {
-    if (!newClientName || !newClientSlug) {
-      toast({ title: "Preencha nome e slug", variant: "destructive" });
+    if (!newClientName || !newClientSlug || !newClientPlanId) {
+      toast({ title: "Preencha nome, slug e plano", variant: "destructive" });
       return;
     }
     setCreatingClient(true);
     try {
-      const { data: plans } = await supabase.from("plans").select("id").eq("is_active", true).limit(1);
-      const planId = plans?.[0]?.id;
-      if (!planId) throw new Error("Nenhum plano disponível");
+      const selectedPlan = availablePlans.find(p => p.id === newClientPlanId);
+      const isEnterprise = selectedPlan?.limits?.custom;
+      const settings = isEnterprise ? { max_operators: newClientOperators } : {};
 
       const { error } = await supabase.from("tenants").insert({
         name: newClientName,
         slug: newClientSlug,
         cnpj: newClientCnpj || null,
-        plan_id: planId,
+        plan_id: newClientPlanId,
         status: "active",
+        settings,
       } as any);
       if (error) throw error;
       toast({ title: "Cliente criado com sucesso!" });
       setNewClientName("");
       setNewClientSlug("");
       setNewClientCnpj("");
+      setNewClientPlanId("");
+      setNewClientOperators(5);
       loadTenants();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
