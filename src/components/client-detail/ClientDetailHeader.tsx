@@ -17,6 +17,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -277,9 +278,51 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               {/* Telefones */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
                 <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
-                <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
-                <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
-                <InfoItem label="Email" value={client.email} />
+                <InfoItem label="Telefone 2" value={
+                  client.phone2 ? (
+                    <span className="flex items-center gap-1">
+                      {formatPhone(client.phone2)}
+                      {client.enrichment_data && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
+                            <TooltipContent>Dado obtido via higienização</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </span>
+                  ) : null
+                } />
+                <InfoItem label="Telefone 3" value={
+                  client.phone3 ? (
+                    <span className="flex items-center gap-1">
+                      {formatPhone(client.phone3)}
+                      {client.enrichment_data && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
+                            <TooltipContent>Dado obtido via higienização</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </span>
+                  ) : null
+                } />
+                <InfoItem label="Email" value={
+                  client.email ? (
+                    <span className="flex items-center gap-1">
+                      {client.email}
+                      {client.enrichment_data && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
+                            <TooltipContent>Dado obtido via higienização</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </span>
+                  ) : null
+                } />
               </div>
 
               {/* Endereço */}

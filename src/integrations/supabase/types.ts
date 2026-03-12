@@ -848,6 +848,7 @@ export type Database = {
           data_vencimento: string
           email: string | null
           endereco: string | null
+          enrichment_data: Json | null
           external_id: string | null
           id: string
           model_name: string | null
@@ -890,6 +891,7 @@ export type Database = {
           data_vencimento: string
           email?: string | null
           endereco?: string | null
+          enrichment_data?: Json | null
           external_id?: string | null
           id?: string
           model_name?: string | null
@@ -932,6 +934,7 @@ export type Database = {
           data_vencimento?: string
           email?: string | null
           endereco?: string | null
+          enrichment_data?: Json | null
           external_id?: string | null
           id?: string
           model_name?: string | null
