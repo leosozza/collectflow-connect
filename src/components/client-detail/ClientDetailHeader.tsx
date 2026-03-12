@@ -85,6 +85,21 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     enabled: !!tenant?.id,
   });
 
+  const cleanCpf = cpf?.replace(/\D/g, "") || "";
+  const { data: allClientPhones = [] } = useQuery({
+    queryKey: ["client_phones", tenant?.id, cleanCpf],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("client_phones")
+        .select("*")
+        .eq("tenant_id", tenant!.id)
+        .eq("cpf", cleanCpf)
+        .order("priority", { ascending: true });
+      return data || [];
+    },
+    enabled: !!tenant?.id && !!cleanCpf,
+  });
+
   const updatePerfilMutation = useMutation({
     mutationFn: async (tipoDevedorId: string | null) => {
       const clientIds = clients.map(c => c.id);
