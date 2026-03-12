@@ -36,6 +36,7 @@ const ClientsPage = () => {
   const { tenant } = useTenant();
   const { trackAction } = useActivityTracker();
   const queryClient = useQueryClient();
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const [filters, setFilters] = useState({
     status: "todos",
     credor: "todos",
