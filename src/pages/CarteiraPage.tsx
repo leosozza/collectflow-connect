@@ -552,7 +552,7 @@ const CarteiraPage = () => {
             <>
               <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
                 <MessageSquare className="w-4 h-4" />
-                <span className="hidden sm:inline">WhatsApp</span> ({selectedIds.size})
+                <span className="hidden sm:inline">WhatsApp</span> ({uniqueSelectedCpfs})
               </Button>
               <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
                 <Phone className="w-4 h-4" />
