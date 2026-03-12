@@ -45,20 +45,44 @@ const COST_PER_CLIENT = 0.15;
 
 const extractFromDataReturned = (raw: any) => {
   const phones: string[] = [];
-  if (Array.isArray(raw?.telefones)) {
-    raw.telefones.forEach((t: any) => {
-      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
-      if (num) phones.push(num);
-    });
-  } else if (raw?.celular) phones.push(String(raw.celular));
-
   const emails: string[] = [];
-  if (Array.isArray(raw?.emails)) {
-    raw.emails.forEach((e: any) => {
-      const addr = typeof e === "string" ? e : e.email || "";
+
+  // New Target Data schema: contato.telefone[] / contato.email[]
+  const telefones = raw?.contato?.telefone || [];
+  if (Array.isArray(telefones)) {
+    telefones.forEach((t: any) => {
+      const ddd = String(t.nr_ddd || "").replace(/\D/g, "");
+      const num = String(t.nr_telefone || "").replace(/\D/g, "");
+      const full = ddd + num;
+      if (full.length >= 10) phones.push(full);
+    });
+  }
+
+  const emailList = raw?.contato?.email || [];
+  if (Array.isArray(emailList)) {
+    emailList.forEach((e: any) => {
+      const addr = typeof e === "string" ? e : e.ds_email || "";
       if (addr) emails.push(addr);
     });
-  } else if (raw?.email) emails.push(raw.email);
+  }
+
+  // Fallback for legacy/flat structures
+  if (phones.length === 0) {
+    if (Array.isArray(raw?.telefones)) {
+      raw.telefones.forEach((t: any) => {
+        const num = typeof t === "string" ? t : t.numero || t.telefone || "";
+        if (num) phones.push(num);
+      });
+    } else if (raw?.celular) phones.push(String(raw.celular));
+  }
+  if (emails.length === 0) {
+    if (Array.isArray(raw?.emails)) {
+      raw.emails.forEach((e: any) => {
+        const addr = typeof e === "string" ? e : e.email || "";
+        if (addr) emails.push(addr);
+      });
+    } else if (raw?.email) emails.push(raw.email);
+  }
 
   return { phones, emails, error: raw?.error || null };
 };

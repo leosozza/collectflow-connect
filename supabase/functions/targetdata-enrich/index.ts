@@ -6,53 +6,66 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Classify and prioritize a phone number */
-function classifyPhone(raw: string): { number: string; type: string; priority: number; isWhatsApp: boolean } {
-  const clean = raw.replace(/\D/g, "");
-  if (clean.length < 10) return { number: clean, type: "desconhecido", priority: 99, isWhatsApp: false };
+/** Classify phone from Target Data contato.telefone[] entry */
+function classifyTdPhone(entry: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any } {
+  const ddd = String(entry.nr_ddd || "").replace(/\D/g, "");
+  const num = String(entry.nr_telefone || "").replace(/\D/g, "");
+  const full = ddd + num;
+  const tipo = String(entry.ds_tipo_telefone || "").toLowerCase();
 
-  // 11 digits and 3rd digit is 9 → mobile (likely WhatsApp)
-  if (clean.length === 11 && clean[2] === "9") {
-    return { number: clean, type: "celular", priority: 1, isWhatsApp: true };
-  }
-  // 11 digits but 3rd digit is not 9 → could be landline with 9-digit area
-  if (clean.length === 11) {
-    return { number: clean, type: "celular", priority: 2, isWhatsApp: false };
-  }
-  // 10 digits → landline
-  if (clean.length === 10) {
-    return { number: clean, type: "fixo", priority: 3, isWhatsApp: false };
-  }
-  return { number: clean, type: "outro", priority: 4, isWhatsApp: false };
+  const isMobile = tipo.includes("movel") || tipo.includes("celular") || (full.length === 11 && full[2] === "9");
+  const isWhatsApp = isMobile && full.length === 11;
+
+  return {
+    number: full,
+    type: isMobile ? "celular" : "fixo",
+    priority: isMobile ? (isWhatsApp ? 1 : 2) : 3,
+    isWhatsApp,
+    raw: entry,
+  };
 }
 
-/** Extract all phones from a Target Data match object */
-function extractPhones(match: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] {
+/** Extract all phones from a Target Data result object (new schema) */
+function extractPhones(result: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] {
   const phones: { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] = [];
   const seen = new Set<string>();
 
-  const addPhone = (raw: string, metadata: any = null) => {
-    const classified = classifyPhone(raw);
+  const telefones = result?.contato?.telefone || [];
+  for (const t of telefones) {
+    const classified = classifyTdPhone(t);
     if (classified.number.length >= 10 && !seen.has(classified.number)) {
       seen.add(classified.number);
-      phones.push({ ...classified, raw: metadata });
+      phones.push(classified);
     }
-  };
-
-  if (match.telefones && Array.isArray(match.telefones)) {
-    match.telefones.forEach((t: any) => {
-      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
-      if (num) addPhone(num, t);
-    });
   }
-  if (match.celular) addPhone(String(match.celular));
-  if (match.telefone_fixo) addPhone(String(match.telefone_fixo));
-  if (match.telefone) addPhone(String(match.telefone));
-  if (match.telefone_comercial) addPhone(String(match.telefone_comercial));
 
-  // Sort by priority (lower = better)
   phones.sort((a, b) => a.priority - b.priority);
   return phones;
+}
+
+/** Extract emails from Target Data result */
+function extractEmails(result: any): string[] {
+  const emails: string[] = [];
+  const list = result?.contato?.email || [];
+  for (const e of list) {
+    const addr = typeof e === "string" ? e : e.ds_email || "";
+    if (addr) emails.push(addr);
+  }
+  return emails;
+}
+
+/** Extract address from Target Data result */
+function extractAddress(result: any): { endereco: string | null; bairro: string | null; cidade: string | null; uf: string | null; cep: string | null } {
+  const enderecos = result?.contato?.endereco || [];
+  if (enderecos.length === 0) return { endereco: null, bairro: null, cidade: null, uf: null, cep: null };
+  const addr = enderecos[0];
+  return {
+    endereco: addr.ds_logradouro || null,
+    bairro: addr.ds_bairro || null,
+    cidade: addr.ds_cidade || null,
+    uf: addr.sg_uf || null,
+    cep: addr.nr_cep ? String(addr.nr_cep).replace(/\D/g, "") : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -76,7 +89,6 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization") || "";
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Validate user from JWT
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -100,7 +112,6 @@ Deno.serve(async (req) => {
     const unitCost = cost_per_client || 0.15;
     const tokensPerClient = 1;
 
-    // Update job status to processing
     await supabase
       .from("enrichment_jobs")
       .update({ status: "processing" })
@@ -110,12 +121,13 @@ Deno.serve(async (req) => {
     let failedCount = 0;
     let processedCount = 0;
 
-    // Process in batches of 10 (Target Data limit)
+    // Process in batches of 10
     for (let i = 0; i < cpfs.length; i += 10) {
       const batch = cpfs.slice(i, i + 10);
 
       try {
-        const response = await fetch("https://api.targetdata.com.br/v1/search/pf", {
+        // FIXED: correct URL with /api prefix
+        const response = await fetch("https://api.targetdata.com.br/api/v1/search/pf", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -126,10 +138,11 @@ Deno.serve(async (req) => {
         });
 
         if (!response.ok) {
+          const errorBody = await response.text();
           for (const cpf of batch) {
             await supabase.from("enrichment_logs").insert({
-              job_id, cpf, status: "error",
-              data_returned: { error: `API returned ${response.status}` },
+              job_id, cpf: cpf.replace(/\D/g, ""), status: "error",
+              data_returned: { error: `API returned ${response.status}`, body: errorBody },
             });
             failedCount++;
             processedCount++;
@@ -140,40 +153,27 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const result = await response.json();
-        const results = result.data || result.results || result || [];
+        const apiResponse = await response.json();
+        
+        // FIXED: Target Data returns { header, results[] }
+        const results: any[] = apiResponse.results || apiResponse.data || [];
 
         for (const cpf of batch) {
           const cleanCpf = cpf.replace(/\D/g, "");
+          
+          // FIXED: match by cadastral.nr_cpf
           const match = Array.isArray(results)
-            ? results.find(
-                (r: any) => (r.cpf || r.documento || "").replace(/\D/g, "") === cleanCpf
-              )
+            ? results.find((r: any) => {
+                const rCpf = (r?.cadastral?.nr_cpf || r?.cpf || r?.documento || "").replace(/\D/g, "");
+                return rCpf === cleanCpf;
+              })
             : null;
 
           if (match) {
-            // Extract and prioritize phones
             const allPhones = extractPhones(match);
+            const emails = extractEmails(match);
+            const address = extractAddress(match);
 
-            // Extract email
-            const emails: string[] = [];
-            if (match.emails && Array.isArray(match.emails)) {
-              match.emails.forEach((e: any) => {
-                const addr = typeof e === "string" ? e : e.email || e.endereco || "";
-                if (addr) emails.push(addr);
-              });
-            } else if (match.email) {
-              emails.push(match.email);
-            }
-
-            // Extract address
-            const endereco = match.endereco || match.logradouro || null;
-            const bairro = match.bairro || null;
-            const cidade = match.cidade || match.municipio || null;
-            const uf = match.uf || match.estado || null;
-            const cep = match.cep ? String(match.cep).replace(/\D/g, "") : null;
-
-            // Update client records — top 3 phones go to main fields
             const updateData: Record<string, any> = {
               enrichment_data: match,
               updated_at: new Date().toISOString(),
@@ -183,11 +183,11 @@ Deno.serve(async (req) => {
             if (allPhones.length > 1) updateData.phone2 = allPhones[1].number;
             if (allPhones.length > 2) updateData.phone3 = allPhones[2].number;
             if (emails.length > 0) updateData.email = emails[0];
-            if (endereco) updateData.endereco = endereco;
-            if (bairro) updateData.bairro = bairro;
-            if (cidade) updateData.cidade = cidade;
-            if (uf) updateData.uf = uf;
-            if (cep) updateData.cep = cep;
+            if (address.endereco) updateData.endereco = address.endereco;
+            if (address.bairro) updateData.bairro = address.bairro;
+            if (address.cidade) updateData.cidade = address.cidade;
+            if (address.uf) updateData.uf = address.uf;
+            if (address.cep) updateData.cep = address.cep;
 
             await supabase
               .from("clients")
