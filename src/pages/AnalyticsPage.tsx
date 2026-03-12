@@ -415,14 +415,14 @@ const AnalyticsPage = () => {
 
           {/* Portfolio conversion */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative flex flex-col">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos que foram pagos (completed) em relação ao total de acordos ativos." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos com pagamentos recebidos em relação ao total de acordos ativos." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Taxa de Conversão de Acordos</h3>
             <div className="flex-1 flex flex-col items-center justify-center gap-4">
               <p className="text-5xl font-bold text-primary">{taxaConversao.toFixed(1)}%</p>
               <Progress value={taxaConversao} className="w-3/4 h-3" />
               <div className="flex gap-6 text-xs text-muted-foreground">
                 <span>Total Ativos: <strong className="text-foreground">{totalAtivos}</strong></span>
-                <span>Pagos: <strong className="text-foreground">{pagos.length}</strong></span>
+                <span>Com Pagamento: <strong className="text-foreground">{acordosComPagamento.length}</strong></span>
               </div>
             </div>
           </div>
