@@ -243,7 +243,7 @@ const DashboardPage = () => {
                 {format(browseDate, "dd/MM/yyyy")}
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none" align="center">
+            <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
               <GlassCalendar
                 selectedDate={browseDate}
                 onDateSelect={(date) => setBrowseDate(date)}
