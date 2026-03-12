@@ -211,7 +211,6 @@ const EnrichmentConfirmDialog = ({
           },
         },
       });
-      onComplete();
     } catch (err: any) {
       toast.error(err.message || "Erro ao processar higienização");
     } finally {
