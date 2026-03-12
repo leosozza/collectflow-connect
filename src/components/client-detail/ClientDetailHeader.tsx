@@ -19,6 +19,9 @@ import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/service
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ClientDetailHeaderProps {
   client: any;
