@@ -23,6 +23,7 @@ import ImportDialog from "@/components/clients/ImportDialog";
 import { Button } from "@/components/ui/button";
 import { Plus, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ const ClientsPage = () => {
   const { tenant } = useTenant();
   const { trackAction } = useActivityTracker();
   const queryClient = useQueryClient();
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const [filters, setFilters] = useState({
     status: "todos",
     credor: "todos",
@@ -108,6 +110,7 @@ const ClientsPage = () => {
       trackAction("registrar_pagamento");
       toast.success("Pagamento registrado e próxima parcela criada!");
       setPaymentClient(null);
+      triggerGamificationUpdate();
     },
     onError: () => toast.error("Erro ao registrar pagamento"),
   });

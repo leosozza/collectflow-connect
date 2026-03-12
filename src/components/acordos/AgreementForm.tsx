@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus } from "lucide-react";
 import { AgreementFormData } from "@/services/agreementService";
 import { formatCPF } from "@/lib/formatters";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 
 interface AgreementFormProps {
   onSubmit: (data: AgreementFormData) => Promise<void>;
@@ -16,6 +17,7 @@ interface AgreementFormProps {
 const AgreementForm = ({ onSubmit }: AgreementFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const [form, setForm] = useState<AgreementFormData>({
     client_cpf: "",
     client_name: "",
@@ -52,6 +54,7 @@ const AgreementForm = ({ onSubmit }: AgreementFormProps) => {
     try {
       await onSubmit(form);
       setOpen(false);
+      triggerGamificationUpdate();
       setForm({
         client_cpf: "", client_name: "", credor: "", original_total: 0,
         proposed_total: 0, discount_percent: 0, new_installments: 1,
