@@ -282,20 +282,20 @@ const AnalyticsPage = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
   }, [vigentes, pendentes, vencidos]);
 
-  // Heatmap by first_due_date day
+  // Heatmap by first_due_date day (use full agreement data)
   const heatmapData = useMemo(() => {
     const counts = new Array(31).fill(0);
-    activeAgreements.forEach((a) => {
+    allAgreementsFull.filter((a) => a.status !== "cancelled" && a.status !== "rejected").forEach((a) => {
       const day = parseISO(a.first_due_date).getDate();
       counts[day - 1] += 1;
     });
     const max = Math.max(...counts, 1);
     return counts.map((count, i) => ({ day: i + 1, count, intensity: count / max }));
-  }, [activeAgreements]);
+  }, [allAgreementsFull]);
 
-  // Export
+  // Export (use full agreement data)
   const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredAgreements.map((a) => ({
+    const ws = XLSX.utils.json_to_sheet(allAgreementsFull.map((a) => ({
       Cliente: a.client_name,
       CPF: a.client_cpf,
       Credor: a.credor,
