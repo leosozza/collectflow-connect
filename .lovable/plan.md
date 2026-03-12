@@ -1,64 +1,37 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Plano: Corrigir teste de conexão Target Data + IP
 
-### O que será feito
+## Problemas identificados
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+### 1. Teste de conexão trava (nunca finaliza)
+A função `targetdata-enrich` tenta processar o CPF de teste como um job real:
+- Usa `job_id: "test-connection"` (string, não UUID) para inserir em `enrichment_logs` e atualizar `enrichment_jobs` — causa erro no banco
+- O fetch para a API Target Data não tem timeout — se a API demorar, a edge function fica pendurada
+- Não há modo de teste que pule as operações de banco
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+### 2. Erro "IP não autorizado" (code 1099)
+A API Target Data exige IP na whitelist. Edge Functions usam IPs dinâmicos. Não há como fixar IP no código. **Duas opções:**
+- Solicitar à Target Data desabilitar restrição de IP para sua API key
+- A Target Data pode ter uma opção "sem restrição de IP" nas configurações da API key
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+## Alterações
 
----
+### 1. `supabase/functions/targetdata-enrich/index.ts`
+- Adicionar parâmetro `test_mode: boolean` — quando `true`, faz apenas um fetch de teste à API e retorna o resultado sem operações de banco
+- Adicionar timeout de 15s no fetch para a API Target Data (evitar hang)
+- Tratar erro 401 com `code_error: 1099` retornando mensagem clara sobre IP
 
-### Explicação das regras e lógicas de Negociação
+### 2. `src/components/admin/integrations/TargetDataTab.tsx`
+- Enviar `test_mode: true` no corpo da requisição de teste
+- Tratar a resposta de IP não autorizado com mensagem orientativa
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+### 3. `supabase/config.toml`
+- Adicionar `verify_jwt = false` para `targetdata-enrich` (necessário para o novo sistema signing-keys) e validar JWT no código
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
-
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
-
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-```
-
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
-
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+| Arquivo | Alteração |
+|---------|-----------|
+| `supabase/functions/targetdata-enrich/index.ts` | Adicionar `test_mode`, timeout no fetch, melhor tratamento de erro de IP |
+| `src/components/admin/integrations/TargetDataTab.tsx` | Enviar `test_mode: true`, exibir orientação sobre IP |
+| `supabase/config.toml` | `verify_jwt = false` para targetdata-enrich |
 
