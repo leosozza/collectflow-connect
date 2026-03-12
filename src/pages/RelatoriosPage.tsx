@@ -12,7 +12,6 @@ import * as XLSX from "xlsx";
 import ReportFilters from "@/components/relatorios/ReportFilters";
 import EvolutionChart from "@/components/relatorios/EvolutionChart";
 import AgingReport from "@/components/relatorios/AgingReport";
-import OperatorRanking from "@/components/relatorios/OperatorRanking";
 import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
