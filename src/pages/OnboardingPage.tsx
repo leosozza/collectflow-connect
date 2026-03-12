@@ -163,8 +163,16 @@ const OnboardingPage = () => {
                         {p.slug === "professional" && <Badge>Popular</Badge>}
                       </div>
                       <CardDescription>
-                        <span className="text-2xl font-bold text-foreground">{formatCurrency(p.price_monthly)}</span>
-                        <span className="text-muted-foreground">/mês</span>
+                        {limits.custom ? (
+                          <>
+                            <span className="text-2xl font-bold text-foreground">Sob consulta</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-2xl font-bold text-foreground">{formatCurrency(p.price_monthly)}</span>
+                            <span className="text-muted-foreground">/mês</span>
+                          </>
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
