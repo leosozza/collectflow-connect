@@ -43,6 +43,26 @@ interface EnrichmentLog {
 
 const COST_PER_CLIENT = 0.15;
 
+const extractFromDataReturned = (raw: any) => {
+  const phones: string[] = [];
+  if (Array.isArray(raw?.telefones)) {
+    raw.telefones.forEach((t: any) => {
+      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
+      if (num) phones.push(num);
+    });
+  } else if (raw?.celular) phones.push(String(raw.celular));
+
+  const emails: string[] = [];
+  if (Array.isArray(raw?.emails)) {
+    raw.emails.forEach((e: any) => {
+      const addr = typeof e === "string" ? e : e.email || "";
+      if (addr) emails.push(addr);
+    });
+  } else if (raw?.email) emails.push(raw.email);
+
+  return { phones, emails, error: raw?.error || null };
+};
+
 const EnrichmentConfirmDialog = ({
   open,
   onOpenChange,
@@ -144,14 +164,17 @@ const EnrichmentConfirmDialog = ({
 
       if (jobLogs) {
         setLogs(
-          (jobLogs as any[]).map((l) => ({
-            id: l.id,
-            cpf: l.cpf,
-            status: l.status,
-            phones_found: l.phones_found,
-            emails_found: l.emails_found,
-            error_message: l.error_message,
-          }))
+          (jobLogs as any[]).map((l) => {
+            const extracted = extractFromDataReturned(l.data_returned);
+            return {
+              id: l.id,
+              cpf: l.cpf,
+              status: l.status,
+              phones_found: extracted.phones.length ? extracted.phones : null,
+              emails_found: extracted.emails.length ? extracted.emails : null,
+              error_message: extracted.error,
+            };
+          })
         );
       }
 
@@ -170,9 +193,10 @@ const EnrichmentConfirmDialog = ({
 
       const logText = (jobLogs as any[] || []).map((l: any) => {
         const st = l.status === "success" ? "✅" : "❌";
-        const phones = l.phones_found?.length ? l.phones_found.join(", ") : "-";
-        const emails = l.emails_found?.length ? l.emails_found.join(", ") : "-";
-        return `${st} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${l.error_message ? ` | Erro: ${l.error_message}` : ""}`;
+        const ext = extractFromDataReturned(l.data_returned);
+        const phones = ext.phones.length ? ext.phones.join(", ") : "-";
+        const emails = ext.emails.length ? ext.emails.join(", ") : "-";
+        return `${st} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${ext.error ? ` | Erro: ${ext.error}` : ""}`;
       }).join("\n");
 
       toast(`Higienização concluída! ${enriched} atualizados, ${failed} não encontrados.`, {
