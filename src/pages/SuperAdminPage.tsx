@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 const AdminDashboardPage = lazy(() => import("@/pages/AdminDashboardPage"));
+import TenantServicesTab from "@/components/admin/TenantServicesTab";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";
 import { supabase } from "@/integrations/supabase/client";
@@ -317,6 +318,7 @@ const SuperAdminPage = () => {
           <TabsTrigger value="executivo">Dashboard Executivo</TabsTrigger>
           <TabsTrigger value="dashboard">Resumo Tenants</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
+          <TabsTrigger value="servicos">Serviços Contratados</TabsTrigger>
           <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
 
@@ -551,6 +553,11 @@ const SuperAdminPage = () => {
               </Card>
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        {/* ========== SERVIÇOS CONTRATADOS ========== */}
+        <TabsContent value="servicos" className="mt-4">
+          <TenantServicesTab />
         </TabsContent>
 
         {/* ========== NOVO CLIENTE ========== */}
