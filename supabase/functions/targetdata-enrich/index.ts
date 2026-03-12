@@ -6,6 +6,55 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Classify and prioritize a phone number */
+function classifyPhone(raw: string): { number: string; type: string; priority: number; isWhatsApp: boolean } {
+  const clean = raw.replace(/\D/g, "");
+  if (clean.length < 10) return { number: clean, type: "desconhecido", priority: 99, isWhatsApp: false };
+
+  // 11 digits and 3rd digit is 9 → mobile (likely WhatsApp)
+  if (clean.length === 11 && clean[2] === "9") {
+    return { number: clean, type: "celular", priority: 1, isWhatsApp: true };
+  }
+  // 11 digits but 3rd digit is not 9 → could be landline with 9-digit area
+  if (clean.length === 11) {
+    return { number: clean, type: "celular", priority: 2, isWhatsApp: false };
+  }
+  // 10 digits → landline
+  if (clean.length === 10) {
+    return { number: clean, type: "fixo", priority: 3, isWhatsApp: false };
+  }
+  return { number: clean, type: "outro", priority: 4, isWhatsApp: false };
+}
+
+/** Extract all phones from a Target Data match object */
+function extractPhones(match: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] {
+  const phones: { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any }[] = [];
+  const seen = new Set<string>();
+
+  const addPhone = (raw: string, metadata: any = null) => {
+    const classified = classifyPhone(raw);
+    if (classified.number.length >= 10 && !seen.has(classified.number)) {
+      seen.add(classified.number);
+      phones.push({ ...classified, raw: metadata });
+    }
+  };
+
+  if (match.telefones && Array.isArray(match.telefones)) {
+    match.telefones.forEach((t: any) => {
+      const num = typeof t === "string" ? t : t.numero || t.telefone || "";
+      if (num) addPhone(num, t);
+    });
+  }
+  if (match.celular) addPhone(String(match.celular));
+  if (match.telefone_fixo) addPhone(String(match.telefone_fixo));
+  if (match.telefone) addPhone(String(match.telefone));
+  if (match.telefone_comercial) addPhone(String(match.telefone_comercial));
+
+  // Sort by priority (lower = better)
+  phones.sort((a, b) => a.priority - b.priority);
+  return phones;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -49,7 +98,7 @@ Deno.serve(async (req) => {
     }
 
     const unitCost = cost_per_client || 0.15;
-    const tokensPerClient = 1; // 1 token per client
+    const tokensPerClient = 1;
 
     // Update job status to processing
     await supabase
@@ -77,19 +126,15 @@ Deno.serve(async (req) => {
         });
 
         if (!response.ok) {
-          // Mark all in batch as failed
           for (const cpf of batch) {
             await supabase.from("enrichment_logs").insert({
-              job_id,
-              cpf,
-              status: "error",
+              job_id, cpf, status: "error",
               data_returned: { error: `API returned ${response.status}` },
             });
             failedCount++;
             processedCount++;
           }
-          await supabase
-            .from("enrichment_jobs")
+          await supabase.from("enrichment_jobs")
             .update({ processed: processedCount, failed: failedCount, enriched: enrichedCount })
             .eq("id", job_id);
           continue;
@@ -100,28 +145,15 @@ Deno.serve(async (req) => {
 
         for (const cpf of batch) {
           const cleanCpf = cpf.replace(/\D/g, "");
-          // Find matching result — try different field names
           const match = Array.isArray(results)
             ? results.find(
-                (r: any) =>
-                  (r.cpf || r.documento || "").replace(/\D/g, "") === cleanCpf
+                (r: any) => (r.cpf || r.documento || "").replace(/\D/g, "") === cleanCpf
               )
             : null;
 
           if (match) {
-            // Extract phone data
-            const phones: string[] = [];
-            if (match.telefones && Array.isArray(match.telefones)) {
-              match.telefones.forEach((t: any) => {
-                const num = typeof t === "string" ? t : t.numero || t.telefone || "";
-                if (num) phones.push(num.replace(/\D/g, ""));
-              });
-            } else if (match.celular) {
-              phones.push(String(match.celular).replace(/\D/g, ""));
-            }
-            if (match.telefone_fixo) {
-              phones.push(String(match.telefone_fixo).replace(/\D/g, ""));
-            }
+            // Extract and prioritize phones
+            const allPhones = extractPhones(match);
 
             // Extract email
             const emails: string[] = [];
@@ -141,15 +173,15 @@ Deno.serve(async (req) => {
             const uf = match.uf || match.estado || null;
             const cep = match.cep ? String(match.cep).replace(/\D/g, "") : null;
 
-            // Update all client records for this CPF in this tenant
+            // Update client records — top 3 phones go to main fields
             const updateData: Record<string, any> = {
               enrichment_data: match,
               updated_at: new Date().toISOString(),
             };
 
-            if (phones.length > 0) updateData.phone = phones[0];
-            if (phones.length > 1) updateData.phone2 = phones[1];
-            if (phones.length > 2) updateData.phone3 = phones[2];
+            if (allPhones.length > 0) updateData.phone = allPhones[0].number;
+            if (allPhones.length > 1) updateData.phone2 = allPhones[1].number;
+            if (allPhones.length > 2) updateData.phone3 = allPhones[2].number;
             if (emails.length > 0) updateData.email = emails[0];
             if (endereco) updateData.endereco = endereco;
             if (bairro) updateData.bairro = bairro;
@@ -157,14 +189,32 @@ Deno.serve(async (req) => {
             if (uf) updateData.uf = uf;
             if (cep) updateData.cep = cep;
 
-            // Update clients
             await supabase
               .from("clients")
               .update(updateData)
               .eq("tenant_id", tenant_id)
               .filter("cpf", "ilike", `%${cleanCpf.slice(-8)}%`);
 
-            // Consume 1 token for this successful enrichment
+            // Save ALL phones to client_phones table
+            for (let p = 0; p < allPhones.length; p++) {
+              const phone = allPhones[p];
+              await supabase.from("client_phones").upsert(
+                {
+                  tenant_id,
+                  cpf: cleanCpf,
+                  phone_number: phone.number,
+                  phone_type: phone.type,
+                  priority: p + 1,
+                  is_whatsapp: phone.isWhatsApp,
+                  source: "targetdata",
+                  raw_metadata: phone.raw || {},
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: "tenant_id,cpf,phone_number" }
+              );
+            }
+
+            // Consume 1 token
             await supabase.rpc("consume_tokens", {
               p_tenant_id: tenant_id,
               p_amount: tokensPerClient,
@@ -175,56 +225,37 @@ Deno.serve(async (req) => {
               p_metadata: {},
             });
 
-            // Log success
             await supabase.from("enrichment_logs").insert({
-              job_id,
-              cpf: cleanCpf,
-              status: "success",
-              data_returned: match,
+              job_id, cpf: cleanCpf, status: "success", data_returned: match,
             });
 
             enrichedCount++;
           } else {
-            // No match found
             await supabase.from("enrichment_logs").insert({
-              job_id,
-              cpf: cleanCpf,
-              status: "not_found",
-              data_returned: null,
+              job_id, cpf: cleanCpf, status: "not_found", data_returned: null,
             });
             failedCount++;
           }
           processedCount++;
         }
 
-        // Update progress
-        await supabase
-          .from("enrichment_jobs")
-          .update({
-            processed: processedCount,
-            enriched: enrichedCount,
-            failed: failedCount,
-          })
+        await supabase.from("enrichment_jobs")
+          .update({ processed: processedCount, enriched: enrichedCount, failed: failedCount })
           .eq("id", job_id);
       } catch (batchError: any) {
-        // Mark remaining batch as failed
         for (const cpf of batch) {
           await supabase.from("enrichment_logs").insert({
-            job_id,
-            cpf: cpf.replace(/\D/g, ""),
-            status: "error",
+            job_id, cpf: cpf.replace(/\D/g, ""), status: "error",
             data_returned: { error: batchError.message },
           });
           failedCount++;
           processedCount++;
         }
-        await supabase
-          .from("enrichment_jobs")
+        await supabase.from("enrichment_jobs")
           .update({ processed: processedCount, failed: failedCount, enriched: enrichedCount })
           .eq("id", job_id);
       }
 
-      // Small delay between batches to avoid rate limiting
       if (i + 10 < cpfs.length) {
         await new Promise((r) => setTimeout(r, 500));
       }
