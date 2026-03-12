@@ -28,9 +28,14 @@ const medals = ["🥇", "🥈", "🥉"];
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
+
+  useEffect(() => {
+    triggerGamificationUpdate();
+  }, [triggerGamificationUpdate]);
 
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],

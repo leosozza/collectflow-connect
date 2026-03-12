@@ -14,7 +14,12 @@ const medals = ["🥇", "🥈", "🥉"];
 const MiniRanking = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
+
+  useEffect(() => {
+    triggerGamificationUpdate();
+  }, [triggerGamificationUpdate]);
 
   const { data: ranking = [] } = useQuery({
     queryKey: ["ranking", now.getFullYear(), now.getMonth() + 1],
