@@ -126,6 +126,87 @@ export const createAgreement = async (
     console.error("Erro ao atribuir operador:", e);
   }
 
+  // --- Gamification: update operator_points ---
+  try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+
+    // Get operator profile id
+    const { data: creatorProfileForPoints } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (creatorProfileForPoints) {
+      const operatorProfileId = creatorProfileForPoints.id;
+
+      // Count valid agreements this month
+      const { count: agreementsCount } = await supabase
+        .from("agreements")
+        .select("*", { count: "exact", head: true })
+        .eq("created_by", userId)
+        .eq("tenant_id", tenantId)
+        .gte("created_at", monthStart)
+        .lt("created_at", monthEnd)
+        .not("status", "in", "(cancelled,rejected)");
+
+      // Count cancelled agreements this month
+      const { count: breaksCount } = await supabase
+        .from("agreements")
+        .select("*", { count: "exact", head: true })
+        .eq("created_by", userId)
+        .eq("tenant_id", tenantId)
+        .eq("status", "cancelled")
+        .gte("created_at", monthStart)
+        .lt("created_at", monthEnd);
+
+      // Sum proposed_total of completed agreements this month
+      const { data: completedData } = await supabase
+        .from("agreements")
+        .select("proposed_total")
+        .eq("created_by", userId)
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("created_at", monthStart)
+        .lt("created_at", monthEnd);
+
+      const totalReceived = (completedData || []).reduce(
+        (sum, a) => sum + Number(a.proposed_total),
+        0
+      );
+
+      const paymentsCount = agreementsCount || 0;
+      const breaks = breaksCount || 0;
+
+      // Simple points formula matching gamificationService.calculatePoints
+      let points = paymentsCount * 10 + Math.floor(totalReceived / 100) * 5 - breaks * 3;
+      points = Math.max(0, points);
+
+      await supabase.from("operator_points").upsert(
+        {
+          tenant_id: tenantId,
+          operator_id: operatorProfileId,
+          year,
+          month,
+          points,
+          payments_count: paymentsCount,
+          breaks_count: breaks,
+          total_received: totalReceived,
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "tenant_id,operator_id,year,month" }
+      );
+    }
+  } catch (e) {
+    console.error("Erro ao atualizar gamificação:", e);
+  }
+
   // Notify admins when agreement requires approval
   if (options?.requiresApproval) {
     try {

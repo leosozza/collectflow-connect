@@ -160,7 +160,35 @@ const AnalyticsPage = () => {
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalRecebido = pagos.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
-  const totalPendente = [...vigentes, ...pendentes, ...vencidos].reduce((s, a) => s + Number(a.proposed_total), 0);
+
+  // Total Pendente: soma do saldo devedor de toda a carteira (clients)
+  const { data: totalCarteiraPendente = 0 } = useQuery({
+    queryKey: ["analytics-carteira-pendente", tenant?.id],
+    queryFn: async () => {
+      // Use pagination to avoid 1000-row limit
+      let total = 0;
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data } = await supabase
+          .from("clients")
+          .select("valor_atualizado, valor_saldo, valor_parcela")
+          .eq("tenant_id", tenant!.id)
+          .in("status", ["pendente", "vencido", "em_acordo"])
+          .range(from, from + pageSize - 1);
+        if (!data || data.length === 0) break;
+        total += data.reduce(
+          (sum, c) => sum + Number(c.valor_atualizado || c.valor_saldo || c.valor_parcela || 0),
+          0
+        );
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return total;
+    },
+    enabled: !!tenant?.id,
+  });
+  const totalPendente = totalCarteiraPendente;
 
   // KPIs
   const totalResolvidos = pagos.length + cancelados.length;
@@ -298,9 +326,9 @@ const AnalyticsPage = () => {
           ) : (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pendentes, vigentes e vencidos." /></div>
-                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Pendente</p>
+<div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada (pendente, vencido e em acordo)." /></div>
+                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
+                 <p className="text-xs text-muted-foreground">Total Pendente</p>
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
@@ -364,7 +392,7 @@ const AnalyticsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Status pie */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Proporção visual entre os status dos acordos no período." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Distribuição dos status dos acordos formalizados no período selecionado." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Distribuição de Status</h3>
             {statusPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
