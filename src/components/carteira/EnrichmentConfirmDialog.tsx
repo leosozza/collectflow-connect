@@ -211,7 +211,6 @@ const EnrichmentConfirmDialog = ({
           },
         },
       });
-      onComplete();
     } catch (err: any) {
       toast.error(err.message || "Erro ao processar higienização");
     } finally {
@@ -322,7 +321,7 @@ const EnrichmentConfirmDialog = ({
               <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={logs.length === 0} className="gap-1.5">
                 <Download className="w-3.5 h-3.5" /> Exportar Excel
               </Button>
-              <Button onClick={() => onOpenChange(false)}>Fechar</Button>
+              <Button onClick={() => { onComplete(); onOpenChange(false); }}>Fechar</Button>
             </DialogFooter>
           </div>
         ) : (
