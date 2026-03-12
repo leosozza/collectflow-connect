@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
