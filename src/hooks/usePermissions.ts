@@ -154,7 +154,7 @@ export function usePermissions() {
 
   return {
     role,
-    loading: tenantLoading || permLoading,
+    loading: tenantLoading || permLoading || profileLoading,
     effectivePermissions,
 
     // Dashboard
