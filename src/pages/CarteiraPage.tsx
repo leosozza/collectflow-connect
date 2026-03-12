@@ -515,6 +515,7 @@ const CarteiraPage = () => {
   };
 
   const selectedClients = clients.filter((c) => selectedIds.has(c.id));
+  const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
 
   return (
