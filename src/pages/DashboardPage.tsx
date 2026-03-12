@@ -61,14 +61,29 @@ const DashboardPage = () => {
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [browseDate, setBrowseDate] = useState(new Date());
   const [agendadosOpen, setAgendadosOpen] = useState(false);
   const { callbacks, count: agendadosCount, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
 
   const canViewAll = permissions.canViewAllDashboard;
 
+  // Fetch operators for admin filter
+  const { data: operators = [] } = useQuery({
+    queryKey: ["dashboard-operators", profile?.tenant_id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles")
+        .select("user_id, full_name")
+        .eq("tenant_id", profile!.tenant_id!);
+      return (data || []).map(p => ({ value: p.user_id, label: p.full_name || "Sem nome" }));
+    },
+    enabled: !!profile?.tenant_id && canViewAll,
+  });
+
   // Determine filter params for RPCs
-  const rpcUserId = canViewAll ? null : (profile?.user_id ?? null);
+  const rpcUserId = canViewAll
+    ? (selectedOperators.length === 1 ? selectedOperators[0] : null)
+    : (profile?.user_id ?? null);
   const filterYear = selectedYears.length === 1 ? parseInt(selectedYears[0]) : null;
   const filterMonth = selectedMonths.length === 1 ? parseInt(selectedMonths[0]) + 1 : null; // month is 0-indexed in UI
 
@@ -164,16 +179,27 @@ const DashboardPage = () => {
             options={yearOptions}
             selected={selectedYears}
             onChange={setSelectedYears}
-            allLabel="Todos Anos"
+            allLabel="Ano"
             className="w-[120px]"
           />
           <MultiSelect
             options={monthOptions}
             selected={selectedMonths}
             onChange={setSelectedMonths}
-            allLabel="Todos Meses"
+            allLabel="Mês"
             className="w-[130px]"
           />
+          {canViewAll && (
+            <MultiSelect
+              options={operators}
+              selected={selectedOperators}
+              onChange={setSelectedOperators}
+              allLabel="Operador"
+              className="w-[160px]"
+              searchable
+              searchPlaceholder="Buscar operador..."
+            />
+          )}
         </div>
       </div>
 
