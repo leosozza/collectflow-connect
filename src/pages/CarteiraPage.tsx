@@ -556,7 +556,7 @@ const CarteiraPage = () => {
               </Button>
               <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
                 <Phone className="w-4 h-4" />
-                <span className="hidden sm:inline">Discador</span> ({selectedIds.size})
+                <span className="hidden sm:inline">Discador</span> ({uniqueSelectedCpfs})
               </Button>
               {hasAssignedCredor && (
                 <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950">
