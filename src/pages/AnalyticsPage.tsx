@@ -160,7 +160,35 @@ const AnalyticsPage = () => {
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalRecebido = pagos.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
-  const totalPendente = [...vigentes, ...pendentes, ...vencidos].reduce((s, a) => s + Number(a.proposed_total), 0);
+
+  // Total Pendente: soma do saldo devedor de toda a carteira (clients)
+  const { data: totalCarteiraPendente = 0 } = useQuery({
+    queryKey: ["analytics-carteira-pendente", tenant?.id],
+    queryFn: async () => {
+      // Use pagination to avoid 1000-row limit
+      let total = 0;
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data } = await supabase
+          .from("clients")
+          .select("valor_atualizado, valor_saldo, valor_parcela")
+          .eq("tenant_id", tenant!.id)
+          .in("status", ["pendente", "vencido", "em_acordo"])
+          .range(from, from + pageSize - 1);
+        if (!data || data.length === 0) break;
+        total += data.reduce(
+          (sum, c) => sum + Number(c.valor_atualizado || c.valor_saldo || c.valor_parcela || 0),
+          0
+        );
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return total;
+    },
+    enabled: !!tenant?.id,
+  });
+  const totalPendente = totalCarteiraPendente;
 
   // KPIs
   const totalResolvidos = pagos.length + cancelados.length;
