@@ -318,6 +318,7 @@ const SuperAdminPage = () => {
           <TabsTrigger value="executivo">Dashboard Executivo</TabsTrigger>
           <TabsTrigger value="dashboard">Resumo Tenants</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
+          <TabsTrigger value="servicos">Serviços Contratados</TabsTrigger>
           <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
 
