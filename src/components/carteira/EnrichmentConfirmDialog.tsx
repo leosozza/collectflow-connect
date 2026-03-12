@@ -193,9 +193,10 @@ const EnrichmentConfirmDialog = ({
 
       const logText = (jobLogs as any[] || []).map((l: any) => {
         const st = l.status === "success" ? "✅" : "❌";
-        const phones = l.phones_found?.length ? l.phones_found.join(", ") : "-";
-        const emails = l.emails_found?.length ? l.emails_found.join(", ") : "-";
-        return `${st} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${l.error_message ? ` | Erro: ${l.error_message}` : ""}`;
+        const ext = extractFromDataReturned(l.data_returned);
+        const phones = ext.phones.length ? ext.phones.join(", ") : "-";
+        const emails = ext.emails.length ? ext.emails.join(", ") : "-";
+        return `${st} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${ext.error ? ` | Erro: ${ext.error}` : ""}`;
       }).join("\n");
 
       toast(`Higienização concluída! ${enriched} atualizados, ${failed} não encontrados.`, {
