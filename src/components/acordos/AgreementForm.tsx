@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus } from "lucide-react";
 import { AgreementFormData } from "@/services/agreementService";
 import { formatCPF } from "@/lib/formatters";
+import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 
 interface AgreementFormProps {
   onSubmit: (data: AgreementFormData) => Promise<void>;
