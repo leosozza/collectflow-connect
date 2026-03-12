@@ -39,12 +39,13 @@ interface TenantRow {
   deleted_at?: string;
 }
 
-const SERVICE_CATALOG = [
-  { key: "whatsapp", label: "WhatsApp", description: "Atendimento via WhatsApp (1 instância + 1 agente IA incluso)", price: 99.0 },
-  { key: "ai_agent", label: "Agente de IA Digital", description: "Agente inteligente para atendimento automatizado", price: null },
-  { key: "negativacao", label: "Negativação Serasa/Protesto", description: "Integração com Serasa e Protesto cartorial", price: null },
-  { key: "assinatura", label: "Assinatura Digital", description: "Assinatura por click, facial ou desenho", price: null },
-];
+interface PlanOption {
+  id: string;
+  name: string;
+  slug: string;
+  price_monthly: number;
+  limits: Record<string, any>;
+}
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
