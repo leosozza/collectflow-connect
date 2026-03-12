@@ -67,7 +67,12 @@ const SuperAdminPage = () => {
   const [newClientName, setNewClientName] = useState("");
   const [newClientSlug, setNewClientSlug] = useState("");
   const [newClientCnpj, setNewClientCnpj] = useState("");
+  const [newClientPlanId, setNewClientPlanId] = useState("");
+  const [newClientOperators, setNewClientOperators] = useState(5);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
+  const [catalogServices, setCatalogServices] = useState<any[]>([]);
+  const [editPlanId, setEditPlanId] = useState("");
 
   const loadTenants = async () => {
     try {
