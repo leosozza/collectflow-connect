@@ -392,7 +392,7 @@ const AnalyticsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Status pie */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Proporção visual entre os status dos acordos no período." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Distribuição dos status dos acordos formalizados no período selecionado." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Distribuição de Status</h3>
             {statusPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
