@@ -4,8 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Settings, Shield, Bell, Database, Globe, CreditCard, AlertTriangle, Wifi, WifiOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Settings, Shield, Bell, Database, Globe, CreditCard, AlertTriangle, Wifi, Loader2, CheckCircle2, XCircle, Search, Handshake, Cloud, Phone, MessageSquare, Scale } from "lucide-react";
 import GoLiveChecklist from "@/components/admin/GoLiveChecklist";
+import TargetDataTab from "@/components/admin/integrations/TargetDataTab";
+import NegociarieTab from "@/components/admin/integrations/NegociarieTab";
+import CobCloudTab from "@/components/admin/integrations/CobCloudTab";
+import ThreeCPlusTab from "@/components/admin/integrations/ThreeCPlusTab";
+import WhatsAppAdminTab from "@/components/admin/integrations/WhatsAppAdminTab";
+import NegativacaoTab from "@/components/admin/integrations/NegativacaoTab";
 import { getSystemSetting, updateSystemSetting } from "@/services/systemSettingsService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -79,10 +86,8 @@ const AdminConfiguracoesPage = () => {
 
   const handleToggleEnv = () => {
     if (asaasEnv === "sandbox") {
-      // Going to production — confirm
       setShowConfirm(true);
     } else {
-      // Going back to sandbox — no confirm needed
       switchEnv("sandbox");
     }
   };
@@ -114,11 +119,8 @@ const AdminConfiguracoesPage = () => {
     setTesting(true);
     setTestLogs([]);
     const env = isProduction ? "Produção" : "Sandbox";
-
     addLog("info", `Iniciando teste de conexão (${env})...`);
-
     try {
-      // Step 1: Check system_settings
       addLog("info", "Verificando configuração do ambiente...");
       const currentEnv = await getSystemSetting("asaas_environment");
       if (currentEnv) {
@@ -128,22 +130,17 @@ const AdminConfiguracoesPage = () => {
         setTesting(false);
         return;
       }
-
-      // Step 2: Test proxy connection
       addLog("info", "Testando conexão com API Asaas via proxy...");
       const { data, error } = await supabase.functions.invoke("asaas-proxy", {
         body: { action: "create_customer", name: "Teste Conexão", cpfCnpj: "00000000000" },
       });
-
       if (error) {
         addLog("error", `Erro na edge function: ${error.message}`);
         toast.error("Falha no teste de conexão");
         setTesting(false);
         return;
       }
-
       if (data?.errors) {
-        // Asaas returned an error — but connection works
         const errMsg = data.errors[0]?.description || JSON.stringify(data.errors);
         if (errMsg.includes("já cadastrado") || errMsg.includes("already")) {
           addLog("success", `API Asaas respondeu (cliente já existe) — Conexão OK`);
@@ -156,7 +153,6 @@ const AdminConfiguracoesPage = () => {
       } else {
         addLog("info", `Resposta da API: ${JSON.stringify(data).slice(0, 200)}`);
       }
-
       addLog("success", `✅ Teste de conexão concluído (${env})`);
       toast.success("Conexão com Asaas verificada!");
     } catch (err: any) {
@@ -174,146 +170,121 @@ const AdminConfiguracoesPage = () => {
           <Settings className="w-6 h-6 text-primary" />
           Configurações do Sistema
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">Configurações globais da plataforma</p>
+        <p className="text-muted-foreground text-sm mt-1">Configurações globais e integrações da plataforma</p>
       </div>
 
-      {/* Asaas Gateway Card */}
-      <Card className="border-primary/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-primary" />
-            Gateway de Pagamento (Asaas)
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Controle o ambiente do gateway de cobranças
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-foreground font-medium">Ambiente ativo:</span>
-              <Badge
-                variant={isProduction ? "default" : "secondary"}
-                className={isProduction
-                  ? "bg-green-600 hover:bg-green-700 text-white"
-                  : "bg-amber-500 hover:bg-amber-600 text-white"
-                }
-              >
-                {isProduction ? "🟢 Produção" : "🟡 Sandbox"}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sandbox</span>
-              <Switch
-                checked={isProduction}
-                onCheckedChange={handleToggleEnv}
-                disabled={loading || saving}
-              />
-              <span className="text-xs text-muted-foreground">Produção</span>
-            </div>
-          </div>
+      <Tabs defaultValue="geral" className="w-full">
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+          <TabsTrigger value="geral" className="gap-1.5 text-xs"><Settings className="w-3.5 h-3.5" /> Geral</TabsTrigger>
+          <TabsTrigger value="targetdata" className="gap-1.5 text-xs"><Search className="w-3.5 h-3.5" /> Target Data</TabsTrigger>
+          <TabsTrigger value="negociarie" className="gap-1.5 text-xs"><Handshake className="w-3.5 h-3.5" /> Negociarie</TabsTrigger>
+          <TabsTrigger value="cobcloud" className="gap-1.5 text-xs"><Cloud className="w-3.5 h-3.5" /> CobCloud</TabsTrigger>
+          <TabsTrigger value="threecplus" className="gap-1.5 text-xs"><Phone className="w-3.5 h-3.5" /> 3CPlus</TabsTrigger>
+          <TabsTrigger value="whatsapp" className="gap-1.5 text-xs"><MessageSquare className="w-3.5 h-3.5" /> WhatsApp</TabsTrigger>
+          <TabsTrigger value="negativacao" className="gap-1.5 text-xs"><Scale className="w-3.5 h-3.5" /> Negativação</TabsTrigger>
+        </TabsList>
 
-          {isProduction && (
-            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-              <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-              <p className="text-xs text-destructive">
-                O ambiente de produção está ativo. Todas as cobranças serão reais e processadas pelo Asaas.
-              </p>
-            </div>
-          )}
-
-          {/* Test Connection */}
-          <div className="flex items-center gap-3 pt-2 border-t border-border">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestConnection}
-              disabled={testing || loading}
-              className="gap-2"
-            >
-              {testing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wifi className="w-4 h-4" />
-              )}
-              {testing ? "Testando..." : "Testar Conexão"}
-            </Button>
-            {testLogs.length > 0 && !testing && (
-              <Badge
-                variant="outline"
-                className={
-                  testLogs[0]?.status === "success"
-                    ? "bg-green-500/10 text-green-600 border-green-200"
-                    : testLogs[0]?.status === "error"
-                    ? "bg-destructive/10 text-destructive border-destructive/20"
-                    : "bg-muted text-muted-foreground"
-                }
-              >
-                {testLogs[0]?.status === "success" ? (
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                ) : testLogs[0]?.status === "error" ? (
-                  <XCircle className="w-3 h-3 mr-1" />
-                ) : null}
-                {testLogs[0]?.status === "success" ? "Conectado" : "Falha"}
-              </Badge>
-            )}
-          </div>
-
-          {/* Logs */}
-          {testLogs.length > 0 && (
-            <ScrollArea className="h-[180px] rounded-md border border-border bg-muted/30 p-3">
-              <div className="space-y-1.5 font-mono text-xs">
-                {testLogs.map((log, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-muted-foreground shrink-0">[{log.time}]</span>
-                    {log.status === "success" && <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />}
-                    {log.status === "error" && <XCircle className="w-3 h-3 text-destructive mt-0.5 shrink-0" />}
-                    {log.status === "info" && <Wifi className="w-3 h-3 text-primary mt-0.5 shrink-0" />}
-                    <span className={
-                      log.status === "success" ? "text-green-600 dark:text-green-400" :
-                      log.status === "error" ? "text-destructive" :
-                      "text-foreground"
-                    }>
-                      {log.message}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Go-Live Checklist */}
-      <GoLiveChecklist />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {configSections.map((section) => (
-          <Card key={section.title}>
+        {/* Geral Tab */}
+        <TabsContent value="geral" className="space-y-6 mt-4">
+          {/* Asaas Gateway Card */}
+          <Card className="border-primary/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <section.icon className="w-4 h-4 text-primary" />
-                {section.title}
+                <CreditCard className="w-4 h-4 text-primary" />
+                Gateway de Pagamento (Asaas)
               </CardTitle>
-              <p className="text-xs text-muted-foreground">{section.description}</p>
+              <p className="text-xs text-muted-foreground">Controle o ambiente do gateway de cobranças</p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {section.items.map((item) => (
-                <div key={item.label} className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{item.label}</span>
-                  <Switch defaultChecked={item.enabled} />
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-foreground font-medium">Ambiente ativo:</span>
+                  <Badge variant={isProduction ? "default" : "secondary"} className={isProduction ? "bg-green-600 hover:bg-green-700 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"}>
+                    {isProduction ? "🟢 Produção" : "🟡 Sandbox"}
+                  </Badge>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Sandbox</span>
+                  <Switch checked={isProduction} onCheckedChange={handleToggleEnv} disabled={loading || saving} />
+                  <span className="text-xs text-muted-foreground">Produção</span>
+                </div>
+              </div>
+              {isProduction && (
+                <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                  <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  <p className="text-xs text-destructive">O ambiente de produção está ativo. Todas as cobranças serão reais e processadas pelo Asaas.</p>
+                </div>
+              )}
+              <div className="flex items-center gap-3 pt-2 border-t border-border">
+                <Button variant="outline" size="sm" onClick={handleTestConnection} disabled={testing || loading} className="gap-2">
+                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                  {testing ? "Testando..." : "Testar Conexão"}
+                </Button>
+                {testLogs.length > 0 && !testing && (
+                  <Badge variant="outline" className={testLogs[0]?.status === "success" ? "bg-green-500/10 text-green-600 border-green-200" : testLogs[0]?.status === "error" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-muted text-muted-foreground"}>
+                    {testLogs[0]?.status === "success" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : testLogs[0]?.status === "error" ? <XCircle className="w-3 h-3 mr-1" /> : null}
+                    {testLogs[0]?.status === "success" ? "Conectado" : "Falha"}
+                  </Badge>
+                )}
+              </div>
+              {testLogs.length > 0 && (
+                <ScrollArea className="h-[180px] rounded-md border border-border bg-muted/30 p-3">
+                  <div className="space-y-1.5 font-mono text-xs">
+                    {testLogs.map((log, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">[{log.time}]</span>
+                        {log.status === "success" && <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />}
+                        {log.status === "error" && <XCircle className="w-3 h-3 text-destructive mt-0.5 shrink-0" />}
+                        {log.status === "info" && <Wifi className="w-3 h-3 text-primary mt-0.5 shrink-0" />}
+                        <span className={log.status === "success" ? "text-green-600 dark:text-green-400" : log.status === "error" ? "text-destructive" : "text-foreground"}>
+                          {log.message}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
 
-      <div className="flex justify-end">
-        <Button>Salvar Configurações</Button>
-      </div>
+          <GoLiveChecklist />
 
-      {/* Confirmation dialog for production */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {configSections.map((section) => (
+              <Card key={section.title}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <section.icon className="w-4 h-4 text-primary" />
+                    {section.title}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">{section.description}</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {section.items.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between">
+                      <span className="text-sm text-foreground">{item.label}</span>
+                      <Switch defaultChecked={item.enabled} />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="flex justify-end">
+            <Button>Salvar Configurações</Button>
+          </div>
+        </TabsContent>
+
+        {/* Integration Tabs */}
+        <TabsContent value="targetdata" className="mt-4"><TargetDataTab /></TabsContent>
+        <TabsContent value="negociarie" className="mt-4"><NegociarieTab /></TabsContent>
+        <TabsContent value="cobcloud" className="mt-4"><CobCloudTab /></TabsContent>
+        <TabsContent value="threecplus" className="mt-4"><ThreeCPlusTab /></TabsContent>
+        <TabsContent value="whatsapp" className="mt-4"><WhatsAppAdminTab /></TabsContent>
+        <TabsContent value="negativacao" className="mt-4"><NegativacaoTab /></TabsContent>
+      </Tabs>
+
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -322,17 +293,12 @@ const AdminConfiguracoesPage = () => {
               Ativar ambiente de Produção?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Ao ativar o ambiente de produção, todas as cobranças serão processadas de forma real
-              pelo Asaas. Certifique-se de que a chave de API de produção está configurada corretamente.
+              Ao ativar o ambiente de produção, todas as cobranças serão processadas de forma real pelo Asaas. Certifique-se de que a chave de API de produção está configurada corretamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => switchEnv("production")}
-              disabled={saving}
-              className="bg-destructive hover:bg-destructive/90"
-            >
+            <AlertDialogAction onClick={() => switchEnv("production")} disabled={saving} className="bg-destructive hover:bg-destructive/90">
               {saving ? "Salvando..." : "Sim, ativar Produção"}
             </AlertDialogAction>
           </AlertDialogFooter>
