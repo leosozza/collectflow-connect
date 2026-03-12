@@ -13,6 +13,11 @@ const SOURCE_LABELS: Record<string, string> = {
   api: "API",
   maxlist: "MaxList",
   manual: "Edição Manual",
+  regua: "Ação da Régua",
+  whatsapp_auto: "WhatsApp Automático",
+  email_auto: "E-mail Automático",
+  system: "Sistema",
+  workflow: "Workflow Automático",
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -48,7 +53,26 @@ const ClientUpdateHistory = ({ clientIds }: Props) => {
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return data || [];
+
+      const items = data || [];
+
+      // Fetch profile names for updated_by user IDs
+      const userIds = [...new Set(items.filter(l => l.updated_by).map(l => l.updated_by as string))];
+      let profileMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", userIds);
+        if (profiles) {
+          profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p.full_name || ""]));
+        }
+      }
+
+      return items.map(item => ({
+        ...item,
+        _user_name: item.updated_by ? (profileMap[item.updated_by] || null) : null,
+      }));
     },
     enabled: clientIds.length > 0,
   });
@@ -75,16 +99,23 @@ const ClientUpdateHistory = ({ clientIds }: Props) => {
         {logs.map((log: any) => {
           const changes = (log.changes || {}) as Record<string, { old: any; new: any }>;
           const changedFields = Object.keys(changes);
+          const sourceLabel = SOURCE_LABELS[log.source] || log.source;
+          const userName = log._user_name;
 
           return (
             <div key={log.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="text-xs text-muted-foreground">
                   {new Date(log.created_at).toLocaleString("pt-BR")}
                 </span>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                  {SOURCE_LABELS[log.source] || log.source}
+                  {sourceLabel}
                 </Badge>
+                {userName && (
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    por {userName}
+                  </span>
+                )}
               </div>
               <div className="space-y-1">
                 {changedFields.map((field) => (

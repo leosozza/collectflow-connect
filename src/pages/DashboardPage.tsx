@@ -179,16 +179,27 @@ const DashboardPage = () => {
             options={yearOptions}
             selected={selectedYears}
             onChange={setSelectedYears}
-            allLabel="Todos Anos"
+            allLabel="Ano"
             className="w-[120px]"
           />
           <MultiSelect
             options={monthOptions}
             selected={selectedMonths}
             onChange={setSelectedMonths}
-            allLabel="Todos Meses"
+            allLabel="Mês"
             className="w-[130px]"
           />
+          {canViewAll && (
+            <MultiSelect
+              options={operators}
+              selected={selectedOperators}
+              onChange={setSelectedOperators}
+              allLabel="Operador"
+              className="w-[160px]"
+              searchable
+              searchPlaceholder="Buscar operador..."
+            />
+          )}
         </div>
       </div>
 

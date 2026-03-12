@@ -111,6 +111,21 @@ export const createAgreement = async (
     console.error("Erro ao marcar títulos como em_acordo:", e);
   }
 
+  // Auto-assign operator_id to the creator
+  try {
+    const { data: creatorProfile } = await supabase
+      .from("profiles").select("id").eq("user_id", userId).single();
+    if (creatorProfile) {
+      await supabase
+        .from("clients")
+        .update({ operator_id: creatorProfile.id } as any)
+        .eq("cpf", data.client_cpf)
+        .eq("credor", data.credor);
+    }
+  } catch (e) {
+    console.error("Erro ao atribuir operador:", e);
+  }
+
   // Notify admins when agreement requires approval
   if (options?.requiresApproval) {
     try {
