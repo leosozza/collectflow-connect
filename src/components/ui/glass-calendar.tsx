@@ -1,15 +1,9 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { format, addMonths, subMonths, isSameDay, isToday, getDate, getDaysInMonth, startOfMonth } from "date-fns";
+import { format, addMonths, subMonths, isSameDay, isToday, getDate, getDaysInMonth, startOfMonth, getDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-
-interface Day {
-  date: Date;
-  isToday: boolean;
-  isSelected: boolean;
-}
 
 interface GlassCalendarProps extends React.HTMLAttributes<HTMLDivElement> {
   selectedDate?: Date;
@@ -17,12 +11,7 @@ interface GlassCalendarProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
 }
 
-const ScrollbarHide = () => (
-  <style>{`
-    .scrollbar-hide::-webkit-scrollbar { display: none; }
-    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  `}</style>
-);
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export const GlassCalendar = React.forwardRef<HTMLDivElement, GlassCalendarProps>(
   ({ className, selectedDate: propSelectedDate, onDateSelect, ...props }, ref) => {
@@ -36,20 +25,17 @@ export const GlassCalendar = React.forwardRef<HTMLDivElement, GlassCalendarProps
       }
     }, [propSelectedDate]);
 
-    const monthDays = React.useMemo(() => {
+    const calendarCells = React.useMemo(() => {
       const start = startOfMonth(currentMonth);
       const totalDays = getDaysInMonth(currentMonth);
-      const days: Day[] = [];
-      for (let i = 0; i < totalDays; i++) {
-        const date = new Date(start.getFullYear(), start.getMonth(), i + 1);
-        days.push({
-          date,
-          isToday: isToday(date),
-          isSelected: isSameDay(date, selectedDate),
-        });
+      const startDow = getDay(start); // 0=Sun
+      const cells: (Date | null)[] = [];
+      for (let i = 0; i < startDow; i++) cells.push(null);
+      for (let i = 1; i <= totalDays; i++) {
+        cells.push(new Date(start.getFullYear(), start.getMonth(), i));
       }
-      return days;
-    }, [currentMonth, selectedDate]);
+      return cells;
+    }, [currentMonth]);
 
     const handleDateClick = (date: Date) => {
       setSelectedDate(date);
@@ -60,58 +46,75 @@ export const GlassCalendar = React.forwardRef<HTMLDivElement, GlassCalendarProps
       <div
         ref={ref}
         className={cn(
-          "w-full max-w-[360px] rounded-2xl p-4 shadow-2xl overflow-hidden",
-          "bg-card/95 backdrop-blur-xl border border-border",
-          "text-card-foreground font-sans",
+          "w-[320px] rounded-2xl p-4 shadow-2xl",
+          "bg-card border border-border",
+          "text-card-foreground font-sans pointer-events-auto",
           className
         )}
         {...props}
       >
-        <ScrollbarHide />
-        <div className="mb-4 flex items-center justify-between">
-          <motion.p
-            key={format(currentMonth, "MMMM yyyy", { locale: ptBR })}
-            initial={{ opacity: 0, y: -10 }}
+        {/* Header */}
+        <div className="mb-3 flex items-center justify-between">
+          <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1.5 rounded-full text-muted-foreground transition-colors hover:bg-muted">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <motion.span
+            key={format(currentMonth, "yyyy-MM")}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="text-lg font-bold tracking-tight capitalize"
+            transition={{ duration: 0.2 }}
+            className="text-sm font-bold capitalize"
           >
             {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
-          </motion.p>
-          <div className="flex items-center space-x-1">
-            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1 rounded-full text-muted-foreground transition-colors hover:bg-muted">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-1 rounded-full text-muted-foreground transition-colors hover:bg-muted">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          </motion.span>
+          <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-1.5 rounded-full text-muted-foreground transition-colors hover:bg-muted">
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
 
-        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-          <div className="flex space-x-3">
-            {monthDays.map((day) => (
-              <div key={format(day.date, "yyyy-MM-dd")} className="flex flex-col items-center space-y-1.5 flex-shrink-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">
-                  {format(day.date, "EEE", { locale: ptBR }).charAt(0)}
-                </span>
+        {/* Weekday headers */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {WEEKDAYS.map((d) => (
+            <span key={d} className="text-[10px] font-semibold text-muted-foreground text-center">
+              {d}
+            </span>
+          ))}
+        </div>
+
+        {/* Day grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {calendarCells.map((date, idx) => (
+            <div key={idx} className="flex items-center justify-center">
+              {date ? (
                 <button
-                  onClick={() => handleDateClick(day.date)}
+                  onClick={() => handleDateClick(date)}
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200 relative",
-                    day.isSelected
-                      ? "bg-primary text-primary-foreground shadow-lg"
+                    "flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-all duration-150 relative",
+                    isSameDay(date, selectedDate)
+                      ? "bg-primary text-primary-foreground shadow-md"
                       : "hover:bg-muted text-foreground"
                   )}
                 >
-                  {day.isToday && !day.isSelected && (
-                    <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-primary"></span>
+                  {isToday(date) && !isSameDay(date, selectedDate) && (
+                    <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-primary" />
                   )}
-                  {getDate(day.date)}
+                  {getDate(date)}
                 </button>
-              </div>
-            ))}
-          </div>
+              ) : (
+                <span className="h-8 w-8" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Today shortcut */}
+        <div className="mt-3 flex justify-center">
+          <button
+            onClick={() => handleDateClick(new Date())}
+            className="text-xs font-semibold text-primary hover:underline"
+          >
+            Hoje
+          </button>
         </div>
       </div>
     );
