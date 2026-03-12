@@ -23,6 +23,10 @@ import { fetchClients, deleteClient } from "@/services/clientService";
 import { fetchCredores, fetchTiposStatus } from "@/services/cadastrosService";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { exportToExcel } from "@/lib/exportUtils";
 
 const actionLabels: Record<string, string> = {
   create: "Criação",
