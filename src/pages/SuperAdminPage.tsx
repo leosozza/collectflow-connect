@@ -555,6 +555,11 @@ const SuperAdminPage = () => {
           </Tabs>
         </TabsContent>
 
+        {/* ========== SERVIÇOS CONTRATADOS ========== */}
+        <TabsContent value="servicos" className="mt-4">
+          <TenantServicesTab />
+        </TabsContent>
+
         {/* ========== NOVO CLIENTE ========== */}
         <TabsContent value="novo">
           <Card>
