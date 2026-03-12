@@ -110,6 +110,7 @@ const ClientsPage = () => {
       trackAction("registrar_pagamento");
       toast.success("Pagamento registrado e próxima parcela criada!");
       setPaymentClient(null);
+      triggerGamificationUpdate();
     },
     onError: () => toast.error("Erro ao registrar pagamento"),
   });
