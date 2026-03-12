@@ -351,13 +351,13 @@ const AnalyticsPage = () => {
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalQuebra)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados aos seus acordos." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos ativos." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos com pagamentos em relação ao total de acordos ativos." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">% de Recebimento</p>
                 <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
@@ -366,25 +366,25 @@ const AnalyticsPage = () => {
           ) : (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-<div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada (pendente, vencido e em acordo)." /></div>
-                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                 <p className="text-xs text-muted-foreground">Total Pendente</p>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada com status pendente." /></div>
+                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Pendente</p>
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos resolvidos (pagos + cancelados)." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual do valor recebido em relação ao valor total negociado nos acordos." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
                 <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos pagos no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por acordo com pagamentos no período." /></div>
                 <Award className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Ticket Médio</p>
                 <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados a acordos no período." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
