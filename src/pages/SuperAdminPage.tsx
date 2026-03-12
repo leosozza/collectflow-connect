@@ -225,6 +225,9 @@ const SuperAdminPage = () => {
     setEditSlug(tenant.slug);
     const svcs = (tenant.settings as any)?.enabled_services || {};
     setExtraInstances(svcs.whatsapp_extra_instances || 0);
+    // Find plan_id for tenant
+    const tenantFull = tenants.find(t => t.id === tenant.id) as any;
+    setEditPlanId(tenantFull?.plan_id || "");
     setManageSheet(tenant);
   };
 
