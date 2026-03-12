@@ -602,6 +602,172 @@ const ExclusaoTab = () => {
   );
 };
 
+/* ─── Higienização Tab ─── */
+const HigienizacaoTab = () => {
+  const { tenant } = useTenant();
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [jobLogs, setJobLogs] = useState<Record<string, any[]>>({});
+  const [loadingLogs, setLoadingLogs] = useState<string | null>(null);
+
+  const { data: jobs = [], isLoading } = useQuery({
+    queryKey: ["enrichment_jobs", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("enrichment_jobs" as any)
+        .select("*")
+        .eq("tenant_id", tenant!.id)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!tenant?.id,
+  });
+
+  const toggleExpand = async (jobId: string) => {
+    if (expandedJobId === jobId) {
+      setExpandedJobId(null);
+      return;
+    }
+    setExpandedJobId(jobId);
+    if (!jobLogs[jobId]) {
+      setLoadingLogs(jobId);
+      const { data } = await supabase
+        .from("enrichment_logs" as any)
+        .select("*")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: true });
+      setJobLogs((prev) => ({ ...prev, [jobId]: (data || []) as any[] }));
+      setLoadingLogs(null);
+    }
+  };
+
+  const handleExportJobLogs = (jobId: string) => {
+    const logs = jobLogs[jobId] || [];
+    const rows = logs.map((l: any) => ({
+      CPF: l.cpf,
+      Status: l.status === "success" ? "Atualizado" : "Não encontrado",
+      Telefones: l.phones_found?.join(", ") || "-",
+      Emails: l.emails_found?.join(", ") || "-",
+      Erro: l.error_message || "-",
+    }));
+    exportToExcel(rows, "Higienização", `higienizacao_job_${jobId.slice(0, 8)}`);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">Carregando...</div>
+        ) : jobs.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">Nenhuma higienização realizada</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs w-8"></TableHead>
+                <TableHead className="text-xs">Data</TableHead>
+                <TableHead className="text-xs">Total CPFs</TableHead>
+                <TableHead className="text-xs">Atualizados</TableHead>
+                <TableHead className="text-xs">Falhos</TableHead>
+                <TableHead className="text-xs">Custo</TableHead>
+                <TableHead className="text-xs">Status</TableHead>
+                <TableHead className="text-xs text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {jobs.map((job: any) => (
+                <>
+                  <TableRow key={job.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(job.id)}>
+                    <TableCell className="w-8 text-muted-foreground">
+                      {expandedJobId === job.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {format(parseISO(job.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                    </TableCell>
+                    <TableCell className="text-xs font-medium">{job.total_clients}</TableCell>
+                    <TableCell className="text-xs text-green-600 font-medium">{job.enriched || 0}</TableCell>
+                    <TableCell className="text-xs text-red-500 font-medium">{job.failed || 0}</TableCell>
+                    <TableCell className="text-xs">{job.total_clients} tokens</TableCell>
+                    <TableCell>
+                      <Badge variant={job.status === "completed" ? "default" : "secondary"} className="text-[10px]">
+                        {job.status === "completed" ? "Concluído" : job.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); toggleExpand(job.id).then(() => handleExportJobLogs(job.id)); }}
+                        disabled={!jobLogs[job.id]}
+                      >
+                        <Download className="w-3 h-3" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  {expandedJobId === job.id && (
+                    <TableRow key={`${job.id}-logs`}>
+                      <TableCell colSpan={8} className="p-0">
+                        <div className="bg-muted/30 p-4">
+                          {loadingLogs === job.id ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" /> Carregando logs...
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex justify-end mb-2">
+                                <Button variant="outline" size="sm" onClick={() => handleExportJobLogs(job.id)} className="gap-1.5">
+                                  <Download className="w-3 h-3" /> Exportar Excel
+                                </Button>
+                              </div>
+                              <ScrollArea className="h-[200px]">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="text-xs">CPF</TableHead>
+                                      <TableHead className="text-xs">Status</TableHead>
+                                      <TableHead className="text-xs">Telefones</TableHead>
+                                      <TableHead className="text-xs">Email</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {(jobLogs[job.id] || []).map((log: any) => (
+                                      <TableRow key={log.id}>
+                                        <TableCell className="text-xs font-mono">{log.cpf}</TableCell>
+                                        <TableCell>
+                                          {log.status === "success" ? (
+                                            <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700">Atualizado</Badge>
+                                          ) : (
+                                            <Badge variant="destructive" className="text-[10px]">Não encontrado</Badge>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                          {log.phones_found?.join(", ") || "—"}
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                          {log.emails_found?.join(", ") || "—"}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </ScrollArea>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ─── Main Page ─── */
 const AuditoriaPage = () => {
   const permissions = usePermissions();
@@ -619,12 +785,16 @@ const AuditoriaPage = () => {
       <Tabs defaultValue="logs">
         <TabsList>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="higienizacao">Higienização</TabsTrigger>
           {permissions.canDeleteCarteira && (
             <TabsTrigger value="exclusao">Exclusão de Dados</TabsTrigger>
           )}
         </TabsList>
         <TabsContent value="logs">
           <LogsTab />
+        </TabsContent>
+        <TabsContent value="higienizacao">
+          <HigienizacaoTab />
         </TabsContent>
         {permissions.canDeleteCarteira && (
           <TabsContent value="exclusao">
