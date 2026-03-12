@@ -6,6 +6,8 @@ import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { GlassCalendar } from "@/components/ui/glass-calendar";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -235,9 +237,19 @@ const DashboardPage = () => {
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <span className="text-sm font-semibold text-foreground min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 text-primary">
-            {format(browseDate, "dd/MM/yyyy")}
-          </span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+                {format(browseDate, "dd/MM/yyyy")}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none" align="center">
+              <GlassCalendar
+                selectedDate={browseDate}
+                onDateSelect={(date) => setBrowseDate(date)}
+              />
+            </PopoverContent>
+          </Popover>
           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
             <ChevronRight className="w-4 h-4" />
           </Button>
