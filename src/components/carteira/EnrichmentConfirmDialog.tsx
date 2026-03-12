@@ -164,14 +164,17 @@ const EnrichmentConfirmDialog = ({
 
       if (jobLogs) {
         setLogs(
-          (jobLogs as any[]).map((l) => ({
-            id: l.id,
-            cpf: l.cpf,
-            status: l.status,
-            phones_found: l.phones_found,
-            emails_found: l.emails_found,
-            error_message: l.error_message,
-          }))
+          (jobLogs as any[]).map((l) => {
+            const extracted = extractFromDataReturned(l.data_returned);
+            return {
+              id: l.id,
+              cpf: l.cpf,
+              status: l.status,
+              phones_found: extracted.phones.length ? extracted.phones : null,
+              emails_found: extracted.emails.length ? extracted.emails : null,
+              error_message: extracted.error,
+            };
+          })
         );
       }
 
