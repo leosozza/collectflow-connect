@@ -94,21 +94,58 @@ const AnalyticsPage = () => {
 
   const isOperator = profile?.role !== "admin";
 
-  // Fetch agreements with all relevant fields, filtered by tenant
+  // Fetch agreements with real payment data via RPC
   const { data: allAgreements = [] } = useQuery({
-    queryKey: ["analytics-agreements", tenant?.id, isOperator ? profile?.id : "all"],
+    queryKey: ["analytics-agreements-payments", tenant?.id, isOperator ? profile?.id : "all"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_analytics_payments", {
+        _tenant_id: tenant!.id,
+      });
+      if (error) throw error;
+      let results = (data || []) as Array<{
+        agreement_id: string;
+        created_by: string;
+        credor: string;
+        created_at: string;
+        proposed_total: number;
+        original_total: number;
+        status: string;
+        total_pago: number;
+      }>;
+      if (isOperator && profile?.id) {
+        results = results.filter((r) => r.created_by === profile.id);
+      }
+      // Map to AgreementRow-compatible shape
+      return results.map((r) => ({
+        id: r.agreement_id,
+        client_cpf: "",
+        client_name: "",
+        credor: r.credor,
+        proposed_total: Number(r.proposed_total),
+        original_total: Number(r.original_total),
+        status: r.status,
+        created_at: r.created_at,
+        created_by: r.created_by,
+        first_due_date: r.created_at,
+        new_installments: 0,
+        new_installment_value: 0,
+        entrada_value: null,
+        total_pago: Number(r.total_pago),
+      })) as (AgreementRow & { total_pago: number })[];
+    },
+    enabled: !!tenant?.id,
+  });
+
+  // Also fetch full agreement details for export & heatmap
+  const { data: allAgreementsFull = [] } = useQuery({
+    queryKey: ["analytics-agreements-full", tenant?.id, isOperator ? profile?.id : "all"],
     queryFn: async () => {
       let query = supabase
         .from("agreements")
         .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by, first_due_date, new_installments, new_installment_value, entrada_value")
         .not("status", "in", "(rejected)");
-
-      if (tenant?.id) {
-        query = query.eq("tenant_id", tenant.id);
-      }
-      if (isOperator && profile?.id) {
-        query = query.eq("created_by", profile.id);
-      }
+      if (tenant?.id) query = query.eq("tenant_id", tenant.id);
+      if (isOperator && profile?.id) query = query.eq("created_by", profile.id);
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as AgreementRow[];
@@ -158,14 +195,18 @@ const AnalyticsPage = () => {
   const cancelados = filteredAgreements.filter((a) => a.status === "cancelled");
 
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
-  const totalRecebido = pagos.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
+
+  // Total Recebido: soma real dos pagamentos vinculados a acordos
+  const totalRecebido = activeAgreements.reduce((s, a) => s + Number((a as any).total_pago || 0), 0);
+
+  // Acordos com pagamento > 0
+  const acordosComPagamento = activeAgreements.filter((a) => Number((a as any).total_pago || 0) > 0);
 
   // Total Pendente: soma do saldo devedor de toda a carteira (clients)
   const { data: totalCarteiraPendente = 0 } = useQuery({
     queryKey: ["analytics-carteira-pendente", tenant?.id],
     queryFn: async () => {
-      // Use pagination to avoid 1000-row limit
       let total = 0;
       let from = 0;
       const pageSize = 1000;
@@ -174,7 +215,7 @@ const AnalyticsPage = () => {
           .from("clients")
           .select("valor_atualizado, valor_saldo, valor_parcela")
           .eq("tenant_id", tenant!.id)
-          .in("status", ["pendente", "vencido", "em_acordo"])
+          .in("status", ["pendente"])
           .range(from, from + pageSize - 1);
         if (!data || data.length === 0) break;
         total += data.reduce(
@@ -190,17 +231,16 @@ const AnalyticsPage = () => {
   });
   const totalPendente = totalCarteiraPendente;
 
-  // KPIs
-  const totalResolvidos = pagos.length + cancelados.length;
-  const taxaRecuperacao = totalResolvidos > 0 ? ((pagos.length / totalResolvidos) * 100).toFixed(1) : "0";
-  const ticketMedio = pagos.length > 0 ? totalRecebido / pagos.length : 0;
-  const percentRecebimento = activeAgreements.length > 0 ? ((pagos.length / activeAgreements.length) * 100).toFixed(1) : "0";
+  // KPIs based on real payment data
+  const taxaRecuperacao = totalNegociado > 0 ? ((totalRecebido / totalNegociado) * 100).toFixed(1) : "0";
+  const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
+  const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
-  // Portfolio conversion rate (agreements that converted to completed vs total active)
-  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + pagos.length;
-  const taxaConversao = totalAtivos > 0 ? (pagos.length / totalAtivos) * 100 : 0;
+  // Portfolio conversion rate: agreements with payments > 0 vs total active
+  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + acordosComPagamento.length;
+  const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
 
-  // Evolution chart data based on agreements.created_at
+  // Evolution chart data based on agreements.created_at with real payments
   const evolutionData = useMemo(() => {
     const years = selectedYears.length > 0 ? selectedYears.map(Number) : generateYearOptions();
     return monthLabels.map((label, monthIdx) => {
@@ -214,7 +254,7 @@ const AnalyticsPage = () => {
       return {
         name: label,
         negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
-        recebido: monthAgreements.filter((a) => a.status === "completed").reduce((s, a) => s + Number(a.proposed_total), 0),
+        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number((a as any).total_pago || 0), 0),
         quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
       };
     });
@@ -242,20 +282,20 @@ const AnalyticsPage = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
   }, [vigentes, pendentes, vencidos]);
 
-  // Heatmap by first_due_date day
+  // Heatmap by first_due_date day (use full agreement data)
   const heatmapData = useMemo(() => {
     const counts = new Array(31).fill(0);
-    activeAgreements.forEach((a) => {
+    allAgreementsFull.filter((a) => a.status !== "cancelled" && a.status !== "rejected").forEach((a) => {
       const day = parseISO(a.first_due_date).getDate();
       counts[day - 1] += 1;
     });
     const max = Math.max(...counts, 1);
     return counts.map((count, i) => ({ day: i + 1, count, intensity: count / max }));
-  }, [activeAgreements]);
+  }, [allAgreementsFull]);
 
-  // Export
+  // Export (use full agreement data)
   const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredAgreements.map((a) => ({
+    const ws = XLSX.utils.json_to_sheet(allAgreementsFull.map((a) => ({
       Cliente: a.client_name,
       CPF: a.client_cpf,
       Credor: a.credor,
@@ -311,13 +351,13 @@ const AnalyticsPage = () => {
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalQuebra)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados aos seus acordos." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos ativos." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos com pagamentos em relação ao total de acordos ativos." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">% de Recebimento</p>
                 <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
@@ -326,25 +366,25 @@ const AnalyticsPage = () => {
           ) : (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-<div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada (pendente, vencido e em acordo)." /></div>
-                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                 <p className="text-xs text-muted-foreground">Total Pendente</p>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada com status pendente." /></div>
+                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Total Pendente</p>
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos pagos em relação ao total de acordos resolvidos (pagos + cancelados)." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual do valor recebido em relação ao valor total negociado nos acordos." /></div>
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
                 <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos pagos no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por acordo com pagamentos no período." /></div>
                 <Award className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Ticket Médio</p>
                 <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos pagos (completed) no período." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados a acordos no período." /></div>
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
@@ -375,14 +415,14 @@ const AnalyticsPage = () => {
 
           {/* Portfolio conversion */}
           <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative flex flex-col">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos que foram pagos (completed) em relação ao total de acordos ativos." /></div>
+            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos com pagamentos recebidos em relação ao total de acordos ativos." /></div>
             <h3 className="text-sm font-semibold text-card-foreground mb-3">Taxa de Conversão de Acordos</h3>
             <div className="flex-1 flex flex-col items-center justify-center gap-4">
               <p className="text-5xl font-bold text-primary">{taxaConversao.toFixed(1)}%</p>
               <Progress value={taxaConversao} className="w-3/4 h-3" />
               <div className="flex gap-6 text-xs text-muted-foreground">
                 <span>Total Ativos: <strong className="text-foreground">{totalAtivos}</strong></span>
-                <span>Pagos: <strong className="text-foreground">{pagos.length}</strong></span>
+                <span>Com Pagamento: <strong className="text-foreground">{acordosComPagamento.length}</strong></span>
               </div>
             </div>
           </div>

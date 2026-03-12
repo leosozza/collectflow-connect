@@ -1,55 +1,64 @@
 
 
-# Plano: Corrigir KPIs do Analytics (Total Recebido, Taxa de Recuperação, Ticket Médio)
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Problema Raiz
+### O que será feito
 
-Os KPIs dependem de `agreement.status === "completed"`, mas **nenhum acordo jamais recebe esse status**. O sistema marca os clientes individuais como "pago" na tabela `clients` (via `markAsPaid`/`registerPayment`), porém nunca atualiza o status do acordo para "completed".
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-Dados reais confirmam: 7 acordos (3 approved, 3 pending, 1 cancelled), nenhum "completed". Porém existem pagamentos reais nos clientes vinculados (ex: acordo com R$1.800 pagos por clientes, mas acordo ainda "approved").
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-## Solução
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-### 1. Nova query para buscar pagamentos reais vinculados a acordos
+---
 
-Criar uma query que faz JOIN entre `agreements` e `clients` (via CPF + credor + tenant) para somar os `valor_pago` reais, respeitando os filtros selecionados.
+### Explicação das regras e lógicas de Negociação
 
-```typescript
-const { data: paymentData } = useQuery({
-  queryKey: ["analytics-payments", tenant?.id],
-  queryFn: async () => {
-    // Buscar todos os acordos ativos com pagamentos dos clientes vinculados
-    const { data } = await supabase.rpc('get_analytics_payments', { _tenant_id: tenant!.id });
-    return data;
-  }
-});
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
 ```
 
-### 2. Criar RPC `get_analytics_payments` no banco
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-Uma função SQL que cruza acordos com clientes e retorna por acordo: `agreement_id`, `created_by`, `credor`, `created_at`, `proposed_total`, `total_pago` (soma de valor_pago dos clientes vinculados).
-
-```sql
-CREATE FUNCTION get_analytics_payments(_tenant_id uuid)
-RETURNS TABLE(
-  agreement_id uuid, created_by uuid, credor text, 
-  created_at timestamptz, proposed_total numeric, total_pago numeric
-)
-```
-
-### 3. Recalcular KPIs com dados reais
-
-| KPI | Antes (quebrado) | Depois (correto) |
-|---|---|---|
-| **Total Recebido** | `sum(proposed_total) where status=completed` → sempre 0 | `sum(valor_pago dos clientes vinculados a acordos)` |
-| **Taxa de Recuperação** | `pagos / (pagos + cancelados)` → 0% | `totalRecebido / totalNegociado * 100` |
-| **Ticket Médio** | `totalRecebido / pagos.length` → 0 | `totalRecebido / nº de acordos com pagamentos > 0` |
-| **Taxa de Conversão** | `pagos / totalAtivos` → 0% | `acordos com pagamento total / totalAtivos * 100` |
-
-### 4. Arquivo a modificar
-
-| Arquivo | Alteração |
-|---|---|
-| Migration SQL | Criar RPC `get_analytics_payments` |
-| `src/pages/AnalyticsPage.tsx` | Nova query para pagamentos reais; recalcular todos os KPIs; atualizar tooltips |
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 

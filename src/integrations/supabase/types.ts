@@ -4054,6 +4054,19 @@ export type Database = {
         }
         Returns: string
       }
+      get_analytics_payments: {
+        Args: { _tenant_id: string }
+        Returns: {
+          agreement_id: string
+          created_at: string
+          created_by: string
+          credor: string
+          original_total: number
+          proposed_total: number
+          status: string
+          total_pago: number
+        }[]
+      }
       get_dashboard_stats: {
         Args: { _month?: number; _user_id?: string; _year?: number }
         Returns: {
