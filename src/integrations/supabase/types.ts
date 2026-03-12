@@ -788,6 +788,56 @@ export type Database = {
           },
         ]
       }
+      client_phones: {
+        Row: {
+          cpf: string
+          created_at: string | null
+          id: string
+          is_whatsapp: boolean | null
+          phone_number: string
+          phone_type: string | null
+          priority: number | null
+          raw_metadata: Json | null
+          source: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          cpf: string
+          created_at?: string | null
+          id?: string
+          is_whatsapp?: boolean | null
+          phone_number: string
+          phone_type?: string | null
+          priority?: number | null
+          raw_metadata?: Json | null
+          source?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          cpf?: string
+          created_at?: string | null
+          id?: string
+          is_whatsapp?: boolean | null
+          phone_number?: string
+          phone_type?: string | null
+          priority?: number | null
+          raw_metadata?: Json | null
+          source?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_phones_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_update_logs: {
         Row: {
           changes: Json
