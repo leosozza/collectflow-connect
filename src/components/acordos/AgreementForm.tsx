@@ -54,6 +54,7 @@ const AgreementForm = ({ onSubmit }: AgreementFormProps) => {
     try {
       await onSubmit(form);
       setOpen(false);
+      triggerGamificationUpdate();
       setForm({
         client_cpf: "", client_name: "", credor: "", original_total: 0,
         proposed_total: 0, discount_percent: 0, new_installments: 1,
