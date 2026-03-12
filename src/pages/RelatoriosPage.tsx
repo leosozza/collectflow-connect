@@ -181,10 +181,7 @@ const RelatoriosPage = () => {
 
           <EvolutionChart agreements={filteredAgreements} year={parseInt(selectedYear)} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <AgingReport clients={filteredClients} />
-            <OperatorRanking agreements={filteredAgreements} operators={profiles} />
-          </div>
+          <AgingReport clients={filteredClients} />
         </TabsContent>
 
         <TabsContent value="prestacao-contas" className="mt-4">
