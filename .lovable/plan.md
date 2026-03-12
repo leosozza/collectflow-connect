@@ -1,64 +1,55 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Plano: Abas de Integração no Super Admin Configurações
 
-### O que será feito
+## Objetivo
+Transformar a página de Configurações do Sistema (`AdminConfiguracoesPage`) em uma interface com abas, adicionando uma aba para cada integração do sistema com teste de conexão e configuração. Atualmente a página tem apenas o card do Asaas e cards de configuração geral.
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+## Estrutura de Abas
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+A página será reorganizada com as seguintes abas:
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+1. **Geral** -- configurações existentes (Asaas, Go-Live Checklist, Segurança, Notificações, etc.)
+2. **Target Data** -- configuração de API Key/Secret, teste de conexão com a edge function `targetdata-enrich`
+3. **Negociarie** -- configuração de credenciais e teste de conexão via `negociarie-proxy`
+4. **CobCloud** -- configuração de tokens e teste de conexão via `cobcloud-proxy`
+5. **3CPlus** -- configuração de domínio/token e teste de conexão via `threecplus-proxy`
+6. **WhatsApp** -- configuração de provedores (Gupshup, Evolution, WuzAPI) e teste de conexão
+7. **Negativação** -- configuração de Serasa e Protesto
 
----
+## Diferença do Admin vs Tenant
 
-### Explicação das regras e lógicas de Negociação
+As abas do tenant (em `IntegracaoPage`) configuram credenciais **por tenant** (no campo `settings` do tenant). As abas do Super Admin configurarão os **secrets globais** da plataforma (variáveis de ambiente das edge functions) e permitirão testar a conectividade de cada serviço.
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+## Implementação
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+### Arquivo: `src/pages/admin/AdminConfiguracoesPage.tsx`
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+- Adicionar `Tabs` com `TabsList` e `TabsTrigger` para cada integração
+- Mover o conteúdo atual para a aba "Geral"
+- Criar componentes internos (ou inline) para cada aba de integração:
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-```
+**Cada aba de integração terá:**
+- Card com ícone e título
+- Campos de credenciais (mascarados com show/hide)
+- Botão "Testar Conexão" com terminal de logs em tempo real (mesmo padrão do Asaas)
+- Badge de status (Conectado / Falha / Não configurado)
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+**Target Data (aba nova):**
+- Campos: API Key, API Secret (read-only display, indicando que são secrets do sistema)
+- Botão "Testar Conexão" que invoca `targetdata-enrich` com um CPF de teste
+- Status da configuração
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+**Demais abas:**
+- Cada uma invocará a edge function correspondente com dados de teste para validar a conectividade
+
+### Detalhes Técnicos
+
+- Os testes de conexão utilizarão `supabase.functions.invoke()` para chamar as edge functions correspondentes
+- O terminal de logs seguirá o mesmo padrão visual já implementado no card do Asaas (ScrollArea + logs com timestamp e ícones de status)
+- Nenhuma alteração de banco de dados necessária
+- Nenhuma nova edge function necessária -- usaremos as existentes para testes
+
+### Arquivos modificados
+- `src/pages/admin/AdminConfiguracoesPage.tsx` -- refatorar com abas e criar seções para cada integração
 
