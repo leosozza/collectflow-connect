@@ -1493,6 +1493,91 @@ export type Database = {
           },
         ]
       }
+      enrichment_jobs: {
+        Row: {
+          cost_per_client: number
+          created_at: string
+          enriched: number
+          failed: number
+          id: string
+          processed: number
+          status: string
+          tenant_id: string
+          total_clients: number
+          total_cost: number
+          updated_at: string
+        }
+        Insert: {
+          cost_per_client?: number
+          created_at?: string
+          enriched?: number
+          failed?: number
+          id?: string
+          processed?: number
+          status?: string
+          tenant_id: string
+          total_clients?: number
+          total_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          cost_per_client?: number
+          created_at?: string
+          enriched?: number
+          failed?: number
+          id?: string
+          processed?: number
+          status?: string
+          tenant_id?: string
+          total_clients?: number
+          total_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrichment_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrichment_logs: {
+        Row: {
+          cpf: string
+          created_at: string
+          data_returned: Json | null
+          id: string
+          job_id: string
+          status: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          data_returned?: Json | null
+          id?: string
+          job_id: string
+          status?: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          data_returned?: Json | null
+          id?: string
+          job_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrichment_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "enrichment_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       equipe_membros: {
         Row: {
           created_at: string
