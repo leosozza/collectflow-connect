@@ -1,64 +1,44 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# Unificar gestão de planos no Catálogo de Serviços do Super Admin
 
-### O que será feito
+## Resumo
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+Adicionar uma terceira aba "Planos" na página `AdminServicosPage` para gerenciar os planos de tenants (Starter, Professional, Enterprise). Atualizar os valores e limites dos planos existentes no banco. Ajustar o fluxo de criação de novo cliente no SuperAdminPage para selecionar o plano e, no caso Enterprise, configurar número de operadores.
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+## Alterações
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+### 1. Atualizar dados dos planos no banco (UPDATE via insert tool)
 
----
+- **Starter**: `price_monthly = 499.99`, `limits = { max_users: 6, max_clients: 500, features: [...] }` (5 operadores + 1 admin = 6 users)
+- **Professional**: `price_monthly = 999.99`, `limits = { max_users: 11, max_clients: 5000, features: [...] }` (10 operadores + 1 admin = 11 users)
+- **Enterprise**: `price_monthly = 0` (personalizado), `limits = { max_users: 999, max_clients: 999999, custom: true, features: [...] }`
 
-### Explicação das regras e lógicas de Negociação
+### 2. `src/pages/admin/AdminServicosPage.tsx` — Adicionar aba "Planos"
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+- Adicionar terceira aba com ícone `CreditCard` chamada "Planos"
+- Listar planos da tabela `plans` com colunas: Nome, Slug, Preço, Max Usuários, Max Clientes, Ativo
+- Dialog de edição para alterar preço, limites e status
+- Para Enterprise, mostrar indicação "Personalizado" no lugar do preço
 
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+### 3. `src/pages/SuperAdminPage.tsx` — Melhorar criação de novo cliente
 
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+- No formulário "Novo Cliente", adicionar select para escolher o plano (Starter/Professional/Enterprise)
+- Para Enterprise, exibir campo adicional para definir número de operadores (salvo em `tenants.settings`)
+- No Sheet de gerenciamento, mostrar e permitir alterar o plano do tenant
+- Remover o hardcoded `SERVICE_CATALOG` (já existe na tabela `service_catalog`)
 
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
-```
+### 4. `src/pages/OnboardingPage.tsx` — Atualizar exibição
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+- Ajustar card do Enterprise para mostrar "Sob consulta" em vez de R$ 0,00
+- Manter os outros planos com os novos valores
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+## Arquivos a alterar
+
+| Arquivo | Ação |
+|---------|------|
+| SQL (insert tool) | UPDATE planos com novos preços e limites |
+| `src/pages/admin/AdminServicosPage.tsx` | Adicionar aba "Planos" com CRUD |
+| `src/pages/SuperAdminPage.tsx` | Seletor de plano na criação + gerenciamento |
+| `src/pages/OnboardingPage.tsx` | Ajustar exibição Enterprise "Sob consulta" |
 
