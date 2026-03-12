@@ -93,10 +93,8 @@ Deno.serve(async (req) => {
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -113,7 +111,7 @@ Deno.serve(async (req) => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret, cpfs: ["00000000000"] }),
+            body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret, cpfs: ["46020967867"] }),
           },
           15000
         );
@@ -123,7 +121,7 @@ Deno.serve(async (req) => {
         try { responseData = JSON.parse(responseText); } catch { /* ignore */ }
 
         // Check for IP restriction error
-        if (responseData?.code_error === 1099 || responseText.includes("IP não autorizado") || responseText.includes("IP nao autorizado")) {
+        if (responseData?.code_error === 1099 || responseData?.header?.code_error === 1099 || responseText.includes("IP não autorizado") || responseText.includes("IP nao autorizado")) {
           return new Response(
             JSON.stringify({
               success: false,
