@@ -168,9 +168,25 @@ const EnrichmentConfirmDialog = ({
         },
       });
 
-      toast.success(
-        `Higienização concluída! ${enriched} clientes atualizados.`
-      );
+      const logText = (jobLogs as any[] || []).map((l: any) => {
+        const st = l.status === "success" ? "✅" : "❌";
+        const phones = l.phones_found?.length ? l.phones_found.join(", ") : "-";
+        const emails = l.emails_found?.length ? l.emails_found.join(", ") : "-";
+        return `${st} CPF: ${l.cpf} | Telefones: ${phones} | Email: ${emails}${l.error_message ? ` | Erro: ${l.error_message}` : ""}`;
+      }).join("\n");
+
+      toast(`Higienização concluída! ${enriched} atualizados, ${failed} não encontrados.`, {
+        duration: Infinity,
+        dismissible: true,
+        action: {
+          label: "Copiar Log",
+          onClick: () => {
+            const header = `Higienização — ${enriched} atualizados, ${failed} falhos de ${uniqueCpfs.length} total`;
+            navigator.clipboard.writeText(`${header}\n${"─".repeat(60)}\n${logText}`);
+            toast.success("Log copiado!");
+          },
+        },
+      });
       onComplete();
     } catch (err: any) {
       toast.error(err.message || "Erro ao processar higienização");
