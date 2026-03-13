@@ -45,6 +45,11 @@ import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminServicosPage from "./pages/admin/AdminServicosPage";
+import CRMPipelinePage from "./pages/admin/comercial/CRMPipelinePage";
+import CRMLeadsPage from "./pages/admin/comercial/CRMLeadsPage";
+import CRMCompaniesPage from "./pages/admin/comercial/CRMCompaniesPage";
+import CRMActivitiesPage from "./pages/admin/comercial/CRMActivitiesPage";
+import CRMReportsPage from "./pages/admin/comercial/CRMReportsPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
