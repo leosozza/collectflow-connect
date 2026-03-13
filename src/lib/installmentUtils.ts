@@ -26,9 +26,9 @@ export interface InstallmentRecord {
   credor: string;
   nome_completo: string;
   cpf: string;
-  phone: string | null;
-  email: string | null;
-  external_id: string | null;
+  phone?: string | null;
+  email?: string | null;
+  external_id?: string | null;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
