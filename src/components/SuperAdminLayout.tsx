@@ -111,7 +111,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard de Gestão",
   "/admin/suporte": "Suporte",
-  "/admin/equipes": "Gestão de Equipes",
+  
   "/admin/financeiro": "Gestão Financeira",
   "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
