@@ -7,7 +7,7 @@ import AuditoriaPage from "@/pages/AuditoriaPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useSearchParams } from "react-router-dom";
+
 
 
 const ConfiguracoesPage = () => {
