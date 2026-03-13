@@ -89,8 +89,8 @@ const navGroups: NavGroup[] = [
     groupIcon: Cog,
     items: [
       { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
-      { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
       { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
+      { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
     ],
   },
 ];
