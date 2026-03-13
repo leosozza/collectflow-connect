@@ -16,7 +16,6 @@ import {
   Building2,
   GraduationCap,
   Settings,
-  BarChart3,
   Map,
   Package,
   ChevronDown,
@@ -25,7 +24,6 @@ import {
   ShieldCheck,
   Cog,
   Shield,
-  Bot,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";

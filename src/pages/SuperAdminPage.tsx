@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
-const AdminDashboardPage = lazy(() => import("@/pages/AdminDashboardPage"));
+import { useState, useEffect, useMemo } from "react";
 import TenantServicesTab from "@/components/admin/TenantServicesTab";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";

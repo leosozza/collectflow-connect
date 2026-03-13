@@ -175,7 +175,7 @@ const AdminConfiguracoesPage = () => {
 
       <Tabs defaultValue="geral" className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
-          <TabsTrigger value="geral" className="gap-1.5 text-xs"><Settings className="w-3.5 h-3.5" /> Geral</TabsTrigger>
+          <TabsTrigger value="geral" className="gap-1.5 text-xs"><CreditCard className="w-3.5 h-3.5" /> Asaas</TabsTrigger>
           <TabsTrigger value="targetdata" className="gap-1.5 text-xs"><Search className="w-3.5 h-3.5" /> Target Data</TabsTrigger>
           <TabsTrigger value="negociarie" className="gap-1.5 text-xs"><Handshake className="w-3.5 h-3.5" /> Negociarie</TabsTrigger>
           <TabsTrigger value="cobcloud" className="gap-1.5 text-xs"><Cloud className="w-3.5 h-3.5" /> CobCloud</TabsTrigger>
