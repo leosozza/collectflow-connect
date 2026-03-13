@@ -6,10 +6,26 @@ import { useCallback, useMemo } from "react";
  * - Default values are omitted from URL (clean URLs).
  * - Supports string, number, boolean, and string[] (comma-separated).
  */
-export function useUrlState<T extends string | number | boolean | string[]>(
+export function useUrlState(
   key: string,
-  defaultValue: T
-): [T, (val: T) => void] {
+  defaultValue: string
+): [string, (val: string) => void];
+export function useUrlState(
+  key: string,
+  defaultValue: number
+): [number, (val: number) => void];
+export function useUrlState(
+  key: string,
+  defaultValue: boolean
+): [boolean, (val: boolean) => void];
+export function useUrlState(
+  key: string,
+  defaultValue: string[]
+): [string[], (val: string[]) => void];
+export function useUrlState(
+  key: string,
+  defaultValue: string | number | boolean | string[]
+): [any, (val: any) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const value = useMemo((): T => {

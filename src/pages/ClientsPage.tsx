@@ -78,7 +78,7 @@ const ClientsPage = () => {
   }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
 
   const setFilters = useMemo(() => {
-    return (newFilters: typeof filters | ((prev: typeof filters) => typeof filters)) => {
+    return (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
       const resolved = typeof newFilters === 'function' ? newFilters(filters) : newFilters;
       setUrlStatus(resolved.status);
       setUrlCredor(resolved.credor);

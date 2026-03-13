@@ -127,9 +127,9 @@ const CarteiraPage = () => {
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
-  const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
+  const toggleSort = (field: string) => {
     if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
       setSortDir(field === "created_at" ? "desc" : "asc");
