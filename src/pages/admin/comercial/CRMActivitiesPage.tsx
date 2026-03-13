@@ -24,9 +24,9 @@ const statusColors: Record<string, string> = {
 const CRMActivitiesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<CRMActivity>>({});
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [search, setSearch] = useUrlState("q", "");
+  const [filterType, setFilterType] = useUrlState("type", "all");
+  const [filterStatus, setFilterStatus] = useUrlState("status", "all");
   const { toast } = useToast();
   const qc = useQueryClient();
 
