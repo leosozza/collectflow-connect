@@ -1464,6 +1464,391 @@ export type Database = {
           },
         ]
       }
+      crm_activities: {
+        Row: {
+          activity_type: string
+          company_id: string | null
+          created_at: string
+          id: string
+          lead_id: string | null
+          notes: string | null
+          opportunity_id: string | null
+          responsible_id: string | null
+          scheduled_date: string
+          scheduled_time: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          activity_type?: string
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          opportunity_id?: string | null
+          responsible_id?: string | null
+          scheduled_date: string
+          scheduled_time?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          activity_type?: string
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          opportunity_id?: string | null
+          responsible_id?: string | null
+          scheduled_date?: string
+          scheduled_time?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "crm_opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_companies: {
+        Row: {
+          city: string | null
+          created_at: string
+          custom_data: Json | null
+          employees_count: number | null
+          estimated_value: number | null
+          id: string
+          lead_id: string | null
+          name: string
+          notes: string | null
+          responsible_id: string | null
+          segment: string | null
+          suggested_plan: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          custom_data?: Json | null
+          employees_count?: number | null
+          estimated_value?: number | null
+          id?: string
+          lead_id?: string | null
+          name: string
+          notes?: string | null
+          responsible_id?: string | null
+          segment?: string | null
+          suggested_plan?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          custom_data?: Json | null
+          employees_count?: number | null
+          estimated_value?: number | null
+          id?: string
+          lead_id?: string | null
+          name?: string
+          notes?: string | null
+          responsible_id?: string | null
+          segment?: string | null
+          suggested_plan?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_companies_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_companies_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_custom_fields: {
+        Row: {
+          created_at: string
+          entity_type: string
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          is_active: boolean
+          is_required: boolean
+          is_visible_in_list: boolean
+          options: Json | null
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          entity_type?: string
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          is_visible_in_list?: boolean
+          options?: Json | null
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          is_visible_in_list?: boolean
+          options?: Json | null
+          position?: number
+        }
+        Relationships: []
+      }
+      crm_lead_score_rules: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          is_active: boolean
+          rule_name: string
+          score_change: number
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          is_active?: boolean
+          rule_name: string
+          score_change?: number
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          is_active?: boolean
+          rule_name?: string
+          score_change?: number
+        }
+        Relationships: []
+      }
+      crm_leads: {
+        Row: {
+          company_name: string | null
+          converted_company_id: string | null
+          created_at: string
+          custom_data: Json | null
+          email: string | null
+          id: string
+          lead_origin: string | null
+          lead_score: number
+          name: string
+          notes: string | null
+          phone: string | null
+          responsible_id: string | null
+          status: string
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          company_name?: string | null
+          converted_company_id?: string | null
+          created_at?: string
+          custom_data?: Json | null
+          email?: string | null
+          id?: string
+          lead_origin?: string | null
+          lead_score?: number
+          name: string
+          notes?: string | null
+          phone?: string | null
+          responsible_id?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          company_name?: string | null
+          converted_company_id?: string | null
+          created_at?: string
+          custom_data?: Json | null
+          email?: string | null
+          id?: string
+          lead_origin?: string | null
+          lead_score?: number
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          responsible_id?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_leads_converted_company_id_fkey"
+            columns: ["converted_company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_leads_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_opportunities: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          estimated_value: number | null
+          expected_close_date: string | null
+          id: string
+          lead_id: string | null
+          notes: string | null
+          position: number
+          responsible_id: string | null
+          stage_id: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          estimated_value?: number | null
+          expected_close_date?: string | null
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          position?: number
+          responsible_id?: string | null
+          stage_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          estimated_value?: number | null
+          expected_close_date?: string | null
+          id?: string
+          lead_id?: string | null
+          notes?: string | null
+          position?: number
+          responsible_id?: string | null
+          stage_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_opportunities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_opportunities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_opportunities_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_opportunities_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipeline_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_pipeline_stages: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       custom_fields: {
         Row: {
           created_at: string | null
