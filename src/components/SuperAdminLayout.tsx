@@ -210,7 +210,7 @@ const SuperAdminLayout = () => {
     }
 
     return (
-      <Collapsible key={group.groupLabel} defaultOpen={true}>
+      <Collapsible key={group.groupLabel} defaultOpen={false}>
         <div className={index > 0 ? "pt-3 mt-3 border-t border-sidebar-border/30" : ""}>
           <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-2.5 rounded-lg group cursor-pointer hover:bg-sidebar-accent/50 transition-colors">
             <div className="flex items-center gap-3">
