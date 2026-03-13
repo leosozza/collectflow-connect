@@ -1,133 +1,64 @@
 
 
-# Sistema Completo de Permissões — Super Admin RiVO Connect
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Resumo
+### O que será feito
 
-Criar sistema de permissões granulares para o painel Super Admin, com tabelas de módulos e permissões por usuário, interface de gerenciamento, sidebar dinâmico e proteção de rotas.
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-## 1 — Banco de Dados (2 migrações)
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-### Tabela `sa_modules` — Cadastro de módulos do Super Admin
-```sql
-CREATE TABLE public.sa_modules (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text NOT NULL UNIQUE,
-  sidebar_group text NOT NULL,
-  icon text,
-  route_path text,
-  sort_order int DEFAULT 0,
-  created_at timestamptz DEFAULT now()
-);
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+
+---
+
+### Explicação das regras e lógicas de Negociação
+
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
+
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
+
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
+
+**Cálculo do Valor Atualizado** (no perfil do devedor):
 ```
-Seed com os 11 módulos: `dashboard`, `suporte`, `gestao_equipes`, `treinamentos_reunioes`, `servicos_tokens`, `permissoes_modulos`, `agentes_digitais`, `integracoes`, `gestao_inquilinos`, `gestao_financeira`, `roadmap`.
-
-### Tabela `sa_user_permissions` — Permissões individuais por usuário
-```sql
-CREATE TABLE public.sa_user_permissions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  module_slug text NOT NULL REFERENCES sa_modules(slug) ON DELETE CASCADE,
-  can_view boolean DEFAULT false,
-  can_create boolean DEFAULT false,
-  can_edit boolean DEFAULT false,
-  can_delete boolean DEFAULT false,
-  granted_by uuid REFERENCES auth.users(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE(user_id, module_slug)
-);
-```
-
-### RLS — Apenas super_admins acessam
-- `sa_modules`: SELECT para authenticated, gerenciamento para super_admins
-- `sa_user_permissions`: Todas as operações restritas a super_admins via `is_super_admin(auth.uid())`
-
-### Função SECURITY DEFINER
-```sql
-CREATE FUNCTION get_my_sa_permissions()
-RETURNS TABLE(module_slug text, can_view bool, can_create bool, can_edit bool, can_delete bool)
-```
-Retorna as permissões do usuário logado sem recursão RLS.
-
-## 2 — Hook `useSAPermissions`
-
-Novo arquivo: `src/hooks/useSAPermissions.ts`
-
-- Chama `get_my_sa_permissions()` via RPC
-- Retorna mapa `{ [slug]: { canView, canCreate, canEdit, canDelete } }`
-- Super admin (owner) tem tudo liberado por padrão
-- Expõe `hasView(slug)`, `hasCreate(slug)`, `hasEdit(slug)`, `hasDelete(slug)`
-
-## 3 — Service `saPermissionService.ts`
-
-Novo arquivo: `src/services/saPermissionService.ts`
-
-- `fetchModules()` — lista todos os módulos
-- `fetchUserPermissions(userId)` — permissões de um usuário
-- `saveUserPermissions(userId, permissions[])` — upsert em lote
-- `fetchSuperAdminUsers()` — lista usuários com role super_admin ou que têm permissões SA
-
-## 4 — Página "Permissões e Módulos"
-
-Novo arquivo: `src/pages/admin/AdminPermissoesPage.tsx`
-
-**Layout:**
-1. Seletor de usuário (dropdown com todos os colaboradores super_admin)
-2. Tabela de permissões com checkboxes:
-
-```text
-┌──────────────────────────┬─────┬───────┬────────┬─────────┐
-│ Módulo                   │ Ver │ Criar │ Editar │ Excluir │
-├──────────────────────────┼─────┼───────┼────────┼─────────┤
-│ Dashboard                │ [✓] │ [ ]   │ [ ]    │ [ ]     │
-│ Suporte                  │ [✓] │ [✓]   │ [✓]    │ [ ]     │
-│ Gestão de Equipes        │ [✓] │ [✓]   │ [✓]    │ [ ]     │
-│ ...                      │     │       │        │         │
-└──────────────────────────┴─────┴───────┴────────┴─────────┘
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
 ```
 
-3. Botão "Salvar Permissões" com toast de confirmação
-4. Badge visual por grupo (Operação, Automação e Serviços, etc.)
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-## 5 — Rota e Sidebar
-
-### Nova rota em `App.tsx`:
-```
-<Route path="/admin/permissoes" element={<AdminPermissoesPage />} />
-```
-
-### Sidebar atualizado em `SuperAdminLayout.tsx`:
-- Adicionar item "Permissões e Módulos" no grupo "Automação e Serviços" com ícone `Shield`
-- Adicionar item "Agentes Digitais" com ícone `Bot` (página placeholder)
-- Filtrar itens do sidebar: chamar `useSAPermissions()` e ocultar itens onde `canView === false`
-- Dashboard sempre visível (não filtrável)
-- `pageTitles` atualizado com as novas rotas
-
-## 6 — Proteção de Rotas
-
-No `SuperAdminLayout.tsx`, antes de renderizar `<Outlet />`:
-- Verificar se o usuário tem `can_view` para o módulo correspondente à rota atual
-- Se não tiver permissão, redirecionar para `/admin` com toast de aviso
-- Mapeamento rota → slug via constante `ROUTE_MODULE_MAP`
-
-## 7 — Arquivos Modificados/Criados
-
-| Arquivo | Ação |
-|---------|------|
-| Migração SQL | Criar tabelas + seed + RLS + função |
-| `src/hooks/useSAPermissions.ts` | Criar |
-| `src/services/saPermissionService.ts` | Criar |
-| `src/pages/admin/AdminPermissoesPage.tsx` | Criar |
-| `src/pages/admin/AdminAgentesDigitaisPage.tsx` | Criar (placeholder) |
-| `src/components/SuperAdminLayout.tsx` | Modificar (sidebar dinâmico + proteção) |
-| `src/App.tsx` | Adicionar 2 novas rotas |
-
-## Notas Técnicas
-
-- Não altera o sistema de permissões existente do tenant (`usePermissions`, `permission_profiles`)
-- Sistema isolado para o painel Super Admin
-- Escalável: adicionar novo módulo = INSERT na `sa_modules` + atribuir permissões
-- Super admin "dono" (primeiro super_admin) tem acesso total independente de registros na tabela
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 
