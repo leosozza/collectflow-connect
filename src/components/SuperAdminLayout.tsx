@@ -97,7 +97,7 @@ const navGroups: NavGroup[] = [
 const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin": "dashboard",
   "/admin/suporte": "suporte",
-  "/admin/equipes": "gestao_equipes",
+  
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
   "/admin/permissoes": "permissoes_modulos",
