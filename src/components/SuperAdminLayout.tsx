@@ -69,17 +69,14 @@ const navGroups: NavGroup[] = [
     groupIcon: Zap,
     items: [
       { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos", moduleSlug: "servicos_tokens" },
-      { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
-      { label: "Agentes Digitais", icon: Bot, path: "/admin/agentes-digitais", moduleSlug: "agentes_digitais" },
       { label: "Integrações", icon: Settings, path: "/admin/configuracoes", moduleSlug: "integracoes" },
-      { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios", moduleSlug: "relatorios" },
     ],
   },
   {
     groupLabel: "Gestão de Clientes",
     groupIcon: Building2,
     items: [
-      { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants", moduleSlug: "gestao_inquilinos" },
+      { label: "Gestão de Clientes", icon: Building2, path: "/admin/tenants", moduleSlug: "gestao_inquilinos" },
     ],
   },
   {
@@ -93,6 +90,7 @@ const navGroups: NavGroup[] = [
     groupLabel: "Configurações",
     groupIcon: Cog,
     items: [
+      { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
       { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
       { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
     ],
