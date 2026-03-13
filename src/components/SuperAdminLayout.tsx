@@ -26,6 +26,7 @@ import {
   Cog,
   Shield,
   Bot,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
