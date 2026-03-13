@@ -58,11 +58,21 @@ const dashboardItem: NavItem = {
 
 const navGroups: NavGroup[] = [
   {
+    groupLabel: "Comercial",
+    groupIcon: Target,
+    items: [
+      { label: "Pipeline de Vendas", icon: Target, path: "/admin/comercial/pipeline", moduleSlug: "comercial_pipeline" },
+      { label: "Leads", icon: UserCheck, path: "/admin/comercial/leads", moduleSlug: "comercial_leads" },
+      { label: "Empresas", icon: Building2, path: "/admin/comercial/empresas", moduleSlug: "comercial_empresas" },
+      { label: "Atividades", icon: CalendarDays, path: "/admin/comercial/atividades", moduleSlug: "comercial_atividades" },
+      { label: "Relatórios", icon: BarChart3, path: "/admin/comercial/relatorios", moduleSlug: "comercial_relatorios" },
+    ],
+  },
+  {
     groupLabel: "Operação",
     groupIcon: Briefcase,
     items: [
       { label: "Suporte", icon: Headphones, path: "/admin/suporte", moduleSlug: "suporte" },
-      
       { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos", moduleSlug: "treinamentos_reunioes" },
     ],
   },
