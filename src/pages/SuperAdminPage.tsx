@@ -313,21 +313,13 @@ const SuperAdminPage = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="executivo">
+      <Tabs defaultValue="dashboard">
         <TabsList>
-          <TabsTrigger value="executivo">Dashboard Executivo</TabsTrigger>
           <TabsTrigger value="dashboard">Resumo Tenants</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
           <TabsTrigger value="servicos">Serviços Contratados</TabsTrigger>
           <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
-
-        {/* ========== DASHBOARD EXECUTIVO ========== */}
-        <TabsContent value="executivo" className="mt-4">
-          <Suspense fallback={<div className="text-muted-foreground text-sm p-4">Carregando...</div>}>
-            <AdminDashboardPage />
-          </Suspense>
-        </TabsContent>
 
         {/* ========== DASHBOARD ========== */}
         <TabsContent value="dashboard" className="space-y-4">
