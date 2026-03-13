@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeads, createLead, updateLead, deleteLead, convertLeadToCompany, CRMLead } from "@/services/crmService";
 import LeadScoreBadge from "@/components/comercial/LeadScoreBadge";
