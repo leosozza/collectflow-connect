@@ -69,7 +69,7 @@ const SupportAdminPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useUrlState("status", "all");
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
