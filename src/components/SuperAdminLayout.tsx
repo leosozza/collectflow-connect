@@ -26,6 +26,7 @@ import {
   Cog,
   Shield,
   Bot,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,7 @@ const navGroups: NavGroup[] = [
     groupIcon: Cog,
     items: [
       { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
+      { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
     ],
   },
 ];
@@ -110,6 +112,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
   "/admin/roadmap": "roadmap",
+  "/admin/usuarios": "gestao_usuarios",
 };
 
 const pageTitles: Record<string, string> = {
@@ -125,6 +128,7 @@ const pageTitles: Record<string, string> = {
   "/admin/roadmap": "Roadmap",
   "/admin/permissoes": "Permissões e Módulos",
   "/admin/agentes-digitais": "Agentes Digitais",
+  "/admin/usuarios": "Gestão de Usuários",
   "/admin/perfil": "Meu Perfil",
 };
 
