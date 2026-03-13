@@ -20,7 +20,7 @@ const AdminUsuariosHubPage = () => {
         </p>
       </div>
 
-      <Tabs value={currentTab} onValueChange={handleTabChange}>
+      <Tabs value={currentTab} onValueChange={setCurrentTab}>
         <TabsList>
           <TabsTrigger value="usuarios" className="gap-2">
             <UserPlus className="w-4 h-4" />
