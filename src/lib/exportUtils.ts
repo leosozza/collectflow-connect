@@ -31,3 +31,9 @@ export function printSection(elementId: string) {
   document.body.classList.remove("printing-section");
   if (el) el.classList.remove("print-target");
 }
+
+export function exportToPDF(elementId: string, fileName: string) {
+  document.title = fileName;
+  printSection(elementId);
+  document.title = "Rivo Connect";
+}
