@@ -122,7 +122,7 @@ const GamificacaoPage = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue={isTenantAdmin ? "ranking" : "goals"} onValueChange={(v) => setUrlTab(v)} value={urlTab}>
+      <Tabs defaultValue={urlTab || (isTenantAdmin ? "ranking" : "goals")} onValueChange={setUrlTab} value={urlTab || undefined}>
         <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
             <Trophy className="w-3.5 h-3.5" /> Ranking
