@@ -3,6 +3,8 @@ import { addMonths } from "date-fns";
 import { logAction } from "@/services/auditService";
 import { autoCancelProtestsForCpf } from "@/services/protestoService";
 import { autoCancelSerasaForCpf } from "@/services/serasaService";
+import { logger } from "@/lib/logger";
+import { handleServiceError } from "@/lib/errorHandler";
 
 export interface Agreement {
   id: string;
@@ -41,26 +43,32 @@ export interface AgreementFormData {
   notes?: string;
 }
 
+const MODULE = "agreementService";
+
 export const fetchAgreements = async (filters?: {
   status?: string;
   created_by?: string;
 }): Promise<Agreement[]> => {
-  let query = supabase
-    .from("agreements")
-    .select("*")
-    .order("created_at", { ascending: false });
+  try {
+    let query = supabase
+      .from("agreements")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  if (filters?.status && filters.status !== "todos") {
-    query = query.eq("status", filters.status);
+    if (filters?.status && filters.status !== "todos") {
+      query = query.eq("status", filters.status);
+    }
+    if (filters?.created_by) {
+      query = query.eq("created_by", filters.created_by);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    logger.info(MODULE, "fetch", { count: data?.length ?? 0 });
+    return (data as Agreement[]) || [];
+  } catch (error) {
+    handleServiceError(error, MODULE);
   }
-
-  if (filters?.created_by) {
-    query = query.eq("created_by", filters.created_by);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data as Agreement[]) || [];
 };
 
 export const createAgreement = async (
@@ -69,171 +77,170 @@ export const createAgreement = async (
   tenantId: string,
   options?: { requiresApproval?: boolean; approvalReason?: string }
 ): Promise<Agreement> => {
-  const status = options?.requiresApproval ? "pending_approval" : "pending";
-  const { data: result, error } = await supabase
-    .from("agreements")
-    .insert({
-      ...data,
-      created_by: userId,
-      tenant_id: tenantId,
-      status,
-      requires_approval: options?.requiresApproval || false,
-      approval_reason: options?.approvalReason || null,
-    } as any)
-    .select()
-    .single();
-
-  if (error) throw error;
-  const agreement = result as Agreement;
-  logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
-
-  // Mark original titles as "em_acordo" and set status_cobranca to "Acordo Vigente"
   try {
-    // Fetch the "Acordo Vigente" status ID
-    const { data: acordoStatus } = await supabase
-      .from("tipos_status")
-      .select("id")
-      .eq("nome", "Acordo Vigente")
+    const status = options?.requiresApproval ? "pending_approval" : "pending";
+    const { data: result, error } = await supabase
+      .from("agreements")
+      .insert({
+        ...data,
+        created_by: userId,
+        tenant_id: tenantId,
+        status,
+        requires_approval: options?.requiresApproval || false,
+        approval_reason: options?.approvalReason || null,
+      } as any)
+      .select()
       .single();
 
-    const updatePayload: any = { status: "em_acordo" };
-    if (acordoStatus?.id) {
-      updatePayload.status_cobranca_id = acordoStatus.id;
-    }
+    if (error) throw error;
+    const agreement = result as Agreement;
+    logger.info(MODULE, "create", { id: agreement.id, cpf: data.client_cpf, credor: data.credor });
+    logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
 
-    await supabase
-      .from("clients")
-      .update(updatePayload)
-      .eq("cpf", data.client_cpf)
-      .eq("credor", data.credor)
-      .in("status", ["pendente", "vencido", "quebrado"]);
-  } catch (e) {
-    console.error("Erro ao marcar títulos como em_acordo:", e);
-  }
+    // Mark original titles as "em_acordo"
+    try {
+      const { data: acordoStatus } = await supabase
+        .from("tipos_status")
+        .select("id")
+        .eq("nome", "Acordo Vigente")
+        .single();
 
-  // Auto-assign operator_id to the creator
-  try {
-    const { data: creatorProfile } = await supabase
-      .from("profiles").select("id").eq("user_id", userId).single();
-    if (creatorProfile) {
+      const updatePayload: any = { status: "em_acordo" };
+      if (acordoStatus?.id) {
+        updatePayload.status_cobranca_id = acordoStatus.id;
+      }
+
       await supabase
         .from("clients")
-        .update({ operator_id: creatorProfile.id } as any)
+        .update(updatePayload)
         .eq("cpf", data.client_cpf)
-        .eq("credor", data.credor);
+        .eq("credor", data.credor)
+        .in("status", ["pendente", "vencido", "quebrado"]);
+    } catch (e) {
+      logger.error(MODULE, "mark_em_acordo", e);
     }
-  } catch (e) {
-    console.error("Erro ao atribuir operador:", e);
-  }
 
-  // --- Gamification: update operator_points ---
-  try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-
-    // Get operator profile id
-    const { data: creatorProfileForPoints } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("user_id", userId)
-      .single();
-
-    if (creatorProfileForPoints) {
-      const operatorProfileId = creatorProfileForPoints.id;
-
-      // Count valid agreements this month
-      const { count: agreementsCount } = await supabase
-        .from("agreements")
-        .select("*", { count: "exact", head: true })
-        .eq("created_by", userId)
-        .eq("tenant_id", tenantId)
-        .gte("created_at", monthStart)
-        .lt("created_at", monthEnd)
-        .not("status", "in", "(cancelled,rejected)");
-
-      // Count cancelled agreements this month
-      const { count: breaksCount } = await supabase
-        .from("agreements")
-        .select("*", { count: "exact", head: true })
-        .eq("created_by", userId)
-        .eq("tenant_id", tenantId)
-        .eq("status", "cancelled")
-        .gte("created_at", monthStart)
-        .lt("created_at", monthEnd);
-
-      // Sum proposed_total of completed agreements this month
-      const { data: completedData } = await supabase
-        .from("agreements")
-        .select("proposed_total")
-        .eq("created_by", userId)
-        .eq("tenant_id", tenantId)
-        .eq("status", "completed")
-        .gte("created_at", monthStart)
-        .lt("created_at", monthEnd);
-
-      const totalReceived = (completedData || []).reduce(
-        (sum, a) => sum + Number(a.proposed_total),
-        0
-      );
-
-      const paymentsCount = agreementsCount || 0;
-      const breaks = breaksCount || 0;
-
-      // Simple points formula matching gamificationService.calculatePoints
-      let points = paymentsCount * 10 + Math.floor(totalReceived / 100) * 5 - breaks * 3;
-      points = Math.max(0, points);
-
-      await supabase.from("operator_points").upsert(
-        {
-          tenant_id: tenantId,
-          operator_id: operatorProfileId,
-          year,
-          month,
-          points,
-          payments_count: paymentsCount,
-          breaks_count: breaks,
-          total_received: totalReceived,
-          updated_at: new Date().toISOString(),
-        } as any,
-        { onConflict: "tenant_id,operator_id,year,month" }
-      );
-    }
-  } catch (e) {
-    console.error("Erro ao atualizar gamificação:", e);
-  }
-
-  // Notify admins when agreement requires approval
-  if (options?.requiresApproval) {
+    // Auto-assign operator_id
     try {
-      const { data: adminUsers } = await supabase
-        .from("tenant_users")
-        .select("user_id")
-        .eq("tenant_id", tenantId)
-        .in("role", ["admin", "super_admin"]);
-
-      if (adminUsers && adminUsers.length > 0) {
-        const notifications = adminUsers.map((admin) => ({
-          tenant_id: tenantId,
-          user_id: admin.user_id,
-          title: "Acordo aguardando liberação",
-          message: `Acordo para ${data.client_name} (${data.client_cpf}) - Credor: ${data.credor} requer liberação. Motivo: ${options.approvalReason || "Fora do padrão"}`,
-          type: "warning",
-          reference_type: "agreement",
-          reference_id: agreement.id,
-        }));
-        await supabase.from("notifications").insert(notifications as any);
+      const { data: creatorProfile } = await supabase
+        .from("profiles").select("id").eq("user_id", userId).single();
+      if (creatorProfile) {
+        await supabase
+          .from("clients")
+          .update({ operator_id: creatorProfile.id } as any)
+          .eq("cpf", data.client_cpf)
+          .eq("credor", data.credor);
       }
     } catch (e) {
-      console.error("Erro ao notificar admins:", e);
+      logger.error(MODULE, "assign_operator", e);
     }
-  }
 
-  return agreement;
+    // Gamification: update operator_points
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear = month === 12 ? year + 1 : year;
+      const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+
+      const { data: creatorProfileForPoints } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .single();
+
+      if (creatorProfileForPoints) {
+        const operatorProfileId = creatorProfileForPoints.id;
+
+        const { count: agreementsCount } = await supabase
+          .from("agreements")
+          .select("*", { count: "exact", head: true })
+          .eq("created_by", userId)
+          .eq("tenant_id", tenantId)
+          .gte("created_at", monthStart)
+          .lt("created_at", monthEnd)
+          .not("status", "in", "(cancelled,rejected)");
+
+        const { count: breaksCount } = await supabase
+          .from("agreements")
+          .select("*", { count: "exact", head: true })
+          .eq("created_by", userId)
+          .eq("tenant_id", tenantId)
+          .eq("status", "cancelled")
+          .gte("created_at", monthStart)
+          .lt("created_at", monthEnd);
+
+        const { data: completedData } = await supabase
+          .from("agreements")
+          .select("proposed_total")
+          .eq("created_by", userId)
+          .eq("tenant_id", tenantId)
+          .eq("status", "completed")
+          .gte("created_at", monthStart)
+          .lt("created_at", monthEnd);
+
+        const totalReceived = (completedData || []).reduce(
+          (sum, a) => sum + Number(a.proposed_total),
+          0
+        );
+
+        const paymentsCount = agreementsCount || 0;
+        const breaks = breaksCount || 0;
+
+        let points = paymentsCount * 10 + Math.floor(totalReceived / 100) * 5 - breaks * 3;
+        points = Math.max(0, points);
+
+        await supabase.from("operator_points").upsert(
+          {
+            tenant_id: tenantId,
+            operator_id: operatorProfileId,
+            year,
+            month,
+            points,
+            payments_count: paymentsCount,
+            breaks_count: breaks,
+            total_received: totalReceived,
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: "tenant_id,operator_id,year,month" }
+        );
+      }
+    } catch (e) {
+      logger.error(MODULE, "gamification_update", e);
+    }
+
+    // Notify admins when agreement requires approval
+    if (options?.requiresApproval) {
+      try {
+        const { data: adminUsers } = await supabase
+          .from("tenant_users")
+          .select("user_id")
+          .eq("tenant_id", tenantId)
+          .in("role", ["admin", "super_admin"]);
+
+        if (adminUsers && adminUsers.length > 0) {
+          const notifications = adminUsers.map((admin) => ({
+            tenant_id: tenantId,
+            user_id: admin.user_id,
+            title: "Acordo aguardando liberação",
+            message: `Acordo para ${data.client_name} (${data.client_cpf}) - Credor: ${data.credor} requer liberação. Motivo: ${options.approvalReason || "Fora do padrão"}`,
+            type: "warning",
+            reference_type: "agreement",
+            reference_id: agreement.id,
+          }));
+          await supabase.from("notifications").insert(notifications as any);
+        }
+      } catch (e) {
+        logger.error(MODULE, "notify_admins", e);
+      }
+    }
+
+    return agreement;
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
 };
 
 export const approveAgreement = async (
@@ -241,27 +248,29 @@ export const approveAgreement = async (
   userId: string,
   _operatorProfileId: string
 ): Promise<void> => {
-  // Update agreement status only — original titles in clients table remain untouched
-  const { error: updateError } = await supabase
-    .from("agreements")
-    .update({ status: "approved", approved_by: userId } as any)
-    .eq("id", agreement.id);
-
-  if (updateError) throw updateError;
-  logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
-
-  // Auto-cancel active protest titles for this CPF
   try {
-    await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
-  } catch (e) {
-    console.error("Erro ao cancelar protestos automaticamente:", e);
-  }
+    const { error: updateError } = await supabase
+      .from("agreements")
+      .update({ status: "approved", approved_by: userId } as any)
+      .eq("id", agreement.id);
 
-  // Auto-remove Serasa negativations for this CPF
-  try {
-    await autoCancelSerasaForCpf(agreement.client_cpf, agreement.tenant_id, userId);
-  } catch (e) {
-    console.error("Erro ao remover negativações Serasa automaticamente:", e);
+    if (updateError) throw updateError;
+    logger.info(MODULE, "approve", { id: agreement.id });
+    logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
+
+    try {
+      await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
+    } catch (e) {
+      logger.error(MODULE, "auto_cancel_protests", e);
+    }
+
+    try {
+      await autoCancelSerasaForCpf(agreement.client_cpf, agreement.tenant_id, userId);
+    } catch (e) {
+      logger.error(MODULE, "auto_cancel_serasa", e);
+    }
+  } catch (error) {
+    handleServiceError(error, MODULE);
   }
 };
 
@@ -269,139 +278,152 @@ export const rejectAgreement = async (
   id: string,
   userId: string
 ): Promise<void> => {
-  const { error } = await supabase
-    .from("agreements")
-    .update({ status: "rejected", approved_by: userId } as any)
-    .eq("id", id);
+  try {
+    const { error } = await supabase
+      .from("agreements")
+      .update({ status: "rejected", approved_by: userId } as any)
+      .eq("id", id);
 
-  if (error) throw error;
-  logAction({ action: "reject", entity_type: "agreement", entity_id: id });
+    if (error) throw error;
+    logger.info(MODULE, "reject", { id });
+    logAction({ action: "reject", entity_type: "agreement", entity_id: id });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
 };
 
 export const updateAgreement = async (
   id: string,
   data: Partial<AgreementFormData>
 ): Promise<void> => {
-  const { error } = await supabase
-    .from("agreements")
-    .update(data as any)
-    .eq("id", id);
+  try {
+    const { error } = await supabase
+      .from("agreements")
+      .update(data as any)
+      .eq("id", id);
 
-  if (error) throw error;
-  logAction({ action: "update", entity_type: "agreement", entity_id: id, details: data });
+    if (error) throw error;
+    logger.info(MODULE, "update", { id });
+    logAction({ action: "update", entity_type: "agreement", entity_id: id, details: data });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
 };
 
 export const cancelAgreement = async (id: string): Promise<void> => {
-  // Fetch agreement details to revert titles
-  const { data: agreement } = await supabase
-    .from("agreements")
-    .select("client_cpf, credor")
-    .eq("id", id)
-    .single();
+  try {
+    const { data: agreement } = await supabase
+      .from("agreements")
+      .select("client_cpf, credor")
+      .eq("id", id)
+      .single();
 
-  const { error } = await supabase
-    .from("agreements")
-    .update({ status: "cancelled" } as any)
-    .eq("id", id);
+    const { error } = await supabase
+      .from("agreements")
+      .update({ status: "cancelled" } as any)
+      .eq("id", id);
 
-  if (error) throw error;
+    if (error) throw error;
 
-  // Revert titles from em_acordo back to pendente and reset status_cobranca
-  if (agreement) {
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      // Get status IDs for auto-assignment
-      const { data: emDiaStatus } = await supabase
-        .from("tipos_status")
-        .select("id")
-        .eq("nome", "Em dia")
-        .single();
-      const { data: aguardandoStatus } = await supabase
-        .from("tipos_status")
-        .select("id")
-        .eq("nome", "Aguardando acionamento")
-        .single();
+    if (agreement) {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const { data: emDiaStatus } = await supabase
+          .from("tipos_status")
+          .select("id")
+          .eq("nome", "Em dia")
+          .single();
+        const { data: aguardandoStatus } = await supabase
+          .from("tipos_status")
+          .select("id")
+          .eq("nome", "Aguardando acionamento")
+          .single();
 
-      // First revert to pendente
-      await supabase
-        .from("clients")
-        .update({ status: "pendente" } as any)
-        .eq("cpf", agreement.client_cpf)
-        .eq("credor", agreement.credor)
-        .eq("status", "em_acordo");
-
-      // Then set appropriate status_cobranca based on vencimento
-      if (emDiaStatus?.id) {
         await supabase
           .from("clients")
-          .update({ status_cobranca_id: emDiaStatus.id } as any)
+          .update({ status: "pendente" } as any)
           .eq("cpf", agreement.client_cpf)
           .eq("credor", agreement.credor)
-          .eq("status", "pendente")
-          .gte("data_vencimento", today);
+          .eq("status", "em_acordo");
+
+        if (emDiaStatus?.id) {
+          await supabase
+            .from("clients")
+            .update({ status_cobranca_id: emDiaStatus.id } as any)
+            .eq("cpf", agreement.client_cpf)
+            .eq("credor", agreement.credor)
+            .eq("status", "pendente")
+            .gte("data_vencimento", today);
+        }
+        if (aguardandoStatus?.id) {
+          await supabase
+            .from("clients")
+            .update({ status_cobranca_id: aguardandoStatus.id } as any)
+            .eq("cpf", agreement.client_cpf)
+            .eq("credor", agreement.credor)
+            .eq("status", "pendente")
+            .lt("data_vencimento", today);
+        }
+      } catch (e) {
+        logger.error(MODULE, "revert_titles", e);
       }
-      if (aguardandoStatus?.id) {
-        await supabase
-          .from("clients")
-          .update({ status_cobranca_id: aguardandoStatus.id } as any)
-          .eq("cpf", agreement.client_cpf)
-          .eq("credor", agreement.credor)
-          .eq("status", "pendente")
-          .lt("data_vencimento", today);
-      }
-    } catch (e) {
-      console.error("Erro ao reverter títulos:", e);
     }
-  }
 
-  logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+    logger.info(MODULE, "cancel", { id });
+    logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
 };
 
-/** Distribute an agreement payment across original pending titles for a CPF/credor */
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,
   valor: number
 ): Promise<void> => {
-  // Fetch pending titles ordered by due date
-  const { data: titles, error } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("cpf", cpf)
-    .eq("credor", credor)
-    .eq("status", "pendente")
-    .order("data_vencimento", { ascending: true });
+  try {
+    const { data: titles, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("cpf", cpf)
+      .eq("credor", credor)
+      .eq("status", "pendente")
+      .order("data_vencimento", { ascending: true });
 
-  if (error) throw error;
-  if (!titles || titles.length === 0) return;
+    if (error) throw error;
+    if (!titles || titles.length === 0) return;
 
-  let remaining = valor;
+    let remaining = valor;
 
-  for (const title of titles) {
-    if (remaining <= 0) break;
+    for (const title of titles) {
+      if (remaining <= 0) break;
 
-    const saldo = Number(title.valor_parcela) - Number(title.valor_pago);
-    if (saldo <= 0) continue;
+      const saldo = Number(title.valor_parcela) - Number(title.valor_pago);
+      if (saldo <= 0) continue;
 
-    const payment = Math.min(remaining, saldo);
-    const newValorPago = Number(title.valor_pago) + payment;
-    const isPaid = newValorPago >= Number(title.valor_parcela);
+      const payment = Math.min(remaining, saldo);
+      const newValorPago = Number(title.valor_pago) + payment;
+      const isPaid = newValorPago >= Number(title.valor_parcela);
 
-    const updateData: any = { valor_pago: newValorPago };
-    if (isPaid) {
-      updateData.status = "pago";
-      updateData.data_quitacao = new Date().toISOString().split("T")[0];
+      const updateData: any = { valor_pago: newValorPago };
+      if (isPaid) {
+        updateData.status = "pago";
+        updateData.data_quitacao = new Date().toISOString().split("T")[0];
+      }
+
+      const { error: updateError } = await supabase
+        .from("clients")
+        .update(updateData)
+        .eq("id", title.id);
+
+      if (updateError) throw updateError;
+
+      remaining -= payment;
     }
 
-    const { error: updateError } = await supabase
-      .from("clients")
-      .update(updateData)
-      .eq("id", title.id);
-
-    if (updateError) throw updateError;
-
-    remaining -= payment;
+    logger.info(MODULE, "registerPayment", { cpf, credor, valor, distributed: valor - remaining });
+    logAction({ action: "agreement_payment", entity_type: "client", details: { cpf, credor, valor, distributed: valor - remaining } });
+  } catch (error) {
+    handleServiceError(error, MODULE);
   }
-
-  logAction({ action: "agreement_payment", entity_type: "client", details: { cpf, credor, valor, distributed: valor - remaining } });
 };

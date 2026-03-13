@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { cleanCPF, formatCPFDisplay } from "@/lib/cpfUtils";
 
 export interface ImportedRow {
   credor: string;
@@ -59,23 +60,8 @@ const parseBRDate = (value: any): string => {
   return "";
 };
 
-const cleanCPF = (value: any): string => {
-  if (!value) return "";
-  const digits = String(value).replace(/\D/g, "").padStart(11, "0").slice(0, 14);
-  if (digits.length !== 11 && digits.length !== 14) return "";
-  return digits;
-};
+// cleanCPF and formatCPFDisplay now imported from @/lib/cpfUtils
 
-const formatCPFDisplay = (cpf: string): string => {
-  const nums = cpf.replace(/\D/g, "");
-  if (nums.length === 11) {
-    return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
-  }
-  if (nums.length === 14) {
-    return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}-${nums.slice(12)}`;
-  }
-  return cpf;
-};
 
 const cleanPhone = (value: any): string => {
   if (!value) return "";
