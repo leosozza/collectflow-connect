@@ -58,7 +58,7 @@ const navGroups: NavGroup[] = [
     groupIcon: Briefcase,
     items: [
       { label: "Suporte", icon: Headphones, path: "/admin/suporte", moduleSlug: "suporte" },
-      { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes", moduleSlug: "gestao_equipes" },
+      
       { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos", moduleSlug: "treinamentos_reunioes" },
     ],
   },
