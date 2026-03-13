@@ -70,9 +70,9 @@ const CarteiraPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
-  const [viewMode, setViewMode] = useUrlState<"list" | "kanban">("view", "list");
+  const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
   const [sortField, setSortField] = useUrlState("sort", "created_at");
-  const [sortDir, setSortDir] = useUrlState<"asc" | "desc">("dir", "desc");
+  const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
 
   const filters = useMemo(() => ({
     status: urlStatus,
