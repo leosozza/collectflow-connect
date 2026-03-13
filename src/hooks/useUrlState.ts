@@ -28,36 +28,36 @@ export function useUrlState(
 ): [any, (val: any) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const value = useMemo((): T => {
+  const value = useMemo(() => {
     const raw = searchParams.get(key);
     if (raw === null) return defaultValue;
 
     // string[]
     if (Array.isArray(defaultValue)) {
-      return (raw === "" ? [] : raw.split(",")) as T;
+      return raw === "" ? [] : raw.split(",");
     }
     // boolean
     if (typeof defaultValue === "boolean") {
-      return (raw === "1" || raw === "true") as T;
+      return raw === "1" || raw === "true";
     }
     // number
     if (typeof defaultValue === "number") {
       const n = Number(raw);
-      return (isNaN(n) ? defaultValue : n) as T;
+      return isNaN(n) ? defaultValue : n;
     }
     // string
-    return raw as T;
+    return raw;
   }, [searchParams, key, defaultValue]);
 
   const setValue = useCallback(
-    (val: T) => {
+    (val: any) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           const isDefault =
             Array.isArray(defaultValue) && Array.isArray(val)
               ? val.length === (defaultValue as string[]).length &&
-                val.every((v, i) => v === (defaultValue as string[])[i])
+                val.every((v: string, i: number) => v === (defaultValue as string[])[i])
               : val === defaultValue;
 
           if (isDefault) {
