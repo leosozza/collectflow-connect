@@ -1,445 +1,558 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCurrency } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
+  LineChart, Line, Legend, PieChart, Pie, Cell,
 } from "recharts";
 import {
-  Building2, Users, DollarSign, TrendingUp, Handshake, BarChart3,
+  DollarSign, TrendingUp, Users, BarChart3, AlertTriangle, Activity, UserX,
+  HeartPulse, Ticket, Clock, LogIn, Zap, Building2, Info,
 } from "lucide-react";
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, subDays, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-interface TenantRow { id: string; name: string; slug: string; status: string; }
-interface ClientAgg { tenant_id: string; count: number; }
-interface AgreementAgg { tenant_id: string; total: number; closed: number; }
-interface UserAgg { tenant_id: string; count: number; }
-
+/* ───── helpers ───── */
 const now = new Date();
-const months = Array.from({ length: 6 }, (_, i) => subMonths(now, 5 - i));
+const months6 = Array.from({ length: 6 }, (_, i) => subMonths(now, 5 - i));
+const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-lg">
       <p className="font-semibold text-popover-foreground mb-1">{label}</p>
       {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
+        <p key={p.name} style={{ color: p.color }}>{p.name}: {typeof p.value === "number" && p.value > 999 ? formatCurrency(p.value) : p.value}</p>
       ))}
     </div>
   );
 };
 
+/* Tooltip-enabled KPI card */
+const KPICard = ({ icon: Icon, label, tooltip, value, sub, color }: {
+  icon: React.ElementType; label: string; tooltip: string; value: string | number; sub?: string; color?: string;
+}) => (
+  <Card>
+    <CardContent className="pt-4 pb-3 px-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className={`w-4 h-4 ${color || "text-primary"}`} />
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
+                {label} <Info className="w-3 h-3 opacity-50" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+      <p className="text-2xl font-bold text-foreground">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+    </CardContent>
+  </Card>
+);
+
+/* ───── Main ───── */
 const AdminDashboardPage = () => {
   const { isSuperAdmin } = useTenant();
+  const [tab, setTab] = useState("receita");
 
-  const { data: tenants = [] } = useQuery<TenantRow[]>({
-    queryKey: ["super-admin-tenants"],
+  /* ── Data queries ── */
+  const { data: tenants = [] } = useQuery({
+    queryKey: ["sa-tenants"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("id, name, slug, status")
-        .neq("status", "deleted")
-        .order("name");
-      if (error) throw error;
+      const { data } = await supabase.from("tenants").select("id, name, slug, status, plan_id, created_at, deleted_at").order("created_at", { ascending: false });
       return data || [];
     },
     enabled: isSuperAdmin,
   });
 
-  // Clients count by tenant
-  const { data: clientsRaw = [] } = useQuery({
-    queryKey: ["exec-clients-by-tenant"],
+  const { data: plans = [] } = useQuery({
+    queryKey: ["sa-plans"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("tenant_id, id");
-      if (error) throw error;
+      const { data } = await supabase.from("plans").select("*");
       return data || [];
     },
     enabled: isSuperAdmin,
   });
 
-  // Agreements by tenant
-  const { data: agreementsRaw = [] } = useQuery({
-    queryKey: ["exec-agreements-by-tenant"],
+  const { data: tenantUsers = [] } = useQuery({
+    queryKey: ["sa-tenant-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agreements")
-        .select("tenant_id, status, proposed_total");
-      if (error) throw error;
+      const { data } = await supabase.from("tenant_users").select("tenant_id, user_id");
       return data || [];
     },
     enabled: isSuperAdmin,
   });
 
-  // Profiles (users) by tenant
-  const { data: profilesRaw = [] } = useQuery({
-    queryKey: ["exec-profiles-by-tenant"],
+  const { data: activityLogs = [] } = useQuery({
+    queryKey: ["sa-activity-logs"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, user_id");
-      if (error) throw error;
+      const since = subDays(now, 30).toISOString();
+      const { data } = await supabase.from("user_activity_logs" as any).select("user_id, tenant_id, activity_type, page_path, created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(1000);
+      return (data || []) as any[];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  const { data: supportTickets = [] } = useQuery({
+    queryKey: ["sa-tickets"],
+    queryFn: async () => {
+      const { data } = await supabase.from("support_tickets").select("id, status, priority, created_at, updated_at").order("created_at", { ascending: false }).limit(500);
       return data || [];
     },
     enabled: isSuperAdmin,
   });
 
-  // Month-over-month: agreements per tenant per month (last 6 months)
-  const { data: agreementsByMonth = [] } = useQuery({
-    queryKey: ["exec-agreements-by-month"],
+  const { data: payments = [] } = useQuery({
+    queryKey: ["sa-payments"],
     queryFn: async () => {
-      const since = format(startOfMonth(months[0]), "yyyy-MM-dd");
-      const { data, error } = await supabase
-        .from("agreements")
-        .select("tenant_id, created_at, proposed_total, status")
-        .gte("created_at", since);
-      if (error) throw error;
+      const { data } = await supabase.from("payment_records").select("*").order("created_at", { ascending: false }).limit(500);
       return data || [];
     },
     enabled: isSuperAdmin,
   });
 
-  const tenantMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    tenants.forEach(t => { m[t.id] = t.name; });
-    return m;
+  /* ── Derived data ── */
+  const planMap = useMemo(() => Object.fromEntries(plans.map((p: any) => [p.id, p])), [plans]);
+  const activeTenants = useMemo(() => tenants.filter((t: any) => t.status === "active"), [tenants]);
+  const deletedTenants = useMemo(() => tenants.filter((t: any) => t.status === "deleted"), [tenants]);
+
+  // ─ Receita ─
+  const mrr = useMemo(() => activeTenants.reduce((s: number, t: any) => s + (planMap[t.plan_id]?.price_monthly || 0), 0), [activeTenants, planMap]);
+  const arr = mrr * 12;
+  const ticketMedio = activeTenants.length > 0 ? mrr / activeTenants.length : 0;
+
+  const monthStart = startOfMonth(now).toISOString();
+  const receitaMes = useMemo(() => payments.filter((p: any) => p.status === "completed" && p.created_at >= monthStart).reduce((s: number, p: any) => s + Number(p.amount), 0), [payments, monthStart]);
+
+  const receitaPorPlano = useMemo(() => {
+    const m: Record<string, { name: string; value: number; count: number }> = {};
+    activeTenants.forEach((t: any) => {
+      const plan = planMap[t.plan_id];
+      if (!plan) return;
+      if (!m[plan.id]) m[plan.id] = { name: plan.name, value: 0, count: 0 };
+      m[plan.id].value += plan.price_monthly || 0;
+      m[plan.id].count++;
+    });
+    return Object.values(m);
+  }, [activeTenants, planMap]);
+
+  const receitaMensal = useMemo(() => months6.map(m => {
+    const start = startOfMonth(m);
+    const end = endOfMonth(m);
+    const total = payments.filter((p: any) => p.status === "completed" && new Date(p.created_at) >= start && new Date(p.created_at) <= end).reduce((s: number, p: any) => s + Number(p.amount), 0);
+    return { month: format(m, "MMM/yy", { locale: ptBR }), receita: Math.round(total) };
+  }), [payments]);
+
+  // ─ Crescimento ─
+  const newThisMonth = useMemo(() => tenants.filter((t: any) => t.status !== "deleted" && new Date(t.created_at) >= startOfMonth(now)).length, [tenants]);
+  const newLast7 = useMemo(() => tenants.filter((t: any) => t.status !== "deleted" && new Date(t.created_at) >= subDays(now, 7)).length, [tenants]);
+  const prevMonthActive = useMemo(() => {
+    const pm = startOfMonth(subMonths(now, 1));
+    return tenants.filter((t: any) => new Date(t.created_at) < pm && (t.status === "active" || (t.status === "deleted" && t.deleted_at && new Date(t.deleted_at) >= pm))).length;
   }, [tenants]);
+  const growthRate = prevMonthActive > 0 ? (((activeTenants.length - prevMonthActive) / prevMonthActive) * 100).toFixed(1) : "—";
+  const inactiveTenants = tenants.filter((t: any) => t.status === "suspended").length;
 
-  // Clients per tenant
-  const clientsByTenant = useMemo<ClientAgg[]>(() => {
-    const map: Record<string, number> = {};
-    clientsRaw.forEach((c: any) => {
-      if (c.tenant_id) map[c.tenant_id] = (map[c.tenant_id] || 0) + 1;
+  const growthData = useMemo(() => months6.map(m => {
+    const start = startOfMonth(m);
+    const end = endOfMonth(m);
+    return {
+      month: format(m, "MMM/yy", { locale: ptBR }),
+      novos: tenants.filter((t: any) => t.status !== "deleted" && new Date(t.created_at) >= start && new Date(t.created_at) <= end).length,
+      acumulado: tenants.filter((t: any) => t.status !== "deleted" && new Date(t.created_at) <= end).length,
+    };
+  }), [tenants]);
+
+  // ─ Uso ─
+  const uniqueUsersToday = useMemo(() => {
+    const today = format(now, "yyyy-MM-dd");
+    return new Set(activityLogs.filter((l: any) => l.created_at?.startsWith(today)).map((l: any) => l.user_id)).size;
+  }, [activityLogs]);
+  const uniqueUsersWeek = useMemo(() => {
+    const since = subDays(now, 7).toISOString();
+    return new Set(activityLogs.filter((l: any) => l.created_at >= since).map((l: any) => l.user_id)).size;
+  }, [activityLogs]);
+  const uniqueUsersMonth = useMemo(() => new Set(activityLogs.map((l: any) => l.user_id)).size, [activityLogs]);
+
+  const topPages = useMemo(() => {
+    const m: Record<string, number> = {};
+    activityLogs.filter((l: any) => l.activity_type === "page_view" && l.page_path).forEach((l: any) => {
+      const p = l.page_path.replace(/^\//, "").split("/")[0] || "dashboard";
+      m[p] = (m[p] || 0) + 1;
     });
-    return Object.entries(map)
-      .map(([tenant_id, count]) => ({ tenant_id, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-  }, [clientsRaw]);
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, views]) => ({ name, views }));
+  }, [activityLogs]);
 
-  // Agreements agg per tenant
-  const agreementsByTenant = useMemo<AgreementAgg[]>(() => {
-    const map: Record<string, { total: number; closed: number }> = {};
-    agreementsRaw.forEach((a: any) => {
-      if (!a.tenant_id) return;
-      if (!map[a.tenant_id]) map[a.tenant_id] = { total: 0, closed: 0 };
-      map[a.tenant_id].total++;
-      if (["approved", "pago", "active"].includes(a.status)) map[a.tenant_id].closed++;
+  const activityByDay = useMemo(() => {
+    const days = Array.from({ length: 14 }, (_, i) => subDays(now, 13 - i));
+    return days.map(d => {
+      const key = format(d, "yyyy-MM-dd");
+      const count = new Set(activityLogs.filter((l: any) => l.created_at?.startsWith(key)).map((l: any) => l.user_id)).size;
+      return { day: format(d, "dd/MM"), usuarios: count };
     });
-    return Object.entries(map)
-      .map(([tenant_id, v]) => ({ tenant_id, ...v }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-  }, [agreementsRaw]);
+  }, [activityLogs]);
 
-  // Users per tenant
-  const usersByTenant = useMemo<UserAgg[]>(() => {
-    const map: Record<string, number> = {};
-    profilesRaw.forEach((p: any) => {
-      if (p.tenant_id) map[p.tenant_id] = (map[p.tenant_id] || 0) + 1;
+  // ─ Cancelamento ─
+  const cancelledThisMonth = useMemo(() => deletedTenants.filter((t: any) => t.deleted_at && new Date(t.deleted_at) >= startOfMonth(now)).length, [deletedTenants]);
+  const churnRate = prevMonthActive > 0 ? ((cancelledThisMonth / prevMonthActive) * 100).toFixed(1) : "0.0";
+  const churnAnual = prevMonthActive > 0 ? (((cancelledThisMonth * 12) / prevMonthActive) * 100).toFixed(1) : "0.0";
+  const receitaPerdida = useMemo(() => deletedTenants.filter((t: any) => t.deleted_at && new Date(t.deleted_at) >= startOfMonth(now)).reduce((s: number, t: any) => s + (planMap[t.plan_id]?.price_monthly || 0), 0), [deletedTenants, planMap]);
+
+  const churnByMonth = useMemo(() => months6.map(m => {
+    const start = startOfMonth(m);
+    const end = endOfMonth(m);
+    return {
+      month: format(m, "MMM/yy", { locale: ptBR }),
+      cancelamentos: deletedTenants.filter((t: any) => t.deleted_at && new Date(t.deleted_at) >= start && new Date(t.deleted_at) <= end).length,
+    };
+  }), [deletedTenants]);
+
+  // ─ Operacional ─
+  const ticketsOpen = supportTickets.filter((t: any) => t.status === "open" || t.status === "pending").length;
+  const ticketsResolved = supportTickets.filter((t: any) => t.status === "resolved" || t.status === "closed").length;
+
+  // ─ Saúde ─
+  const userLastLogin = useMemo(() => {
+    const m: Record<string, string> = {};
+    activityLogs.forEach((l: any) => {
+      if (!m[l.tenant_id] || l.created_at > m[l.tenant_id]) m[l.tenant_id] = l.created_at;
     });
-    return Object.entries(map)
-      .map(([tenant_id, count]) => ({ tenant_id, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-  }, [profilesRaw]);
+    return m;
+  }, [activityLogs]);
 
-  // Recovered value per tenant (approved agreements)
-  const recoveredByTenant = useMemo(() => {
-    const map: Record<string, number> = {};
-    agreementsRaw.forEach((a: any) => {
-      if (!a.tenant_id) return;
-      if (["approved", "pago", "active"].includes(a.status)) {
-        map[a.tenant_id] = (map[a.tenant_id] || 0) + Number(a.proposed_total || 0);
-      }
+  const healthData = useMemo(() => {
+    let healthy = 0, moderate = 0, risk = 0;
+    const noLogin7: string[] = [];
+    const noLogin30: string[] = [];
+    activeTenants.forEach((t: any) => {
+      const lastLogin = userLastLogin[t.id];
+      if (!lastLogin) { risk++; noLogin30.push(t.name); noLogin7.push(t.name); return; }
+      const days = differenceInDays(now, new Date(lastLogin));
+      if (days > 30) { risk++; noLogin30.push(t.name); noLogin7.push(t.name); }
+      else if (days > 7) { moderate++; noLogin7.push(t.name); }
+      else { healthy++; }
     });
-    return Object.entries(map)
-      .map(([tenant_id, value]) => ({ tenant_id, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
-  }, [agreementsRaw]);
+    return { healthy, moderate, risk, noLogin7: noLogin7.length, noLogin30: noLogin30.length };
+  }, [activeTenants, userLastLogin]);
 
-  // Month-over-month growth (total agreements per month across all tenants)
-  const growthData = useMemo(() => {
-    return months.map(m => {
-      const start = startOfMonth(m);
-      const end = endOfMonth(m);
-      const count = agreementsByMonth.filter((a: any) => {
-        const d = new Date(a.created_at);
-        return d >= start && d <= end;
-      }).length;
-      const value = agreementsByMonth
-        .filter((a: any) => {
-          const d = new Date(a.created_at);
-          return d >= start && d <= end && ["approved", "pago", "active"].includes(a.status);
-        })
-        .reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
-      return {
-        month: format(m, "MMM/yy", { locale: ptBR }),
-        acordos: count,
-        recuperado: Math.round(value),
-      };
-    });
-  }, [agreementsByMonth]);
+  const healthPie = [
+    { name: "Saudável", value: healthData.healthy },
+    { name: "Moderado", value: healthData.moderate },
+    { name: "Risco Alto", value: healthData.risk },
+  ];
 
-  // Top-level KPIs
-  const totalClients = clientsRaw.length;
-  const totalRecovered = agreementsRaw
-    .filter((a: any) => ["approved", "pago", "active"].includes(a.status))
-    .reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
-  const totalAgreements = agreementsRaw.length;
-  const closedAgreements = agreementsRaw.filter((a: any) =>
-    ["approved", "pago", "active"].includes(a.status)
-  ).length;
-  const conversionRate = totalAgreements > 0
-    ? ((closedAgreements / totalAgreements) * 100).toFixed(1)
-    : "0.0";
-  const totalUsers = profilesRaw.length;
+  // ─ Radar ─
+  const alerts = useMemo(() => {
+    const list: { icon: React.ElementType; text: string; severity: string }[] = [];
+    if (parseFloat(churnRate) > 5) list.push({ icon: AlertTriangle, text: `Churn mensal em ${churnRate}%`, severity: "destructive" });
+    if (healthData.noLogin30 > 0) list.push({ icon: UserX, text: `${healthData.noLogin30} clientes sem login há +30 dias`, severity: "destructive" });
+    if (healthData.risk > activeTenants.length * 0.3 && activeTenants.length > 0) list.push({ icon: HeartPulse, text: `${healthData.risk} clientes em risco alto de churn`, severity: "destructive" });
+    if (uniqueUsersMonth < tenantUsers.length * 0.3 && tenantUsers.length > 5) list.push({ icon: Activity, text: `Apenas ${uniqueUsersMonth} de ${tenantUsers.length} usuários ativos no mês`, severity: "warning" });
+    if (ticketsOpen > 10) list.push({ icon: Ticket, text: `${ticketsOpen} tickets de suporte abertos`, severity: "warning" });
+    if (cancelledThisMonth > 0) list.push({ icon: UserX, text: `${cancelledThisMonth} cancelamento(s) neste mês`, severity: "warning" });
+    return list;
+  }, [churnRate, healthData, uniqueUsersMonth, tenantUsers, ticketsOpen, cancelledThisMonth, activeTenants]);
 
   if (!isSuperAdmin) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-muted-foreground">Acesso restrito a Super Admins.</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center min-h-[60vh]"><p className="text-muted-foreground">Acesso restrito a Super Admins.</p></div>;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <BarChart3 className="w-6 h-6 text-primary" />
           Dashboard Executivo
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Visão consolidada de {tenants.length} empresas ativas
-        </p>
+        <p className="text-muted-foreground text-sm mt-1">Visão consolidada de {activeTenants.length} empresas ativas</p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="pt-4 pb-3 px-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Total Clientes</span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{totalClients.toLocaleString("pt-BR")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-4">
-            <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Total Recuperado</span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{formatCurrency(totalRecovered)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Handshake className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Taxa de Acordos</span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{conversionRate}%</p>
-            <p className="text-xs text-muted-foreground">{closedAgreements}/{totalAgreements}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Building2 className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Usuários Ativos</span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{totalUsers}</p>
-            <p className="text-xs text-muted-foreground">{tenants.length} empresas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Growth Chart */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            Crescimento Mês a Mês (últimos 6 meses)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={growthData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-              <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }}
-                tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="acordos" name="Acordos" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="recuperado" name="Valor (R$)" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Two columns: clients + recovered */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Clients by tenant */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Clientes por Empresa (top 10)</CardTitle>
+      {/* ── Radar ── */}
+      {alerts.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-2 pt-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              Radar da Plataforma
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            {clientsByTenant.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={clientsByTenant.map(c => ({
-                  name: (tenantMap[c.tenant_id] || c.tenant_id).slice(0, 14),
-                  clientes: c.count,
-                }))} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+          <CardContent className="pb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {alerts.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs bg-background/80 rounded-md border border-border px-3 py-2">
+                  <a.icon className={`w-4 h-4 shrink-0 ${a.severity === "destructive" ? "text-destructive" : "text-amber-500"}`} />
+                  <span className="text-foreground">{a.text}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Tabs ── */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="receita" className="text-xs">Receita</TabsTrigger>
+          <TabsTrigger value="crescimento" className="text-xs">Crescimento</TabsTrigger>
+          <TabsTrigger value="uso" className="text-xs">Uso</TabsTrigger>
+          <TabsTrigger value="cancelamento" className="text-xs">Cancelamento</TabsTrigger>
+          <TabsTrigger value="operacional" className="text-xs">Operacional</TabsTrigger>
+          <TabsTrigger value="saude" className="text-xs">Saúde</TabsTrigger>
+        </TabsList>
+
+        {/* ═══════ RECEITA ═══════ */}
+        <TabsContent value="receita" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={DollarSign} label="MRR" tooltip="Receita recorrente mensal da plataforma. Soma de todas as assinaturas ativas no mês atual." value={formatCurrency(mrr)} />
+            <KPICard icon={TrendingUp} label="ARR" tooltip="Receita recorrente anual estimada. Calculada multiplicando o MRR por 12." value={formatCurrency(arr)} />
+            <KPICard icon={DollarSign} label="Receita do Mês" tooltip="Total de receita efetivamente recebida (pagamentos confirmados) no mês atual." value={formatCurrency(receitaMes)} color="text-emerald-500" />
+            <KPICard icon={Users} label="Ticket Médio" tooltip="Valor médio pago por cliente ativo na plataforma. MRR ÷ total de clientes pagantes." value={formatCurrency(ticketMedio)} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Evolução da Receita Mensal</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={receitaMensal}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                    <RTooltip content={<ChartTooltip />} />
+                    <Bar dataKey="receita" name="Receita (R$)" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Receita por Plano</CardTitle></CardHeader>
+              <CardContent>
+                {receitaPorPlano.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-10">Sem dados</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={receitaPorPlano} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${formatCurrency(value)}`} labelLine={false}>
+                        {receitaPorPlano.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <RTooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ═══════ CRESCIMENTO ═══════ */}
+        <TabsContent value="crescimento" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={Building2} label="Total Clientes" tooltip="Número total de empresas cadastradas na plataforma (excluindo deletadas)." value={tenants.filter((t: any) => t.status !== "deleted").length} />
+            <KPICard icon={TrendingUp} label="Novos no Mês" tooltip="Clientes que se cadastraram no mês corrente." value={newThisMonth} />
+            <KPICard icon={Zap} label="Novos (7 dias)" tooltip="Clientes cadastrados nos últimos 7 dias." value={newLast7} />
+            <KPICard icon={TrendingUp} label="Crescimento" tooltip="Taxa de crescimento da base de clientes em relação ao mês anterior." value={`${growthRate}%`} />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <KPICard icon={Users} label="Ativos" tooltip="Clientes com assinatura ativa." value={activeTenants.length} color="text-emerald-500" />
+            <KPICard icon={UserX} label="Inativos" tooltip="Clientes com assinatura suspensa." value={inactiveTenants} color="text-amber-500" />
+            <KPICard icon={UserX} label="Excluídos" tooltip="Total de clientes que foram excluídos." value={deletedTenants.length} color="text-destructive" />
+          </div>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Novos Clientes por Mês</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={growthData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                  <RTooltip content={<ChartTooltip />} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="novos" name="Novos" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="acumulado" name="Acumulado" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══════ USO ═══════ */}
+        <TabsContent value="uso" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={LogIn} label="DAU" tooltip="Usuários ativos hoje. Número de usuários únicos que acessaram a plataforma hoje." value={uniqueUsersToday} />
+            <KPICard icon={Activity} label="WAU" tooltip="Usuários ativos na semana. Número de usuários únicos nos últimos 7 dias." value={uniqueUsersWeek} />
+            <KPICard icon={Users} label="MAU" tooltip="Usuários ativos mensais que acessaram a plataforma pelo menos uma vez nos últimos 30 dias." value={uniqueUsersMonth} />
+            <KPICard icon={Users} label="Total Usuários" tooltip="Total de usuários registrados na plataforma." value={tenantUsers.length} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Atividade de Usuários (14 dias)</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={activityByDay}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <RTooltip content={<ChartTooltip />} />
+                    <Line type="monotone" dataKey="usuarios" name="Usuários" stroke="hsl(var(--primary))" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Funcionalidades Mais Usadas</CardTitle></CardHeader>
+              <CardContent>
+                {topPages.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-10">Sem dados de atividade</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={topPages} layout="vertical" margin={{ left: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={55} />
+                      <RTooltip content={<ChartTooltip />} />
+                      <Bar dataKey="views" name="Acessos" fill="hsl(var(--chart-2))" radius={[0, 3, 3, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ═══════ CANCELAMENTO ═══════ */}
+        <TabsContent value="cancelamento" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={UserX} label="Cancelados (mês)" tooltip="Número de clientes que cancelaram neste mês." value={cancelledThisMonth} color="text-destructive" />
+            <KPICard icon={TrendingUp} label="Churn Mensal" tooltip="Percentual de clientes que cancelaram no período dividido pelos clientes ativos no início do período." value={`${churnRate}%`} color="text-destructive" />
+            <KPICard icon={TrendingUp} label="Churn Anual" tooltip="Estimativa anualizada do churn. Churn mensal × 12." value={`${churnAnual}%`} color="text-destructive" />
+            <KPICard icon={DollarSign} label="Receita Perdida" tooltip="Receita mensal perdida com os cancelamentos do mês." value={formatCurrency(receitaPerdida)} color="text-destructive" />
+          </div>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Cancelamentos por Mês</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={churnByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="clientes" name="Clientes" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                  <RTooltip content={<ChartTooltip />} />
+                  <Bar dataKey="cancelamentos" name="Cancelamentos" fill="hsl(var(--destructive))" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          {deletedTenants.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Histórico de Cancelamentos</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
+                      <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Plano</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Data</th>
+                    </tr></thead>
+                    <tbody>
+                      {deletedTenants.slice(0, 10).map((t: any) => (
+                        <tr key={t.id} className="border-t border-border">
+                          <td className="px-4 py-2 font-medium">{t.name}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{planMap[t.plan_id]?.name || "—"}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{t.deleted_at ? new Date(t.deleted_at).toLocaleDateString("pt-BR") : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
-        {/* Recovered value by tenant */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Valor Recuperado por Empresa (top 10)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recoveredByTenant.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={recoveredByTenant.map(r => ({
-                  name: (tenantMap[r.tenant_id] || r.tenant_id).slice(0, 14),
-                  valor: Math.round(r.value),
-                }))} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="valor" name="Valor (R$)" fill="hsl(var(--chart-2))" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Agreements conversion by tenant (table) */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Handshake className="w-4 h-4 text-primary" />
-            Taxa de Acordos por Empresa
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {agreementsByTenant.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
-                    <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Negociados</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Fechados</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Taxa</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agreementsByTenant.map(a => {
-                    const rate = a.total > 0 ? ((a.closed / a.total) * 100).toFixed(1) : "0.0";
-                    const rateNum = parseFloat(rate);
-                    const tenant = tenants.find(t => t.id === a.tenant_id);
+        {/* ═══════ OPERACIONAL ═══════ */}
+        <TabsContent value="operacional" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={Ticket} label="Tickets Abertos" tooltip="Quantidade de tickets de suporte abertos ou pendentes no momento." value={ticketsOpen} color="text-amber-500" />
+            <KPICard icon={Ticket} label="Tickets Resolvidos" tooltip="Quantidade de tickets de suporte resolvidos ou fechados." value={ticketsResolved} color="text-emerald-500" />
+            <KPICard icon={Clock} label="Total Tickets" tooltip="Total de tickets registrados na plataforma." value={supportTickets.length} />
+            <KPICard icon={Users} label="Usuários Totais" tooltip="Total de usuários cadastrados em todos os tenants." value={tenantUsers.length} />
+          </div>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Volume de Tickets por Prioridade</CardTitle></CardHeader>
+            <CardContent>
+              {supportTickets.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-10">Nenhum ticket registrado</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  {["high", "medium", "low"].map(p => {
+                    const count = supportTickets.filter((t: any) => t.priority === p).length;
+                    const labels: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
+                    const colors: Record<string, string> = { high: "text-destructive", medium: "text-amber-500", low: "text-muted-foreground" };
                     return (
-                      <tr key={a.tenant_id} className="border-t border-border hover:bg-muted/30">
-                        <td className="px-4 py-2.5 font-medium">{tenant?.name || a.tenant_id.slice(0, 8)}</td>
-                        <td className="px-4 py-2.5 text-right">{a.total}</td>
-                        <td className="px-4 py-2.5 text-right text-primary">{a.closed}</td>
-                        <td className="px-4 py-2.5 text-right font-semibold">{rate}%</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <Badge variant={rateNum >= 60 ? "default" : rateNum >= 30 ? "secondary" : "destructive"} className="text-xs">
-                            {rateNum >= 60 ? "Ótimo" : rateNum >= 30 ? "Regular" : "Baixo"}
-                          </Badge>
-                        </td>
-                      </tr>
+                      <div key={p} className="bg-muted/30 rounded-lg p-4 text-center">
+                        <p className={`text-2xl font-bold ${colors[p]}`}>{count}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{labels[p]}</p>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* Users by tenant */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary" />
-            Usuários por Empresa
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {usersByTenant.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Sem dados</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 text-xs text-muted-foreground uppercase">
-                    <th className="px-4 py-2.5 text-left font-medium">Empresa</th>
-                    <th className="px-4 py-2.5 text-left font-medium">Slug</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Usuários</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Clientes</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usersByTenant.map(u => {
-                    const tenant = tenants.find(t => t.id === u.tenant_id);
-                    const clientCount = clientsRaw.filter((c: any) => c.tenant_id === u.tenant_id).length;
-                    return (
-                      <tr key={u.tenant_id} className="border-t border-border hover:bg-muted/30">
-                        <td className="px-4 py-2.5 font-medium">{tenant?.name || u.tenant_id.slice(0, 8)}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{tenant?.slug || "-"}</td>
-                        <td className="px-4 py-2.5 text-right">{u.count}</td>
-                        <td className="px-4 py-2.5 text-right">{clientCount.toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <Badge variant={tenant?.status === "active" ? "default" : "destructive"} className="text-xs">
-                            {tenant?.status === "active" ? "Ativa" : "Suspensa"}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* ═══════ SAÚDE ═══════ */}
+        <TabsContent value="saude" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard icon={HeartPulse} label="Saudáveis" tooltip="Clientes com login nos últimos 7 dias. Engajamento alto." value={healthData.healthy} color="text-emerald-500" />
+            <KPICard icon={Activity} label="Moderados" tooltip="Clientes com login entre 7 e 30 dias atrás. Engajamento moderado." value={healthData.moderate} color="text-amber-500" />
+            <KPICard icon={AlertTriangle} label="Risco Alto" tooltip="Clientes sem login há mais de 30 dias. Alto risco de churn." value={healthData.risk} color="text-destructive" />
+            <KPICard icon={UserX} label="Sem Login 30d" tooltip="Total de clientes sem nenhum login nos últimos 30 dias." value={healthData.noLogin30} color="text-destructive" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição de Saúde</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={healthPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${value}`}>
+                      <Cell fill="hsl(var(--chart-2))" />
+                      <Cell fill="hsl(var(--chart-4))" />
+                      <Cell fill="hsl(var(--destructive))" />
+                    </Pie>
+                    <RTooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Atividade Diária (14 dias)</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={activityByDay}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <RTooltip content={<ChartTooltip />} />
+                    <Line type="monotone" dataKey="usuarios" name="Usuários Ativos" stroke="hsl(var(--primary))" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
