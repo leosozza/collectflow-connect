@@ -100,7 +100,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
-  "/admin/permissoes": "permissoes_modulos",
+  
   "/admin/configuracoes": "integracoes",
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
