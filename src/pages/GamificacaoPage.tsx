@@ -29,6 +29,7 @@ const medals = ["🥇", "🥈", "🥉"];
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const [urlTab, setUrlTab] = useUrlState("tab", "");
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
