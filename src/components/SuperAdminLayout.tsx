@@ -167,13 +167,16 @@ const SuperAdminLayout = () => {
     return (
       <Collapsible key={group.groupLabel} defaultOpen={true}>
         <div className={index > 0 ? "pt-3 mt-3 border-t border-sidebar-border/30" : ""}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-1.5 group cursor-pointer">
-            <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">
-              {group.groupLabel}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-2.5 rounded-lg group cursor-pointer hover:bg-sidebar-accent/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <group.groupIcon className="w-5 h-5 flex-shrink-0 text-sidebar-foreground" />
+              <span className="text-sm font-medium text-sidebar-foreground">
+                {group.groupLabel}
+              </span>
+            </div>
+            <ChevronDown className="w-4 h-4 text-sidebar-foreground/50 transition-transform duration-200 group-data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-1 ml-1 space-y-0.5">
+          <CollapsibleContent className="mt-1 ml-8 space-y-0.5">
             {group.items.map(renderNavLink)}
           </CollapsibleContent>
         </div>
