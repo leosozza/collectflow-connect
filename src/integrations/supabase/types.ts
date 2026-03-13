@@ -2928,6 +2928,86 @@ export type Database = {
           },
         ]
       }
+      sa_modules: {
+        Row: {
+          created_at: string | null
+          icon: string | null
+          id: string
+          name: string
+          route_path: string | null
+          sidebar_group: string
+          slug: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          route_path?: string | null
+          sidebar_group: string
+          slug: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          route_path?: string | null
+          sidebar_group?: string
+          slug?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      sa_user_permissions: {
+        Row: {
+          can_create: boolean | null
+          can_delete: boolean | null
+          can_edit: boolean | null
+          can_view: boolean | null
+          created_at: string | null
+          granted_by: string | null
+          id: string
+          module_slug: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          can_create?: boolean | null
+          can_delete?: boolean | null
+          can_edit?: boolean | null
+          can_view?: boolean | null
+          created_at?: string | null
+          granted_by?: string | null
+          id?: string
+          module_slug: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          can_create?: boolean | null
+          can_delete?: boolean | null
+          can_edit?: boolean | null
+          can_view?: boolean | null
+          created_at?: string | null
+          granted_by?: string | null
+          id?: string
+          module_slug?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sa_user_permissions_module_slug_fkey"
+            columns: ["module_slug"]
+            isOneToOne: false
+            referencedRelation: "sa_modules"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       scripts_abordagem: {
         Row: {
           canal: string
@@ -4248,6 +4328,16 @@ export type Database = {
         }[]
       }
       get_my_profile_id: { Args: never; Returns: string }
+      get_my_sa_permissions: {
+        Args: never
+        Returns: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          module_slug: string
+        }[]
+      }
       get_my_tenant_id: { Args: never; Returns: string }
       get_my_tenant_role: { Args: never; Returns: string }
       get_tenant_token_summary: {
