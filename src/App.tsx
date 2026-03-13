@@ -45,7 +45,6 @@ import AdminEquipesPage from "./pages/admin/AdminEquipesPage";
 import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
 import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
-import AdminRelatoriosPage from "./pages/admin/AdminRelatoriosPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminServicosPage from "./pages/admin/AdminServicosPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
