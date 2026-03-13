@@ -19,6 +19,10 @@ import {
   Map,
   Package,
   ChevronDown,
+  Zap,
+  Briefcase,
+  ShieldCheck,
+  Cog,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
