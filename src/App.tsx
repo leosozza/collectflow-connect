@@ -332,6 +332,7 @@ const App = () => (
               <Route path="/admin/perfil" element={<PerfilPage />} />
               <Route path="/admin/permissoes" element={<AdminPermissoesPage />} />
               <Route path="/admin/agentes-digitais" element={<AdminAgentesDigitaisPage />} />
+              <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
