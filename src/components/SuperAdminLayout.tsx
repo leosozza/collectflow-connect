@@ -38,6 +38,7 @@ interface NavItem {
 
 interface NavGroup {
   groupLabel: string;
+  groupIcon: LucideIcon;
   items: NavItem[];
 }
 
