@@ -1,64 +1,85 @@
 
 
-## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
+# URL State & Search Params — Melhoria de UX em Todo o Sistema
 
-### O que será feito
+## Problema Atual
 
-1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
-2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
-3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
+O sistema usa `useState` local para filtros, tabs e estado de UI em quase todas as páginas. Isso causa:
 
-### Índices disponíveis (nomes completos)
-- Taxa de Juros - São Paulo (TJ/SP)
-- Taxa de Juros - Minas Gerais (TJ/MG)
-- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
-- Taxa de Juros - Paraná (TJ/PR)
-- Índice Nacional de Preços ao Consumidor (INPC)
-- Índice Geral de Preços do Mercado (IGPM)
-- Índice Nacional de Custo da Construção (INCC)
-- Índice de Preços ao Consumidor Amplo (IPCA)
-- Unidade Fiscal de Referência (UFIR)
-- Sistema Especial de Liquidação e Custódia (SELIC)
-- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
-- Taxa Básica Financeira (TBF)
-- Taxa Referencial (TR)
+- **Filtros perdidos** ao navegar para outra página e voltar
+- **Links não compartilháveis** — não é possível enviar um link com filtros pré-aplicados
+- **Back/Forward do browser não funcionam** — o botão voltar não restaura o estado anterior
+- **Refresh perde tudo** — F5 reseta todos os filtros para o padrão
 
-### Arquivos alterados
-- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
-- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
+Apenas 3 páginas usam `useSearchParams` hoje: `ConfiguracoesPage`, `AdminUsuariosHubPage` e `AuthPage` (parcialmente).
 
----
+## Solução: Hook `useUrlState`
 
-### Explicação das regras e lógicas de Negociação
+Criar um hook reutilizável que sincroniza estado com URL search params, substituindo `useState` nas páginas principais.
 
-A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
-
-| Campo | Função |
-|-------|--------|
-| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
-| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
-| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
-| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
-| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
-| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
-| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
-
-**Fluxo de negociação:**
-1. Operador abre o painel de negociação no perfil do devedor
-2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
-3. Sistema compara os valores com as regras do credor
-4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
-5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
-
-**Cálculo do Valor Atualizado** (no perfil do devedor):
-```
-Para cada parcela vencida:
-  valorBase = valor_parcela || valor_saldo
-  mesesAtraso = diferença em meses entre hoje e data_vencimento
-  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+```text
+Antes:  const [status, setStatus] = useState("todos")     → URL: /carteira
+Depois: const [status, setStatus] = useUrlState("status", "todos") → URL: /carteira?status=pago
 ```
 
-**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
+### Hook `useUrlState`
 
-**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
+```typescript
+// src/hooks/useUrlState.ts
+function useUrlState<T>(key: string, defaultValue: T): [T, (val: T) => void]
+function useUrlFilters(defaults: Record<string, string>): [filters, setFilter, clearAll]
+```
+
+- Serializa/deserializa automaticamente (strings, números, booleans)
+- `replace: true` para não poluir histórico com cada filtro
+- Batch updates para múltiplos filtros simultâneos
+
+## Páginas Impactadas (12 páginas)
+
+### Prioridade Alta — Filtros complexos
+| Página | Estado a migrar para URL |
+|--------|--------------------------|
+| `CarteiraPage` | `status`, `credor`, `dateFrom`, `dateTo`, `search`, `viewMode`, `tipoDevedorId`, `tipoDividaId`, `statusCobrancaId`, `semAcordo`, `page`, `sort` |
+| `ClientsPage` | Mesmos filtros da Carteira |
+| `AcordosPage` | `statusFilter`, `credorFilter`, `searchQuery` |
+| `RelatoriosPage` | `year`, `month`, `credor`, `operator`, `status`, `tipoDivida`, `tipoDevedor`, `quitacaoDe`, `quitacaoAte` |
+| `AnalyticsPage` | `selectedYears`, `selectedMonths`, `selectedOperators`, `selectedCredores` |
+
+### Prioridade Média — Tabs e filtros simples
+| Página | Estado a migrar |
+|--------|-----------------|
+| `CadastrosPage` | `active` (tab selecionada) |
+| `AutomacaoPage` | `activeTab` |
+| `GamificacaoPage` | Tab ativa (atualmente via Tabs component sem state) |
+| `ContactCenterPage` | `activeTab` |
+| `FinanceiroPage` | `month` |
+| `ConfiguracoesPage` | Já usa parcialmente — unificar com hook |
+
+### Prioridade Baixa — CRM
+| Página | Estado a migrar |
+|--------|-----------------|
+| `CRMLeadsPage` | `search`, `filterStatus` |
+| `CRMActivitiesPage` | `search`, `filterType`, `filterStatus` |
+| `SupportAdminPage` | `statusFilter` |
+
+## Arquivos a Criar/Modificar
+
+1. **Criar** `src/hooks/useUrlState.ts` — Hook genérico
+2. **Modificar** 12+ páginas — Substituir `useState` por `useUrlState` para filtros/tabs
+3. **Modificar** componentes de filtro (`ClientFilters`, `CarteiraFilters`, `ReportFilters`) — Propagar valores da URL
+
+## Benefícios para o Usuário
+
+- Copiar URL com filtros e compartilhar com colega
+- Refresh mantém filtros intactos
+- Botão voltar restaura estado anterior
+- Deep linking direto para tab específica (ex: `/cadastros?tab=credores`)
+
+## Detalhes Técnicos
+
+- O hook usa `useSearchParams` do React Router internamente
+- Valores default não aparecem na URL (URL limpa)
+- Arrays serializados com vírgula (`?years=2025,2024`)
+- Booleans como `?semAcordo=1` / ausente = false
+- Números parseados automaticamente
 
