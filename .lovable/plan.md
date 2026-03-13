@@ -1,51 +1,64 @@
 
 
-# Atualizar Dashboard Executivo: Exportação + Customer Health
+## Plano: Adicionar Índice de Correção Monetária na aba Negociação do Credor
 
-## Resumo
+### O que será feito
 
-Adicionar botões de exportação (Excel/PDF) em cada aba existente e criar nova aba "Customer Health" com Health Score calculado automaticamente. Tudo dentro do `AdminDashboardPage.tsx` existente.
+1. **Nova coluna no banco**: Adicionar `indice_correcao_monetaria` (text, nullable) na tabela `credores`
+2. **UI na aba Negociação**: Adicionar um Switch "Ativar Índice de Correção Monetária" + Select com os índices (nomes completos, não abreviados) logo após o campo "Prazo para pagamento do acordo"
+3. **Persistência**: Incluir o novo campo no `handleSaveNegociacao` e no `handleSave` geral
 
-## Alterações
+### Índices disponíveis (nomes completos)
+- Taxa de Juros - São Paulo (TJ/SP)
+- Taxa de Juros - Minas Gerais (TJ/MG)
+- Taxa de Juros - Rio de Janeiro (Lei 11.690/2009)
+- Taxa de Juros - Paraná (TJ/PR)
+- Índice Nacional de Preços ao Consumidor (INPC)
+- Índice Geral de Preços do Mercado (IGPM)
+- Índice Nacional de Custo da Construção (INCC)
+- Índice de Preços ao Consumidor Amplo (IPCA)
+- Unidade Fiscal de Referência (UFIR)
+- Sistema Especial de Liquidação e Custódia (SELIC)
+- Índice Geral de Preços - Disponibilidade Interna (IGP-DI)
+- Taxa Básica Financeira (TBF)
+- Taxa Referencial (TR)
 
-### 1. `src/pages/AdminDashboardPage.tsx`
+### Arquivos alterados
+- **Migração SQL**: adicionar coluna `indice_correcao_monetaria`
+- **`src/components/cadastros/CredorForm.tsx`**: Switch + Select na seção Negociação, salvar no `handleSaveNegociacao`
 
-**Exportação por aba:**
-- Adicionar dois botões (Exportar Excel / Exportar PDF) no canto superior direito de cada TabsContent
-- Excel: usar `exportToExcel` já existente em `src/lib/exportUtils.ts`
-- PDF: usar `window.print()` com CSS de impressão (mesmo padrão do `printSection` existente), envolvendo cada aba em um div com id para impressão
-- Cada aba gera dados específicos conforme especificado (MRR/ARR/Ticket Médio para Receita, etc.)
+---
 
-**Nova aba "Customer Health":**
-- Adicionar `TabsTrigger` para "Customer Health" com ícone `HeartPulse`
-- Calcular Health Score (0-100) por tenant baseado em:
-  - Dias desde último login (peso 40%): 0 dias = 40pts, >30 dias = 0pts
-  - Atividade no mês (peso 30%): proporção de dias ativos
-  - Número de usuários ativos vs total (peso 30%)
-- Classificação: 80-100 = Saudável, 50-79 = Atenção, 0-49 = Em Risco
-- Tabela com colunas: Cliente, Plano, Health Score (barra visual), Status, Último Login, Dias Inativo
-- Botões de exportação Excel/PDF
+### Explicação das regras e lógicas de Negociação
 
-### 2. `src/lib/exportUtils.ts`
+A aba Negociação do Credor define as regras que controlam como acordos podem ser firmados:
 
-- Adicionar função `exportToPDF(elementId, fileName)` que usa `window.print()` com isolamento CSS do elemento alvo (reutilizando o padrão `printSection` existente)
+| Campo | Função |
+|-------|--------|
+| **Parcelas Mínimas/Máximas** | Limita o range de parcelamento permitido (ex: 1 a 12x) |
+| **Entrada Mínima** | Valor ou percentual mínimo exigido como primeira parcela. Pode ser fixo (R$) ou percentual (%) |
+| **Desconto Máximo (%)** | Teto de desconto que o operador pode conceder sem precisar de aprovação do gestor |
+| **Juros ao Mês (%)** | Taxa de juros moratórios aplicada mensalmente sobre parcelas vencidas. Usado no cálculo do "Valor Atualizado" no perfil do devedor |
+| **Multa (%)** | Percentual de multa aplicado uma vez sobre parcelas vencidas. Também usado no cálculo do "Valor Atualizado" |
+| **Prazo para pagamento (dias)** | Prazo máximo em dias para o devedor efetuar o pagamento após a formalização do acordo |
+| **Índice de Correção Monetária** *(novo)* | Índice oficial usado para atualizar monetariamente o valor da dívida (ex: IPCA, SELIC, IGPM) |
 
-## Dados por aba na exportação
+**Fluxo de negociação:**
+1. Operador abre o painel de negociação no perfil do devedor
+2. Pode usar templates pré-definidos ou simular manualmente desconto/parcelas
+3. Sistema compara os valores com as regras do credor
+4. Se dentro dos limites → "Gerar Acordo" (aprovação automática)
+5. Se fora dos limites → "Solicitar Liberação" (requer aprovação do gestor)
 
-| Aba | Colunas exportadas |
-|-----|-------------------|
-| Receita | MRR, ARR, Receita Mês, Ticket Médio, Plano, Receita por Plano |
-| Crescimento | Total Clientes, Novos Mês, Novos 7d, Crescimento%, Ativos, Inativos |
-| Uso | DAU, WAU, MAU, Total Usuários, Top Páginas |
-| Cancelamento | Cancelados, Churn%, Churn Anual%, Receita Perdida, Histórico |
-| Operacional | Tickets Abertos, Resolvidos, Total, Por Prioridade |
-| Saúde | Saudáveis, Moderados, Risco, Sem Login 30d |
-| Customer Health | Cliente, Plano, Score, Status, Último Login, Inatividade |
+**Cálculo do Valor Atualizado** (no perfil do devedor):
+```
+Para cada parcela vencida:
+  valorBase = valor_parcela || valor_saldo
+  mesesAtraso = diferença em meses entre hoje e data_vencimento
+  valorAtualizado = valorBase + (valorBase × multa/100) + (valorBase × juros_mes/100 × mesesAtraso)
+```
 
-## Arquivos a alterar
+**Faixas de Desconto por Aging**: Permite configurar descontos automáticos escalonados por tempo de atraso (ex: 0-30 dias = 30% desconto, 31-60 dias = 20%).
 
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/AdminDashboardPage.tsx` | Adicionar exportação em cada aba + nova aba Customer Health |
-| `src/lib/exportUtils.ts` | Adicionar helper `exportToPDF` |
+**Grade de Honorários**: Define a comissão do escritório de cobrança por faixa de valor recuperado.
 
