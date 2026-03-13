@@ -38,9 +38,9 @@ const AcordosPage = () => {
   const { toast } = useToast();
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("vigentes");
-  const [credorFilter, setCredorFilter] = useState("todos");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useUrlState<StatusFilter>("status", "vigentes");
+  const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
+  const [searchQuery, setSearchQuery] = useUrlState("q", "");
   const [editingAgreement, setEditingAgreement] = useState<Agreement | null>(null);
   const [editForm, setEditForm] = useState<Partial<{ proposed_total: number; new_installments: number; new_installment_value: number; first_due_date: string; entrada_value: number; entrada_date: string; notes: string }>>({});
   const [editLoading, setEditLoading] = useState(false);

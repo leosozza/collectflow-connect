@@ -18,15 +18,15 @@ import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 const RelatoriosPage = () => {
   const now = new Date();
   const { tenant } = useTenant();
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState("all");
-  const [selectedCredor, setSelectedCredor] = useState("todos");
-  const [selectedOperator, setSelectedOperator] = useState("todos");
-  const [selectedStatus, setSelectedStatus] = useState("todos");
-  const [selectedTipoDivida, setSelectedTipoDivida] = useState("todos");
-  const [selectedTipoDevedor, setSelectedTipoDevedor] = useState("todos");
-  const [quitacaoDe, setQuitacaoDe] = useState("");
-  const [quitacaoAte, setQuitacaoAte] = useState("");
+  const [selectedYear, setSelectedYear] = useUrlState("year", now.getFullYear().toString());
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", "all");
+  const [selectedCredor, setSelectedCredor] = useUrlState("credor", "todos");
+  const [selectedOperator, setSelectedOperator] = useUrlState("operator", "todos");
+  const [selectedStatus, setSelectedStatus] = useUrlState("status", "todos");
+  const [selectedTipoDivida, setSelectedTipoDivida] = useUrlState("tipoDivida", "todos");
+  const [selectedTipoDevedor, setSelectedTipoDevedor] = useUrlState("tipoDevedor", "todos");
+  const [quitacaoDe, setQuitacaoDe] = useUrlState("quitDe", "");
+  const [quitacaoAte, setQuitacaoAte] = useUrlState("quitAte", "");
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],

@@ -88,10 +88,10 @@ const AnalyticsPage = () => {
   const navigate = useNavigate();
   const now = new Date();
 
-  const [selectedYears, setSelectedYears] = useState<string[]>([now.getFullYear().toString()]);
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-  const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
-  const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useUrlState<string[]>("years", [now.getFullYear().toString()]);
+  const [selectedMonths, setSelectedMonths] = useUrlState<string[]>("months", []);
+  const [selectedOperators, setSelectedOperators] = useUrlState<string[]>("operators", []);
+  const [selectedCredores, setSelectedCredores] = useUrlState<string[]>("credores", []);
 
   const isOperator = profile?.role !== "admin";
 

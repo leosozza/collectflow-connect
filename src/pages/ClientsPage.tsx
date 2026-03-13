@@ -38,25 +38,67 @@ const ClientsPage = () => {
   const { trackAction } = useActivityTracker();
   const queryClient = useQueryClient();
   const { triggerGamificationUpdate } = useGamificationTrigger();
-  const [filters, setFilters] = useState({
-    status: "todos",
-    credor: "todos",
-    dateFrom: "",
-    dateTo: "",
-    search: "",
-    tipoDevedorId: "",
-    tipoDividaId: "",
-    statusCobrancaId: "",
-    semAcordo: false,
-    cadastroDe: "",
-    cadastroAte: "",
-    quitados: false,
-    valorAbertoDe: 0,
-    valorAbertoAte: 0,
-    semContato: false,
-    emDia: false,
-    higienizados: false,
-  });
+  // URL-synced filters
+  const [urlStatus, setUrlStatus] = useUrlState("status", "todos");
+  const [urlCredor, setUrlCredor] = useUrlState("credor", "todos");
+  const [urlDateFrom, setUrlDateFrom] = useUrlState("dateFrom", "");
+  const [urlDateTo, setUrlDateTo] = useUrlState("dateTo", "");
+  const [urlSearch, setUrlSearch] = useUrlState("search", "");
+  const [urlTipoDevedorId, setUrlTipoDevedorId] = useUrlState("tipoDevedorId", "");
+  const [urlTipoDividaId, setUrlTipoDividaId] = useUrlState("tipoDividaId", "");
+  const [urlStatusCobrancaId, setUrlStatusCobrancaId] = useUrlState("statusCobrancaId", "");
+  const [urlSemAcordo, setUrlSemAcordo] = useUrlState("semAcordo", false);
+  const [urlCadastroDe, setUrlCadastroDe] = useUrlState("cadastroDe", "");
+  const [urlCadastroAte, setUrlCadastroAte] = useUrlState("cadastroAte", "");
+  const [urlQuitados, setUrlQuitados] = useUrlState("quitados", false);
+  const [urlValorAbertoDe, setUrlValorAbertoDe] = useUrlState("valorAbertoDe", 0);
+  const [urlValorAbertoAte, setUrlValorAbertoAte] = useUrlState("valorAbertoAte", 0);
+  const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
+  const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
+  const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+
+  const filters = useMemo(() => ({
+    status: urlStatus,
+    credor: urlCredor,
+    dateFrom: urlDateFrom,
+    dateTo: urlDateTo,
+    search: urlSearch,
+    tipoDevedorId: urlTipoDevedorId,
+    tipoDividaId: urlTipoDividaId,
+    statusCobrancaId: urlStatusCobrancaId,
+    semAcordo: urlSemAcordo,
+    cadastroDe: urlCadastroDe,
+    cadastroAte: urlCadastroAte,
+    quitados: urlQuitados,
+    valorAbertoDe: urlValorAbertoDe,
+    valorAbertoAte: urlValorAbertoAte,
+    semContato: urlSemContato,
+    emDia: urlEmDia,
+    higienizados: urlHigienizados,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
+
+  const setFilters = useMemo(() => {
+    return (newFilters: typeof filters | ((prev: typeof filters) => typeof filters)) => {
+      const resolved = typeof newFilters === 'function' ? newFilters(filters) : newFilters;
+      setUrlStatus(resolved.status);
+      setUrlCredor(resolved.credor);
+      setUrlDateFrom(resolved.dateFrom);
+      setUrlDateTo(resolved.dateTo);
+      setUrlSearch(resolved.search);
+      setUrlTipoDevedorId(resolved.tipoDevedorId);
+      setUrlTipoDividaId(resolved.tipoDividaId);
+      setUrlStatusCobrancaId(resolved.statusCobrancaId);
+      setUrlSemAcordo(resolved.semAcordo);
+      setUrlCadastroDe(resolved.cadastroDe);
+      setUrlCadastroAte(resolved.cadastroAte);
+      setUrlQuitados(resolved.quitados);
+      setUrlValorAbertoDe(resolved.valorAbertoDe);
+      setUrlValorAbertoAte(resolved.valorAbertoAte);
+      setUrlSemContato(resolved.semContato);
+      setUrlEmDia(resolved.emDia);
+      setUrlHigienizados(resolved.higienizados);
+    };
+  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados]);
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
