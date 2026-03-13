@@ -111,21 +111,23 @@ const navGroups: NavGroup[] = [
 const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin": "dashboard",
   "/admin/suporte": "suporte",
-  
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
-  
   "/admin/configuracoes": "integracoes",
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
   "/admin/roadmap": "roadmap",
   "/admin/usuarios": "gestao_usuarios",
+  "/admin/comercial/pipeline": "comercial_pipeline",
+  "/admin/comercial/leads": "comercial_leads",
+  "/admin/comercial/empresas": "comercial_empresas",
+  "/admin/comercial/atividades": "comercial_atividades",
+  "/admin/comercial/relatorios": "comercial_relatorios",
 };
 
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard de Gestão",
   "/admin/suporte": "Suporte",
-  
   "/admin/financeiro": "Gestão Financeira",
   "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
@@ -134,6 +136,11 @@ const pageTitles: Record<string, string> = {
   "/admin/roadmap": "Roadmap",
   "/admin/usuarios": "Usuários",
   "/admin/perfil": "Meu Perfil",
+  "/admin/comercial/pipeline": "Pipeline de Vendas",
+  "/admin/comercial/leads": "Leads",
+  "/admin/comercial/empresas": "Empresas",
+  "/admin/comercial/atividades": "Atividades",
+  "/admin/comercial/relatorios": "Relatórios Comerciais",
 };
 
 const SuperAdminLayout = () => {

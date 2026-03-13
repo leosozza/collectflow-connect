@@ -331,6 +331,11 @@ const App = () => (
               <Route path="/admin/servicos" element={<AdminServicosPage />} />
               <Route path="/admin/perfil" element={<PerfilPage />} />
               <Route path="/admin/usuarios" element={<AdminUsuariosHubPage />} />
+              <Route path="/admin/comercial/pipeline" element={<CRMPipelinePage />} />
+              <Route path="/admin/comercial/leads" element={<CRMLeadsPage />} />
+              <Route path="/admin/comercial/empresas" element={<CRMCompaniesPage />} />
+              <Route path="/admin/comercial/atividades" element={<CRMActivitiesPage />} />
+              <Route path="/admin/comercial/relatorios" element={<CRMReportsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
