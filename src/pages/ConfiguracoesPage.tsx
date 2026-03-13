@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
 import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
+import { useUrlState } from "@/hooks/useUrlState";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
