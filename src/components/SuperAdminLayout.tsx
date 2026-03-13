@@ -112,6 +112,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
   "/admin/roadmap": "roadmap",
+  "/admin/usuarios": "gestao_usuarios",
 };
 
 const pageTitles: Record<string, string> = {
