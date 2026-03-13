@@ -16,7 +16,6 @@ import {
   Building2,
   GraduationCap,
   Settings,
-  BarChart3,
   Map,
   Package,
   ChevronDown,
@@ -25,7 +24,6 @@ import {
   ShieldCheck,
   Cog,
   Shield,
-  Bot,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -69,17 +67,14 @@ const navGroups: NavGroup[] = [
     groupIcon: Zap,
     items: [
       { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos", moduleSlug: "servicos_tokens" },
-      { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
-      { label: "Agentes Digitais", icon: Bot, path: "/admin/agentes-digitais", moduleSlug: "agentes_digitais" },
       { label: "Integrações", icon: Settings, path: "/admin/configuracoes", moduleSlug: "integracoes" },
-      { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios", moduleSlug: "relatorios" },
     ],
   },
   {
     groupLabel: "Gestão de Clientes",
     groupIcon: Building2,
     items: [
-      { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants", moduleSlug: "gestao_inquilinos" },
+      { label: "Gestão de Clientes", icon: Building2, path: "/admin/tenants", moduleSlug: "gestao_inquilinos" },
     ],
   },
   {
@@ -93,6 +88,7 @@ const navGroups: NavGroup[] = [
     groupLabel: "Configurações",
     groupIcon: Cog,
     items: [
+      { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
       { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
       { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
     ],
@@ -106,9 +102,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
   "/admin/permissoes": "permissoes_modulos",
-  "/admin/agentes-digitais": "agentes_digitais",
   "/admin/configuracoes": "integracoes",
-  "/admin/relatorios": "relatorios",
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
   "/admin/roadmap": "roadmap",
@@ -120,14 +114,12 @@ const pageTitles: Record<string, string> = {
   "/admin/suporte": "Suporte",
   "/admin/equipes": "Gestão de Equipes",
   "/admin/financeiro": "Gestão Financeira",
-  "/admin/tenants": "Gestão de Inquilinos",
+  "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
   "/admin/configuracoes": "Integrações",
-  "/admin/relatorios": "Relatórios e Análises",
   "/admin/servicos": "Serviços e Tokens",
   "/admin/roadmap": "Roadmap",
   "/admin/permissoes": "Permissões e Módulos",
-  "/admin/agentes-digitais": "Agentes Digitais",
   "/admin/usuarios": "Gestão de Usuários",
   "/admin/perfil": "Meu Perfil",
 };
