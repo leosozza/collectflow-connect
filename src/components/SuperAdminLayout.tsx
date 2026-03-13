@@ -25,6 +25,10 @@ import {
   Cog,
   Shield,
   UserPlus,
+  Target,
+  UserCheck,
+  CalendarDays,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
