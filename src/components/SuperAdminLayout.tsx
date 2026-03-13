@@ -18,23 +18,80 @@ import {
   BarChart3,
   Map,
   Package,
+  ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Navigate } from "react-router-dom";
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
-  { label: "Suporte", icon: Headphones, path: "/admin/suporte" },
-  { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes" },
-  { label: "Gestão Financeira", icon: DollarSign, path: "/admin/financeiro" },
-  { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants" },
-  { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos" },
-  { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos" },
-  { label: "Configurações do Sistema", icon: Settings, path: "/admin/configuracoes" },
-  { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
-  { label: "Roadmap", icon: Map, path: "/admin/roadmap" },
+interface NavItem {
+  label: string;
+  icon: LucideIcon;
+  path: string;
+}
+
+interface NavGroup {
+  groupLabel: string;
+  items: NavItem[];
+}
+
+const dashboardItem: NavItem = {
+  label: "Dashboard",
+  icon: LayoutDashboard,
+  path: "/admin",
+};
+
+const navGroups: NavGroup[] = [
+  {
+    groupLabel: "OPERAÇÃO",
+    items: [
+      { label: "Suporte", icon: Headphones, path: "/admin/suporte" },
+      { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes" },
+      { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos" },
+    ],
+  },
+  {
+    groupLabel: "AUTOMAÇÃO E SERVIÇOS",
+    items: [
+      { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos" },
+      { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
+      { label: "Integrações", icon: Settings, path: "/admin/configuracoes" },
+    ],
+  },
+  {
+    groupLabel: "GESTÃO DE CLIENTES",
+    items: [
+      { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants" },
+    ],
+  },
+  {
+    groupLabel: "ADMINISTRAÇÃO",
+    items: [
+      { label: "Gestão Financeira", icon: DollarSign, path: "/admin/financeiro" },
+    ],
+  },
+  {
+    groupLabel: "CONFIGURAÇÕES",
+    items: [
+      { label: "Roadmap", icon: Map, path: "/admin/roadmap" },
+    ],
+  },
 ];
+
+const pageTitles: Record<string, string> = {
+  "/admin": "Dashboard de Gestão",
+  "/admin/suporte": "Suporte",
+  "/admin/equipes": "Gestão de Equipes",
+  "/admin/financeiro": "Gestão Financeira",
+  "/admin/tenants": "Gestão de Inquilinos",
+  "/admin/treinamentos": "Treinamentos e Reuniões",
+  "/admin/configuracoes": "Integrações",
+  "/admin/relatorios": "Relatórios e Análises",
+  "/admin/servicos": "Serviços e Tokens",
+  "/admin/roadmap": "Roadmap",
+};
 
 const SuperAdminLayout = () => {
   const { profile, signOut } = useAuth();
@@ -64,17 +121,54 @@ const SuperAdminLayout = () => {
     navigate("/auth");
   };
 
-  const pageTitles: Record<string, string> = {
-    "/admin": "Dashboard de Gestão",
-    "/admin/suporte": "Suporte",
-    "/admin/equipes": "Gestão de Equipes",
-    "/admin/financeiro": "Gestão Financeira",
-    "/admin/tenants": "Gestão de Inquilinos",
-    "/admin/treinamentos": "Treinamentos e Reuniões",
-    "/admin/configuracoes": "Configurações do Sistema",
-    "/admin/relatorios": "Relatórios e Análises",
-    "/admin/servicos": "Serviços e Tokens",
-    "/admin/roadmap": "Roadmap",
+  const renderNavLink = (item: NavItem) => {
+    const active = location.pathname === item.path;
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        onClick={() => setSidebarOpen(false)}
+        title={collapsed ? item.label : undefined}
+        className={`
+          flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
+          ${active
+            ? "bg-primary text-primary-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          }
+        `}
+      >
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+        {!collapsed && item.label}
+      </Link>
+    );
+  };
+
+  const renderGroup = (group: NavGroup, index: number) => {
+    const groupHasActive = group.items.some((item) => location.pathname === item.path);
+
+    if (collapsed) {
+      return (
+        <div key={group.groupLabel} className={index > 0 ? "pt-2 mt-2 border-t border-sidebar-border/30" : ""}>
+          {group.items.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible key={group.groupLabel} defaultOpen={groupHasActive}>
+        <div className={index > 0 ? "pt-3 mt-3 border-t border-sidebar-border/30" : ""}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-1.5 group cursor-pointer">
+            <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">
+              {group.groupLabel}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-1 ml-1 space-y-0.5">
+            {group.items.map(renderNavLink)}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
   };
 
   return (
@@ -108,27 +202,11 @@ const SuperAdminLayout = () => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
-          {navItems.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                title={collapsed ? item.label : undefined}
-                className={`
-                  flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  }
-                `}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!collapsed && item.label}
-              </Link>
-            );
-          })}
+          {/* Dashboard - always visible at top */}
+          {renderNavLink(dashboardItem)}
+
+          {/* Collapsible groups */}
+          {navGroups.map((group, index) => renderGroup(group, index))}
         </nav>
 
         {/* Footer */}
