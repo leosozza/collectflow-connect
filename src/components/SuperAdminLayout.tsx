@@ -128,6 +128,7 @@ const pageTitles: Record<string, string> = {
   "/admin/roadmap": "Roadmap",
   "/admin/permissoes": "Permissões e Módulos",
   "/admin/agentes-digitais": "Agentes Digitais",
+  "/admin/usuarios": "Gestão de Usuários",
   "/admin/perfil": "Meu Perfil",
 };
 
