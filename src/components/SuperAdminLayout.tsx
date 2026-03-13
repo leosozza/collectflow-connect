@@ -58,7 +58,7 @@ const navGroups: NavGroup[] = [
     groupIcon: Briefcase,
     items: [
       { label: "Suporte", icon: Headphones, path: "/admin/suporte", moduleSlug: "suporte" },
-      { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes", moduleSlug: "gestao_equipes" },
+      
       { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos", moduleSlug: "treinamentos_reunioes" },
     ],
   },
@@ -88,8 +88,7 @@ const navGroups: NavGroup[] = [
     groupLabel: "Configurações",
     groupIcon: Cog,
     items: [
-      { label: "Permissões e Módulos", icon: Shield, path: "/admin/permissoes", moduleSlug: "permissoes_modulos" },
-      { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
+      { label: "Usuários", icon: Users, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
       { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
     ],
   },
@@ -98,10 +97,10 @@ const navGroups: NavGroup[] = [
 const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin": "dashboard",
   "/admin/suporte": "suporte",
-  "/admin/equipes": "gestao_equipes",
+  
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
-  "/admin/permissoes": "permissoes_modulos",
+  
   "/admin/configuracoes": "integracoes",
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
@@ -112,15 +111,14 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard de Gestão",
   "/admin/suporte": "Suporte",
-  "/admin/equipes": "Gestão de Equipes",
+  
   "/admin/financeiro": "Gestão Financeira",
   "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
   "/admin/configuracoes": "Integrações",
   "/admin/servicos": "Serviços e Tokens",
   "/admin/roadmap": "Roadmap",
-  "/admin/permissoes": "Permissões e Módulos",
-  "/admin/usuarios": "Gestão de Usuários",
+  "/admin/usuarios": "Usuários",
   "/admin/perfil": "Meu Perfil",
 };
 

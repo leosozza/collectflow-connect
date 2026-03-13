@@ -36,12 +36,10 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
-import AdminPermissoesPage from "./pages/admin/AdminPermissoesPage";
-import AdminUsuariosPage from "./pages/admin/AdminUsuariosPage";
+import AdminUsuariosHubPage from "./pages/admin/AdminUsuariosHubPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
 import SuperAdminLayout from "./components/SuperAdminLayout";
-import AdminEquipesPage from "./pages/admin/AdminEquipesPage";
 import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
 import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
@@ -320,15 +318,14 @@ const App = () => (
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/suporte" element={<SupportAdminPage />} />
               <Route path="/admin/tenants" element={<SuperAdminPage />} />
-              <Route path="/admin/equipes" element={<AdminEquipesPage />} />
+              
               <Route path="/admin/financeiro" element={<AdminFinanceiroPage />} />
               <Route path="/admin/treinamentos" element={<AdminTreinamentosPage />} />
               <Route path="/admin/configuracoes" element={<AdminConfiguracoesPage />} />
               <Route path="/admin/roadmap" element={<RoadmapPage />} />
               <Route path="/admin/servicos" element={<AdminServicosPage />} />
               <Route path="/admin/perfil" element={<PerfilPage />} />
-              <Route path="/admin/permissoes" element={<AdminPermissoesPage />} />
-              <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
+              <Route path="/admin/usuarios" element={<AdminUsuariosHubPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
