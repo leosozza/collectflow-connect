@@ -50,7 +50,8 @@ const dashboardItem: NavItem = {
 
 const navGroups: NavGroup[] = [
   {
-    groupLabel: "OPERAÇÃO",
+    groupLabel: "Operação",
+    groupIcon: Briefcase,
     items: [
       { label: "Suporte", icon: Headphones, path: "/admin/suporte" },
       { label: "Gestão de Equipes", icon: Users, path: "/admin/equipes" },
@@ -58,7 +59,8 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    groupLabel: "AUTOMAÇÃO E SERVIÇOS",
+    groupLabel: "Automação e Serviços",
+    groupIcon: Zap,
     items: [
       { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos" },
       { label: "Relatórios e Análises", icon: BarChart3, path: "/admin/relatorios" },
@@ -66,19 +68,22 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    groupLabel: "GESTÃO DE CLIENTES",
+    groupLabel: "Gestão de Clientes",
+    groupIcon: Building2,
     items: [
       { label: "Gestão de Inquilinos", icon: Building2, path: "/admin/tenants" },
     ],
   },
   {
-    groupLabel: "ADMINISTRAÇÃO",
+    groupLabel: "Administração",
+    groupIcon: ShieldCheck,
     items: [
       { label: "Gestão Financeira", icon: DollarSign, path: "/admin/financeiro" },
     ],
   },
   {
-    groupLabel: "CONFIGURAÇÕES",
+    groupLabel: "Configurações",
+    groupIcon: Cog,
     items: [
       { label: "Roadmap", icon: Map, path: "/admin/roadmap" },
     ],
