@@ -36,6 +36,8 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AdminPermissoesPage from "./pages/admin/AdminPermissoesPage";
+import AdminAgentesDigitaisPage from "./pages/admin/AdminAgentesDigitaisPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
 import SuperAdminLayout from "./components/SuperAdminLayout";
