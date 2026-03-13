@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+// ─── Client Schema ───────────────────────────────────────────────────────────
+
 export const clientSchema = z.object({
   credor: z.string().trim().min(1, "Credor é obrigatório").max(100, "Credor muito longo"),
   nome_completo: z.string().trim().min(2, "Nome deve ter ao menos 2 caracteres").max(200, "Nome muito longo"),
@@ -25,6 +27,65 @@ export const clientSchema = z.object({
 });
 
 export type ValidatedClientData = z.infer<typeof clientSchema>;
+
+// ─── Agreement Schema ────────────────────────────────────────────────────────
+
+export const agreementSchema = z.object({
+  client_cpf: z.string().trim().min(1, "CPF é obrigatório"),
+  client_name: z.string().trim().min(2, "Nome é obrigatório").max(200),
+  credor: z.string().trim().min(1, "Credor é obrigatório").max(100),
+  original_total: z.number().min(0, "Valor original não pode ser negativo"),
+  proposed_total: z.number().min(0, "Valor proposto não pode ser negativo"),
+  discount_percent: z.number().min(0).max(100, "Desconto máximo é 100%"),
+  new_installments: z.number().int().min(1, "Mínimo 1 parcela").max(999),
+  new_installment_value: z.number().min(0),
+  first_due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  entrada_value: z.number().min(0).optional(),
+  entrada_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida").optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+export type ValidatedAgreementData = z.infer<typeof agreementSchema>;
+
+// ─── CRM Lead Schema ────────────────────────────────────────────────────────
+
+export const crmLeadSchema = z.object({
+  name: z.string().trim().min(2, "Nome é obrigatório").max(200),
+  email: z.string().trim().email("Email inválido").max(255).optional().nullable(),
+  phone: z.string().trim().max(20).optional().nullable(),
+  company: z.string().trim().max(200).optional().nullable(),
+  status: z.string().trim().max(50).optional().default("novo"),
+  source: z.string().trim().max(100).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+export type ValidatedCRMLeadData = z.infer<typeof crmLeadSchema>;
+
+// ─── Workflow Schema ─────────────────────────────────────────────────────────
+
+export const workflowSchema = z.object({
+  name: z.string().trim().min(1, "Nome é obrigatório").max(200),
+  description: z.string().max(1000).optional().default(""),
+  trigger_type: z.string().min(1, "Tipo de gatilho é obrigatório"),
+  is_active: z.boolean().optional().default(false),
+  nodes: z.array(z.any()).optional().default([]),
+  edges: z.array(z.any()).optional().default([]),
+});
+
+export type ValidatedWorkflowData = z.infer<typeof workflowSchema>;
+
+// ─── Expense Schema ──────────────────────────────────────────────────────────
+
+export const expenseSchema = z.object({
+  description: z.string().trim().min(1, "Descrição é obrigatória").max(300),
+  amount: z.number().min(0.01, "Valor deve ser maior que zero").max(99999999.99),
+  category: z.string().trim().min(1, "Categoria é obrigatória").max(100),
+  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+});
+
+export type ValidatedExpenseData = z.infer<typeof expenseSchema>;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Validates client data and throws a descriptive error if invalid */
 export const validateClientData = (data: unknown): ValidatedClientData => {
