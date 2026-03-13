@@ -25,6 +25,10 @@ import {
   Cog,
   Shield,
   UserPlus,
+  Target,
+  UserCheck,
+  CalendarDays,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,11 +58,21 @@ const dashboardItem: NavItem = {
 
 const navGroups: NavGroup[] = [
   {
+    groupLabel: "Comercial",
+    groupIcon: Target,
+    items: [
+      { label: "Pipeline de Vendas", icon: Target, path: "/admin/comercial/pipeline", moduleSlug: "comercial_pipeline" },
+      { label: "Leads", icon: UserCheck, path: "/admin/comercial/leads", moduleSlug: "comercial_leads" },
+      { label: "Empresas", icon: Building2, path: "/admin/comercial/empresas", moduleSlug: "comercial_empresas" },
+      { label: "Atividades", icon: CalendarDays, path: "/admin/comercial/atividades", moduleSlug: "comercial_atividades" },
+      { label: "Relatórios", icon: BarChart3, path: "/admin/comercial/relatorios", moduleSlug: "comercial_relatorios" },
+    ],
+  },
+  {
     groupLabel: "Operação",
     groupIcon: Briefcase,
     items: [
       { label: "Suporte", icon: Headphones, path: "/admin/suporte", moduleSlug: "suporte" },
-      
       { label: "Treinamentos e Reuniões", icon: GraduationCap, path: "/admin/treinamentos", moduleSlug: "treinamentos_reunioes" },
     ],
   },
@@ -97,21 +111,23 @@ const navGroups: NavGroup[] = [
 const ROUTE_MODULE_MAP: Record<string, string> = {
   "/admin": "dashboard",
   "/admin/suporte": "suporte",
-  
   "/admin/treinamentos": "treinamentos_reunioes",
   "/admin/servicos": "servicos_tokens",
-  
   "/admin/configuracoes": "integracoes",
   "/admin/tenants": "gestao_inquilinos",
   "/admin/financeiro": "gestao_financeira",
   "/admin/roadmap": "roadmap",
   "/admin/usuarios": "gestao_usuarios",
+  "/admin/comercial/pipeline": "comercial_pipeline",
+  "/admin/comercial/leads": "comercial_leads",
+  "/admin/comercial/empresas": "comercial_empresas",
+  "/admin/comercial/atividades": "comercial_atividades",
+  "/admin/comercial/relatorios": "comercial_relatorios",
 };
 
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard de Gestão",
   "/admin/suporte": "Suporte",
-  
   "/admin/financeiro": "Gestão Financeira",
   "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
@@ -120,6 +136,11 @@ const pageTitles: Record<string, string> = {
   "/admin/roadmap": "Roadmap",
   "/admin/usuarios": "Usuários",
   "/admin/perfil": "Meu Perfil",
+  "/admin/comercial/pipeline": "Pipeline de Vendas",
+  "/admin/comercial/leads": "Leads",
+  "/admin/comercial/empresas": "Empresas",
+  "/admin/comercial/atividades": "Atividades",
+  "/admin/comercial/relatorios": "Relatórios Comerciais",
 };
 
 const SuperAdminLayout = () => {
