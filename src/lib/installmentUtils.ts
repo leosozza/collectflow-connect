@@ -11,6 +11,7 @@ export interface InstallmentInput {
   phone?: string | null;
   email?: string | null;
   external_id?: string | null;
+  [key: string]: any;
   numero_parcela: number;
   total_parcelas: number;
   valor_entrada: number;
