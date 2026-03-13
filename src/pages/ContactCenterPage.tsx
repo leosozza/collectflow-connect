@@ -14,7 +14,7 @@ interface ContactCenterPageProps {
 
 const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const permissions = usePermissions();
-  const [activeTab, setActiveTab] = useState("conversas");
+  const [activeTab, setActiveTab] = useUrlState("tab", "conversas");
 
   if (channel === "telefonia") {
     return (

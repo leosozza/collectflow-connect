@@ -11,16 +11,9 @@ import { useSearchParams } from "react-router-dom";
 
 
 const ConfiguracoesPage = () => {
-  const [searchParams] = useSearchParams();
-  const defaultTab = searchParams.get("tab") || "integracao";
-  const [active, setActive] = useState(defaultTab);
+  const [active, setActive] = useUrlState("tab", "integracao");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
   const permissions = usePermissions();
-
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab) setActive(tab);
-  }, [searchParams]);
 
   const isMaxList = tenant?.id === "39a450f8-7a40-46e5-8bc7-708da5043ec7";
 
