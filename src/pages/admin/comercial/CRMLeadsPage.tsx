@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeads, createLead, updateLead, deleteLead, convertLeadToCompany, CRMLead } from "@/services/crmService";
 import LeadScoreBadge from "@/components/comercial/LeadScoreBadge";
@@ -26,8 +27,8 @@ const LEAD_STATUSES = [
 const CRMLeadsPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<CRMLead>>({});
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [search, setSearch] = useUrlState("q", "");
+  const [filterStatus, setFilterStatus] = useUrlState("status", "all");
   const { toast } = useToast();
   const qc = useQueryClient();
 

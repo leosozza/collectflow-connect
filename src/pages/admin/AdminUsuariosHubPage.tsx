@@ -1,17 +1,12 @@
-import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Shield, UserPlus } from "lucide-react";
+import { useUrlState } from "@/hooks/useUrlState";
 import AdminUsuariosPage from "./AdminUsuariosPage";
 import AdminEquipesPage from "./AdminEquipesPage";
 import AdminPermissoesPage from "./AdminPermissoesPage";
 
 const AdminUsuariosHubPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const currentTab = searchParams.get("tab") || "usuarios";
-
-  const handleTabChange = (value: string) => {
-    setSearchParams({ tab: value }, { replace: true });
-  };
+  const [currentTab, setCurrentTab] = useUrlState("tab", "usuarios");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -25,7 +20,7 @@ const AdminUsuariosHubPage = () => {
         </p>
       </div>
 
-      <Tabs value={currentTab} onValueChange={handleTabChange}>
+      <Tabs value={currentTab} onValueChange={setCurrentTab}>
         <TabsList>
           <TabsTrigger value="usuarios" className="gap-2">
             <UserPlus className="w-4 h-4" />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +23,7 @@ const FinanceiroPage = () => {
   const [loading, setLoading] = useState(true);
 
   const now = new Date();
-  const [month, setMonth] = useState(format(now, "yyyy-MM"));
+  const [month, setMonth] = useUrlState("month", format(now, "yyyy-MM"));
 
   const dateFrom = format(startOfMonth(new Date(month + "-01")), "yyyy-MM-dd");
   const dateTo = format(endOfMonth(new Date(month + "-01")), "yyyy-MM-dd");

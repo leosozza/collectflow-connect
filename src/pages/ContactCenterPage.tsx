@@ -5,7 +5,7 @@ import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppCha
 import AIAgentTab from "@/components/contact-center/whatsapp/AIAgentTab";
 import TagsManagementTab from "@/components/contact-center/whatsapp/TagsManagementTab";
 import QuickRepliesTab from "@/components/contact-center/whatsapp/QuickRepliesTab";
-import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { cn } from "@/lib/utils";
 
 interface ContactCenterPageProps {
@@ -14,7 +14,7 @@ interface ContactCenterPageProps {
 
 const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   const permissions = usePermissions();
-  const [activeTab, setActiveTab] = useState("conversas");
+  const [activeTab, setActiveTab] = useUrlState("tab", "conversas");
 
   if (channel === "telefonia") {
     return (

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Puzzle } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
@@ -32,7 +33,7 @@ interface NavGroup {
 }
 
 const CadastrosPage = () => {
-  const [active, setActive] = useState("credores");
+  const [active, setActive] = useUrlState("tab", "credores");
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
 

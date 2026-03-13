@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchActivities, createActivity, updateActivity, deleteActivity, CRMActivity, ACTIVITY_TYPES, ACTIVITY_STATUSES } from "@/services/crmActivityService";
 import { fetchLeads } from "@/services/crmService";
@@ -23,9 +24,9 @@ const statusColors: Record<string, string> = {
 const CRMActivitiesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<CRMActivity>>({});
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [search, setSearch] = useUrlState("q", "");
+  const [filterType, setFilterType] = useUrlState("type", "all");
+  const [filterStatus, setFilterStatus] = useUrlState("status", "all");
   const { toast } = useToast();
   const qc = useQueryClient();
 

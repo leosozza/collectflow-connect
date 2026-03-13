@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";
 import { useTenant } from "@/hooks/useTenant";
@@ -51,41 +52,84 @@ const CarteiraPage = () => {
 
   const profileId = profile?.id;
 
-  const [filters, setFilters] = useState({
-    status: "todos",
-    credor: "todos",
-    dateFrom: "",
-    dateTo: "",
-    search: "",
-    tipoDevedorId: "",
-    tipoDividaId: "",
-    statusCobrancaId: "",
-    semAcordo: false,
-    cadastroDe: "",
-    cadastroAte: "",
-    quitados: false,
-    valorAbertoDe: 0,
-    valorAbertoAte: 0,
-    semContato: false,
-    emDia: false,
-    higienizados: false,
-  });
+  // URL-synced filters
+  const [urlStatus, setUrlStatus] = useUrlState("status", "todos");
+  const [urlCredor, setUrlCredor] = useUrlState("credor", "todos");
+  const [urlDateFrom, setUrlDateFrom] = useUrlState("dateFrom", "");
+  const [urlDateTo, setUrlDateTo] = useUrlState("dateTo", "");
+  const [urlSearch, setUrlSearch] = useUrlState("search", "");
+  const [urlTipoDevedorId, setUrlTipoDevedorId] = useUrlState("tipoDevedorId", "");
+  const [urlTipoDividaId, setUrlTipoDividaId] = useUrlState("tipoDividaId", "");
+  const [urlStatusCobrancaId, setUrlStatusCobrancaId] = useUrlState("statusCobrancaId", "");
+  const [urlSemAcordo, setUrlSemAcordo] = useUrlState("semAcordo", false);
+  const [urlCadastroDe, setUrlCadastroDe] = useUrlState("cadastroDe", "");
+  const [urlCadastroAte, setUrlCadastroAte] = useUrlState("cadastroAte", "");
+  const [urlQuitados, setUrlQuitados] = useUrlState("quitados", false);
+  const [urlValorAbertoDe, setUrlValorAbertoDe] = useUrlState("valorAbertoDe", 0);
+  const [urlValorAbertoAte, setUrlValorAbertoAte] = useUrlState("valorAbertoAte", 0);
+  const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
+  const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
+  const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
+  const [sortField, setSortField] = useUrlState("sort", "created_at");
+  const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
+
+  const filters = useMemo(() => ({
+    status: urlStatus,
+    credor: urlCredor,
+    dateFrom: urlDateFrom,
+    dateTo: urlDateTo,
+    search: urlSearch,
+    tipoDevedorId: urlTipoDevedorId,
+    tipoDividaId: urlTipoDividaId,
+    statusCobrancaId: urlStatusCobrancaId,
+    semAcordo: urlSemAcordo,
+    cadastroDe: urlCadastroDe,
+    cadastroAte: urlCadastroAte,
+    quitados: urlQuitados,
+    valorAbertoDe: urlValorAbertoDe,
+    valorAbertoAte: urlValorAbertoAte,
+    semContato: urlSemContato,
+    emDia: urlEmDia,
+    higienizados: urlHigienizados,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
+
+  const setFilters = useMemo(() => {
+    return (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
+      const resolved = typeof newFilters === 'function' ? newFilters(filters) : newFilters;
+      setUrlStatus(resolved.status);
+      setUrlCredor(resolved.credor);
+      setUrlDateFrom(resolved.dateFrom);
+      setUrlDateTo(resolved.dateTo);
+      setUrlSearch(resolved.search);
+      setUrlTipoDevedorId(resolved.tipoDevedorId);
+      setUrlTipoDividaId(resolved.tipoDividaId);
+      setUrlStatusCobrancaId(resolved.statusCobrancaId);
+      setUrlSemAcordo(resolved.semAcordo);
+      setUrlCadastroDe(resolved.cadastroDe);
+      setUrlCadastroAte(resolved.cadastroAte);
+      setUrlQuitados(resolved.quitados);
+      setUrlValorAbertoDe(resolved.valorAbertoDe);
+      setUrlValorAbertoAte(resolved.valorAbertoAte);
+      setUrlSemContato(resolved.semContato);
+      setUrlEmDia(resolved.emDia);
+      setUrlHigienizados(resolved.higienizados);
+    };
+  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados]);
+
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [calculatingScore, setCalculatingScore] = useState(false);
-  const [sortField, setSortField] = useState<"created_at" | "data_vencimento" | "status_cobranca" | null>("created_at");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
-  const toggleSort = (field: "created_at" | "data_vencimento" | "status_cobranca") => {
+  const toggleSort = (field: string) => {
     if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
       setSortDir(field === "created_at" ? "desc" : "asc");

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +30,7 @@ const AutomacaoPage = () => {
   const [editingRule, setEditingRule] = useState<CollectionRule | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("fluxos");
+  const [activeTab, setActiveTab] = useUrlState("tab", "fluxos");
   const [newFlowTriggerType, setNewFlowTriggerType] = useState<string | null>(null);
 
   const loadRules = useCallback(async () => {

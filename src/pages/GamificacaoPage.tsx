@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -28,6 +29,7 @@ const medals = ["🥇", "🥈", "🥉"];
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const [urlTab, setUrlTab] = useUrlState("tab", "");
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
@@ -120,7 +122,7 @@ const GamificacaoPage = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue={isTenantAdmin ? "ranking" : "goals"}>
+      <Tabs defaultValue={urlTab || (isTenantAdmin ? "ranking" : "goals")} onValueChange={setUrlTab} value={urlTab || undefined}>
         <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
             <Trophy className="w-3.5 h-3.5" /> Ranking

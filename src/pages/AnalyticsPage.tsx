@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCurrency } from "@/lib/formatters";
@@ -87,10 +88,10 @@ const AnalyticsPage = () => {
   const navigate = useNavigate();
   const now = new Date();
 
-  const [selectedYears, setSelectedYears] = useState<string[]>([now.getFullYear().toString()]);
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-  const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
-  const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
+  const [selectedYears, setSelectedYears] = useUrlState("years", [now.getFullYear().toString()]);
+  const [selectedMonths, setSelectedMonths] = useUrlState("months", [] as string[]);
+  const [selectedOperators, setSelectedOperators] = useUrlState("operators", [] as string[]);
+  const [selectedCredores, setSelectedCredores] = useUrlState("credores", [] as string[]);
 
   const isOperator = profile?.role !== "admin";
 
