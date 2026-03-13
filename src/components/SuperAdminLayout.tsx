@@ -94,6 +94,7 @@ const navGroups: NavGroup[] = [
     groupIcon: Cog,
     items: [
       { label: "Roadmap", icon: Map, path: "/admin/roadmap", moduleSlug: "roadmap" },
+      { label: "Gestão de Usuários", icon: UserPlus, path: "/admin/usuarios", moduleSlug: "gestao_usuarios" },
     ],
   },
 ];
