@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { cleanCPF, formatCPFDisplay } from "@/lib/cpfUtils";
 
 export interface ImportedRow {
   credor: string;
