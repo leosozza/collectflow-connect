@@ -3918,6 +3918,42 @@ export type Database = {
           },
         ]
       }
+      system_modules: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_core: boolean | null
+          name: string
+          slug: string
+          sort_order: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_core?: boolean | null
+          name: string
+          slug: string
+          sort_order?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_core?: boolean | null
+          name?: string
+          slug?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           id: string
@@ -3941,6 +3977,48 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      tenant_modules: {
+        Row: {
+          enabled: boolean | null
+          enabled_at: string | null
+          enabled_by: string | null
+          id: string
+          module_id: string
+          tenant_id: string
+        }
+        Insert: {
+          enabled?: boolean | null
+          enabled_at?: string | null
+          enabled_by?: string | null
+          id?: string
+          module_id: string
+          tenant_id: string
+        }
+        Update: {
+          enabled?: boolean | null
+          enabled_at?: string | null
+          enabled_by?: string | null
+          id?: string
+          module_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_modules_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "system_modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_modules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tenant_services: {
         Row: {
@@ -4695,6 +4773,7 @@ export type Database = {
           valor_parcela: number
         }[]
       }
+      get_my_enabled_modules: { Args: never; Returns: string[] }
       get_my_permission_profile: {
         Args: never
         Returns: {
