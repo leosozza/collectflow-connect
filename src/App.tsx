@@ -232,7 +232,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <AutomacaoPage />
+                    <ModuleGuard module="automacao">
+                      <AutomacaoPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
