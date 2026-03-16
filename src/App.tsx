@@ -200,7 +200,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <IntegracaoPage />
+                    <ModuleGuard module="integracoes">
+                      <IntegracaoPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
