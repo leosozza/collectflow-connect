@@ -1,10 +1,8 @@
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
 import { PhoneCall, Handshake, MessageSquare, DollarSign } from "lucide-react";
-import WhatsAppChat from "./WhatsAppChat";
+
 interface TimelineItem {
   id: string;
   date: string;
@@ -16,7 +14,6 @@ interface TimelineItem {
 interface ClientTimelineProps {
   dispositions: CallDisposition[];
   agreements: any[];
-  messages: any[];
 }
 
 const typeIcons = {
@@ -33,7 +30,7 @@ const typeColors = {
   payment: "bg-warning/10 text-warning",
 };
 
-const ClientTimeline = ({ dispositions, agreements, messages }: ClientTimelineProps) => {
+const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
   const items: TimelineItem[] = [];
 
   dispositions.forEach((d) => {
@@ -57,64 +54,42 @@ const ClientTimeline = ({ dispositions, agreements, messages }: ClientTimelinePr
     });
   });
 
-  messages.forEach((m: any) => {
-    items.push({
-      id: `m-${m.id}`,
-      date: m.created_at,
-      type: "message",
-      title: `WhatsApp - ${m.status}`,
-      detail: m.message_body?.slice(0, 80) || undefined,
-    });
-  });
-
   items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <Card>
-      <Tabs defaultValue="historico" className="w-full">
-        <CardHeader className="pb-3">
-          <TabsList className="w-full">
-            <TabsTrigger value="historico" className="flex-1">Histórico</TabsTrigger>
-            <TabsTrigger value="whatsapp" className="flex-1">Conversa WhatsApp</TabsTrigger>
-          </TabsList>
-        </CardHeader>
-
-        <CardContent>
-          <TabsContent value="historico" className="mt-0">
-            {items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum registro</p>
-            ) : (
-              <div className="space-y-3">
-                {items.map((item) => {
-                  const Icon = typeIcons[item.type];
-                  return (
-                    <div key={item.id} className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${typeColors[item.type]}`}>
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{item.title}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(item.date).toLocaleString("pt-BR")}
-                          </span>
-                        </div>
-                        {item.detail && (
-                          <p className="text-xs text-muted-foreground truncate">{item.detail}</p>
-                        )}
-                      </div>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Histórico</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum registro</p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item) => {
+              const Icon = typeIcons[item.type];
+              return (
+                <div key={item.id} className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${typeColors[item.type]}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{item.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(item.date).toLocaleString("pt-BR")}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="whatsapp" className="mt-0">
-            <WhatsAppChat messages={messages} />
-          </TabsContent>
-        </CardContent>
-      </Tabs>
+                    {item.detail && (
+                      <p className="text-xs text-muted-foreground truncate">{item.detail}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 };
