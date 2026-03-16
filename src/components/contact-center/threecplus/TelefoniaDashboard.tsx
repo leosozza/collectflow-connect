@@ -23,7 +23,6 @@ import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 import AtendimentoPage from "@/pages/AtendimentoPage";
-import { Card, CardContent as CardContentInner } from "@/components/ui/card";
 import { UserX } from "lucide-react";
 
 interface TelefoniaDashboardProps {
