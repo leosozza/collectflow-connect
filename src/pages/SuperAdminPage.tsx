@@ -79,10 +79,29 @@ const SuperAdminPage = () => {
   const [editPlanId, setEditPlanId] = useState("");
   const [selectedModuleTenant, setSelectedModuleTenant] = useState<TenantRow | null>(null);
 
+  const [tenantServiceCounts, setTenantServiceCounts] = useState<Record<string, { activeServices: number; whatsappInstances: number }>>({});
+
   const loadTenants = async () => {
     try {
       const data = await fetchAllTenants();
       setTenants(data as TenantRow[]);
+
+      // Load real service counts from tenant_services
+      const { data: svcData } = await supabase
+        .from("tenant_services")
+        .select("tenant_id, quantity, service_catalog(name)")
+        .eq("status", "active");
+
+      const counts: Record<string, { activeServices: number; whatsappInstances: number }> = {};
+      (svcData || []).forEach((row: any) => {
+        const tid = row.tenant_id;
+        if (!counts[tid]) counts[tid] = { activeServices: 0, whatsappInstances: 0 };
+        counts[tid].activeServices += 1;
+        if (row.service_catalog?.name?.toLowerCase().includes("whatsapp")) {
+          counts[tid].whatsappInstances += (row.quantity || 1);
+        }
+      });
+      setTenantServiceCounts(counts);
     } catch (err) {
       console.error(err);
     } finally {
@@ -286,13 +305,11 @@ const SuperAdminPage = () => {
   };
 
   const getActiveServicesCount = (tenant: TenantRow) => {
-    const svcs = (tenant.settings as any)?.enabled_services || {};
-    return Object.entries(svcs).filter(([k, v]) => k !== "whatsapp_extra_instances" && v === true).length;
+    return tenantServiceCounts[tenant.id]?.activeServices || 0;
   };
 
   const getExtraInstancesCount = (tenant: TenantRow) => {
-    const svcs = (tenant.settings as any)?.enabled_services || {};
-    return svcs.whatsapp_extra_instances || 0;
+    return tenantServiceCounts[tenant.id]?.whatsappInstances || 0;
   };
 
   const [bulkModulesOpen, setBulkModulesOpen] = useState(false);
