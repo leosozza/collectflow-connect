@@ -460,8 +460,12 @@ const TenantSettingsPage = () => {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
 
-            {/* Tokens section inside services tab */}
+        {/* ABA TOKENS */}
+        <TabsContent value="tokens">
+          <div className="space-y-6">
             <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
 
             <Card>
