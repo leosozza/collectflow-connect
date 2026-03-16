@@ -294,6 +294,8 @@ const SuperAdminPage = () => {
     return svcs.whatsapp_extra_instances || 0;
   };
 
+  const [bulkModulesOpen, setBulkModulesOpen] = useState(false);
+
   if (!isSuperAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
