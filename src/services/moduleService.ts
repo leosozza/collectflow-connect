@@ -27,10 +27,7 @@ export const getSystemModules = async (): Promise<SystemModule[]> => {
     .from("system_modules")
     .select("*")
     .order("sort_order");
-  if (error) {
-    logger.error("Failed to fetch system modules", error);
-    throw error;
-  }
+  if (error) throw error;
   return (data || []) as SystemModule[];
 };
 
@@ -39,10 +36,7 @@ export const getTenantModules = async (tenantId: string): Promise<(TenantModule 
     .from("tenant_modules")
     .select("*, system_module:system_modules(*)")
     .eq("tenant_id", tenantId);
-  if (error) {
-    logger.error("Failed to fetch tenant modules", error);
-    throw error;
-  }
+  if (error) throw error;
   return (data || []) as any;
 };
 
@@ -59,13 +53,10 @@ export const toggleModule = async (
         module_id: moduleId,
         enabled,
         enabled_at: new Date().toISOString(),
-      },
+      } as any,
       { onConflict: "tenant_id,module_id" }
     );
-  if (error) {
-    logger.error("Failed to toggle module", error);
-    throw error;
-  }
+  if (error) throw error;
 };
 
 export const bulkToggleModules = async (
@@ -85,14 +76,13 @@ export const bulkToggleModules = async (
     }))
   );
 
-  // Upsert in batches of 50
   for (let i = 0; i < rows.length; i += 50) {
     const batch = rows.slice(i, i + 50);
     const { error } = await supabase
       .from("tenant_modules")
-      .upsert(batch, { onConflict: "tenant_id,module_id" });
+      .upsert(batch as any[], { onConflict: "tenant_id,module_id" });
     if (error) {
-      logger.error("Bulk toggle batch error", error);
+      console.error("Bulk toggle batch error", error);
       errors += batch.length;
     } else {
       success += batch.length;
