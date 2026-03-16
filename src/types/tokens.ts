@@ -2,7 +2,7 @@
 // ENUMS
 // ============================================
 export type ServicePriceType = 'fixed' | 'per_unit' | 'monthly' | 'variable';
-export type ServiceCategory = 'core' | 'ai_agent' | 'integration' | 'addon';
+export type ServiceCategory = 'crm' | 'contact_center' | 'ai_agent' | 'addon' | 'negativacao' | 'tokens' | 'core' | 'integration' | 'enrichment';
 export type ServiceStatus = 'active' | 'suspended' | 'cancelled' | 'pending';
 export type TokenTransactionType = 'purchase' | 'consumption' | 'refund' | 'bonus' | 'adjustment' | 'expiration' | 'transfer';
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'refunded' | 'cancelled';
