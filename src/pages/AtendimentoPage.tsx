@@ -104,20 +104,6 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     enabled: !!client?.cpf,
   });
 
-  // Fetch message logs for this client
-  const { data: messageLogs = [] } = useQuery({
-    queryKey: ["atendimento-messages", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("message_logs")
-        .select("*")
-        .eq("client_id", id!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!id,
-  });
 
   // Resolve the effective agentId for 3CPlus qualification
   const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
