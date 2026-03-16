@@ -16,10 +16,13 @@ const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate, onUpdateQuantity }: ServiceCatalogGridProps) => {
+  // Filter out CRM (already part of the plan)
+  const filteredCatalog = catalog.filter(s => s.service_code !== 'crm');
+
   const categories = useMemo(() => {
-    const cats = [...new Set(catalog.map((s) => s.category))];
+    const cats = [...new Set(filteredCatalog.map((s) => s.category))];
     return cats;
-  }, [catalog]);
+  }, [filteredCatalog]);
 
   const tenantServiceMap = useMemo(() => {
     const map: Record<string, TenantService> = {};

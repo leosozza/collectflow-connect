@@ -475,22 +475,6 @@ const TenantSettingsPage = () => {
           </div>
         </TabsContent>
 
-        {/* ABA TOKENS */}
-        <TabsContent value="tokens">
-          <div className="space-y-6">
-            <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Histórico de Transações</CardTitle>
-                <CardDescription>Todas as movimentações de tokens</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TokenHistoryTable transactions={transactions} loading={loadingData} />
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
 
         {/* ABA CANCELAMENTO */}
         <TabsContent value="cancelamento">
