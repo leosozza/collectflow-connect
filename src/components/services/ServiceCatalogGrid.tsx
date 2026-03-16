@@ -1,7 +1,10 @@
 import { useState, useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import ServiceCard from "./ServiceCard";
-import type { ServiceCatalogItem, TenantService, ServiceCategory } from "@/types/tokens";
+import TokenBalance from "@/components/tokens/TokenBalance";
+import TokenHistoryTable from "@/components/tokens/TokenHistoryTable";
+import type { ServiceCatalogItem, TenantService, TenantTokens, TokenTransaction, ServiceCategory } from "@/types/tokens";
 import { CATEGORY_LABELS } from "@/types/tokens";
 
 interface ServiceCatalogGridProps {
@@ -10,12 +13,16 @@ interface ServiceCatalogGridProps {
   onActivate: (serviceId: string, quantity: number) => void;
   onDeactivate: (serviceId: string) => void;
   onUpdateQuantity: (serviceId: string, quantity: number) => void;
+  tokens?: TenantTokens | null;
+  transactions?: TokenTransaction[];
+  loadingTokens?: boolean;
+  onPurchase?: () => void;
 }
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate, onUpdateQuantity }: ServiceCatalogGridProps) => {
+const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate, onUpdateQuantity, tokens, transactions = [], loadingTokens, onPurchase }: ServiceCatalogGridProps) => {
   // Filter out CRM (already part of the plan)
   const filteredCatalog = catalog.filter(s => s.service_code !== 'crm');
 
@@ -57,13 +64,14 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
         </div>
       </div>
 
-      <Tabs defaultValue={categories[0] || "core"}>
-        <TabsList>
+      <Tabs defaultValue={categories[0] || "tokens"}>
+        <TabsList className="flex-wrap">
           {categories.map((cat) => (
             <TabsTrigger key={cat} value={cat}>
               {CATEGORY_LABELS[cat as ServiceCategory] || cat}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
         </TabsList>
 
         {categories.map((cat) => (
@@ -84,6 +92,23 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
             </div>
           </TabsContent>
         ))}
+
+        <TabsContent value="tokens">
+          <div className="space-y-6">
+            {tokens !== undefined && onPurchase && (
+              <TokenBalance tokens={tokens} onPurchase={onPurchase} />
+            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Histórico de Transações de Tokens</CardTitle>
+                <CardDescription>Todas as movimentações de tokens</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TokenHistoryTable transactions={transactions} loading={loadingTokens || false} />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );
