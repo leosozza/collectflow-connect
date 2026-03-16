@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import TenantServicesTab from "@/components/admin/TenantServicesTab";
+import TenantModulesTab from "@/components/admin/TenantModulesTab";
+import BulkModulesDialog from "@/components/admin/BulkModulesDialog";
+import { Blocks } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";
 import { supabase } from "@/integrations/supabase/client";
