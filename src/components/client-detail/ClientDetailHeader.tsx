@@ -147,14 +147,21 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     onError: () => toast.error("Erro ao salvar dados"),
   });
 
-  const openWhatsApp = () => {
-    if (!client.phone) {
+  const openWhatsApp = (phoneNumber?: string) => {
+    const rawPhone = phoneNumber || client.phone;
+    if (!rawPhone) {
       toast.error("Nenhum telefone cadastrado para este devedor");
       return;
     }
-    const phone = client.phone.replace(/\D/g, "");
-    const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
-    window.open(`https://wa.me/${intlPhone}`, "_blank");
+    if (isModuleEnabled("whatsapp")) {
+      const phone = rawPhone.replace(/\D/g, "");
+      const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
+      navigate(`/contact-center/whatsapp?phone=${intlPhone}`);
+    } else {
+      const phone = rawPhone.replace(/\D/g, "");
+      const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
+      window.open(`https://wa.me/${intlPhone}`, "_blank");
+    }
   };
 
   // Total Pago: sum valor_pago from all records + proposed_total from approved agreements
