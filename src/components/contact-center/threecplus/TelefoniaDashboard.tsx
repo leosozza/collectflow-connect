@@ -20,8 +20,11 @@ import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
-import TelefoniaAtendimento from "./TelefoniaAtendimento";
 import OperatorCallHistory from "./OperatorCallHistory";
+import { useClientByPhone } from "@/hooks/useClientByPhone";
+import AtendimentoPage from "@/pages/AtendimentoPage";
+import { Card, CardContent as CardContentInner } from "@/components/ui/card";
+import { UserX } from "lucide-react";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
