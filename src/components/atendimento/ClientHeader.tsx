@@ -60,6 +60,8 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const { tenant } = useTenant();
 
   useEffect(() => {
     if (!client.status_cobranca_id) { setStatusCobranca(null); return; }
