@@ -1,48 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Reorganizar layout do ClientHeader na tela de atendimento
+### Correções aplicadas
 
-## Layout proposto
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ Francisco Helton Moreira da Silva  [Badge Status]    [Formalizar ▸]│
-│ CPF: 010.257.973-37 │ Credor: YBRASIL                              │
-│ 📞 (85) 99999-1234  📞 (85) 98888-5678  📞 (85) 97777-0000        │
-│    (clicável=disca)     (clicável=disca)     (clicável=disca)       │
-├─────────────────────────────────────────────────────────────────────┤
-│ Em Aberto    │ Pago         │ Parcelas  │ Vencimento │ Valor Parc. │
-│ R$ 1.400,00  │ R$ 400,00    │ 1/12      │ 10/01/2025 │ R$ 200,00   │
-│ ... mais dados da dívida (quebra, entrada, parcela atual, etc.)    │
-├─────────────────────────────────────────────────────────────────────┤
-│ [▼ Mais detalhes] → Endereço, email, ID externo, observações       │
-└─────────────────────────────────────────────────────────────────────┘
-```
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-## Alterações em `src/components/atendimento/ClientHeader.tsx`
-
-### 1. Linha superior: Nome + Status + Botão Formalizar
-- Nome completo do cliente (bold, grande) à esquerda
-- Badge de status ao lado do nome
-- Botão "Formalizar Acordo" empurrado para o canto direito (`ml-auto`)
-- **Remover** o botão "Ligar" standalone
-
-### 2. Linha de identificação: CPF + Credor
-- Manter como está (CPF formatado + credor), logo abaixo do nome
-
-### 3. Linha de telefones: clicáveis com ícone verde
-- Mostrar `phone`, `phone2`, `phone3` (quando existirem) como spans clicáveis
-- Cada telefone com um ícone 📞 verde (`text-emerald-500`) ao lado
-- Ao clicar, chama `onCall(phone)` — mesma lógica atual
-- Se `callingPhone` estiver true, mostrar "Discando..." no telefone clicado
-- Adicionar `phone2` e `phone3` à interface do componente
-
-### 4. Seção de dados da dívida (sempre visível)
-- Mover os dados financeiros para uma faixa abaixo dos telefones com `border-t`
-- Grid com: Em Aberto, Pago, Parcelas, Vencimento, Valor Parcela, Parcela Atual, Quebra (se > 0)
-- Dados que hoje ficam escondidos no collapsible (financeiros) passam a ficar visíveis
-
-### 5. Collapsible: apenas dados secundários
-- Manter collapsible apenas para: endereço, email, ID externo, observações
-- Trigger com chevron no final da seção de dados da dívida
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
