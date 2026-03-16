@@ -178,7 +178,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <ContactCenterPage channel="whatsapp" />
+                    <ModuleGuard module="whatsapp">
+                      <ContactCenterPage channel="whatsapp" />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
