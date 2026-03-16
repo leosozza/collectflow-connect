@@ -455,6 +455,10 @@ const TenantSettingsPage = () => {
                     onActivate={handleActivateService}
                     onDeactivate={handleDeactivateService}
                     onUpdateQuantity={handleUpdateQuantity}
+                    tokens={tokens}
+                    transactions={transactions}
+                    loadingTokens={loadingData}
+                    onPurchase={() => setPurchaseOpen(true)}
                   />
                 )}
               </CardContent>
