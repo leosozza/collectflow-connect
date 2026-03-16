@@ -162,20 +162,6 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 pt-3 border-t border-border">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-            {client.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Email:</span>
-                <span className="font-medium text-foreground">{client.email}</span>
-              </div>
-            )}
-            {client.external_id && (
-              <div className="flex items-center gap-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">ID Externo:</span>
-                <span className="font-medium text-foreground">{client.external_id}</span>
-              </div>
-            )}
             {(client.endereco || client.cidade || client.uf || client.cep) && (
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
