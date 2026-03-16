@@ -2,7 +2,7 @@
 // ENUMS
 // ============================================
 export type ServicePriceType = 'fixed' | 'per_unit' | 'monthly' | 'variable';
-export type ServiceCategory = 'core' | 'ai_agent' | 'integration' | 'addon';
+export type ServiceCategory = 'crm' | 'contact_center' | 'ai_agent' | 'addon' | 'negativacao' | 'tokens' | 'core' | 'integration' | 'enrichment';
 export type ServiceStatus = 'active' | 'suspended' | 'cancelled' | 'pending';
 export type TokenTransactionType = 'purchase' | 'consumption' | 'refund' | 'bonus' | 'adjustment' | 'expiration' | 'transfer';
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'refunded' | 'cancelled';
@@ -192,18 +192,28 @@ export interface TokenSummary {
 // ============================================
 // CATEGORY COLORS
 // ============================================
-export const CATEGORY_COLORS: Record<ServiceCategory, string> = {
-  core: '#3B82F6',
+export const CATEGORY_COLORS: Record<string, string> = {
+  crm: '#3B82F6',
+  contact_center: '#0EA5E9',
   ai_agent: '#8B5CF6',
-  integration: '#F97316',
   addon: '#22C55E',
+  negativacao: '#F97316',
+  tokens: '#EAB308',
+  core: '#3B82F6',
+  integration: '#F97316',
+  enrichment: '#22C55E',
 };
 
-export const CATEGORY_LABELS: Record<ServiceCategory, string> = {
-  core: 'Core',
+export const CATEGORY_LABELS: Record<string, string> = {
+  crm: 'CRM',
+  contact_center: 'Contact Center',
   ai_agent: 'AI Agent',
+  addon: 'Serviços Adicionais',
+  negativacao: 'Negativação',
+  tokens: 'Tokens',
+  core: 'Core',
   integration: 'Integração',
-  addon: 'Addon',
+  enrichment: 'Enriquecimento',
 };
 
 export const TRANSACTION_TYPE_COLORS: Record<string, string> = {

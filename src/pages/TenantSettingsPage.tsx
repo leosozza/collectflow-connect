@@ -199,12 +199,11 @@ const TenantSettingsPage = () => {
       </div>
 
       <Tabs defaultValue="dados">
-        <TabsList>
+         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
@@ -268,7 +267,12 @@ const TenantSettingsPage = () => {
               <CardContent>
                 {(() => {
                   const activeServices = tenantServices.filter(ts => ts.status === "active");
-                  const serviceRows = activeServices.map(ts => {
+                  const serviceRows = activeServices
+                    .filter(ts => {
+                      const catalogItem = catalog.find(c => c.id === ts.service_id);
+                      return catalogItem?.service_code !== 'crm';
+                    })
+                    .map(ts => {
                     const catalogItem = catalog.find(c => c.id === ts.service_id);
                     const unitPrice = ts.unit_price_override ?? catalogItem?.price ?? 0;
                     const qty = ts.quantity || 1;
@@ -301,7 +305,7 @@ const TenantSettingsPage = () => {
                         <tbody>
                           {/* Plano base */}
                           <tr className="border-b border-border/50">
-                            <td className="py-3 px-4 font-medium">{plan?.name || "Plano Base"}</td>
+                            <td className="py-3 px-4 font-medium">CRM {plan?.name || "Plano Base"}</td>
                             <td className="py-3 px-4 text-muted-foreground">Plano</td>
                             <td className="py-3 px-4 text-center">1</td>
                             <td className="py-3 px-4 text-right">{formatCurrency(planPrice)}</td>
@@ -432,38 +436,36 @@ const TenantSettingsPage = () => {
 
         {/* ABA SERVIÇOS */}
         <TabsContent value="servicos">
-          <Card>
-            <CardHeader>
-              <CardTitle>Catálogo de Serviços</CardTitle>
-              <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingData ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
-                  <span className="text-muted-foreground">Carregando serviços...</span>
-                </div>
-              ) : (
-                <ServiceCatalogGrid
-                  catalog={catalog}
-                  tenantServices={tenantServices}
-                  onActivate={handleActivateService}
-                  onDeactivate={handleDeactivateService}
-                  onUpdateQuantity={handleUpdateQuantity}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ABA TOKENS */}
-        <TabsContent value="tokens">
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Catálogo de Serviços</CardTitle>
+                <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingData ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+                    <span className="text-muted-foreground">Carregando serviços...</span>
+                  </div>
+                ) : (
+                  <ServiceCatalogGrid
+                    catalog={catalog}
+                    tenantServices={tenantServices}
+                    onActivate={handleActivateService}
+                    onDeactivate={handleDeactivateService}
+                    onUpdateQuantity={handleUpdateQuantity}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Tokens section inside services tab */}
             <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
 
             <Card>
               <CardHeader>
-                <CardTitle>Histórico de Transações</CardTitle>
+                <CardTitle>Histórico de Transações de Tokens</CardTitle>
                 <CardDescription>Todas as movimentações de tokens</CardDescription>
               </CardHeader>
               <CardContent>
@@ -472,6 +474,7 @@ const TenantSettingsPage = () => {
             </Card>
           </div>
         </TabsContent>
+
 
         {/* ABA CANCELAMENTO */}
         <TabsContent value="cancelamento">

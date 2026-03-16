@@ -16,10 +16,13 @@ const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate, onUpdateQuantity }: ServiceCatalogGridProps) => {
+  // Filter out CRM (already part of the plan)
+  const filteredCatalog = catalog.filter(s => s.service_code !== 'crm');
+
   const categories = useMemo(() => {
-    const cats = [...new Set(catalog.map((s) => s.category))];
+    const cats = [...new Set(filteredCatalog.map((s) => s.category))];
     return cats;
-  }, [catalog]);
+  }, [filteredCatalog]);
 
   const tenantServiceMap = useMemo(() => {
     const map: Record<string, TenantService> = {};
@@ -32,13 +35,13 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
   const activeServices = tenantServices.filter((ts) => ts.status === "active");
   const monthlyTotal = useMemo(() => {
     return activeServices.reduce((sum, ts) => {
-      const svc = catalog.find((c) => c.id === ts.service_id);
+      const svc = filteredCatalog.find((c) => c.id === ts.service_id);
       if (!svc) return sum;
       const price = ts.unit_price_override ?? svc.price;
       const qty = svc.price_type === "per_unit" ? ts.quantity : 1;
       return sum + price * qty;
     }, 0);
-  }, [activeServices, catalog]);
+  }, [activeServices, filteredCatalog]);
 
   return (
     <div className="space-y-4">
@@ -66,7 +69,7 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
         {categories.map((cat) => (
           <TabsContent key={cat} value={cat}>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {catalog
+              {filteredCatalog
                 .filter((s) => s.category === cat)
                 .map((service) => (
                   <ServiceCard
