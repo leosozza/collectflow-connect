@@ -166,7 +166,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <ContactCenterPage channel="telefonia" />
+                    <ModuleGuard module="telefonia">
+                      <ContactCenterPage channel="telefonia" />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
