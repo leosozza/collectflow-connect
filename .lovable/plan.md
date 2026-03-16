@@ -1,35 +1,23 @@
 
 
-## Plano: URL State & Search Params — Implementado ✅
+# Mover Tokens para dentro do catálogo de Serviços
 
-### O que foi feito
+## Situação atual
+Tokens é uma aba separada no nível superior (ao lado de Financeiro, Contrato, Serviços, Cancelamento). O usuário quer que Tokens seja uma aba **dentro** do catálogo de serviços, ao lado de AI Agent, Contact Center, etc.
 
-1. **Criado** `src/hooks/useUrlState.ts` — Hook genérico com overloads para string, number, boolean e string[]
-2. **Migradas 15 páginas** de `useState` local para URL search params:
+## Alterações
 
-#### Alta Prioridade (filtros complexos)
-- ✅ `CarteiraPage` — 18 filtros + viewMode + sort sincronizados na URL
-- ✅ `ClientsPage` — 18 filtros sincronizados na URL
-- ✅ `AcordosPage` — statusFilter, credorFilter, searchQuery
-- ✅ `RelatoriosPage` — year, month, credor, operator, status, tipoDivida, tipoDevedor, quitação
-- ✅ `AnalyticsPage` — years[], months[], operators[], credores[] (arrays)
+### 1. `src/pages/TenantSettingsPage.tsx`
+- Remover a `TabsTrigger` e `TabsContent` de `"tokens"` do nível superior
+- Passar props de tokens (`tokens`, `transactions`, `loadingData`, `onPurchase`) para o `ServiceCatalogGrid`
 
-#### Média Prioridade (tabs e filtros simples)
-- ✅ `CadastrosPage` — tab ativa
-- ✅ `AutomacaoPage` — tab ativa
-- ✅ `GamificacaoPage` — tab ativa
-- ✅ `ContactCenterPage` — tab ativa
-- ✅ `FinanceiroPage` — mês selecionado
-- ✅ `ConfiguracoesPage` — tab ativa (refatorado de useSearchParams manual)
-- ✅ `AdminUsuariosHubPage` — tab ativa (refatorado de useSearchParams manual)
+### 2. `src/components/services/ServiceCatalogGrid.tsx`
+- Receber novas props: `tokens`, `transactions`, `loadingTokens`, `onPurchase`
+- Adicionar aba fixa `"tokens"` na `TabsList` (após as categorias dinâmicas do catálogo)
+- No `TabsContent` de tokens, renderizar `TokenBalance` + `TokenHistoryTable`
 
-#### Baixa Prioridade (CRM)
-- ✅ `CRMLeadsPage` — search, filterStatus
-- ✅ `CRMActivitiesPage` — search, filterType, filterStatus
-- ✅ `SupportAdminPage` — statusFilter
+### 3. `src/types/tokens.ts`
+- Garantir que `"tokens"` está no `CATEGORY_LABELS` (já deve estar)
 
-### Benefícios
-- URLs compartilháveis com filtros pré-aplicados
-- F5 mantém filtros intactos
-- Botões Voltar/Avançar do browser funcionam
-- Deep linking para tabs específicas
+Resultado: a aba Tokens aparecerá dentro do grid de serviços, ao lado de AI Agent.
+
