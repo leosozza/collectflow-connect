@@ -77,6 +77,7 @@ const SuperAdminPage = () => {
   const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
   const [catalogServices, setCatalogServices] = useState<any[]>([]);
   const [editPlanId, setEditPlanId] = useState("");
+  const [selectedModuleTenant, setSelectedModuleTenant] = useState<TenantRow | null>(null);
 
   const loadTenants = async () => {
     try {
