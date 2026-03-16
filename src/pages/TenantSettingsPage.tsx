@@ -199,12 +199,11 @@ const TenantSettingsPage = () => {
       </div>
 
       <Tabs defaultValue="dados">
-        <TabsList>
+         <TabsList>
           <TabsTrigger value="dados">Dados</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
