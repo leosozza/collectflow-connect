@@ -204,6 +204,7 @@ const TenantSettingsPage = () => {
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
