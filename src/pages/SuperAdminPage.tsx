@@ -559,7 +559,31 @@ const SuperAdminPage = () => {
 
         {/* ========== MÓDULOS ========== */}
         <TabsContent value="modulos" className="space-y-4">
-          <ModulesTabContent tenants={tenants.filter(t => t.status !== "deleted")} />
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Controle de módulos habilitados por tenant</p>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setBulkModulesOpen(true)}>
+              <Blocks className="w-4 h-4" />
+              Liberar em massa
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <Label>Selecione o tenant</Label>
+            <Select onValueChange={(v) => {
+              const t = tenants.find(t => t.id === v);
+              if (t) setSelectedModuleTenant(t);
+            }}>
+              <SelectTrigger><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
+              <SelectContent>
+                {tenants.filter(t => t.status !== "deleted").map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name} ({t.slug})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedModuleTenant && (
+            <TenantModulesTab tenantId={selectedModuleTenant.id} tenantName={selectedModuleTenant.name} />
+          )}
+          <BulkModulesDialog open={bulkModulesOpen} onOpenChange={setBulkModulesOpen} />
         </TabsContent>
 
         {/* ========== NOVO CLIENTE ========== */}
