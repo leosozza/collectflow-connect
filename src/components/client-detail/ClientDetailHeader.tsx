@@ -256,7 +256,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               variant="ghost"
               size="icon"
               className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
-              onClick={() => navigate(`/atendimento/${client.id}`)}
+              onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
               title="Atendimento"
             >
               <Headset className="w-5 h-5" />
