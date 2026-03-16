@@ -89,10 +89,12 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
         </Button>
       </div>
 
-      {/* Row 2: CPF + Credor */}
+      {/* Row 2: CPF + Credor + Email + ID Externo */}
       <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {formatCPF(client.cpf)}</span>
         <span className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" /> {client.credor}</span>
+        {client.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {client.email}</span>}
+        {client.external_id && <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> {client.external_id}</span>}
       </div>
 
       {/* Row 3: Clickable phones */}
@@ -160,20 +162,6 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 pt-3 border-t border-border">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-            {client.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Email:</span>
-                <span className="font-medium text-foreground">{client.email}</span>
-              </div>
-            )}
-            {client.external_id && (
-              <div className="flex items-center gap-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">ID Externo:</span>
-                <span className="font-medium text-foreground">{client.external_id}</span>
-              </div>
-            )}
             {(client.endereco || client.cidade || client.uf || client.cep) && (
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
