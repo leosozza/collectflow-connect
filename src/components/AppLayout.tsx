@@ -65,8 +65,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const contactCenterItems = [
-    ...(permissions.canViewTelefonia ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
-    ...(permissions.canViewContactCenter ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
+    ...(permissions.canViewTelefonia && isModuleEnabled("telefonia") ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
+    ...(permissions.canViewContactCenter && isModuleEnabled("whatsapp") ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
   ];
 
   const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
