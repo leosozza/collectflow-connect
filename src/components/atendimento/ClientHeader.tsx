@@ -89,10 +89,12 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
         </Button>
       </div>
 
-      {/* Row 2: CPF + Credor */}
+      {/* Row 2: CPF + Credor + Email + ID Externo */}
       <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {formatCPF(client.cpf)}</span>
         <span className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" /> {client.credor}</span>
+        {client.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {client.email}</span>}
+        {client.external_id && <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> {client.external_id}</span>}
       </div>
 
       {/* Row 3: Clickable phones */}
