@@ -1,20 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Fix AtendimentoPage: read clientId from query parameter
+### Correções aplicadas
 
-## Problem
-The previous fix changed the navigation from `/atendimento/:id` to `/atendimento?clientId=...`, but `AtendimentoPage` still uses `useParams` to extract `id`. Since there's no route param, `id` is always `undefined`, causing "Cliente nao encontrado".
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## Solution
-In `src/pages/AtendimentoPage.tsx`:
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-1. Import `useSearchParams` from `react-router-dom` (or use `useLocation`)
-2. Replace `const { id } = useParams()` with reading from query params:
-   ```ts
-   const [searchParams] = useSearchParams();
-   const id = searchParams.get("clientId");
-   ```
-3. No other changes needed -- all downstream references to `id` remain the same since it's still a string.
-
-Single file change, single line modification.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { useParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,7 +19,8 @@ import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
 import ClientTimeline from "@/components/atendimento/ClientTimeline";
 
 const AtendimentoPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get("clientId");
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
