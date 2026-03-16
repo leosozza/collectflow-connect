@@ -268,7 +268,7 @@ const DashboardPage = () => {
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
 
-      <MiniRanking />
+      
 
       {/* Meus Clientes table — virtual installments from agreements */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
