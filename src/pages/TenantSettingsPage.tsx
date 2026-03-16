@@ -436,28 +436,43 @@ const TenantSettingsPage = () => {
 
         {/* ABA SERVIÇOS */}
         <TabsContent value="servicos">
-          <Card>
-            <CardHeader>
-              <CardTitle>Catálogo de Serviços</CardTitle>
-              <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingData ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
-                  <span className="text-muted-foreground">Carregando serviços...</span>
-                </div>
-              ) : (
-                <ServiceCatalogGrid
-                  catalog={catalog}
-                  tenantServices={tenantServices}
-                  onActivate={handleActivateService}
-                  onDeactivate={handleDeactivateService}
-                  onUpdateQuantity={handleUpdateQuantity}
-                />
-              )}
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Catálogo de Serviços</CardTitle>
+                <CardDescription>Gerencie as funcionalidades contratadas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingData ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+                    <span className="text-muted-foreground">Carregando serviços...</span>
+                  </div>
+                ) : (
+                  <ServiceCatalogGrid
+                    catalog={catalog}
+                    tenantServices={tenantServices}
+                    onActivate={handleActivateService}
+                    onDeactivate={handleDeactivateService}
+                    onUpdateQuantity={handleUpdateQuantity}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Tokens section inside services tab */}
+            <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Histórico de Transações de Tokens</CardTitle>
+                <CardDescription>Todas as movimentações de tokens</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TokenHistoryTable transactions={transactions} loading={loadingData} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ABA TOKENS */}
