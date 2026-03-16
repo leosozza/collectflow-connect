@@ -15,6 +15,7 @@ import { formatCPF, formatCurrency, formatPhone, formatDate } from "@/lib/format
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
+import { useModules } from "@/hooks/useModules";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
