@@ -32,6 +32,7 @@ import PerfilPage from "./pages/PerfilPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
+import ModuleGuard from "./components/ModuleGuard";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
