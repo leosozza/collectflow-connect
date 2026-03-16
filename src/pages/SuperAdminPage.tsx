@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import TenantServicesTab from "@/components/admin/TenantServicesTab";
+import TenantModulesTab from "@/components/admin/TenantModulesTab";
+import BulkModulesDialog from "@/components/admin/BulkModulesDialog";
+import { Blocks } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +77,7 @@ const SuperAdminPage = () => {
   const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
   const [catalogServices, setCatalogServices] = useState<any[]>([]);
   const [editPlanId, setEditPlanId] = useState("");
+  const [selectedModuleTenant, setSelectedModuleTenant] = useState<TenantRow | null>(null);
 
   const loadTenants = async () => {
     try {
@@ -291,6 +295,8 @@ const SuperAdminPage = () => {
     return svcs.whatsapp_extra_instances || 0;
   };
 
+  const [bulkModulesOpen, setBulkModulesOpen] = useState(false);
+
   if (!isSuperAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -317,6 +323,7 @@ const SuperAdminPage = () => {
           <TabsTrigger value="dashboard">Resumo Tenants</TabsTrigger>
           <TabsTrigger value="empresas">Empresas</TabsTrigger>
           <TabsTrigger value="servicos">Serviços Contratados</TabsTrigger>
+          <TabsTrigger value="modulos">Módulos</TabsTrigger>
           <TabsTrigger value="novo">Novo Cliente</TabsTrigger>
         </TabsList>
 
@@ -549,6 +556,35 @@ const SuperAdminPage = () => {
         {/* ========== SERVIÇOS CONTRATADOS ========== */}
         <TabsContent value="servicos" className="mt-4">
           <TenantServicesTab />
+        </TabsContent>
+
+        {/* ========== MÓDULOS ========== */}
+        <TabsContent value="modulos" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Controle de módulos habilitados por tenant</p>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setBulkModulesOpen(true)}>
+              <Blocks className="w-4 h-4" />
+              Liberar em massa
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <Label>Selecione o tenant</Label>
+            <Select onValueChange={(v) => {
+              const t = tenants.find(t => t.id === v);
+              if (t) setSelectedModuleTenant(t);
+            }}>
+              <SelectTrigger><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
+              <SelectContent>
+                {tenants.filter(t => t.status !== "deleted").map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name} ({t.slug})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedModuleTenant && (
+            <TenantModulesTab tenantId={selectedModuleTenant.id} tenantName={selectedModuleTenant.name} />
+          )}
+          <BulkModulesDialog open={bulkModulesOpen} onOpenChange={setBulkModulesOpen} />
         </TabsContent>
 
         {/* ========== NOVO CLIENTE ========== */}

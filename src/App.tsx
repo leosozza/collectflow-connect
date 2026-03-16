@@ -32,6 +32,7 @@ import PerfilPage from "./pages/PerfilPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import GamificacaoPage from "./pages/GamificacaoPage";
 import NotFound from "./pages/NotFound";
+import ModuleGuard from "./components/ModuleGuard";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
@@ -165,7 +166,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <ContactCenterPage channel="telefonia" />
+                    <ModuleGuard module="telefonia">
+                      <ContactCenterPage channel="telefonia" />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -175,7 +178,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <ContactCenterPage channel="whatsapp" />
+                    <ModuleGuard module="whatsapp">
+                      <ContactCenterPage channel="whatsapp" />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -195,7 +200,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <IntegracaoPage />
+                    <ModuleGuard module="integracoes">
+                      <IntegracaoPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -215,7 +222,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <GamificacaoPage />
+                    <ModuleGuard module="gamificacao">
+                      <GamificacaoPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -225,7 +234,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <AutomacaoPage />
+                    <ModuleGuard module="automacao">
+                      <AutomacaoPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -235,7 +246,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <RelatoriosPage />
+                    <ModuleGuard module="relatorios">
+                      <RelatoriosPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }

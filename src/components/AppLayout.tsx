@@ -4,6 +4,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useModules } from "@/hooks/useModules";
 import rivoLogo from "@/assets/rivo_connect.png";
 import { 
   LayoutDashboard, 
@@ -40,6 +41,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const { profile, signOut } = useAuth();
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const permissions = usePermissions();
+  const { isModuleEnabled } = useModules();
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,14 +59,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
   const preContactItems = [
     { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-    ...(permissions.canViewGamificacao ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
+    ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
   ];
 
   const contactCenterItems = [
-    ...(permissions.canViewTelefonia ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
-    ...(permissions.canViewContactCenter ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
+    ...(permissions.canViewTelefonia && isModuleEnabled("telefonia") ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
+    ...(permissions.canViewContactCenter && isModuleEnabled("whatsapp") ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
   ];
 
   const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
@@ -128,7 +130,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           })}
 
           {/* Automação */}
-          {permissions.canViewAutomacao && (
+          {permissions.canViewAutomacao && isModuleEnabled("automacao") && (
             <Link
               to="/automacao"
               onClick={() => setSidebarOpen(false)}
