@@ -19,7 +19,8 @@ import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
 import ClientTimeline from "@/components/atendimento/ClientTimeline";
 
 const AtendimentoPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get("clientId");
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
