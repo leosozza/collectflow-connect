@@ -247,7 +247,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               variant="ghost"
               size="icon"
               className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
-              onClick={openWhatsApp}
+              onClick={() => openWhatsApp()}
               title="WhatsApp"
             >
               <WhatsAppIcon className="w-5 h-5" />
