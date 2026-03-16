@@ -33,6 +33,8 @@ interface ClientHeaderProps {
     cep?: string | null;
     observacoes?: string | null;
     status_cobranca_id?: string | null;
+    custom_data?: Record<string, any> | null;
+    tenant_id?: string | null;
   };
   totalAberto: number;
   totalPago: number;
