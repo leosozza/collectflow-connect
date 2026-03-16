@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useNavigate } from "react-router-dom";
-import MiniRanking from "@/components/dashboard/MiniRanking";
+
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
 import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
@@ -268,7 +268,7 @@ const DashboardPage = () => {
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
 
-      <MiniRanking />
+      
 
       {/* Meus Clientes table — virtual installments from agreements */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
