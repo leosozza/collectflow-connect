@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useNavigate } from "react-router-dom";
-import MiniRanking from "@/components/dashboard/MiniRanking";
+
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
 import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
