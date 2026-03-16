@@ -1,35 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-## Plano: URL State & Search Params — Implementado ✅
+### Correções aplicadas
 
-### O que foi feito
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-1. **Criado** `src/hooks/useUrlState.ts` — Hook genérico com overloads para string, number, boolean e string[]
-2. **Migradas 15 páginas** de `useState` local para URL search params:
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-#### Alta Prioridade (filtros complexos)
-- ✅ `CarteiraPage` — 18 filtros + viewMode + sort sincronizados na URL
-- ✅ `ClientsPage` — 18 filtros sincronizados na URL
-- ✅ `AcordosPage` — statusFilter, credorFilter, searchQuery
-- ✅ `RelatoriosPage` — year, month, credor, operator, status, tipoDivida, tipoDevedor, quitação
-- ✅ `AnalyticsPage` — years[], months[], operators[], credores[] (arrays)
-
-#### Média Prioridade (tabs e filtros simples)
-- ✅ `CadastrosPage` — tab ativa
-- ✅ `AutomacaoPage` — tab ativa
-- ✅ `GamificacaoPage` — tab ativa
-- ✅ `ContactCenterPage` — tab ativa
-- ✅ `FinanceiroPage` — mês selecionado
-- ✅ `ConfiguracoesPage` — tab ativa (refatorado de useSearchParams manual)
-- ✅ `AdminUsuariosHubPage` — tab ativa (refatorado de useSearchParams manual)
-
-#### Baixa Prioridade (CRM)
-- ✅ `CRMLeadsPage` — search, filterStatus
-- ✅ `CRMActivitiesPage` — search, filterType, filterStatus
-- ✅ `SupportAdminPage` — statusFilter
-
-### Benefícios
-- URLs compartilháveis com filtros pré-aplicados
-- F5 mantém filtros intactos
-- Botões Voltar/Avançar do browser funcionam
-- Deep linking para tabs específicas
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
