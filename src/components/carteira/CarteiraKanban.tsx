@@ -76,7 +76,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
         return (
           <div
             key={col.key}
-            className="rounded-xl border border-border border-t-4 bg-muted/30 flex flex-col min-h-[400px] min-w-[280px] w-[300px] shrink-0"
+            className="rounded-xl border border-border border-t-4 bg-muted/30 flex flex-col min-h-[400px] min-w-[250px] flex-1"
             style={{ borderTopColor: col.color }}
           >
             {/* Column header */}
