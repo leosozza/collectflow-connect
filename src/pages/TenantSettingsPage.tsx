@@ -204,6 +204,7 @@ const TenantSettingsPage = () => {
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
@@ -459,8 +460,12 @@ const TenantSettingsPage = () => {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
 
-            {/* Tokens section inside services tab */}
+        {/* ABA TOKENS */}
+        <TabsContent value="tokens">
+          <div className="space-y-6">
             <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
 
             <Card>
