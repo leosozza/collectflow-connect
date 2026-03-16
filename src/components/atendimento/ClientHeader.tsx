@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote, Handshake } from "lucide-react";
+import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote, Handshake, Tag } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-
+import { useTenant } from "@/hooks/useTenant";
+import { fetchCustomFields, type CustomField } from "@/services/customFieldsService";
 interface ClientHeaderProps {
   client: {
     nome_completo: string;
@@ -32,6 +33,8 @@ interface ClientHeaderProps {
     cep?: string | null;
     observacoes?: string | null;
     status_cobranca_id?: string | null;
+    custom_data?: Record<string, any> | null;
+    tenant_id?: string | null;
   };
   totalAberto: number;
   totalPago: number;
@@ -57,12 +60,20 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const { tenant } = useTenant();
 
   useEffect(() => {
     if (!client.status_cobranca_id) { setStatusCobranca(null); return; }
     supabase.from("tipos_status").select("nome, cor").eq("id", client.status_cobranca_id).maybeSingle()
       .then(({ data }) => setStatusCobranca(data as { nome: string; cor: string } | null));
   }, [client.status_cobranca_id]);
+
+  useEffect(() => {
+    const tid = client.tenant_id || tenant?.id;
+    if (!tid) return;
+    fetchCustomFields(tid).then(setCustomFields).catch(() => {});
+  }, [client.tenant_id, tenant?.id]);
 
   const phones = [client.phone, client.phone2, client.phone3].filter(Boolean) as string[];
 
@@ -170,6 +181,30 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
               </div>
             )}
           </div>
+          {/* Custom fields */}
+          {(() => {
+            const activeFields = customFields.filter(
+              (f) => f.is_active && client.custom_data && client.custom_data[f.field_key] != null && client.custom_data[f.field_key] !== ""
+            );
+            if (activeFields.length === 0) return null;
+            return (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
+                  {activeFields.map((f) => {
+                    const raw = client.custom_data![f.field_key];
+                    const display = f.field_type === "boolean" ? (raw ? "Sim" : "Não") : String(raw);
+                    return (
+                      <div key={f.id} className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">{f.field_label}:</span>
+                        <span className="font-medium text-foreground">{display}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           {client.observacoes && (
             <div className="mt-3 pt-3 border-t border-border flex items-start gap-2 text-sm">
               <StickyNote className="w-4 h-4 text-muted-foreground mt-0.5" />

@@ -1,22 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Exibir campos personalizados na tela de atendimento
+### Correções aplicadas
 
-## Problema
-O cliente possui dados em `custom_data` (JSONB na tabela `clients`) — como "nome do modelo" — mas esses valores não são exibidos na tela de atendimento.
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## Solução
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### 1. `src/components/atendimento/ClientHeader.tsx`
-- Adicionar `custom_data` à interface do `client` (tipo `Record<string, any> | null`)
-- Buscar as definições de campos personalizados do tenant via `fetchCustomFields` (usando o `tenant_id` do client ou via hook `useTenant`)
-- Renderizar os campos personalizados que possuem valor no collapsible "Mais detalhes", em um grid com label e valor, usando um ícone genérico (ex: `Layers` ou `Tag`)
-- Filtrar apenas campos ativos (`is_active`) e que tenham valor no `custom_data` do cliente
-
-### 2. `src/pages/AtendimentoPage.tsx`
-- Garantir que o `client` passado ao `ClientHeader` inclui o campo `custom_data` (já vem do `select("*")`, então nenhuma alteração necessária na query)
-
-### Exibição
-- No collapsible, antes das observações, renderizar uma seção "Campos Personalizados" com cada campo como: `[Label]: [Valor]`
-- Para campos do tipo `select`, exibir o valor direto; para `boolean`, exibir "Sim/Não"
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
