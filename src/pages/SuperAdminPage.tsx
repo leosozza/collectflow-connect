@@ -305,13 +305,11 @@ const SuperAdminPage = () => {
   };
 
   const getActiveServicesCount = (tenant: TenantRow) => {
-    const svcs = (tenant.settings as any)?.enabled_services || {};
-    return Object.entries(svcs).filter(([k, v]) => k !== "whatsapp_extra_instances" && v === true).length;
+    return tenantServiceCounts[tenant.id]?.activeServices || 0;
   };
 
   const getExtraInstancesCount = (tenant: TenantRow) => {
-    const svcs = (tenant.settings as any)?.enabled_services || {};
-    return svcs.whatsapp_extra_instances || 0;
+    return tenantServiceCounts[tenant.id]?.whatsappInstances || 0;
   };
 
   const [bulkModulesOpen, setBulkModulesOpen] = useState(false);
