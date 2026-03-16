@@ -13,15 +13,41 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
-  Mic, Keyboard, Phone, MessageSquare,
+  Mic, Keyboard, Phone, MessageSquare, UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
 import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
-import TelefoniaAtendimento from "./TelefoniaAtendimento";
 import OperatorCallHistory from "./OperatorCallHistory";
+import { useClientByPhone } from "@/hooks/useClientByPhone";
+import AtendimentoPage from "@/pages/AtendimentoPage";
+
+/** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
+const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
+  const { client, isLoading } = useClientByPhone(clientPhone);
+
+  if (isLoading) {
+    return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
+  }
+
+  if (!client) {
+    return (
+      <Card className="border-dashed m-3">
+        <CardContent className="flex items-center gap-3 py-6">
+          <UserX className="w-5 h-5 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
+            <p className="text-xs text-muted-foreground">Telefone: {clientPhone}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <AtendimentoPage clientId={client.id} agentId={agentId} callId={callId} embedded />;
+};
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
@@ -471,7 +497,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State 3: On call → show atendimento
+    // State 3: On call → show atendimento (unified)
     if (isOnCall && (myAgent?.phone || myAgent?.remote_phone)) {
       return (
         <div className="space-y-0">
@@ -482,7 +508,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
               <span className="font-semibold text-sm">Em ligação ({formatTimer(timerSeconds)})</span>
             </div>
           </div>
-          <TelefoniaAtendimento
+          <TelefoniaAtendimentoWrapper
             clientPhone={myAgent.phone || myAgent.remote_phone}
             agentId={operatorAgentId!}
             callId={myAgent.call_id || myAgent.current_call_id}
