@@ -204,7 +204,6 @@ const TenantSettingsPage = () => {
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="contrato">Contrato</TabsTrigger>
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens</TabsTrigger>
           <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
         </TabsList>
 
@@ -456,6 +455,10 @@ const TenantSettingsPage = () => {
                     onActivate={handleActivateService}
                     onDeactivate={handleDeactivateService}
                     onUpdateQuantity={handleUpdateQuantity}
+                    tokens={tokens}
+                    transactions={transactions}
+                    loadingTokens={loadingData}
+                    onPurchase={() => setPurchaseOpen(true)}
                   />
                 )}
               </CardContent>
@@ -463,22 +466,8 @@ const TenantSettingsPage = () => {
           </div>
         </TabsContent>
 
-        {/* ABA TOKENS */}
-        <TabsContent value="tokens">
-          <div className="space-y-6">
-            <TokenBalance tokens={tokens} onPurchase={() => setPurchaseOpen(true)} />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Histórico de Transações de Tokens</CardTitle>
-                <CardDescription>Todas as movimentações de tokens</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TokenHistoryTable transactions={transactions} loading={loadingData} />
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+
 
 
         {/* ABA CANCELAMENTO */}
