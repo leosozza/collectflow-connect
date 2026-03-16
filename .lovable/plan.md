@@ -1,35 +1,39 @@
 
 
-## Plano: URL State & Search Params — Implementado ✅
+# Corrigir contagem de serviços na aba Empresas
 
-### O que foi feito
+## Problema
+A função `getActiveServicesCount()` (linha 288-291) e `getExtraInstancesCount()` (linha 293-296) leem de `tenant.settings.enabled_services` — um campo JSON legado na tabela `tenants`. Os dados reais estão na tabela `tenant_services`.
 
-1. **Criado** `src/hooks/useUrlState.ts` — Hook genérico com overloads para string, number, boolean e string[]
-2. **Migradas 15 páginas** de `useState` local para URL search params:
+Resultado: mostra "4 ativos" e "1 + 4 extra" quando na verdade são 2 serviços ativos com 2 instâncias WhatsApp.
 
-#### Alta Prioridade (filtros complexos)
-- ✅ `CarteiraPage` — 18 filtros + viewMode + sort sincronizados na URL
-- ✅ `ClientsPage` — 18 filtros sincronizados na URL
-- ✅ `AcordosPage` — statusFilter, credorFilter, searchQuery
-- ✅ `RelatoriosPage` — year, month, credor, operator, status, tipoDivida, tipoDevedor, quitação
-- ✅ `AnalyticsPage` — years[], months[], operators[], credores[] (arrays)
+## Solução
 
-#### Média Prioridade (tabs e filtros simples)
-- ✅ `CadastrosPage` — tab ativa
-- ✅ `AutomacaoPage` — tab ativa
-- ✅ `GamificacaoPage` — tab ativa
-- ✅ `ContactCenterPage` — tab ativa
-- ✅ `FinanceiroPage` — mês selecionado
-- ✅ `ConfiguracoesPage` — tab ativa (refatorado de useSearchParams manual)
-- ✅ `AdminUsuariosHubPage` — tab ativa (refatorado de useSearchParams manual)
+### Modificar `src/pages/SuperAdminPage.tsx`
 
-#### Baixa Prioridade (CRM)
-- ✅ `CRMLeadsPage` — search, filterStatus
-- ✅ `CRMActivitiesPage` — search, filterType, filterStatus
-- ✅ `SupportAdminPage` — statusFilter
+1. **Carregar `tenant_services`** agrupado por tenant no `loadTenants()` ou em query separada — buscar contagem de serviços ativos e quantidade de instâncias WhatsApp por tenant.
 
-### Benefícios
-- URLs compartilháveis com filtros pré-aplicados
-- F5 mantém filtros intactos
-- Botões Voltar/Avançar do browser funcionam
-- Deep linking para tabs específicas
+2. **Substituir `getActiveServicesCount()`** para usar dados de `tenant_services` (status = 'active') em vez do JSON legado.
+
+3. **Substituir `getExtraInstancesCount()`** para buscar a `quantity` do serviço "Instância de WhatsApp" na `tenant_services` em vez de `settings.enabled_services.whatsapp_extra_instances`.
+
+4. **Criar estado** `tenantServiceCounts: Record<tenantId, { activeServices: number, whatsappInstances: number }>` populado na carga inicial.
+
+### Query necessária
+
+```sql
+SELECT tenant_id, COUNT(*) as active_count
+FROM tenant_services WHERE status = 'active'
+GROUP BY tenant_id
+```
+
+```sql
+SELECT tenant_id, quantity
+FROM tenant_services ts
+JOIN service_catalog sc ON sc.id = ts.service_id
+WHERE ts.status = 'active' AND sc.name ILIKE '%whatsapp%'
+```
+
+### Arquivos alterados
+- `src/pages/SuperAdminPage.tsx` — substituir leitura do JSON legado por dados da tabela `tenant_services`
+
