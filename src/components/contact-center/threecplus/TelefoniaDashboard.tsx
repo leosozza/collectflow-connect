@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
+import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
-  Mic, Keyboard, Phone, MessageSquare,
+  Mic, Keyboard, Phone, MessageSquare, UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
@@ -23,7 +23,6 @@ import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 import AtendimentoPage from "@/pages/AtendimentoPage";
-import { UserX } from "lucide-react";
 
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
