@@ -474,7 +474,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State 3: On call → show atendimento
+    // State 3: On call → show atendimento (unified)
     if (isOnCall && (myAgent?.phone || myAgent?.remote_phone)) {
       return (
         <div className="space-y-0">
@@ -485,7 +485,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
               <span className="font-semibold text-sm">Em ligação ({formatTimer(timerSeconds)})</span>
             </div>
           </div>
-          <TelefoniaAtendimento
+          <TelefoniaAtendimentoWrapper
             clientPhone={myAgent.phone || myAgent.remote_phone}
             agentId={operatorAgentId!}
             callId={myAgent.call_id || myAgent.current_call_id}
