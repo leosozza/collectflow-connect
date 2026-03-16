@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, MapPin, StickyNote, Handshake, Tag, Pencil, MessageCircle } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Phone, Mail, Building, Hash, MapPin, Tag, Pencil, MessageCircle, Handshake, AlertTriangle, DollarSign, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,6 +47,7 @@ interface ClientHeaderProps {
   totalPago: number;
   totalParcelas: number;
   parcelasPagas: number;
+  diasAtraso: number;
   onCall?: (phone: string) => void;
   callingPhone?: boolean;
 }
@@ -59,13 +59,12 @@ const ClickablePhone = ({ phone, onCall, callingPhone }: { phone: string; onCall
     className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     title={`Ligar para ${formatPhone(phone)}`}
   >
-    <Phone className="w-4 h-4 text-emerald-500" />
+    <Phone className="w-3.5 h-3.5 text-emerald-500" />
     <span>{callingPhone ? "Discando..." : formatPhone(phone)}</span>
   </button>
 );
 
-const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas, onCall, callingPhone }: ClientHeaderProps) => {
-  const [open, setOpen] = useState(false);
+const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas, diasAtraso, onCall, callingPhone }: ClientHeaderProps) => {
   const [editPhoneOpen, setEditPhoneOpen] = useState(false);
   const [phoneForm, setPhoneForm] = useState({ phone: "", phone2: "", phone3: "" });
   const [savingPhone, setSavingPhone] = useState(false);
@@ -92,10 +91,7 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
 
   const handleWhatsAppClick = () => {
     const phone = client.phone;
-    if (!phone) {
-      toast.error("Cliente não possui telefone cadastrado");
-      return;
-    }
+    if (!phone) { toast.error("Cliente não possui telefone cadastrado"); return; }
     const rawPhone = phone.replace(/\D/g, "");
     if (isModuleEnabled("whatsapp")) {
       navigate(`/contact-center/whatsapp?phone=${rawPhone}`);
@@ -105,25 +101,18 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
   };
 
   const handleEditPhoneOpen = () => {
-    setPhoneForm({
-      phone: client.phone || "",
-      phone2: client.phone2 || "",
-      phone3: client.phone3 || "",
-    });
+    setPhoneForm({ phone: client.phone || "", phone2: client.phone2 || "", phone3: client.phone3 || "" });
     setEditPhoneOpen(true);
   };
 
   const handleSavePhones = async () => {
     setSavingPhone(true);
     try {
-      const { error } = await supabase
-        .from("clients")
-        .update({
-          phone: phoneForm.phone || null,
-          phone2: phoneForm.phone2 || null,
-          phone3: phoneForm.phone3 || null,
-        })
-        .eq("id", client.id);
+      const { error } = await supabase.from("clients").update({
+        phone: phoneForm.phone || null,
+        phone2: phoneForm.phone2 || null,
+        phone3: phoneForm.phone3 || null,
+      }).eq("id", client.id);
       if (error) throw error;
       toast.success("Telefones atualizados");
       setEditPhoneOpen(false);
@@ -135,209 +124,142 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
     }
   };
 
+  const initials = client.nome_completo.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase();
+
+  const statusBadge = useMemo(() => {
+    const s = client.status;
+    if (s === "pago") return { label: "Pago", className: "bg-emerald-500/10 text-emerald-600 border-emerald-200" };
+    if (s === "pendente") return { label: "Pendente", className: "bg-amber-500/10 text-amber-600 border-amber-200" };
+    return { label: s || "—", className: "bg-muted text-muted-foreground" };
+  }, [client.status]);
+
+  // Custom fields with values
+  const activeCustomFields = customFields.filter(
+    (f) => f.is_active && client.custom_data && client.custom_data[f.field_key] != null && client.custom_data[f.field_key] !== ""
+  );
+
   return (
-    <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-      {/* Row 1: Name + Status + WhatsApp + Formalizar */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-xl font-bold text-foreground">{client.nome_completo}</h2>
-          {statusCobranca && (
-            <Badge className="text-xs" style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}>
-              {statusCobranca.nome}
-            </Badge>
-          )}
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      {/* Main header row */}
+      <div className="p-4 flex items-center gap-4 flex-wrap">
+        {/* Avatar */}
+        <div className="w-12 h-12 rounded-full bg-primary/10 text-primary font-bold text-lg flex items-center justify-center shrink-0">
+          {initials}
         </div>
+
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-bold text-foreground truncate">{client.nome_completo}</h2>
+            <Badge variant="outline" className={statusBadge.className}>{statusBadge.label}</Badge>
+            {statusCobranca && (
+              <Badge className="text-xs" style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}>
+                {statusCobranca.nome}
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
+            <span>CPF: {formatCPF(client.cpf)}</span>
+            <span className="flex items-center gap-1"><Building className="w-3 h-3" />{client.credor}</span>
+            {client.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{client.email}</span>}
+            {client.external_id && <span className="flex items-center gap-1"><Hash className="w-3 h-3" />{client.external_id}</span>}
+          </div>
+        </div>
+
+        {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
           <Button
-            variant="outline"
             size="sm"
-            className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5"
             onClick={handleWhatsAppClick}
-            title="Abrir WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />
           </Button>
           <Button
-            variant="outline"
             size="sm"
+            variant="outline"
             onClick={() => navigate(`/carteira/${client.cpf.replace(/\D/g, "")}?tab=acordo`)}
+            className="gap-1.5"
           >
-            <Handshake className="w-4 h-4 mr-1" />
-            Formalizar Acordo
+            <Handshake className="w-4 h-4" />
+            <span className="hidden sm:inline">Formalizar Acordo</span>
           </Button>
         </div>
       </div>
 
-      {/* Row 2: CPF + Credor + Email + ID Externo */}
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-        <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {formatCPF(client.cpf)}</span>
-        <span className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" /> {client.credor}</span>
-        {client.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {client.email}</span>}
-        {client.external_id && <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> {client.external_id}</span>}
-      </div>
-
-      {/* Row 3: Clickable phones + edit pencil */}
-      {phones.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {phones.map((p) => (
-            <ClickablePhone key={p} phone={p} onCall={onCall} callingPhone={callingPhone} />
-          ))}
-          <button
-            onClick={handleEditPhoneOpen}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Editar telefones"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-      {phones.length === 0 && (
-        <button
-          onClick={handleEditPhoneOpen}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
+      {/* Phones row */}
+      <div className="px-4 pb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5">
+        {phones.map((p) => (
+          <ClickablePhone key={p} phone={p} onCall={onCall} callingPhone={callingPhone} />
+        ))}
+        <button onClick={handleEditPhoneOpen} className="text-muted-foreground hover:text-foreground transition-colors" title="Editar telefones">
           <Pencil className="w-3.5 h-3.5" />
-          <span>Adicionar telefone</span>
         </button>
-      )}
-
-      {/* Row 4: Debt data (always visible) */}
-      <div className="border-t border-border pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 text-center">
-        <div>
-          <p className="text-xs text-muted-foreground">Em Aberto</p>
-          <p className="text-lg font-bold text-destructive">{formatCurrency(totalAberto)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Pago</p>
-          <p className="text-lg font-bold text-success">{formatCurrency(totalPago)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Parcelas</p>
-          <p className="text-lg font-bold text-foreground">{parcelasPagas}/{totalParcelas}</p>
-        </div>
-        {client.data_vencimento && (
-          <div>
-            <p className="text-xs text-muted-foreground">Vencimento</p>
-            <p className="text-sm font-semibold text-foreground">{new Date(client.data_vencimento).toLocaleDateString("pt-BR")}</p>
-          </div>
-        )}
-        {client.valor_parcela != null && (
-          <div>
-            <p className="text-xs text-muted-foreground">Valor Parcela</p>
-            <p className="text-sm font-semibold text-foreground">{formatCurrency(client.valor_parcela)}</p>
-          </div>
-        )}
-        {client.numero_parcela != null && client.total_parcelas != null && (
-          <div>
-            <p className="text-xs text-muted-foreground">Parcela Atual</p>
-            <p className="text-sm font-semibold text-foreground">{client.numero_parcela} de {client.total_parcelas}</p>
-          </div>
-        )}
-        {client.valor_entrada != null && client.valor_entrada > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground">Entrada</p>
-            <p className="text-sm font-semibold text-foreground">{formatCurrency(client.valor_entrada)}</p>
-          </div>
-        )}
-        {client.quebra != null && client.quebra > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground">Quebra</p>
-            <p className="text-sm font-semibold text-destructive">{formatCurrency(client.quebra)}</p>
-          </div>
+        {phones.length === 0 && (
+          <button onClick={handleEditPhoneOpen} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Pencil className="w-3 h-3" /> Adicionar telefone
+          </button>
         )}
       </div>
 
-      {/* Collapsible: secondary data */}
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-            {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {open ? "Menos detalhes" : "Mais detalhes"}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 pt-3 border-t border-border">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-            {(client.endereco || client.cidade || client.uf || client.cep) && (
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Endereço:</span>
-                <span className="font-medium text-foreground">{[client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ")}</span>
-              </div>
-            )}
+      {/* Financial stat cards */}
+      <div className="border-t border-border bg-muted/30 px-4 py-3 grid grid-cols-3 gap-3">
+        <div className="bg-card rounded-lg border border-border p-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-destructive mb-1">
+            <Wallet className="w-4 h-4" />
+            <span className="text-xs font-medium uppercase tracking-wider">Em Aberto</span>
           </div>
-          {/* Custom fields */}
-          {(() => {
-            const activeFields = customFields.filter(
-              (f) => f.is_active && client.custom_data && client.custom_data[f.field_key] != null && client.custom_data[f.field_key] !== ""
-            );
-            if (activeFields.length === 0) return null;
-            return (
-              <div className="mt-3 pt-3 border-t border-border">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-                  {activeFields.map((f) => {
-                    const raw = client.custom_data![f.field_key];
-                    const display = f.field_type === "boolean" ? (raw ? "Sim" : "Não") : String(raw);
-                    return (
-                      <div key={f.id} className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">{f.field_label}:</span>
-                        <span className="font-medium text-foreground">{display}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-          {client.observacoes && (
-            <div className="mt-3 pt-3 border-t border-border flex items-start gap-2 text-sm">
-              <StickyNote className="w-4 h-4 text-muted-foreground mt-0.5" />
-              <div>
-                <span className="text-muted-foreground">Observações: </span>
-                <span className="text-foreground">{client.observacoes}</span>
-              </div>
-            </div>
+          <p className="text-xl font-bold text-destructive">{formatCurrency(totalAberto)}</p>
+        </div>
+        <div className="bg-card rounded-lg border border-border p-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-emerald-600 mb-1">
+            <DollarSign className="w-4 h-4" />
+            <span className="text-xs font-medium uppercase tracking-wider">Total Pago</span>
+          </div>
+          <p className="text-xl font-bold text-emerald-600">{formatCurrency(totalPago)}</p>
+        </div>
+        <div className="bg-card rounded-lg border border-border p-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-amber-600 mb-1">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-xs font-medium uppercase tracking-wider">Atraso</span>
+          </div>
+          <p className="text-xl font-bold text-amber-600">{diasAtraso > 0 ? `${diasAtraso} Dias` : "Em dia"}</p>
+        </div>
+      </div>
+
+      {/* Extra info (address, custom fields) — inline, no collapsible */}
+      {(activeCustomFields.length > 0 || client.endereco || client.cidade) && (
+        <div className="border-t border-border px-4 py-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          {(client.endereco || client.cidade || client.uf) && (
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {[client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ")}
+            </span>
           )}
-        </CollapsibleContent>
-      </Collapsible>
+          {activeCustomFields.map((f) => {
+            const raw = client.custom_data![f.field_key];
+            const display = f.field_type === "boolean" ? (raw ? "Sim" : "Não") : String(raw);
+            return (
+              <span key={f.id} className="flex items-center gap-1">
+                <Tag className="w-3 h-3" /> {f.field_label}: <span className="font-medium text-foreground">{display}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Edit phones dialog */}
       <Dialog open={editPhoneOpen} onOpenChange={setEditPhoneOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Telefones</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Editar Telefones</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Telefone 1 (principal)</Label>
-              <Input
-                value={phoneForm.phone}
-                onChange={(e) => setPhoneForm((prev) => ({ ...prev, phone: e.target.value }))}
-                placeholder="(11) 99999-9999"
-              />
-            </div>
-            <div>
-              <Label>Telefone 2</Label>
-              <Input
-                value={phoneForm.phone2}
-                onChange={(e) => setPhoneForm((prev) => ({ ...prev, phone2: e.target.value }))}
-                placeholder="(11) 99999-9999"
-              />
-            </div>
-            <div>
-              <Label>Telefone 3</Label>
-              <Input
-                value={phoneForm.phone3}
-                onChange={(e) => setPhoneForm((prev) => ({ ...prev, phone3: e.target.value }))}
-                placeholder="(11) 99999-9999"
-              />
-            </div>
+            <div><Label>Telefone 1 (principal)</Label><Input value={phoneForm.phone} onChange={(e) => setPhoneForm(prev => ({ ...prev, phone: e.target.value }))} placeholder="(11) 99999-9999" /></div>
+            <div><Label>Telefone 2</Label><Input value={phoneForm.phone2} onChange={(e) => setPhoneForm(prev => ({ ...prev, phone2: e.target.value }))} placeholder="(11) 99999-9999" /></div>
+            <div><Label>Telefone 3</Label><Input value={phoneForm.phone3} onChange={(e) => setPhoneForm(prev => ({ ...prev, phone3: e.target.value }))} placeholder="(11) 99999-9999" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditPhoneOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSavePhones} disabled={savingPhone}>
-              {savingPhone ? "Salvando..." : "Salvar"}
-            </Button>
+            <Button onClick={handleSavePhones} disabled={savingPhone}>{savingPhone ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
