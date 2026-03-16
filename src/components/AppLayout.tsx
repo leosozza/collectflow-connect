@@ -4,6 +4,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useModules } from "@/hooks/useModules";
 import rivoLogo from "@/assets/rivo_connect.png";
 import { 
   LayoutDashboard, 
