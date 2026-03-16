@@ -267,7 +267,12 @@ const TenantSettingsPage = () => {
               <CardContent>
                 {(() => {
                   const activeServices = tenantServices.filter(ts => ts.status === "active");
-                  const serviceRows = activeServices.map(ts => {
+                  const serviceRows = activeServices
+                    .filter(ts => {
+                      const catalogItem = catalog.find(c => c.id === ts.service_id);
+                      return catalogItem?.service_code !== 'crm';
+                    })
+                    .map(ts => {
                     const catalogItem = catalog.find(c => c.id === ts.service_id);
                     const unitPrice = ts.unit_price_override ?? catalogItem?.price ?? 0;
                     const qty = ts.quantity || 1;
