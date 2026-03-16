@@ -15,6 +15,7 @@ import { formatCPF, formatCurrency, formatPhone, formatDate } from "@/lib/format
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
+import { useModules } from "@/hooks/useModules";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
@@ -48,6 +49,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
+  const { isModuleEnabled } = useModules();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -145,14 +147,21 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     onError: () => toast.error("Erro ao salvar dados"),
   });
 
-  const openWhatsApp = () => {
-    if (!client.phone) {
+  const openWhatsApp = (phoneNumber?: string) => {
+    const rawPhone = phoneNumber || client.phone;
+    if (!rawPhone) {
       toast.error("Nenhum telefone cadastrado para este devedor");
       return;
     }
-    const phone = client.phone.replace(/\D/g, "");
-    const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
-    window.open(`https://wa.me/${intlPhone}`, "_blank");
+    if (isModuleEnabled("whatsapp")) {
+      const phone = rawPhone.replace(/\D/g, "");
+      const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
+      navigate(`/contact-center/whatsapp?phone=${intlPhone}`);
+    } else {
+      const phone = rawPhone.replace(/\D/g, "");
+      const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
+      window.open(`https://wa.me/${intlPhone}`, "_blank");
+    }
   };
 
   // Total Pago: sum valor_pago from all records + proposed_total from approved agreements
@@ -238,7 +247,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               variant="ghost"
               size="icon"
               className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
-              onClick={openWhatsApp}
+              onClick={() => openWhatsApp()}
               title="WhatsApp"
             >
               <WhatsAppIcon className="w-5 h-5" />
@@ -335,11 +344,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                                     variant="ghost"
                                     size="icon"
                                     className="h-6 w-6"
-                                    onClick={() => {
-                                      const num = p.phone_number.replace(/\D/g, "");
-                                      const intl = num.startsWith("55") ? num : `55${num}`;
-                                      window.open(`https://wa.me/${intl}`, "_blank");
-                                    }}
+                                    onClick={() => openWhatsApp(p.phone_number)}
                                     title="Abrir WhatsApp"
                                   >
                                     <MessageCircle className="w-3.5 h-3.5 text-green-500" />
