@@ -1,35 +1,18 @@
 
 
-## Plano: URL State & Search Params — Implementado ✅
+# Mover Tokens para aba própria
 
-### O que foi feito
+## Situação atual
+Na `TenantSettingsPage.tsx`, o conteúdo de Tokens (saldo + histórico) está embutido dentro da aba "Serviços" (linhas 463-474). As abas atuais são: Financeiro, Contrato, Serviços, Cancelamento.
 
-1. **Criado** `src/hooks/useUrlState.ts` — Hook genérico com overloads para string, number, boolean e string[]
-2. **Migradas 15 páginas** de `useState` local para URL search params:
+## Alteração
 
-#### Alta Prioridade (filtros complexos)
-- ✅ `CarteiraPage` — 18 filtros + viewMode + sort sincronizados na URL
-- ✅ `ClientsPage` — 18 filtros sincronizados na URL
-- ✅ `AcordosPage` — statusFilter, credorFilter, searchQuery
-- ✅ `RelatoriosPage` — year, month, credor, operator, status, tipoDivida, tipoDevedor, quitação
-- ✅ `AnalyticsPage` — years[], months[], operators[], credores[] (arrays)
+**Arquivo:** `src/pages/TenantSettingsPage.tsx`
 
-#### Média Prioridade (tabs e filtros simples)
-- ✅ `CadastrosPage` — tab ativa
-- ✅ `AutomacaoPage` — tab ativa
-- ✅ `GamificacaoPage` — tab ativa
-- ✅ `ContactCenterPage` — tab ativa
-- ✅ `FinanceiroPage` — mês selecionado
-- ✅ `ConfiguracoesPage` — tab ativa (refatorado de useSearchParams manual)
-- ✅ `AdminUsuariosHubPage` — tab ativa (refatorado de useSearchParams manual)
+1. Adicionar nova `TabsTrigger` com valor `"tokens"` na `TabsList` (após "Serviços")
+2. Mover o bloco de Tokens (TokenBalance + Card com TokenHistoryTable) da aba "Serviços" para um novo `TabsContent value="tokens"`
+3. A aba "Serviços" ficará apenas com o catálogo de serviços
+4. A nova aba "Tokens" terá o saldo, botão de compra e histórico de transações
 
-#### Baixa Prioridade (CRM)
-- ✅ `CRMLeadsPage` — search, filterStatus
-- ✅ `CRMActivitiesPage` — search, filterType, filterStatus
-- ✅ `SupportAdminPage` — statusFilter
+Resultado final das abas: **Financeiro | Contrato | Serviços | Tokens | Cancelamento**
 
-### Benefícios
-- URLs compartilháveis com filtros pré-aplicados
-- F5 mantém filtros intactos
-- Botões Voltar/Avançar do browser funcionam
-- Deep linking para tabs específicas
