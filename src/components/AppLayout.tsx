@@ -41,6 +41,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const { profile, signOut } = useAuth();
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const permissions = usePermissions();
+  const { isModuleEnabled } = useModules();
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
