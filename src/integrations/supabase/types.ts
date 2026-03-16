@@ -4851,6 +4851,50 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      lookup_agreement_by_token: {
+        Args: { _token: string }
+        Returns: {
+          checkout_token: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          discount_percent: number
+          entrada_date: string
+          entrada_value: number
+          first_due_date: string
+          id: string
+          new_installment_value: number
+          new_installments: number
+          notes: string
+          original_total: number
+          portal_origin: boolean
+          proposed_total: number
+          status: string
+          tenant_id: string
+        }[]
+      }
+      lookup_invite_by_token: {
+        Args: { _token: string }
+        Returns: {
+          created_by: string
+          expires_at: string
+          id: string
+          role: string
+          tenant_id: string
+          used_by: string
+        }[]
+      }
+      lookup_tenant_by_slug: {
+        Args: { _slug: string }
+        Returns: {
+          id: string
+          logo_url: string
+          name: string
+          plan_id: string
+          primary_color: string
+          slug: string
+        }[]
+      }
       onboard_tenant: {
         Args: { _cnpj?: string; _name: string; _plan_id: string; _slug: string }
         Returns: string
