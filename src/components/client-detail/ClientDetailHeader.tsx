@@ -49,6 +49,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
+  const { isModuleEnabled } = useModules();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
