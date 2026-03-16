@@ -69,7 +69,7 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
         {categories.map((cat) => (
           <TabsContent key={cat} value={cat}>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {catalog
+              {filteredCatalog
                 .filter((s) => s.category === cat)
                 .map((service) => (
                   <ServiceCard
