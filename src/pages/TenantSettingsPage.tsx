@@ -305,7 +305,7 @@ const TenantSettingsPage = () => {
                         <tbody>
                           {/* Plano base */}
                           <tr className="border-b border-border/50">
-                            <td className="py-3 px-4 font-medium">{plan?.name || "Plano Base"}</td>
+                            <td className="py-3 px-4 font-medium">CRM {plan?.name || "Plano Base"}</td>
                             <td className="py-3 px-4 text-muted-foreground">Plano</td>
                             <td className="py-3 px-4 text-center">1</td>
                             <td className="py-3 px-4 text-right">{formatCurrency(planPrice)}</td>
