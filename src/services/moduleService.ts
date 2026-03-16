@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { logger } from "@/lib/logger";
 
 export interface SystemModule {
   id: string;
