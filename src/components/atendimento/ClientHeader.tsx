@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone } from "@/lib/formatters";
-import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote, Handshake } from "lucide-react";
+import { User, Phone, Mail, Building, Hash, ChevronDown, ChevronUp, Calendar, FileText, DollarSign, AlertTriangle, Layers, MapPin, StickyNote, Handshake, Tag } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-
+import { useTenant } from "@/hooks/useTenant";
+import { fetchCustomFields, type CustomField } from "@/services/customFieldsService";
 interface ClientHeaderProps {
   client: {
     nome_completo: string;
