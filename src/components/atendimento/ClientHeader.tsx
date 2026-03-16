@@ -69,6 +69,12 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
       .then(({ data }) => setStatusCobranca(data as { nome: string; cor: string } | null));
   }, [client.status_cobranca_id]);
 
+  useEffect(() => {
+    const tid = client.tenant_id || tenant?.id;
+    if (!tid) return;
+    fetchCustomFields(tid).then(setCustomFields).catch(() => {});
+  }, [client.tenant_id, tenant?.id]);
+
   const phones = [client.phone, client.phone2, client.phone3].filter(Boolean) as string[];
 
   return (
