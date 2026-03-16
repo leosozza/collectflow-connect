@@ -344,11 +344,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                                     variant="ghost"
                                     size="icon"
                                     className="h-6 w-6"
-                                    onClick={() => {
-                                      const num = p.phone_number.replace(/\D/g, "");
-                                      const intl = num.startsWith("55") ? num : `55${num}`;
-                                      window.open(`https://wa.me/${intl}`, "_blank");
-                                    }}
+                                    onClick={() => openWhatsApp(p.phone_number)}
                                     title="Abrir WhatsApp"
                                   >
                                     <MessageCircle className="w-3.5 h-3.5 text-green-500" />
