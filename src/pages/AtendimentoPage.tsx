@@ -173,19 +173,6 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     }
   };
 
-  if (clientLoading) {
-    return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
-  }
-
-  if (!client) {
-    return (
-      <div className="p-8 text-center space-y-4">
-        <p className="text-muted-foreground">Cliente não encontrado</p>
-        {!embedded && <Button variant="outline" onClick={() => navigate("/carteira")}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
-      </div>
-    );
-  }
-
   const totalAberto = clientRecords.filter((c) => c.status === "pendente").reduce((sum, c) => sum + Number(c.valor_parcela), 0);
   const totalPago = clientRecords.reduce((sum, c) => sum + Number(c.valor_pago), 0);
 
@@ -200,6 +187,19 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     const diff = Math.floor((Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24));
     return diff > 0 ? diff : 0;
   }, [clientRecords]);
+
+  if (clientLoading) {
+    return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!client) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <p className="text-muted-foreground">Cliente não encontrado</p>
+        {!embedded && <Button variant="outline" onClick={() => navigate("/carteira")}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
+      </div>
+    );
+  }
 
   const handleDisposition = async (type: DispositionType, notes?: string, scheduledCallback?: string) => {
     await dispositionMutation.mutateAsync({ type, notes, scheduledCallback });
