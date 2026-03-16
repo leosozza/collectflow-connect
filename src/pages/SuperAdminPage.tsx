@@ -555,6 +555,11 @@ const SuperAdminPage = () => {
           <TenantServicesTab />
         </TabsContent>
 
+        {/* ========== MÓDULOS ========== */}
+        <TabsContent value="modulos" className="space-y-4">
+          <ModulesTabContent tenants={tenants.filter(t => t.status !== "deleted")} />
+        </TabsContent>
+
         {/* ========== NOVO CLIENTE ========== */}
         <TabsContent value="novo">
           <Card>

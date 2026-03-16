@@ -130,7 +130,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           })}
 
           {/* Automação */}
-          {permissions.canViewAutomacao && (
+          {permissions.canViewAutomacao && isModuleEnabled("automacao") && (
             <Link
               to="/automacao"
               onClick={() => setSidebarOpen(false)}
