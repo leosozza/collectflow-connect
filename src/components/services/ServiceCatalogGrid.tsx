@@ -35,13 +35,13 @@ const ServiceCatalogGrid = ({ catalog, tenantServices, onActivate, onDeactivate,
   const activeServices = tenantServices.filter((ts) => ts.status === "active");
   const monthlyTotal = useMemo(() => {
     return activeServices.reduce((sum, ts) => {
-      const svc = catalog.find((c) => c.id === ts.service_id);
+      const svc = filteredCatalog.find((c) => c.id === ts.service_id);
       if (!svc) return sum;
       const price = ts.unit_price_override ?? svc.price;
       const qty = svc.price_type === "per_unit" ? ts.quantity : 1;
       return sum + price * qty;
     }, 0);
-  }, [activeServices, catalog]);
+  }, [activeServices, filteredCatalog]);
 
   return (
     <div className="space-y-4">
