@@ -244,7 +244,9 @@ const App = () => (
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
-                    <RelatoriosPage />
+                    <ModuleGuard module="relatorios">
+                      <RelatoriosPage />
+                    </ModuleGuard>
                   </AppLayout>
                 </ProtectedRoute>
               }
