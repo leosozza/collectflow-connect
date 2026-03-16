@@ -18,9 +18,20 @@ import DispositionPanel from "@/components/atendimento/DispositionPanel";
 import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
 import ClientTimeline from "@/components/atendimento/ClientTimeline";
 
-const AtendimentoPage = () => {
+interface AtendimentoPageProps {
+  /** When provided, overrides the clientId from URL search params */
+  clientId?: string;
+  /** 3CPlus agent ID for auto-qualification during telephony */
+  agentId?: number;
+  /** 3CPlus call ID for auto-qualification during telephony */
+  callId?: string | number;
+  /** When true, hides back button and page header (used inside TelefoniaDashboard) */
+  embedded?: boolean;
+}
+
+const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: AtendimentoPageProps) => {
   const [searchParams] = useSearchParams();
-  const id = searchParams.get("clientId");
+  const id = propClientId || searchParams.get("clientId");
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
@@ -28,6 +39,7 @@ const AtendimentoPage = () => {
   const { trackAction } = useActivityTracker();
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [callingPhone, setCallingPhone] = useState(false);
+  const settings = (tenant?.settings as Record<string, any>) || {};
 
   // Fetch client by ID
   const { data: client, isLoading: clientLoading } = useQuery<any>({
@@ -107,6 +119,9 @@ const AtendimentoPage = () => {
     enabled: !!id,
   });
 
+  // Resolve the effective agentId for 3CPlus qualification
+  const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
+
   // Disposition mutation
   const dispositionMutation = useMutation({
     mutationFn: async ({ type, notes, scheduledCallback }: { type: DispositionType; notes?: string; scheduledCallback?: string }) => {
@@ -127,14 +142,13 @@ const AtendimentoPage = () => {
       if (tenant?.id && id) {
         executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
       }
-      // Auto-qualify on 3CPlus (best-effort)
-      const tenantSettings = (tenant?.settings as Record<string, any>) || {};
-      const operatorAgentId = (profile as any)?.threecplus_agent_id as number | undefined;
-      if (operatorAgentId && tenantSettings.threecplus_domain) {
+      // Auto-qualify on 3CPlus
+      if (effectiveAgentId && settings.threecplus_domain) {
         qualifyOn3CPlus({
           dispositionType: variables.type,
-          tenantSettings,
-          agentId: operatorAgentId,
+          tenantSettings: settings,
+          agentId: effectiveAgentId,
+          callId,
         });
       }
     },
@@ -186,6 +200,15 @@ const AtendimentoPage = () => {
           notes: "Acordo gerado",
         }).then(() => {
           queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+          // Also qualify on 3CPlus
+          if (effectiveAgentId && settings.threecplus_domain) {
+            qualifyOn3CPlus({
+              dispositionType: "negotiated",
+              tenantSettings: settings,
+              agentId: effectiveAgentId,
+              callId,
+            });
+          }
         });
       }
     },
@@ -202,9 +225,11 @@ const AtendimentoPage = () => {
     return (
       <div className="p-8 text-center space-y-4">
         <p className="text-muted-foreground">Cliente não encontrado</p>
-        <Button variant="outline" onClick={() => navigate("/carteira")}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
-        </Button>
+        {!embedded && (
+          <Button variant="outline" onClick={() => navigate("/carteira")}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+          </Button>
+        )}
       </div>
     );
   }
@@ -219,7 +244,8 @@ const AtendimentoPage = () => {
   };
 
   const handleCall = async (phone: string) => {
-    if (!profile?.threecplus_agent_id) {
+    const callAgentId = effectiveAgentId;
+    if (!callAgentId) {
       toast.error("Seu perfil não possui um agente 3CPlus vinculado");
       return;
     }
@@ -228,9 +254,9 @@ const AtendimentoPage = () => {
       .select("settings")
       .eq("id", tenant!.id)
       .single();
-    const settings = (tenantData?.settings as any) || {};
-    const domain = settings.threecplus_domain;
-    const apiToken = settings.threecplus_api_token;
+    const tenantSettings = (tenantData?.settings as any) || {};
+    const domain = tenantSettings.threecplus_domain;
+    const apiToken = tenantSettings.threecplus_api_token;
     if (!domain || !apiToken) {
       toast.error("Telefonia 3CPlus não configurada neste tenant");
       return;
@@ -242,14 +268,13 @@ const AtendimentoPage = () => {
           action: "click2call",
           domain,
           api_token: apiToken,
-          agent_id: profile.threecplus_agent_id,
+          agent_id: callAgentId,
           phone_number: phone.replace(/\D/g, ""),
         },
       });
       if (error) throw error;
       if (data?.status && data.status >= 400) {
         const detail = data.detail || data.message || (Array.isArray(data.errors) ? data.errors[0] : null) || "Erro ao discar";
-        // "O agente não está online" means the agent is not logged in to 3CPlus
         if (detail.toLowerCase().includes("não está online") || detail.toLowerCase().includes("not online")) {
           toast.error("Agente não está online no 3CPlus. Faça login na plataforma de telefonia antes de discar.");
         } else {
@@ -267,16 +292,18 @@ const AtendimentoPage = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Back button */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Atendimento</h1>
-          <p className="text-sm text-muted-foreground">Tela do operador</p>
+      {/* Back button — hidden when embedded */}
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Atendimento</h1>
+            <p className="text-sm text-muted-foreground">Tela do operador</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Client Header */}
       <ClientHeader
