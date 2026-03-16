@@ -12,6 +12,8 @@ interface ClientHeaderProps {
     nome_completo: string;
     cpf: string;
     phone: string | null;
+    phone2?: string | null;
+    phone3?: string | null;
     email: string | null;
     credor: string;
     external_id?: string | null;
@@ -39,12 +41,16 @@ interface ClientHeaderProps {
   callingPhone?: boolean;
 }
 
-const InfoItem = ({ icon: Icon, label, value, className }: { icon?: any; label: string; value: string | number; className?: string }) => (
-  <div className="flex items-center gap-2 text-sm">
-    {Icon && <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />}
-    <span className="text-muted-foreground">{label}:</span>
-    <span className={`font-medium ${className || "text-foreground"}`}>{value}</span>
-  </div>
+const ClickablePhone = ({ phone, onCall, callingPhone }: { phone: string; onCall?: (p: string) => void; callingPhone?: boolean }) => (
+  <button
+    onClick={() => onCall?.(phone)}
+    disabled={callingPhone || !onCall}
+    className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    title={`Ligar para ${formatPhone(phone)}`}
+  >
+    <Phone className="w-4 h-4 text-emerald-500" />
+    <span>{callingPhone ? "Discando..." : formatPhone(phone)}</span>
+  </button>
 );
 
 const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasPagas, onCall, callingPhone }: ClientHeaderProps) => {
@@ -53,142 +59,135 @@ const ClientHeader = ({ client, totalAberto, totalPago, totalParcelas, parcelasP
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
 
   useEffect(() => {
-    if (!client.status_cobranca_id) {
-      setStatusCobranca(null);
-      return;
-    }
-    supabase
-      .from("tipos_status")
-      .select("nome, cor")
-      .eq("id", client.status_cobranca_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setStatusCobranca(data as { nome: string; cor: string } | null);
-      });
+    if (!client.status_cobranca_id) { setStatusCobranca(null); return; }
+    supabase.from("tipos_status").select("nome, cor").eq("id", client.status_cobranca_id).maybeSingle()
+      .then(({ data }) => setStatusCobranca(data as { nome: string; cor: string } | null));
   }, [client.status_cobranca_id]);
 
-  return (
-    <div className="bg-card rounded-xl border border-border p-5">
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl font-bold text-foreground">{client.nome_completo}</h2>
-              {statusCobranca && (
-                <Badge
-                  className="text-xs"
-                  style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
-                >
-                  {statusCobranca.nome}
-                </Badge>
-              )}
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </Button>
-              </CollapsibleTrigger>
-            </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5" /> {formatCPF(client.cpf)}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Building className="w-3.5 h-3.5" /> {client.credor}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {onCall && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => client.phone && onCall(client.phone)}
-                disabled={callingPhone || !client.phone}
-                title={client.phone ? `Ligar para ${client.phone}` : "Sem telefone cadastrado"}
-                className={`gap-1.5 ${client.phone ? "border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950" : "opacity-50 cursor-not-allowed"}`}
-              >
-                <Phone className="w-4 h-4" />
-                {callingPhone ? "Discando..." : "Ligar"}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/carteira/${client.cpf.replace(/\D/g, "")}?tab=acordo`)}
-            >
-              <Handshake className="w-4 h-4 mr-1" />
-              Formalizar Acordo
-            </Button>
-          </div>
-          <div className="flex gap-4 text-center">
-            <div>
-              <p className="text-xs text-muted-foreground">Em Aberto</p>
-              <p className="text-lg font-bold text-destructive">{formatCurrency(totalAberto)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Pago</p>
-              <p className="text-lg font-bold text-success">{formatCurrency(totalPago)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Parcelas</p>
-              <p className="text-lg font-bold text-foreground">{parcelasPagas}/{totalParcelas}</p>
-            </div>
-          </div>
-        </div>
+  const phones = [client.phone, client.phone2, client.phone3].filter(Boolean) as string[];
 
-        <CollapsibleContent className="mt-4 pt-4 border-t border-border">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
-            {client.phone && (
-              <InfoItem icon={Phone} label="Telefone" value={formatPhone(client.phone)} />
-            )}
+  return (
+    <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+      {/* Row 1: Name + Status + Formalizar */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-xl font-bold text-foreground">{client.nome_completo}</h2>
+          {statusCobranca && (
+            <Badge className="text-xs" style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}>
+              {statusCobranca.nome}
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => navigate(`/carteira/${client.cpf.replace(/\D/g, "")}?tab=acordo`)}
+        >
+          <Handshake className="w-4 h-4 mr-1" />
+          Formalizar Acordo
+        </Button>
+      </div>
+
+      {/* Row 2: CPF + Credor */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+        <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {formatCPF(client.cpf)}</span>
+        <span className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" /> {client.credor}</span>
+      </div>
+
+      {/* Row 3: Clickable phones */}
+      {phones.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {phones.map((p) => (
+            <ClickablePhone key={p} phone={p} onCall={onCall} callingPhone={callingPhone} />
+          ))}
+        </div>
+      )}
+
+      {/* Row 4: Debt data (always visible) */}
+      <div className="border-t border-border pt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 text-center">
+        <div>
+          <p className="text-xs text-muted-foreground">Em Aberto</p>
+          <p className="text-lg font-bold text-destructive">{formatCurrency(totalAberto)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Pago</p>
+          <p className="text-lg font-bold text-success">{formatCurrency(totalPago)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Parcelas</p>
+          <p className="text-lg font-bold text-foreground">{parcelasPagas}/{totalParcelas}</p>
+        </div>
+        {client.data_vencimento && (
+          <div>
+            <p className="text-xs text-muted-foreground">Vencimento</p>
+            <p className="text-sm font-semibold text-foreground">{new Date(client.data_vencimento).toLocaleDateString("pt-BR")}</p>
+          </div>
+        )}
+        {client.valor_parcela != null && (
+          <div>
+            <p className="text-xs text-muted-foreground">Valor Parcela</p>
+            <p className="text-sm font-semibold text-foreground">{formatCurrency(client.valor_parcela)}</p>
+          </div>
+        )}
+        {client.numero_parcela != null && client.total_parcelas != null && (
+          <div>
+            <p className="text-xs text-muted-foreground">Parcela Atual</p>
+            <p className="text-sm font-semibold text-foreground">{client.numero_parcela} de {client.total_parcelas}</p>
+          </div>
+        )}
+        {client.valor_entrada != null && client.valor_entrada > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground">Entrada</p>
+            <p className="text-sm font-semibold text-foreground">{formatCurrency(client.valor_entrada)}</p>
+          </div>
+        )}
+        {client.quebra != null && client.quebra > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground">Quebra</p>
+            <p className="text-sm font-semibold text-destructive">{formatCurrency(client.quebra)}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Collapsible: secondary data */}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+            {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {open ? "Menos detalhes" : "Mais detalhes"}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 pt-3 border-t border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
             {client.email && (
-              <InfoItem icon={Mail} label="Email" value={client.email} />
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Email:</span>
+                <span className="font-medium text-foreground">{client.email}</span>
+              </div>
             )}
             {client.external_id && (
-              <InfoItem icon={Hash} label="ID Externo" value={client.external_id} />
-            )}
-            {client.data_vencimento && (
-              <InfoItem icon={Calendar} label="Vencimento" value={new Date(client.data_vencimento).toLocaleDateString("pt-BR")} />
-            )}
-            {client.valor_parcela != null && (
-              <InfoItem icon={FileText} label="Valor Parcela" value={formatCurrency(client.valor_parcela)} />
-            )}
-            {client.valor_entrada != null && client.valor_entrada > 0 && (
-              <InfoItem icon={DollarSign} label="Valor Entrada" value={formatCurrency(client.valor_entrada)} />
-            )}
-            {client.valor_pago != null && (
-              <InfoItem icon={DollarSign} label="Valor Pago" value={formatCurrency(client.valor_pago)} className="text-success" />
-            )}
-            {client.numero_parcela != null && client.total_parcelas != null && (
-              <InfoItem icon={Layers} label="Parcela Atual" value={`${client.numero_parcela} de ${client.total_parcelas}`} />
-            )}
-            {client.quebra != null && client.quebra > 0 && (
-              <InfoItem icon={AlertTriangle} label="Quebra" value={formatCurrency(client.quebra)} className="text-destructive" />
-            )}
-            {client.status && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Status:</span>
-                <span className={`font-medium capitalize ${client.status === "pendente" ? "text-destructive" : client.status === "pago" ? "text-success" : "text-foreground"}`}>
-                  {client.status}
-                </span>
+              <div className="flex items-center gap-2">
+                <Hash className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">ID Externo:</span>
+                <span className="font-medium text-foreground">{client.external_id}</span>
               </div>
             )}
             {(client.endereco || client.cidade || client.uf || client.cep) && (
-              <InfoItem
-                icon={MapPin}
-                label="Endereço"
-                value={[client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ")}
-              />
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Endereço:</span>
+                <span className="font-medium text-foreground">{[client.endereco, client.cidade, client.uf, client.cep].filter(Boolean).join(", ")}</span>
+              </div>
             )}
           </div>
           {client.observacoes && (
-            <div className="mt-3 pt-3 border-t border-border">
-              <div className="flex items-start gap-2 text-sm">
-                <StickyNote className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
-                <div>
-                  <span className="text-muted-foreground">Observações: </span>
-                  <span className="text-foreground">{client.observacoes}</span>
-                </div>
+            <div className="mt-3 pt-3 border-t border-border flex items-start gap-2 text-sm">
+              <StickyNote className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <span className="text-muted-foreground">Observações: </span>
+                <span className="text-foreground">{client.observacoes}</span>
               </div>
             </div>
           )}
