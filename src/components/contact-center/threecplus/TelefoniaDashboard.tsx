@@ -24,6 +24,31 @@ import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 import AtendimentoPage from "@/pages/AtendimentoPage";
 
+/** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
+const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
+  const { client, isLoading } = useClientByPhone(clientPhone);
+
+  if (isLoading) {
+    return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
+  }
+
+  if (!client) {
+    return (
+      <Card className="border-dashed m-3">
+        <CardContent className="flex items-center gap-3 py-6">
+          <UserX className="w-5 h-5 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
+            <p className="text-xs text-muted-foreground">Telefone: {clientPhone}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <AtendimentoPage clientId={client.id} agentId={agentId} callId={callId} embedded />;
+};
+
 interface TelefoniaDashboardProps {
   menuButton?: React.ReactNode;
   isOperatorView?: boolean;
