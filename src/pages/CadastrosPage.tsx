@@ -11,7 +11,6 @@ import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
 import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
 import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
-import AtendimentoFieldsConfig from "@/components/cadastros/AtendimentoFieldsConfig";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -90,7 +89,6 @@ const CadastrosPage = () => {
         { key: "permissoes", label: "Permissões", icon: Shield },
         { key: "grade_comissao", label: "Grade de Comissão", icon: TrendingUp },
         { key: "campos_personalizados", label: "Campos Personalizados", icon: Puzzle },
-        { key: "campos_atendimento", label: "Campos do Atendimento", icon: Headset },
       ],
     },
   ];
@@ -190,7 +188,7 @@ const CadastrosPage = () => {
         {active === "grade_comissao" && <CommissionGradesTab />}
         {active === "campos_personalizados" && <CustomFieldsConfig />}
         {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
-        {active === "campos_atendimento" && <AtendimentoFieldsConfig />}
+        
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
+import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -676,6 +677,20 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     </TableBody>
                   </Table>
                 )}
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Campos Visíveis no Atendimento */}
+            <Collapsible className="border-t border-border pt-4">
+              <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 cursor-pointer">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Campos Visíveis no Atendimento</p>
+                  <p className="text-xs text-muted-foreground">Defina quais informações do devedor o operador visualiza</p>
+                </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <AtendimentoFieldsConfig credorId={editing?.id} />
               </CollapsibleContent>
             </Collapsible>
           </TabsContent>

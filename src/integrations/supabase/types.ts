@@ -503,6 +503,7 @@ export type Database = {
       }
       atendimento_field_config: {
         Row: {
+          credor_id: string | null
           field_key: string
           id: string
           label: string
@@ -511,6 +512,7 @@ export type Database = {
           visible: boolean
         }
         Insert: {
+          credor_id?: string | null
           field_key: string
           id?: string
           label: string
@@ -519,6 +521,7 @@ export type Database = {
           visible?: boolean
         }
         Update: {
+          credor_id?: string | null
           field_key?: string
           id?: string
           label?: string
@@ -527,6 +530,13 @@ export type Database = {
           visible?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "atendimento_field_config_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "atendimento_field_config_tenant_id_fkey"
             columns: ["tenant_id"]
