@@ -174,8 +174,6 @@ const CadastrosPage = () => {
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
-        {active === "permissoes" && <UserPermissionsTab />}
-        {active === "grade_comissao" && <CommissionGradesTab />}
         
         {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
         
