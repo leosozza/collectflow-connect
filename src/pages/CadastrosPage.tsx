@@ -81,13 +81,6 @@ const CadastrosPage = () => {
         { key: "categorizacao_chamada", label: "Categorização da Chamada", icon: Headset },
       ],
     },
-    {
-      title: "Acesso",
-      items: [
-        { key: "permissoes", label: "Permissões", icon: Shield },
-        { key: "grade_comissao", label: "Grade de Comissão", icon: TrendingUp },
-      ],
-    },
   ];
 
   const filteredGroups = groups
