@@ -295,6 +295,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
           <ClientTimeline
             dispositions={dispositions}
             agreements={agreements}
+            callLogs={callLogs}
           />
         </div>
         <div>
