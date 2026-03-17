@@ -198,42 +198,44 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
           {/* Financial stats */}
           <div className="flex items-center gap-0 shrink-0">
-            <div className="text-center px-6">
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Em Aberto</p>
-              <p className="text-base font-bold text-destructive">{formatCurrency(totalAberto)}</p>
+            <div className="text-center px-4">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Em Aberto</p>
+              <p className="text-sm font-bold text-destructive">{formatCurrency(totalAberto)}</p>
             </div>
-            <div className="w-px h-10 bg-border" />
-            <div className="text-center px-6">
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Total Pago</p>
-              <p className="text-base font-bold text-emerald-600">{formatCurrency(totalPago)}</p>
+            <div className="w-px h-8 bg-border" />
+            <div className="text-center px-4">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Total Pago</p>
+              <p className="text-sm font-bold text-emerald-600">{formatCurrency(totalPago)}</p>
             </div>
-            <div className="w-px h-10 bg-border" />
-            <div className="text-center px-6">
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Atraso</p>
-              <p className="text-base font-bold text-amber-600">{diasAtraso > 0 ? `${diasAtraso} Dias` : "Em dia"}</p>
+            <div className="w-px h-8 bg-border" />
+            <div className="text-center px-4">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-0.5">Atraso</p>
+              <p className="text-sm font-bold text-amber-600">{diasAtraso > 0 ? `${diasAtraso} Dias` : "Em dia"}</p>
             </div>
           </div>
-        </div>
 
-        {/* Centered action buttons */}
-        <div className="flex items-center justify-center gap-3 pb-4">
-          <Button
-            onClick={openWhatsApp}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-10 w-10 p-0"
-            title="Abrir WhatsApp"
-          >
-            <MessageCircle className="w-5 h-5 fill-white" />
-          </Button>
-          {onNegotiate && (
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
             <Button
-              onClick={onNegotiate}
-              size="lg"
-              className="gap-2 font-bold text-base px-8"
+              variant="ghost"
+              size="icon"
+              onClick={openWhatsApp}
+              className="bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded-full h-9 w-9"
+              title="WhatsApp"
             >
-              <Handshake className="w-5 h-5" />
-              FORMALIZAR ACORDO
+              <WhatsAppIcon className="w-4 h-4" />
             </Button>
-          )}
+            {onNegotiate && (
+              <Button
+                onClick={onNegotiate}
+                size="sm"
+                className="gap-1.5 font-bold text-xs px-4"
+              >
+                <Handshake className="w-4 h-4" />
+                FORMALIZAR ACORDO
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Expand trigger */}
