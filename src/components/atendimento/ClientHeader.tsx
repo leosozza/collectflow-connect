@@ -34,7 +34,7 @@ interface ClientHeaderProps {
 const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2 min-w-0">
+    <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
       <div className="min-w-0">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
