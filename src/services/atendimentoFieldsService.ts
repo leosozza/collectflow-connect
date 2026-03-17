@@ -61,7 +61,7 @@ export const atendimentoFieldsService = {
       .select() as any);
 
     if (error) {
-      logger.error("Error seeding default fields", error);
+      logger.error("atendimentoFieldsService", "seedDefaultFields", error);
       throw error;
     }
     return (data as FieldConfig[]) || [];
