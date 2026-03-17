@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { PhoneCall, Handshake, MessageSquare, DollarSign, Save, StickyNote } from "lucide-react";
+import { Clock, PenLine, Save, Inbox } from "lucide-react";
 
 interface TimelineItem {
   id: string;
@@ -25,22 +25,6 @@ interface ClientObservationsProps {
   onSaveNote?: (note: string) => Promise<void>;
   savingNote?: boolean;
 }
-
-const typeIcons = {
-  disposition: PhoneCall,
-  agreement: Handshake,
-  message: MessageSquare,
-  payment: DollarSign,
-  note: StickyNote,
-};
-
-const typeColors = {
-  disposition: "bg-blue-500",
-  agreement: "bg-primary",
-  message: "bg-emerald-500",
-  payment: "bg-amber-500",
-  note: "bg-muted-foreground",
-};
 
 const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
   const [showAll, setShowAll] = useState(false);
@@ -75,49 +59,52 @@ const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
 
   return (
     <Card className="border-border h-full">
-      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <PhoneCall className="w-4 h-4" />
+          <Clock className="w-4 h-4" />
           Histórico de Atendimento
         </CardTitle>
         {items.length > 5 && (
-          <Button variant="link" size="sm" className="text-xs" onClick={() => setShowAll(!showAll)}>
+          <button
+            className="text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+            onClick={() => setShowAll(!showAll)}
+          >
             {showAll ? "Mostrar menos" : "Ver tudo"}
-          </Button>
+          </button>
         )}
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum registro</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Inbox className="w-10 h-10 text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">Nenhum registro de atendimento</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Os eventos aparecerão aqui conforme o atendimento avança.</p>
+          </div>
         ) : (
           <div className="relative pl-6">
             <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
-            <div className="space-y-4">
-              {visibleItems.map((item) => {
-                const Icon = typeIcons[item.type];
-                const dotColor = typeColors[item.type];
-                return (
-                  <div key={item.id} className="relative flex items-start gap-3">
-                    <div className={`absolute -left-6 top-1 w-[18px] h-[18px] rounded-full flex items-center justify-center ${dotColor}`}>
-                      <Icon className="w-2.5 h-2.5 text-white" />
+            <div className="space-y-3">
+              {visibleItems.map((item) => (
+                <div key={item.id} className="relative">
+                  {/* Hollow dot */}
+                  <div className="absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 border-muted-foreground/30 bg-card" />
+                  {/* Card */}
+                  <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-semibold text-foreground">{item.title}</span>
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                        {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-foreground">{item.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(item.date).toLocaleDateString("pt-BR")} - {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                      {item.operator && (
-                        <p className="text-xs text-muted-foreground">Operador: {item.operator}</p>
-                      )}
-                      {item.detail && (
-                        <p className="text-xs text-muted-foreground mt-0.5">"{item.detail}"</p>
-                      )}
-                    </div>
+                    {item.operator && (
+                      <p className="text-xs text-muted-foreground mt-0.5">Operador: {item.operator}</p>
+                    )}
+                    {item.detail && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">"{item.detail}"</p>
+                    )}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -141,51 +128,67 @@ const ClientObservations = ({ observacoes, onSaveNote, savingNote }: ClientObser
       const lines = block.trim().split("\n");
       const header = lines[0] || "";
       const body = lines.slice(1).join("\n").trim();
-      return { id: `note-${i}`, header, body };
+      // Try to parse "DD/MM/YYYY - HH:MM | OperatorName"
+      const match = header.match(/^(.+?)\s*\|\s*(.+)$/);
+      const datetime = match ? match[1].trim() : header;
+      const operator = match ? match[2].trim() : "";
+      return { id: `note-${i}`, datetime, operator, body };
     });
   })();
 
   return (
     <Card className="border-border h-full">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <StickyNote className="w-4 h-4" />
+          <PenLine className="w-4 h-4" />
           Observações
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         {onSaveNote && (
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <Textarea
-              placeholder="Adicionar observação..."
+              placeholder="Adicione uma observação sobre este atendimento..."
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
-              rows={2}
-              className="text-sm flex-1"
+              rows={3}
+              className="text-sm"
             />
-            <Button
-              size="sm"
-              onClick={handleSaveNote}
-              disabled={savingNote || !noteText.trim()}
-              className="self-end gap-1.5"
-            >
-              <Save className="w-4 h-4" />
-              Salvar
-            </Button>
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={handleSaveNote}
+                disabled={savingNote || !noteText.trim()}
+                className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                <Save className="w-4 h-4" />
+                Salvar Nota
+              </Button>
+            </div>
           </div>
         )}
 
         {parsedNotes.length > 0 ? (
           <div className="space-y-3">
             {parsedNotes.map((note) => (
-              <div key={note.id} className="bg-muted/50 rounded-lg p-3 border border-border">
-                <p className="text-xs font-medium text-muted-foreground mb-1">{note.header}</p>
-                {note.body && <p className="text-sm text-foreground">"{note.body}"</p>}
+              <div key={note.id} className="border-l-4 border-amber-400 bg-muted/30 rounded-r-lg p-3">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[11px] text-muted-foreground">{note.datetime}</span>
+                  {note.operator && (
+                    <span className="text-[11px] font-semibold text-foreground">{note.operator}</span>
+                  )}
+                </div>
+                {note.body && <p className="text-sm text-foreground italic">"{note.body}"</p>}
               </div>
             ))}
           </div>
         ) : (
-          !onSaveNote && <p className="text-sm text-muted-foreground">Nenhuma observação</p>
+          !onSaveNote && (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <PenLine className="w-8 h-8 text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">Nenhuma observação</p>
+            </div>
+          )
         )}
       </CardContent>
     </Card>

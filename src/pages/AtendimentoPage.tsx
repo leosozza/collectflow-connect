@@ -231,7 +231,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Breadcrumb */}
       {!embedded && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -257,7 +257,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       />
 
       {/* Main content — 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
           <DispositionPanel
             onDisposition={handleDisposition}
