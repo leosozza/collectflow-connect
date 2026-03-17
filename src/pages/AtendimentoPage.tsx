@@ -281,6 +281,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             onDisposition={handleDisposition}
             loading={dispositionMutation.isPending}
           />
+          <DebtorCategoryPanel
+            clientId={client.id}
+            credorName={client.credor}
+            currentCategoryId={client.debtor_category_id}
+          />
           <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
             <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
