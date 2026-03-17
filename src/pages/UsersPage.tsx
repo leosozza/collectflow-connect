@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
+import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 import { useTenant } from "@/hooks/useTenant";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -536,15 +539,23 @@ const UsersPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
-          <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
-        </div>
-        <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
-          <UserPlus className="w-4 h-4" /> Novo Usuário
-        </Button>
-      </div>
+      <Tabs defaultValue="usuarios" className="w-full">
+        <TabsList>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="permissoes">Permissões</TabsTrigger>
+          <TabsTrigger value="comissao">Grade de Comissão</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="usuarios" className="space-y-6 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
+              <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
+            </div>
+            <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
+              <UserPlus className="w-4 h-4" /> Novo Usuário
+            </Button>
+          </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <Table>
@@ -908,6 +919,16 @@ const UsersPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="permissoes" className="mt-4">
+          <UserPermissionsTab />
+        </TabsContent>
+
+        <TabsContent value="comissao" className="mt-4">
+          <CommissionGradesTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
