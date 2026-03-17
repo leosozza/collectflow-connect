@@ -42,6 +42,24 @@ export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbD
   return (data || []) as DbDispositionType[];
 };
 
+export const DEFAULT_DISPOSITION_LIST = [
+  { key: "voicemail", label: "Caixa Postal", group_name: "resultado", sort_order: 0 },
+  { key: "interrupted", label: "Ligação Interrompida", group_name: "resultado", sort_order: 1 },
+  { key: "no_answer", label: "Não Atende", group_name: "resultado", sort_order: 2 },
+  { key: "cpc", label: "CPC (Contato com a Pessoa Certa)", group_name: "resultado", sort_order: 3 },
+  { key: "wrong_contact", label: "Contato Pessoa Errada", group_name: "contato", sort_order: 4 },
+];
+
+export const seedDefaultDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
+  const rows = DEFAULT_DISPOSITION_LIST.map(d => ({ ...d, tenant_id: tenantId }));
+  const { data, error } = await supabase
+    .from("call_disposition_types")
+    .insert(rows as any)
+    .select();
+  if (error) throw error;
+  return (data || []) as DbDispositionType[];
+};
+
 export const createDispositionType = async (params: {
   tenant_id: string;
   key: string;

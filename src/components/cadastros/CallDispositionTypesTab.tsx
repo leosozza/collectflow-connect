@@ -1,51 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import {
-  fetchTenantDispositionTypes,
   createDispositionType,
   updateDispositionType,
   deleteDispositionType,
-  DISPOSITION_TYPES,
+  seedDefaultDispositionTypes,
   type DbDispositionType,
 } from "@/services/dispositionService";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const slugify = (text: string) =>
-  text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
+  text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
 const GROUP_OPTIONS = [
   { value: "resultado", label: "Resultado do Contato" },
@@ -56,19 +38,12 @@ const GROUP_OPTIONS = [
 interface FormState {
   id?: string;
   label: string;
-  key: string;
   group_name: string;
   sort_order: number;
   active: boolean;
 }
 
-const emptyForm: FormState = {
-  label: "",
-  key: "",
-  group_name: "resultado",
-  sort_order: 0,
-  active: true,
-};
+const emptyForm: FormState = { label: "", group_name: "resultado", sort_order: 0, active: true };
 
 const CallDispositionTypesTab = () => {
   const { tenant } = useTenant();
@@ -76,12 +51,12 @@ const CallDispositionTypesTab = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [autoKey, setAutoKey] = useState(true);
+  const [seeded, setSeeded] = useState(false);
 
   const { data: types = [], isLoading } = useQuery({
     queryKey: ["call-disposition-types", tenantId],
     queryFn: async () => {
-      const { data, error } = await (await import("@/integrations/supabase/client")).supabase
+      const { data, error } = await supabase
         .from("call_disposition_types")
         .select("*")
         .eq("tenant_id", tenantId!)
@@ -91,6 +66,21 @@ const CallDispositionTypesTab = () => {
     },
     enabled: !!tenantId,
   });
+
+  // Auto-seed defaults when tenant has no records
+  const seedMut = useMutation({
+    mutationFn: () => seedDefaultDispositionTypes(tenantId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
+      setSeeded(true);
+    },
+  });
+
+  useEffect(() => {
+    if (!isLoading && tenantId && types.length === 0 && !seeded && !seedMut.isPending) {
+      seedMut.mutate();
+    }
+  }, [isLoading, tenantId, types.length, seeded, seedMut.isPending]);
 
   const createMut = useMutation({
     mutationFn: (p: Parameters<typeof createDispositionType>[0]) => createDispositionType(p),
@@ -123,72 +113,42 @@ const CallDispositionTypesTab = () => {
   });
 
   const openNew = () => {
-    setForm(emptyForm);
-    setAutoKey(true);
+    setForm({ ...emptyForm, sort_order: types.length });
     setOpen(true);
   };
 
   const openEdit = (t: DbDispositionType) => {
-    setForm({
-      id: t.id,
-      label: t.label,
-      key: t.key,
-      group_name: t.group_name,
-      sort_order: t.sort_order,
-      active: t.active,
-    });
-    setAutoKey(false);
+    setForm({ id: t.id, label: t.label, group_name: t.group_name, sort_order: t.sort_order, active: t.active });
     setOpen(true);
   };
 
   const handleSave = () => {
-    if (!form.label.trim()) {
-      toast.error("Informe o nome da categorização");
-      return;
-    }
-    const key = form.key || slugify(form.label);
+    if (!form.label.trim()) { toast.error("Informe o nome da categorização"); return; }
     if (form.id) {
       updateMut.mutate({ id: form.id, label: form.label, group_name: form.group_name, sort_order: form.sort_order, active: form.active });
     } else {
-      createMut.mutate({ tenant_id: tenantId!, key, label: form.label, group_name: form.group_name, sort_order: form.sort_order });
+      createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), label: form.label, group_name: form.group_name, sort_order: form.sort_order });
     }
   };
-
-  const defaults = Object.entries(DISPOSITION_TYPES).map(([key, label]) => ({ key, label }));
-  const hasCustom = types.length > 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {hasCustom
-            ? `${types.length} categorização(ões) personalizada(s) configurada(s).`
-            : "Nenhuma personalização. Usando padrões do sistema."}
+          {types.length > 0
+            ? `${types.length} categorização(ões) configurada(s).`
+            : "Carregando categorizações..."}
         </p>
         <Button size="sm" onClick={openNew}>
           <Plus className="w-4 h-4 mr-1" /> Nova Categorização
         </Button>
       </div>
 
-      {/* Defaults info */}
-      {!hasCustom && (
-        <div className="rounded-lg border border-border p-4 space-y-2">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">Padrões do Sistema</p>
-          <div className="flex flex-wrap gap-2">
-            {defaults.map(d => (
-              <Badge key={d.key} variant="secondary">{d.label}</Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Custom table */}
-      {hasCustom && (
+      {types.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Chave</TableHead>
               <TableHead>Grupo</TableHead>
               <TableHead>Ordem</TableHead>
               <TableHead>Ativo</TableHead>
@@ -199,7 +159,6 @@ const CallDispositionTypesTab = () => {
             {types.map(t => (
               <TableRow key={t.id}>
                 <TableCell className="font-medium">{t.label}</TableCell>
-                <TableCell className="text-muted-foreground text-xs font-mono">{t.key}</TableCell>
                 <TableCell>
                   <Badge variant="outline">
                     {GROUP_OPTIONS.find(g => g.value === t.group_name)?.label || t.group_name}
@@ -227,7 +186,6 @@ const CallDispositionTypesTab = () => {
         </Table>
       )}
 
-      {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -238,20 +196,8 @@ const CallDispositionTypesTab = () => {
               <Label>Nome</Label>
               <Input
                 value={form.label}
-                onChange={e => {
-                  const label = e.target.value;
-                  setForm(f => ({ ...f, label, ...(autoKey ? { key: slugify(label) } : {}) }));
-                }}
+                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
                 placeholder="Ex: CPC (Contato com a Pessoa Certa)"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Chave (slug)</Label>
-              <Input
-                value={form.key}
-                onChange={e => { setAutoKey(false); setForm(f => ({ ...f, key: e.target.value })); }}
-                placeholder="cpc"
-                disabled={!!form.id}
               />
             </div>
             <div className="space-y-2">
