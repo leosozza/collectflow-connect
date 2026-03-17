@@ -919,6 +919,16 @@ const UsersPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="permissoes" className="mt-4">
+          <UserPermissionsTab />
+        </TabsContent>
+
+        <TabsContent value="comissao" className="mt-4">
+          <CommissionGradesTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
