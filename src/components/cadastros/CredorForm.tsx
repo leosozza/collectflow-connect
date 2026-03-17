@@ -307,7 +307,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
             <TabsTrigger value="regua" className="flex-1">Régua</TabsTrigger>
-            <TabsTrigger value="scripts" className="flex-1">Scripts</TabsTrigger>
+            <TabsTrigger value="personalizacao" className="flex-1">Personalização</TabsTrigger>
             <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
             <TabsTrigger value="portal" className="flex-1">Portal</TabsTrigger>
           </TabsList>
@@ -324,29 +324,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <div><Label>Telefone *</Label><Input value={applyMask(form.telefone || "", "phone")} onChange={e => set("telefone", e.target.value)} placeholder="(00) 00000-0000" /></div>
             </div>
 
-            {/* Modo da Carteira */}
-            <div className="border-t border-border pt-4 space-y-3">
-              <Label className="text-sm font-medium">Modo da Carteira</Label>
-              <RadioGroup
-                value={form.carteira_mode || "open"}
-                onValueChange={(v) => set("carteira_mode", v)}
-                className="flex gap-6"
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="open" id="mode-open" />
-                  <Label htmlFor="mode-open" className="cursor-pointer font-normal">Mar Aberto</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="assigned" id="mode-assigned" />
-                  <Label htmlFor="mode-assigned" className="cursor-pointer font-normal">Atribuição</Label>
-                </div>
-              </RadioGroup>
-              <p className="text-xs text-muted-foreground">
-                {form.carteira_mode === "assigned"
-                  ? "Operadores veem apenas clientes atribuídos a eles neste credor."
-                  : "Todos os operadores com permissão podem ver todos os clientes deste credor."}
-              </p>
-            </div>
+
+
             <Collapsible
               open={enderecoOpen}
               onOpenChange={setEnderecoOpen}
@@ -369,86 +348,6 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Modelos de Documentos */}
-            <Collapsible className="border-t border-border pt-4">
-              <CollapsibleTrigger className="flex items-center gap-2 w-full cursor-pointer group">
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-0 -rotate-90 group-data-[state=closed]:-rotate-90" />
-                <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3 space-y-3">
-                {TEMPLATES.map(t => (
-                  <Card key={t.key} className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{t.label}</span>
-                    </div>
-                    <Button variant="outline" size="sm" type="button" onClick={() => setOpenTemplateDialog(t.key)} className="gap-1">
-                      <Pencil className="w-3 h-3" /> Editar
-                    </Button>
-                  </Card>
-                ))}
-
-                {TEMPLATES.map(t => (
-                  <Dialog key={t.key} open={openTemplateDialog === t.key} onOpenChange={open => setOpenTemplateDialog(open ? t.key : null)}>
-                    <DialogContent className="sm:max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Editar: {t.label}</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" size="sm" type="button">
-                                Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
-                              <div className="space-y-1">
-                                {VARIAVEIS.map(v => (
-                                  <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-
-                          <div className="h-6 w-px bg-border mx-1" />
-
-                          <TooltipProvider delayDuration={300}>
-                            {FORMATTING_TOOLS.map(tool => (
-                              <Tooltip key={tool.label}>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    type="button"
-                                    className="h-8 w-8"
-                                    onClick={() => applyFormatting(t.key, tool.prefix, tool.suffix)}
-                                  >
-                                    <tool.icon className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom"><p className="text-xs">{tool.label}</p></TooltipContent>
-                              </Tooltip>
-                            ))}
-                          </TooltipProvider>
-                        </div>
-
-                        <Textarea
-                          rows={12}
-                          value={form[t.key] || ""}
-                          onChange={e => set(t.key, e.target.value)}
-                          className="font-mono text-xs"
-                          ref={el => { textareaRefs.current[t.key] = el; }}
-                        />
-                      </div>
-                      <DialogFooter>
-                        <Button type="button" onClick={() => setOpenTemplateDialog(null)}>Concluir</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
           </TabsContent>
 
           {/* ABA 2 - BANCÁRIO / GATEWAY - Item 9: removed footer message */}
@@ -680,6 +579,122 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </CollapsibleContent>
             </Collapsible>
 
+
+
+          </TabsContent>
+
+          {/* ABA 4 - RÉGUA DE COBRANÇA */}
+          <TabsContent value="regua" className="mt-4">
+            <CredorReguaTab credorId={editing?.id} />
+          </TabsContent>
+
+          {/* ABA 5 - PERSONALIZAÇÃO */}
+          <TabsContent value="personalizacao" className="space-y-6 mt-4">
+            {/* Modo da Carteira */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Modo da Carteira</Label>
+              <RadioGroup
+                value={form.carteira_mode || "open"}
+                onValueChange={(v) => set("carteira_mode", v)}
+                className="flex gap-6"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="open" id="mode-open" />
+                  <Label htmlFor="mode-open" className="cursor-pointer font-normal">Mar Aberto</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="assigned" id="mode-assigned" />
+                  <Label htmlFor="mode-assigned" className="cursor-pointer font-normal">Atribuição</Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                {form.carteira_mode === "assigned"
+                  ? "Operadores veem apenas clientes atribuídos a eles neste credor."
+                  : "Todos os operadores com permissão podem ver todos os clientes deste credor."}
+              </p>
+            </div>
+
+            {/* Modelos de Documentos */}
+            <Collapsible className="border-t border-border pt-4">
+              <CollapsibleTrigger className="flex items-center gap-2 w-full cursor-pointer group">
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-0 -rotate-90 group-data-[state=closed]:-rotate-90" />
+                <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                {TEMPLATES.map(t => (
+                  <Card key={t.key} className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{t.label}</span>
+                    </div>
+                    <Button variant="outline" size="sm" type="button" onClick={() => setOpenTemplateDialog(t.key)} className="gap-1">
+                      <Pencil className="w-3 h-3" /> Editar
+                    </Button>
+                  </Card>
+                ))}
+
+                {TEMPLATES.map(t => (
+                  <Dialog key={t.key} open={openTemplateDialog === t.key} onOpenChange={open => setOpenTemplateDialog(open ? t.key : null)}>
+                    <DialogContent className="sm:max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Editar: {t.label}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" size="sm" type="button">
+                                Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
+                              <div className="space-y-1">
+                                {VARIAVEIS.map(v => (
+                                  <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          <div className="h-6 w-px bg-border mx-1" />
+
+                          <TooltipProvider delayDuration={300}>
+                            {FORMATTING_TOOLS.map(tool => (
+                              <Tooltip key={tool.label}>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    type="button"
+                                    className="h-8 w-8"
+                                    onClick={() => applyFormatting(t.key, tool.prefix, tool.suffix)}
+                                  >
+                                    <tool.icon className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom"><p className="text-xs">{tool.label}</p></TooltipContent>
+                              </Tooltip>
+                            ))}
+                          </TooltipProvider>
+                        </div>
+
+                        <Textarea
+                          rows={12}
+                          value={form[t.key] || ""}
+                          onChange={e => set(t.key, e.target.value)}
+                          className="font-mono text-xs"
+                          ref={el => { textareaRefs.current[t.key] = el; }}
+                        />
+                      </div>
+                      <DialogFooter>
+                        <Button type="button" onClick={() => setOpenTemplateDialog(null)}>Concluir</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+
             {/* Campos Visíveis no Atendimento */}
             <Collapsible className="border-t border-border pt-4">
               <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 cursor-pointer">
@@ -693,16 +708,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <AtendimentoFieldsConfig credorId={editing?.id} />
               </CollapsibleContent>
             </Collapsible>
-          </TabsContent>
 
-          {/* ABA 4 - RÉGUA DE COBRANÇA */}
-          <TabsContent value="regua" className="mt-4">
-            <CredorReguaTab credorId={editing?.id} />
-          </TabsContent>
-
-          {/* ABA 5 - SCRIPTS DE ABORDAGEM */}
-          <TabsContent value="scripts" className="mt-4">
-            <CredorScriptsTab credorId={editing?.id} />
+            {/* Scripts de Abordagem */}
+            <div className="border-t border-border pt-4">
+              <CredorScriptsTab credorId={editing?.id} />
+            </div>
           </TabsContent>
 
           {/* ABA 5 - ASSINATURA DIGITAL */}
