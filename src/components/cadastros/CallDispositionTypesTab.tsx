@@ -156,7 +156,6 @@ const CallDispositionTypesTab = () => {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Grupo</TableHead>
-              <TableHead>Ordem</TableHead>
               <TableHead>Ativo</TableHead>
               <TableHead className="w-20">Ações</TableHead>
             </TableRow>
