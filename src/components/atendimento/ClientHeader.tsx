@@ -179,13 +179,26 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
               <Badge className={`text-[10px] font-bold tracking-wider px-2.5 py-0.5 ${statusBadge.className}`}>
                 {statusBadge.label}
               </Badge>
-              <button
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <Button
                 onClick={openWhatsApp}
+                size="sm"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-9 w-9 p-0"
                 title="Abrir WhatsApp"
-                className="p-1.5 rounded-full hover:bg-muted transition-colors"
               >
-                <MessageCircle className="w-5 h-5 text-emerald-500 fill-emerald-500" />
-              </button>
+                <MessageCircle className="w-4 h-4 fill-white" />
+              </Button>
+              {onNegotiate && (
+                <Button
+                  onClick={onNegotiate}
+                  size="sm"
+                  className="gap-2 font-bold"
+                >
+                  <Handshake className="w-4 h-4" />
+                  FORMALIZAR ACORDO
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
