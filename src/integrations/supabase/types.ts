@@ -1109,6 +1109,7 @@ export type Database = {
           data_pagamento: string | null
           data_quitacao: string | null
           data_vencimento: string
+          debtor_category_id: string | null
           email: string | null
           endereco: string | null
           enrichment_data: Json | null
@@ -1157,6 +1158,7 @@ export type Database = {
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento: string
+          debtor_category_id?: string | null
           email?: string | null
           endereco?: string | null
           enrichment_data?: Json | null
@@ -1205,6 +1207,7 @@ export type Database = {
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento?: string
+          debtor_category_id?: string | null
           email?: string | null
           endereco?: string | null
           enrichment_data?: Json | null
@@ -1242,6 +1245,13 @@ export type Database = {
           valor_saldo?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "clients_debtor_category_id_fkey"
+            columns: ["debtor_category_id"]
+            isOneToOne: false
+            referencedRelation: "debtor_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clients_operator_id_fkey"
             columns: ["operator_id"]
@@ -2111,6 +2121,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "custom_fields_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      debtor_categories: {
+        Row: {
+          cor: string | null
+          created_at: string | null
+          credor_id: string
+          descricao: string | null
+          id: string
+          nome: string
+          sort_order: number | null
+          tenant_id: string
+        }
+        Insert: {
+          cor?: string | null
+          created_at?: string | null
+          credor_id: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          sort_order?: number | null
+          tenant_id: string
+        }
+        Update: {
+          cor?: string | null
+          created_at?: string | null
+          credor_id?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          sort_order?: number | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debtor_categories_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "debtor_categories_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
