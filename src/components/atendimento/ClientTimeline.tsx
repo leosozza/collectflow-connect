@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox, Phone, Play, Pause } from "lucide-react";
-import { useRef } from "react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard } from "lucide-react";
 
 interface TimelineItem {
   id: string;
@@ -30,7 +29,7 @@ interface CallLog {
 }
 
 interface ClientTimelineProps {
-  dispositions: CallDisposition[];
+  dispositions: (CallDisposition & { operator_name?: string })[];
   agreements: any[];
   callLogs?: CallLog[];
 }
@@ -40,6 +39,25 @@ interface ClientObservationsProps {
   onSaveNote?: (note: string) => Promise<void>;
   savingNote?: boolean;
 }
+
+const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
+  disposition: { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
+  note:        { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
+  call:        { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  agreement:   { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  message:     { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  payment:     { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
+  system:      { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
+  ai:          { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+};
+
+const TYPE_ICON: Record<string, React.ReactNode> = {
+  call: <Phone className="w-3.5 h-3.5 text-blue-500" />,
+  agreement: <Handshake className="w-3.5 h-3.5 text-emerald-500" />,
+  payment: <CreditCard className="w-3.5 h-3.5 text-teal-500" />,
+  message: <Zap className="w-3.5 h-3.5 text-violet-500" />,
+  system: <Bot className="w-3.5 h-3.5 text-slate-500" />,
+};
 
 const formatDuration = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -53,11 +71,8 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
 
   const toggle = () => {
     if (!audioRef.current) return;
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
+    if (playing) audioRef.current.pause();
+    else audioRef.current.play();
     setPlaying(!playing);
   };
 
@@ -70,14 +85,27 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
       >
         {playing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
       </button>
-      <audio
-        ref={audioRef}
-        src={url}
-        onEnded={() => setPlaying(false)}
-        preload="none"
-      />
+      <audio ref={audioRef} src={url} onEnded={() => setPlaying(false)} preload="none" />
     </span>
   );
+};
+
+const ResponsibleLabel = ({ operator, type }: { operator?: string; type: string }) => {
+  if (operator) {
+    return (
+      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+        <User className="w-3 h-3" /> por {operator}
+      </span>
+    );
+  }
+  if (type === "system") {
+    return (
+      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+        <Bot className="w-3 h-3" /> Sistema
+      </span>
+    );
+  }
+  return null;
 };
 
 const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimelineProps) => {
@@ -93,7 +121,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimel
       type: d.disposition_type === "note" ? "note" : "disposition",
       title: label,
       detail: d.notes || undefined,
-      operator: (d as any).operator_name || undefined,
+      operator: d.operator_name || undefined,
     });
   });
 
@@ -104,6 +132,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimel
       type: "agreement",
       title: `Acordo ${a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}`,
       detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
+      operator: a.creator_name || undefined,
     });
   });
 
@@ -124,11 +153,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimel
 
   const visibleItems = showAll ? items : items.slice(0, 5);
 
-  const getItemBorderColor = (type: string) => {
-    if (type === "call") return "border-blue-200 bg-blue-50/50";
-    if (type === "agreement") return "border-green-200 bg-green-50/50";
-    return "border-amber-100 bg-amber-50/50";
-  };
+  const getColors = (type: string) => COLOR_MAP[type] || COLOR_MAP.disposition;
 
   return (
     <Card className="border-border h-full">
@@ -157,37 +182,38 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimel
           <div className="relative pl-6">
             <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
             <div className="space-y-3">
-              {visibleItems.map((item) => (
-                <div key={item.id} className="relative">
-                  <div className={`absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 bg-card ${item.type === "call" ? "border-blue-400" : "border-muted-foreground/30"}`} />
-                  <div className={`border rounded-lg p-3 ${getItemBorderColor(item.type)}`}>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                        {item.type === "call" && <Phone className="w-3.5 h-3.5 text-blue-500" />}
-                        {item.title}
-                        {item.type === "call" && item.durationSeconds !== undefined && item.durationSeconds > 0 && (
-                          <span className="text-xs font-normal text-muted-foreground">({formatDuration(item.durationSeconds)})</span>
-                        )}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                        {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    {item.operator && (
-                      <p className="text-xs text-muted-foreground mt-0.5">Operador: {item.operator}</p>
-                    )}
-                    {item.detail && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">"{item.detail}"</p>
-                    )}
-                    {item.type === "call" && item.recordingUrl && (
-                      <div className="mt-1.5 flex items-center">
-                        <span className="text-xs text-blue-600 font-medium">Gravação</span>
-                        <InlineAudioPlayer url={item.recordingUrl} />
+              {visibleItems.map((item) => {
+                const colors = getColors(item.type);
+                return (
+                  <div key={item.id} className="relative">
+                    <div className={`absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 bg-card ${colors.dot}`} />
+                    <div className={`border rounded-lg p-3 ${colors.border} ${colors.bg}`}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                          {TYPE_ICON[item.type]}
+                          {item.title}
+                          {item.type === "call" && item.durationSeconds !== undefined && item.durationSeconds > 0 && (
+                            <span className="text-xs font-normal text-muted-foreground">({formatDuration(item.durationSeconds)})</span>
+                          )}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                          {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
-                    )}
+                      <ResponsibleLabel operator={item.operator} type={item.type} />
+                      {item.detail && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">"{item.detail}"</p>
+                      )}
+                      {item.type === "call" && item.recordingUrl && (
+                        <div className="mt-1.5 flex items-center">
+                          <span className="text-xs text-blue-600 font-medium">Gravação</span>
+                          <InlineAudioPlayer url={item.recordingUrl} />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

@@ -131,14 +131,18 @@ export const getCustomDispositionList = (tenantSettings?: Record<string, any>): 
   return Object.entries(DISPOSITION_TYPES).map(([key, label]) => ({ key, label }));
 };
 
-export const fetchDispositions = async (clientId: string): Promise<CallDisposition[]> => {
+export const fetchDispositions = async (clientId: string): Promise<(CallDisposition & { operator_name?: string })[]> => {
   const { data, error } = await supabase
     .from("call_dispositions")
-    .select("*")
+    .select("*, profiles:operator_id(full_name)")
     .eq("client_id", clientId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []) as CallDisposition[];
+  return (data || []).map((d: any) => ({
+    ...d,
+    operator_name: d.profiles?.full_name || null,
+    profiles: undefined,
+  })) as (CallDisposition & { operator_name?: string })[];
 };
 
 export const createDisposition = async (params: {
