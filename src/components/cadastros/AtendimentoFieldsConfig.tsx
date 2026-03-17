@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { atendimentoFieldsService, type FieldConfig } from "@/services/atendimentoFieldsService";
+import { fetchCustomFields } from "@/services/customFieldsService";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -16,18 +17,40 @@ const AtendimentoFieldsConfig = ({ credorId }: Props) => {
   const tenantId = tenant?.id;
   const queryClient = useQueryClient();
 
+  const { data: customFields } = useQuery({
+    queryKey: ["custom-fields", tenantId],
+    queryFn: () => fetchCustomFields(tenantId!),
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: fields, isLoading, refetch } = useQuery({
     queryKey: ["atendimento-field-config", credorId],
     queryFn: () => atendimentoFieldsService.fetchFieldConfig(credorId),
     enabled: !!credorId,
   });
 
-  // Auto-seed default fields if none exist
+  // Auto-seed default fields (including custom) if none exist
   useEffect(() => {
     if (fields && fields.length === 0 && tenantId && credorId) {
-      atendimentoFieldsService.seedDefaultFields(tenantId, credorId).then(() => refetch());
+      const activeCustom = (customFields || []).filter((cf) => cf.is_active);
+      atendimentoFieldsService
+        .seedDefaultFields(tenantId, credorId, activeCustom)
+        .then(() => refetch());
     }
-  }, [fields, tenantId, credorId, refetch]);
+  }, [fields, tenantId, credorId, customFields, refetch]);
+
+  // Sync new custom fields that may have been added after initial seed
+  useEffect(() => {
+    if (fields && fields.length > 0 && tenantId && credorId && customFields) {
+      const activeCustom = customFields.filter((cf) => cf.is_active);
+      if (activeCustom.length > 0) {
+        atendimentoFieldsService
+          .syncCustomFields(tenantId, credorId, activeCustom)
+          .then(() => refetch());
+      }
+    }
+  }, [fields?.length, tenantId, credorId, customFields, refetch]);
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, visible }: { id: string; visible: boolean }) =>

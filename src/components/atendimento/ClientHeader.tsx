@@ -15,6 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useTenant } from "@/hooks/useTenant";
 import { useModules } from "@/hooks/useModules";
 import { atendimentoFieldsService } from "@/services/atendimentoFieldsService";
+import { fetchCustomFields } from "@/services/customFieldsService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -90,6 +91,14 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch custom fields definitions for the tenant
+  const { data: customFieldsDefs } = useQuery({
+    queryKey: ["custom-fields", tenantId],
+    queryFn: () => fetchCustomFields(tenantId!),
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Resolve lookup names for UUID fields
   const { data: tipoDevedorName } = useQuery({
     queryKey: ["tipo-devedor-name", client?.tipo_devedor_id],
@@ -124,6 +133,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     staleTime: 10 * 60 * 1000,
   });
 
+  // Static field renderers
   const FIELD_RENDERERS: Record<string, () => { label: string; value: string | null; icon?: React.ElementType }> = {
     phone: () => ({ label: "Telefone 1", value: client.phone ? formatPhone(client.phone) : null, icon: Phone }),
     phone2: () => ({ label: "Telefone 2", value: client.phone2 ? formatPhone(client.phone2) : null, icon: Phone }),
@@ -152,12 +162,29 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
     tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
     status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
-    
+  };
+
+  // Build a dynamic renderer for custom fields
+  const getCustomFieldRenderer = (fieldKey: string): (() => { label: string; value: string | null; icon?: React.ElementType }) | null => {
+    if (!fieldKey.startsWith("custom:")) return null;
+    const realKey = fieldKey.replace("custom:", "");
+    const customData = client.custom_data as Record<string, any> | null;
+    const rawValue = customData?.[realKey];
+
+    // Find the label from custom fields definitions, or use the config label
+    const cfDef = customFieldsDefs?.find((cf) => cf.field_key === realKey);
+    const label = cfDef?.field_label || realKey;
+
+    return () => ({
+      label,
+      value: rawValue != null && rawValue !== "" ? String(rawValue) : null,
+      icon: Tag,
+    });
   };
 
   const ALL_FIELD_KEYS = Object.keys(FIELD_RENDERERS);
 
-  // If config exists for this credor, use it; otherwise show all fields
+  // If config exists for this credor, use it; otherwise show all static fields
   const visibleFields = fieldConfig && fieldConfig.length > 0
     ? fieldConfig.filter((f) => f.visible).sort((a, b) => a.sort_order - b.sort_order)
     : ALL_FIELD_KEYS.map((key, i) => ({ field_key: key, sort_order: i }));
@@ -251,7 +278,8 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
           <div className="px-6 py-4 border-t border-border">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
               {visibleFields.map((f) => {
-                const renderer = FIELD_RENDERERS[f.field_key];
+                // Try static renderer first, then dynamic custom renderer
+                const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
                 if (!renderer) return null;
                 const { label, value, icon } = renderer();
                 if (!value) return null;
