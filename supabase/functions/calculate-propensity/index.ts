@@ -146,6 +146,14 @@ function calculateScore(events: ClientEvent[], now: Date): ScoreResult {
         engageTotal += weight;
         break;
       }
+      case "debtor_category": {
+        // Operator classified the debtor profile — engagement signal
+        engageTotal += weight;
+        if ((ev.event_value || "").toLowerCase() !== "removed") {
+          engagePos += weight;
+        }
+        break;
+      }
       default:
         break;
     }
