@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useTenant } from "@/hooks/useTenant";
+import { useModules } from "@/hooks/useModules";
 import { atendimentoFieldsService } from "@/services/atendimentoFieldsService";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface ClientHeaderProps {
   client: any;
@@ -37,6 +40,21 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const navigate = useNavigate();
+  const { isModuleEnabled } = useModules();
+
+  const openWhatsApp = () => {
+    if (!client.phone) {
+      toast({ title: "Cliente sem telefone cadastrado", variant: "destructive" });
+      return;
+    }
+    const cleanPhone = client.phone.replace(/\D/g, "");
+    if (isModuleEnabled("whatsapp")) {
+      navigate(`/contact-center/whatsapp?phone=${cleanPhone}`);
+    } else {
+      window.open(`https://wa.me/55${cleanPhone}`, "_blank");
+    }
+  };
 
   // Resolve credor_id from credor name
   const { data: credorData } = useQuery({
@@ -112,12 +130,14 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     cod_contrato: () => ({ label: "Cód. Contrato", value: client.cod_contrato, icon: FileText }),
     valor_saldo: () => {
       const records = clientRecords.length > 0 ? clientRecords : [client];
-      const total = records.reduce((sum, r) => sum + (Number(r.valor_saldo) || 0), 0);
+      const pending = records.filter((r) => r.status === "pendente");
+      const total = pending.reduce((sum, r) => sum + (Number(r.valor_saldo) || 0), 0);
       return { label: "Valor Saldo", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
     },
     valor_atualizado: () => {
       const records = clientRecords.length > 0 ? clientRecords : [client];
-      const total = records.reduce((sum, r) => sum + (Number(r.valor_atualizado) || 0), 0);
+      const pending = records.filter((r) => r.status === "pendente");
+      const total = pending.reduce((sum, r) => sum + (Number(r.valor_atualizado) || 0), 0);
       return { label: "Valor Atualizado", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
     },
     data_vencimento: () => ({ label: "Data Vencimento", value: client.data_vencimento ? formatDate(client.data_vencimento) : null }),
@@ -157,6 +177,13 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
               <Badge className={`text-[10px] font-bold tracking-wider px-2.5 py-0.5 ${statusBadge.className}`}>
                 {statusBadge.label}
               </Badge>
+              <button
+                onClick={openWhatsApp}
+                title="Abrir WhatsApp"
+                className="p-1.5 rounded-full hover:bg-muted transition-colors"
+              >
+                <MessageCircle className="w-5 h-5 text-emerald-500 fill-emerald-500" />
+              </button>
             </div>
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
