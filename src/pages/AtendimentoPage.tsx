@@ -92,6 +92,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     enabled: !!client?.cpf,
   });
 
+  const { data: callLogs = [] } = useQuery({
+    queryKey: ["atendimento-call-logs", client?.cpf],
+    queryFn: async () => {
+      const cpf = client!.cpf;
+      const rawCpf = cpf.replace(/\D/g, "");
+      const { data, error } = await supabase
+        .from("call_logs" as any).select("*")
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
+        .order("called_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!client?.cpf,
+  });
+
   const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
 
   // Disposition mutation
