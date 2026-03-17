@@ -539,15 +539,23 @@ const UsersPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
-          <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
-        </div>
-        <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
-          <UserPlus className="w-4 h-4" /> Novo Usuário
-        </Button>
-      </div>
+      <Tabs defaultValue="usuarios" className="w-full">
+        <TabsList>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="permissoes">Permissões</TabsTrigger>
+          <TabsTrigger value="comissao">Grade de Comissão</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="usuarios" className="space-y-6 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
+              <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
+            </div>
+            <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
+              <UserPlus className="w-4 h-4" /> Novo Usuário
+            </Button>
+          </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <Table>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUrlState } from "@/hooks/useUrlState";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Headset } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
