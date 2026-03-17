@@ -111,7 +111,7 @@ const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHead
           className="gap-1.5"
         >
           <Handshake className="w-4 h-4" />
-          <span className="hidden sm:inline">Acordo</span>
+          <span className="hidden sm:inline">Formalizar Acordo</span>
         </Button>
       </div>
     </div>
