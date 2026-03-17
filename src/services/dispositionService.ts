@@ -54,7 +54,7 @@ export const seedDefaultDispositionTypes = async (tenantId: string): Promise<DbD
   const rows = DEFAULT_DISPOSITION_LIST.map(d => ({ ...d, tenant_id: tenantId }));
   const { data, error } = await supabase
     .from("call_disposition_types")
-    .insert(rows as any)
+    .upsert(rows as any, { onConflict: "tenant_id,key" })
     .select();
   if (error) throw error;
   return (data || []) as DbDispositionType[];

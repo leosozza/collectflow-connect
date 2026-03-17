@@ -78,10 +78,15 @@ const CallDispositionTypesTab = () => {
   });
 
   useEffect(() => {
-    if (!isLoading && tenantId && types.length === 0 && !seeded && !seedMut.isPending) {
-      seedMut.mutate();
+    if (!isLoading && tenantId && !seeded && !seedMut.isPending) {
+      const missingDefaults = DEFAULT_DISPOSITION_LIST.some(
+        d => !types.find(t => t.key === d.key)
+      );
+      if (missingDefaults) {
+        seedMut.mutate();
+      }
     }
-  }, [isLoading, tenantId, types.length, seeded, seedMut.isPending]);
+  }, [isLoading, tenantId, types, seeded, seedMut.isPending]);
 
   const createMut = useMutation({
     mutationFn: (p: Parameters<typeof createDispositionType>[0]) => createDispositionType(p),
