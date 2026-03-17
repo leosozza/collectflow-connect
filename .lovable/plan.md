@@ -1,17 +1,33 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Fix Valor Saldo + Botão WhatsApp no Atendimento
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## 1. Fix "Valor Saldo" — mostrar apenas o que falta pagar
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+Atualmente o campo `valor_saldo` soma **todos** os registros (inclusive pagos). O correto é somar apenas os registros com `status === "pendente"`, pois representa o saldo restante da dívida original.
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+**Arquivo:** `src/components/atendimento/ClientHeader.tsx`
+- Alterar o renderer `valor_saldo` para filtrar apenas `clientRecords` com status pendente
+- Mesmo ajuste para `valor_atualizado` (consistência)
+
+## 2. Botão WhatsApp no header do Atendimento
+
+Adicionar um ícone de WhatsApp (emoji verde) na área superior do `ClientHeader`, ao lado do nome/CPF ou nos stats. Ao clicar:
+- Se módulo `whatsapp` habilitado → navega para `/contact-center/whatsapp?phone=55XXXX`
+- Se módulo não habilitado → abre `wa.me/55XXXX` em nova aba
+- Se cliente não tem telefone → toast de erro
+
+**Arquivo:** `src/components/atendimento/ClientHeader.tsx`
+- Importar `useModules` e `useNavigate`
+- Adicionar `MessageCircle` (lucide) com cor verde ao lado do nome do cliente
+- Implementar `openWhatsApp` seguindo o mesmo padrão do `ClientDetailHeader`
+
+**Arquivo:** `src/pages/AtendimentoPage.tsx`
+- Nenhuma mudança necessária (client.phone já está disponível)
+
+## Arquivos afetados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/components/atendimento/ClientHeader.tsx` | Fix valor_saldo (filtrar pendentes) + botão WhatsApp |
+
