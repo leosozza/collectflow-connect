@@ -10,6 +10,7 @@ import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
 import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
+import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
