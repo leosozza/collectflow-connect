@@ -1,17 +1,47 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Unificar visual da aba Personalização + adicionar Campos Personalizados
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Problemas identificados
+1. **Modelos de Documentos** usa `Collapsible` com seta rotacional e Cards internos
+2. **Campos Visíveis no Atendimento** usa `Collapsible` com estilo diferente (sem seta, com descrição inline)
+3. **Scripts** aparece direto sem wrapper
+4. **Campos Personalizados** (`CustomFieldsConfig`) não foi incluído na aba — continua apenas em CadastrosPage
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+## Mudanças em `src/components/cadastros/CredorForm.tsx`
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+### 1. Padronizar todas as seções com layout uniforme
+Cada seção dentro de Personalização terá o mesmo padrão visual:
+
+```text
+[border-t] ─────────────────────────
+▸ Título da Seção              [chevron]
+  Descrição curta em text-xs
+  ─── conteúdo colapsável ───
+```
+
+Usar o mesmo `Collapsible` com:
+- `CollapsibleTrigger` com `flex items-center justify-between w-full`
+- Título em `text-sm font-medium` + descrição em `text-xs text-muted-foreground`
+- `ChevronDown` com rotação `-rotate-90 → rotate-0`
+
+Aplicar esse padrão para: Modo da Carteira, Modelos de Documentos, Campos Visíveis, Campos Personalizados, Scripts.
+
+### 2. Adicionar seção "Campos Personalizados"
+- Importar `CustomFieldsConfig` no CredorForm
+- Inserir como nova seção colapsável entre "Campos Visíveis no Atendimento" e "Scripts"
+- O componente já é autossuficiente (CRUD completo), basta renderizá-lo
+
+### 3. Modo da Carteira dentro de Collapsible também
+Envolver o RadioGroup existente em um Collapsible para manter consistência visual (será a primeira seção, aberta por padrão).
+
+### Ordem final das seções na aba Personalização:
+1. Modo da Carteira
+2. Modelos de Documentos
+3. Campos Visíveis no Atendimento
+4. Campos Personalizados
+5. Scripts de Abordagem
+
+## Arquivo modificado
+- `src/components/cadastros/CredorForm.tsx`
+
