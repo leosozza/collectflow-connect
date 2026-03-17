@@ -10,6 +10,7 @@ import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
 import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
+import CredorDebtorCategoriesConfig from "./CredorDebtorCategoriesConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
