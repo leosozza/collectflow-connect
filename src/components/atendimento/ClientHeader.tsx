@@ -177,6 +177,13 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
               <Badge className={`text-[10px] font-bold tracking-wider px-2.5 py-0.5 ${statusBadge.className}`}>
                 {statusBadge.label}
               </Badge>
+              <button
+                onClick={openWhatsApp}
+                title="Abrir WhatsApp"
+                className="p-1.5 rounded-full hover:bg-muted transition-colors"
+              >
+                <MessageCircle className="w-5 h-5 text-emerald-500 fill-emerald-500" />
+              </button>
             </div>
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
