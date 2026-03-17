@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCPF } from "@/lib/formatters";
-import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
+import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { ArrowLeft, Home } from "lucide-react";
