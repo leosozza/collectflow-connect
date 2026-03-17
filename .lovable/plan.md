@@ -1,17 +1,43 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Criar aba "Personalização" no CredorForm
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Resumo
+Reorganizar o `CredorForm.tsx` criando uma nova aba **Personalização** que agrupa funcionalidades de customização por credor, simplificando as abas existentes.
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+## O que move para "Personalização"
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+| Conteúdo | Localização atual | Ação |
+|---|---|---|
+| Modo da Carteira (RadioGroup open/assigned) | Aba "Dados" (linhas 327-349) | Mover |
+| Modelos de Documentos (Collapsible + Dialog de edição) | Aba "Dados" (linhas 372-451) | Mover |
+| Campos Visíveis no Atendimento (`AtendimentoFieldsConfig`) | Aba "Negociação" (linhas 683-695) | Mover |
+| Scripts de Abordagem (`CredorScriptsTab`) | Aba própria "Scripts" (linhas 703-706) | Mover |
+
+## Mudanças no `CredorForm.tsx`
+
+1. **Substituir a aba "Scripts"** por **"Personalização"** na `TabsList`:
+   - `<TabsTrigger value="personalizacao">Personalização</TabsTrigger>` no lugar de `scripts`
+
+2. **Nova `TabsContent value="personalizacao"`** contendo, em ordem:
+   - Modo da Carteira (RadioGroup)
+   - Modelos de Documentos (Collapsible existente)
+   - Campos Visíveis no Atendimento (Collapsible + `AtendimentoFieldsConfig`)
+   - Scripts de Abordagem (`CredorScriptsTab`)
+
+3. **Remover** dessas seções dos locais originais:
+   - Modo da Carteira sai da aba "Dados"
+   - Modelos de Documentos sai da aba "Dados"
+   - Campos Visíveis sai da aba "Negociação"
+   - `TabsTrigger value="scripts"` e `TabsContent value="scripts"` removidos
+
+4. **Nenhuma lógica ou estado muda** — apenas realocação de JSX. Imports, handlers, e state permanecem os mesmos.
+
+## Estrutura final das abas
+```text
+Dados | Bancário | Negociação | Régua | Personalização | Assinatura | Portal
+```
+
+## Arquivo modificado
+- `src/components/cadastros/CredorForm.tsx` — único arquivo alterado
+
