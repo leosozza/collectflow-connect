@@ -81,6 +81,7 @@ const CadastrosPage = () => {
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
         { key: "categorizacao_chamada", label: "Categorização da Chamada", icon: Headset },
+      ],
     },
     {
       title: "Acesso",
