@@ -23,7 +23,7 @@ const DEFAULT_GROUP_MAP: Record<string, string> = {
   wrong_contact: "contato",
 };
 
-const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPanelProps) => {
+const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const [selected, setSelected] = useState<string | null>(null);
