@@ -128,6 +128,19 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       if (tenant?.id && id) {
         executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
       }
+      // Save call log from 3CPlus after disposition
+      if (effectiveAgentId && settings.threecplus_domain && tenant?.id && client?.cpf) {
+        saveCallLog({
+          tenantId: tenant.id,
+          clientId: id!,
+          clientCpf: client.cpf,
+          agentId: effectiveAgentId,
+          tenantSettings: settings,
+          operatorName: profile?.full_name || undefined,
+        }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["atendimento-call-logs"] });
+        }).catch(console.error);
+      }
       if (effectiveAgentId && settings.threecplus_domain) {
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId });
       }
