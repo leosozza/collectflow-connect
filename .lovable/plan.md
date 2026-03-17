@@ -1,17 +1,27 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Integrar Categorização do Devedor no Score Operacional
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Situação Atual
+O evento `debtor_category` é gravado em `client_events` mas o motor de score em `calculate-propensity` não o processa — ele é ignorado no `switch`.
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+## Lógica Proposta
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+A categorização do devedor pelo operador é um sinal de **Engajamento** — significa que houve interação suficiente para o operador classificar o perfil. Também pode impactar **Credibilidade** dependendo da categoria atribuída.
+
+### Regras no motor de score:
+- **Novo case `debtor_category`** no switch do `calculateScore`:
+  - Conta como evento de engajamento positivo (o operador teve interação suficiente para categorizar)
+  - `engagePos += weight` e `engageTotal += weight`
+  - Se o `event_value` for `"removed"`, não conta como positivo (apenas `engageTotal += weight`)
+
+### Impacto estimado:
+- Leve boost na dimensão Engajamento (20% do score total)
+- Clientes categorizados terão score marginalmente superior a não-categorizados, refletindo que houve análise humana do perfil
+
+## Arquivo a editar
+- `supabase/functions/calculate-propensity/index.ts` — adicionar case `debtor_category` no switch (~5 linhas)
+
+## Evolução futura (Fase 2+)
+Quando houver categorias com semântica definida (ex: "inadimplente recorrente", "primeira vez"), o score poderá usar o `metadata.category_name` para ajustar também a dimensão Credibilidade. Por agora, tratamos apenas como sinal genérico de engajamento.
+
