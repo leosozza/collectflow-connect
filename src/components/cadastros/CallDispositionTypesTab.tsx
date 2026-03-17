@@ -216,7 +216,6 @@ const CallDispositionTypesTab = () => {
                 </SelectContent>
               </Select>
             </div>
-            </div>
             {form.id && (
               <div className="flex items-center gap-2">
                 <Switch checked={form.active} onCheckedChange={v => setForm(f => ({ ...f, active: v }))} />
