@@ -270,6 +270,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         diasAtraso={diasAtraso}
         onCall={handleCall}
         callingPhone={callingPhone}
+        onNegotiate={() => setShowNegotiation(true)}
       />
 
       {/* Main content — 3 columns */}
@@ -277,7 +278,6 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         <div className="space-y-4">
           <DispositionPanel
             onDisposition={handleDisposition}
-            onNegotiate={() => setShowNegotiation(true)}
             loading={dispositionMutation.isPending}
           />
           <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>

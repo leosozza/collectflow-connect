@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Headset, ChevronRight, Handshake, CalendarClock, Check
+  Headset, ChevronRight, CalendarClock, Check
 } from "lucide-react";
 import { DispositionType, DISPOSITION_TYPES, fetchTenantDispositionTypes } from "@/services/dispositionService";
 import { useTenant } from "@/hooks/useTenant";
@@ -12,7 +12,6 @@ import { toast } from "sonner";
 
 interface DispositionPanelProps {
   onDisposition: (type: DispositionType, notes?: string, scheduledCallback?: string) => Promise<void>;
-  onNegotiate: () => void;
   loading?: boolean;
 }
 
@@ -24,7 +23,7 @@ const DEFAULT_GROUP_MAP: Record<string, string> = {
   wrong_contact: "contato",
 };
 
-const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPanelProps) => {
+const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const [selected, setSelected] = useState<string | null>(null);
@@ -98,7 +97,35 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
 
   return (
     <div className="space-y-4">
-      {/* Card 1: Categorização */}
+      {/* Card 1: Agendar Retorno */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <CalendarClock className="w-4 h-4" />
+            Agendar Retorno
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <Input
+              type="datetime-local"
+              value={callbackDate}
+              onChange={(e) => setCallbackDate(e.target.value)}
+              className="text-sm flex-1"
+            />
+            <Button
+              size="icon"
+              onClick={handleCallback}
+              disabled={loading || !callbackDate}
+              className="h-10 w-10 rounded-full shrink-0"
+            >
+              <Check className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Card 2: Categorização */}
       <Card className="border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -107,7 +134,6 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Resultado do Contato */}
           {resultadoGroup.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Resultado do Contato</p>
@@ -117,7 +143,6 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
             </div>
           )}
 
-          {/* Erro de Cadastro */}
           {contatoGroup.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Erro de Cadastro</p>
@@ -144,7 +169,6 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
             </div>
           )}
 
-          {/* Other */}
           {otherGroup.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Outros</p>
@@ -153,44 +177,6 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
               </div>
             </div>
           )}
-
-          {/* FORMALIZAR ACORDO */}
-          <Button
-            className="w-full h-14 gap-3 text-base font-bold bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-primary-foreground"
-            onClick={onNegotiate}
-            disabled={loading}
-          >
-            <Handshake className="w-5 h-5" />
-            FORMALIZAR ACORDO
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Card 2: Agendar Retorno */}
-      <Card className="border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <CalendarClock className="w-4 h-4" />
-            Agendar Retorno
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <Input
-              type="datetime-local"
-              value={callbackDate}
-              onChange={(e) => setCallbackDate(e.target.value)}
-              className="text-sm flex-1"
-            />
-            <Button
-              size="icon"
-              onClick={handleCallback}
-              disabled={loading || !callbackDate}
-              className="h-10 w-10 rounded-full shrink-0"
-            >
-              <Check className="w-4 h-4" />
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

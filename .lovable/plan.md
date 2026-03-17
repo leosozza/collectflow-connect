@@ -1,26 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Ajustes no layout da tela de Atendimento
+### Correções aplicadas
 
-## Mudanças
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-### 1. Botão WhatsApp — usar mesmo estilo do perfil na Carteira
-O botão WhatsApp no `ClientHeader` será um botão maior e mais evidente (verde, com fundo arredondado e ícone preenchido), similar ao usado em `ClientDetailHeader`.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### 2. Botão "Formalizar Acordo" — mover para o card superior
-Adicionar um botão `FORMALIZAR ACORDO` (com ícone Handshake) ao lado do botão WhatsApp no `ClientHeader`, na linha do nome do devedor. O `onNegotiate` callback será passado como prop.
-
-### 3. "Mais informações" — expandir dentro do mesmo card visualmente
-Atualmente o `CollapsibleContent` renderiza com `border-t` criando um visual de card separado. Remover o `border-t` do conteúdo expandido e ajustar para que flua naturalmente dentro do mesmo card, sem separação visual.
-
-### 4. Reordenar cards no DispositionPanel
-Inverter a ordem: "Agendar Retorno" primeiro, "Categorização da Chamada" depois. O botão "FORMALIZAR ACORDO" será removido do DispositionPanel (já estará no header).
-
-## Arquivos afetados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/components/atendimento/ClientHeader.tsx` | Botão WhatsApp maior + botão Formalizar Acordo + fix visual collapsible |
-| `src/components/atendimento/DispositionPanel.tsx` | Remover botão Formalizar Acordo, inverter ordem dos cards |
-| `src/pages/AtendimentoPage.tsx` | Passar `onNegotiate` como prop ao ClientHeader |
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
