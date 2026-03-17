@@ -180,16 +180,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
                 {statusBadge.label}
               </Badge>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <Button
-                onClick={openWhatsApp}
-                size="sm"
-                className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-9 w-9 p-0"
-                title="Abrir WhatsApp"
-              >
-                <MessageCircle className="w-4 h-4 fill-white" />
-              </Button>
-            </div>
+            
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
               <span className="flex items-center gap-1.5">
@@ -218,9 +209,16 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
           </div>
         </div>
 
-        {/* Centered action button */}
-        {onNegotiate && (
-          <div className="flex justify-center pb-4">
+        {/* Centered action buttons */}
+        <div className="flex items-center justify-center gap-3 pb-4">
+          <Button
+            onClick={openWhatsApp}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-10 w-10 p-0"
+            title="Abrir WhatsApp"
+          >
+            <MessageCircle className="w-5 h-5 fill-white" />
+          </Button>
+          {onNegotiate && (
             <Button
               onClick={onNegotiate}
               size="lg"
@@ -229,8 +227,8 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
               <Handshake className="w-5 h-5" />
               FORMALIZAR ACORDO
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Expand trigger */}
         <CollapsibleTrigger asChild>

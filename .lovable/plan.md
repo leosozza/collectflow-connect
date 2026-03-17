@@ -1,29 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Centralizar botões WhatsApp + Formalizar Acordo no card
+### Correções aplicadas
 
-## Problema
-O botão WhatsApp está posicionado abaixo do nome do cliente (linha 183-192), enquanto o "Formalizar Acordo" está centralizado mais abaixo (linha 222-233). Ambos precisam estar juntos, centralizados no card.
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## Solução
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-**Arquivo:** `src/components/atendimento/ClientHeader.tsx`
-
-1. **Remover** o botão WhatsApp da seção "Name + meta" (linhas 183-192)
-2. **Unificar** ambos os botões em uma única `div` centralizada, logo após os stats financeiros:
-
-```tsx
-<div className="flex items-center justify-center gap-3 pb-4">
-  <Button onClick={openWhatsApp} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-10 w-10 p-0">
-    <MessageCircle className="w-5 h-5 fill-white" />
-  </Button>
-  {onNegotiate && (
-    <Button onClick={onNegotiate} size="lg" className="gap-2 font-bold text-base px-8">
-      <Handshake className="w-5 h-5" /> FORMALIZAR ACORDO
-    </Button>
-  )}
-</div>
-```
-
-Sem aumentar altura do card — apenas reorganiza o que já existe.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
