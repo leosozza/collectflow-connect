@@ -1,17 +1,51 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Fix campos expandidos no Atendimento + Mover config para dentro do Credor
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Problemas identificados
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+1. **Campos mostram UUIDs**: `tipo_devedor`, `tipo_divida` e `status_cobranca` exibem IDs em vez de nomes legíveis — os renderers usam `c.tipo_devedor_id` diretamente
+2. **Config deve ser por credor, não por tenant**: Cada credor pode ter campos diferentes relevantes para o operador
+3. **Aba "Campos do Atendimento" em Cadastros**: Deve ser removida de lá e movida para dentro do CredorForm, na aba "Negociação"
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+## Mudanças
+
+### 1. Migration: Adicionar coluna `credor_id` à tabela `atendimento_field_config`
+
+```sql
+ALTER TABLE public.atendimento_field_config ADD COLUMN credor_id UUID REFERENCES credores(id) ON DELETE CASCADE;
+-- Drop old unique constraint (tenant_id, field_key)
+-- Add new unique constraint (credor_id, field_key)
+-- Update RLS policies accordingly
+```
+
+### 2. Service `atendimentoFieldsService.ts`
+- Alterar `fetchFieldConfig` para filtrar por `credor_id` em vez de apenas `tenant_id`
+- Alterar `seedDefaultFields` para receber `credorId`
+- Alterar `toggleFieldVisibility` — sem mudança
+
+### 3. `ClientHeader.tsx` — Fix dos campos com UUID
+- Para `tipo_devedor`, `tipo_divida`, `status_cobranca`: renderizar o nome (via join ou lookup) em vez do UUID
+- O `client` já vem com `select("*")` — verificar se há campos de nome disponíveis ou se precisa resolver via lookup
+- Buscar config por `credor_id` do client (via `client.credor_id` ou nome do credor)
+
+### 4. Mover config para CredorForm → aba Negociação
+- **Novo componente**: `CredorAtendimentoFieldsConfig.tsx` (versão compacta do `AtendimentoFieldsConfig` que recebe `credorId`)
+- Adicionar dentro de `<TabsContent value="negociacao">` no `CredorForm.tsx`, como seção colapsável ao final
+- Remover item "campos_atendimento" do `CadastrosPage.tsx`
+
+### 5. Remover `AtendimentoFieldsConfig.tsx` de Cadastros
+- Remover import e renderização em `CadastrosPage.tsx`
+- O componente pode ser deletado ou reutilizado pelo novo componente do Credor
+
+## Arquivos afetados
+
+| Arquivo | Mudança |
+|---|---|
+| Migration SQL | Adicionar `credor_id`, ajustar unique constraint |
+| `src/services/atendimentoFieldsService.ts` | Queries por `credor_id` |
+| `src/components/atendimento/ClientHeader.tsx` | Fix UUIDs + buscar config por credor |
+| `src/components/cadastros/CredorForm.tsx` | Adicionar seção de campos do atendimento na aba Negociação |
+| `src/pages/CadastrosPage.tsx` | Remover "Campos do Atendimento" da nav |
+| `src/components/cadastros/AtendimentoFieldsConfig.tsx` | Refatorar para aceitar `credorId` prop |
+
