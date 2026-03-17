@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUrlState } from "@/hooks/useUrlState";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Puzzle, Headset } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
@@ -9,7 +9,7 @@ import TipoStatusList from "@/components/cadastros/TipoStatusList";
 import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
-import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
+
 import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
@@ -88,7 +88,6 @@ const CadastrosPage = () => {
       items: [
         { key: "permissoes", label: "Permissões", icon: Shield },
         { key: "grade_comissao", label: "Grade de Comissão", icon: TrendingUp },
-        { key: "campos_personalizados", label: "Campos Personalizados", icon: Puzzle },
       ],
     },
   ];
@@ -186,7 +185,7 @@ const CadastrosPage = () => {
         {active === "tipo_status" && <TipoStatusList />}
         {active === "permissoes" && <UserPermissionsTab />}
         {active === "grade_comissao" && <CommissionGradesTab />}
-        {active === "campos_personalizados" && <CustomFieldsConfig />}
+        
         {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
         
       </div>

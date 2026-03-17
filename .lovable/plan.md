@@ -1,12 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Remover "Campos Personalizados" da página Cadastros
+### Correções aplicadas
 
-Mudança simples em `src/pages/CadastrosPage.tsx`:
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-1. **Remover do menu lateral**: Tirar `{ key: "campos_personalizados", ... }` do grupo "Acesso" (linha 91)
-2. **Remover a renderização**: Tirar `{active === "campos_personalizados" && <CustomFieldsConfig />}` (linha 189)
-3. **Limpar imports não utilizados**: Remover import de `CustomFieldsConfig` e o ícone `Puzzle` se não usado em outro lugar
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-O componente já está disponível dentro da aba **Personalização** do perfil do credor, então basta remover a duplicação.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
