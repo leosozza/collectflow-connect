@@ -247,19 +247,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             onNegotiate={() => setShowNegotiation(true)}
             loading={dispositionMutation.isPending}
           />
-          {showNegotiation && (
-            <NegotiationPanel
-              totalAberto={totalAberto}
-              clientCpf={client.cpf}
-              clientName={client.nome_completo}
-              credor={client.credor}
-              credorRules={credorRules}
-              onClose={() => setShowNegotiation(false)}
-              onCreateAgreement={async (data) => { await agreementMutation.mutateAsync(data); }}
-              loading={agreementMutation.isPending}
-              hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
-            />
-          )}
+          <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Formalizar Acordo — {client.nome_completo}</DialogTitle>
+              </DialogHeader>
+              <AgreementCalculator
+                clients={clientRecords}
+                cpf={client.cpf}
+                clientName={client.nome_completo}
+                credor={client.credor}
+                onAgreementCreated={handleAgreementCreated}
+                hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
         <div>
           <ClientTimeline
