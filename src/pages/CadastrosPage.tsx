@@ -187,6 +187,7 @@ const CadastrosPage = () => {
         {active === "permissoes" && <UserPermissionsTab />}
         {active === "grade_comissao" && <CommissionGradesTab />}
         {active === "campos_personalizados" && <CustomFieldsConfig />}
+        {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
       </div>
     </div>
   );
