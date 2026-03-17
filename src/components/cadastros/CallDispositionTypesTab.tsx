@@ -216,13 +216,6 @@ const CallDispositionTypesTab = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Ordem</Label>
-              <Input
-                type="number"
-                value={form.sort_order}
-                onChange={e => setForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-              />
             </div>
             {form.id && (
               <div className="flex items-center gap-2">
