@@ -152,7 +152,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
     tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
     status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
-    observacoes: () => ({ label: "Observações", value: client.observacoes ? (client.observacoes.length > 80 ? client.observacoes.slice(0, 80) + "…" : client.observacoes) : null }),
+    
   };
 
   const ALL_FIELD_KEYS = Object.keys(FIELD_RENDERERS);
