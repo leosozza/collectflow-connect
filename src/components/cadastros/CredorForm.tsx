@@ -10,6 +10,7 @@ import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
 import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
+import CredorDebtorCategoriesConfig from "./CredorDebtorCategoriesConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -735,7 +736,21 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </CollapsibleContent>
             </Collapsible>
 
-            {/* 5. Scripts de Abordagem */}
+            {/* 5. Categorização do Devedor */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Categorização do Devedor</h4>
+                  <p className="text-xs text-muted-foreground">Defina categorias específicas para classificar os devedores deste credor</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <CredorDebtorCategoriesConfig credorId={editing?.id} />
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 6. Scripts de Abordagem */}
             <Collapsible className="border-t border-border py-4">
               <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
                 <div className="text-left">

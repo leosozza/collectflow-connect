@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
+import DebtorCategoryPanel from "@/components/atendimento/DebtorCategoryPanel";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientTimeline, { ClientObservations } from "@/components/atendimento/ClientTimeline";
 
@@ -279,6 +280,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
           <DispositionPanel
             onDisposition={handleDisposition}
             loading={dispositionMutation.isPending}
+          />
+          <DebtorCategoryPanel
+            clientId={client.id}
+            credorName={client.credor}
+            currentCategoryId={client.debtor_category_id}
           />
           <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
             <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
