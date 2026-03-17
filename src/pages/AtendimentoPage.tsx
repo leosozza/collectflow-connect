@@ -262,6 +262,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       {/* Client Header */}
       <ClientHeader
         client={{ ...client, id: client.id } as any}
+        clientRecords={clientRecords}
         totalAberto={totalAberto}
         totalPago={totalPago}
         totalParcelas={clientRecords.length}

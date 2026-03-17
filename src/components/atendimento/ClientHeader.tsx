@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface ClientHeaderProps {
   client: any;
+  clientRecords?: any[];
   totalAberto: number;
   totalPago: number;
   totalParcelas: number;
@@ -32,7 +33,7 @@ const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string |
   );
 };
 
-const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHeaderProps) => {
+const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
@@ -109,8 +110,16 @@ const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHead
     cep: () => ({ label: "CEP", value: client.cep ? formatCEP(client.cep) : null }),
     external_id: () => ({ label: "Cód. Devedor", value: client.external_id, icon: Tag }),
     cod_contrato: () => ({ label: "Cód. Contrato", value: client.cod_contrato, icon: FileText }),
-    valor_saldo: () => ({ label: "Valor Saldo", value: client.valor_saldo != null ? formatCurrency(client.valor_saldo) : null, icon: DollarSign }),
-    valor_atualizado: () => ({ label: "Valor Atualizado", value: client.valor_atualizado != null ? formatCurrency(client.valor_atualizado) : null, icon: DollarSign }),
+    valor_saldo: () => {
+      const records = clientRecords.length > 0 ? clientRecords : [client];
+      const total = records.reduce((sum, r) => sum + (Number(r.valor_saldo) || 0), 0);
+      return { label: "Valor Saldo", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
+    },
+    valor_atualizado: () => {
+      const records = clientRecords.length > 0 ? clientRecords : [client];
+      const total = records.reduce((sum, r) => sum + (Number(r.valor_atualizado) || 0), 0);
+      return { label: "Valor Atualizado", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
+    },
     data_vencimento: () => ({ label: "Data Vencimento", value: client.data_vencimento ? formatDate(client.data_vencimento) : null }),
     tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
     tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
