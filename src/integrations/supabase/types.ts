@@ -895,6 +895,60 @@ export type Database = {
           },
         ]
       }
+      client_events: {
+        Row: {
+          client_cpf: string
+          client_id: string | null
+          created_at: string | null
+          event_channel: string | null
+          event_source: string
+          event_type: string
+          event_value: string | null
+          id: string
+          metadata: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          client_cpf: string
+          client_id?: string | null
+          created_at?: string | null
+          event_channel?: string | null
+          event_source: string
+          event_type: string
+          event_value?: string | null
+          id?: string
+          metadata?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          client_cpf?: string
+          client_id?: string | null
+          created_at?: string | null
+          event_channel?: string | null
+          event_source?: string
+          event_type?: string
+          event_value?: string | null
+          id?: string
+          metadata?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_phones: {
         Row: {
           cpf: string
@@ -1016,12 +1070,17 @@ export type Database = {
           phone: string | null
           phone2: string | null
           phone3: string | null
+          preferred_channel: string | null
           propensity_score: number | null
           quebra: number | null
+          score_confidence: string | null
+          score_reason: string | null
+          score_updated_at: string | null
           status: Database["public"]["Enums"]["client_status"]
           status_cobranca_id: string | null
           status_cobranca_locked_at: string | null
           status_cobranca_locked_by: string | null
+          suggested_queue: string | null
           tenant_id: string | null
           tipo_devedor_id: string | null
           tipo_divida_id: string | null
@@ -1059,12 +1118,17 @@ export type Database = {
           phone?: string | null
           phone2?: string | null
           phone3?: string | null
+          preferred_channel?: string | null
           propensity_score?: number | null
           quebra?: number | null
+          score_confidence?: string | null
+          score_reason?: string | null
+          score_updated_at?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
@@ -1102,12 +1166,17 @@ export type Database = {
           phone?: string | null
           phone2?: string | null
           phone3?: string | null
+          preferred_channel?: string | null
           propensity_score?: number | null
           quebra?: number | null
+          score_confidence?: string | null
+          score_reason?: string | null
+          score_updated_at?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null

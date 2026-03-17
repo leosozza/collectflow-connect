@@ -3,10 +3,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 interface PropensityBadgeProps {
   score: number | null | undefined;
+  scoreReason?: string | null;
   size?: "sm" | "md";
 }
 
-const PropensityBadge = ({ score, size = "sm" }: PropensityBadgeProps) => {
+const PropensityBadge = ({ score, scoreReason, size = "sm" }: PropensityBadgeProps) => {
   if (score === null || score === undefined) return null;
 
   const getColor = (s: number) => {
@@ -16,9 +17,9 @@ const PropensityBadge = ({ score, size = "sm" }: PropensityBadgeProps) => {
   };
 
   const getLabel = (s: number) => {
-    if (s >= 70) return "Alta propensão";
-    if (s >= 40) return "Média propensão";
-    return "Baixa propensão";
+    if (s >= 70) return "Alto";
+    if (s >= 40) return "Médio";
+    return "Baixo";
   };
 
   const { bg, text, icon: Icon } = getColor(score);
@@ -33,7 +34,8 @@ const PropensityBadge = ({ score, size = "sm" }: PropensityBadgeProps) => {
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        <p>{getLabel(score)} a pagamento ({score}/100)</p>
+        <p className="font-medium">Score Operacional: {getLabel(score)} ({score}/100)</p>
+        {scoreReason && <p className="text-xs text-muted-foreground mt-0.5">{scoreReason}</p>}
       </TooltipContent>
     </Tooltip>
   );
