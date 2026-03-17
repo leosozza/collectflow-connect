@@ -8,6 +8,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
+import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -589,38 +590,49 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           </TabsContent>
 
           {/* ABA 5 - PERSONALIZAÇÃO */}
-          <TabsContent value="personalizacao" className="space-y-6 mt-4">
-            {/* Modo da Carteira */}
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Modo da Carteira</Label>
-              <RadioGroup
-                value={form.carteira_mode || "open"}
-                onValueChange={(v) => set("carteira_mode", v)}
-                className="flex gap-6"
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="open" id="mode-open" />
-                  <Label htmlFor="mode-open" className="cursor-pointer font-normal">Mar Aberto</Label>
+          <TabsContent value="personalizacao" className="space-y-0 mt-4">
+            {/* 1. Modo da Carteira */}
+            <Collapsible defaultOpen className="py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Modo da Carteira</h4>
+                  <p className="text-xs text-muted-foreground">Define como os operadores acessam os clientes deste credor</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="assigned" id="mode-assigned" />
-                  <Label htmlFor="mode-assigned" className="cursor-pointer font-normal">Atribuição</Label>
-                </div>
-              </RadioGroup>
-              <p className="text-xs text-muted-foreground">
-                {form.carteira_mode === "assigned"
-                  ? "Operadores veem apenas clientes atribuídos a eles neste credor."
-                  : "Todos os operadores com permissão podem ver todos os clientes deste credor."}
-              </p>
-            </div>
-
-            {/* Modelos de Documentos */}
-            <Collapsible className="border-t border-border pt-4">
-              <CollapsibleTrigger className="flex items-center gap-2 w-full cursor-pointer group">
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-0 -rotate-90 group-data-[state=closed]:-rotate-90" />
-                <p className="text-sm font-medium text-foreground">Modelos de Documentos</p>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3 space-y-3">
+              <CollapsibleContent className="pt-4">
+                <RadioGroup
+                  value={form.carteira_mode || "open"}
+                  onValueChange={(v) => set("carteira_mode", v)}
+                  className="flex gap-6"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="open" id="mode-open" />
+                    <Label htmlFor="mode-open" className="cursor-pointer font-normal">Mar Aberto</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="assigned" id="mode-assigned" />
+                    <Label htmlFor="mode-assigned" className="cursor-pointer font-normal">Atribuição</Label>
+                  </div>
+                </RadioGroup>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {form.carteira_mode === "assigned"
+                    ? "Operadores veem apenas clientes atribuídos a eles neste credor."
+                    : "Todos os operadores com permissão podem ver todos os clientes deste credor."}
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 2. Modelos de Documentos */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Modelos de Documentos</h4>
+                  <p className="text-xs text-muted-foreground">Templates para acordo, recibo, quitação e descrição de dívida</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-3">
                 {TEMPLATES.map(t => (
                   <Card key={t.key} className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -695,24 +707,47 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Campos Visíveis no Atendimento */}
-            <Collapsible className="border-t border-border pt-4">
-              <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 cursor-pointer">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Campos Visíveis no Atendimento</p>
+            {/* 3. Campos Visíveis no Atendimento */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Campos Visíveis no Atendimento</h4>
                   <p className="text-xs text-muted-foreground">Defina quais informações do devedor o operador visualiza</p>
                 </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3">
+              <CollapsibleContent className="pt-4">
                 <AtendimentoFieldsConfig credorId={editing?.id} />
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Scripts de Abordagem */}
-            <div className="border-t border-border pt-4">
-              <CredorScriptsTab credorId={editing?.id} />
-            </div>
+            {/* 4. Campos Personalizados */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Campos Personalizados</h4>
+                  <p className="text-xs text-muted-foreground">Crie campos extras para armazenar informações adicionais dos clientes</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <CustomFieldsConfig />
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 5. Scripts de Abordagem */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Scripts de Abordagem</h4>
+                  <p className="text-xs text-muted-foreground">Modelos de texto para orientar o atendimento ao devedor</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <CredorScriptsTab credorId={editing?.id} />
+              </CollapsibleContent>
+            </Collapsible>
           </TabsContent>
 
           {/* ABA 5 - ASSINATURA DIGITAL */}
