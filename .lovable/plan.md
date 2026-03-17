@@ -1,28 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Botão "NEGOCIAR AGORA" → abrir "Formalizar Acordo" (AgreementCalculator)
+### Correções aplicadas
 
-## Situação atual
-- O botão "NEGOCIAR AGORA" no `DispositionPanel` abre o `NegotiationPanel` (simulador simples com templates de desconto)
-- A tela `/carteira/:cpf` (ClientDetailPage) possui o componente `AgreementCalculator` dentro de um Dialog, que é a experiência completa de "Formalizar Acordo" — com seleção de títulos, cálculo de juros/multa/honorários, simulação de parcelas, etc.
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## O que será feito
-Substituir o `NegotiationPanel` pelo `AgreementCalculator` dentro de um Dialog na página `/atendimento`, reaproveitando exatamente o mesmo componente sem duplicar lógica.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### Arquivos modificados
-
-**`src/pages/AtendimentoPage.tsx`**
-- Remover import do `NegotiationPanel`
-- Importar `AgreementCalculator` de `@/components/client-detail/AgreementCalculator`
-- Importar `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`
-- Substituir o bloco `{showNegotiation && <NegotiationPanel .../>}` por um `<Dialog>` com `AgreementCalculator` dentro, passando:
-  - `clients={clientRecords}` (registros do CPF)
-  - `cpf={client.cpf}`
-  - `clientName={client.nome_completo}`
-  - `credor={client.credor}`
-  - `onAgreementCreated` → invalida queries + fecha dialog + registra tabulação "negotiated"
-  - `hasActiveAgreement` → mesma lógica atual
-- O `onNegotiate` continuará setando `showNegotiation(true)`, mas agora abre o Dialog
-
-Nenhuma lógica de negócio, endpoint ou componente novo será criado. O `NegotiationPanel` deixa de ser usado nesta página.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)

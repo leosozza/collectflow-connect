@@ -6,16 +6,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCPF } from "@/lib/formatters";
-import { createAgreement } from "@/services/agreementService";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
-import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
+import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientTimeline, { ClientObservations } from "@/components/atendimento/ClientTimeline";
 
 interface AtendimentoPageProps {
@@ -119,38 +119,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     },
   });
 
-  // Agreement mutation
-  const agreementMutation = useMutation({
-    mutationFn: async (data: {
-      discount_percent: number; new_installments: number; proposed_total: number;
-      new_installment_value: number; first_due_date: string; notes?: string;
-      requiresApproval?: boolean; approvalReason?: string;
-    }) => {
-      if (!user?.id || !tenant?.id || !client) throw new Error("Dados não encontrados");
-      return createAgreement({
-        client_cpf: client.cpf, client_name: client.nome_completo, credor: client.credor,
-        original_total: totalAberto, proposed_total: data.proposed_total,
-        discount_percent: data.discount_percent, new_installments: data.new_installments,
-        new_installment_value: data.new_installment_value, first_due_date: data.first_due_date, notes: data.notes,
-      }, user.id, tenant.id, { requiresApproval: data.requiresApproval, approvalReason: data.approvalReason });
-    },
-    onSuccess: () => {
-      trackAction("criar_acordo_atendimento", { client_id: id });
-      toast.success("Acordo criado com sucesso!");
-      setShowNegotiation(false);
-      queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
-      if (tenant?.id && profile?.id) {
-        createDisposition({ client_id: id!, tenant_id: tenant.id, operator_id: profile.id, disposition_type: "negotiated", notes: "Acordo gerado" })
-          .then(() => {
-            queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
-            if (effectiveAgentId && settings.threecplus_domain) {
-              qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
-            }
-          });
-      }
-    },
-    onError: () => { toast.error("Erro ao criar acordo"); },
-  });
+  const handleAgreementCreated = () => {
+    trackAction("criar_acordo_atendimento", { client_id: id });
+    toast.success("Acordo criado com sucesso!");
+    setShowNegotiation(false);
+    queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
+    if (tenant?.id && profile?.id) {
+      createDisposition({ client_id: id!, tenant_id: tenant.id, operator_id: profile.id, disposition_type: "negotiated", notes: "Acordo gerado" })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+          if (effectiveAgentId && settings.threecplus_domain) {
+            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
+          }
+        });
+    }
+  };
 
   // Save observation
   const handleSaveNote = async (note: string) => {
@@ -264,19 +247,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             onNegotiate={() => setShowNegotiation(true)}
             loading={dispositionMutation.isPending}
           />
-          {showNegotiation && (
-            <NegotiationPanel
-              totalAberto={totalAberto}
-              clientCpf={client.cpf}
-              clientName={client.nome_completo}
-              credor={client.credor}
-              credorRules={credorRules}
-              onClose={() => setShowNegotiation(false)}
-              onCreateAgreement={async (data) => { await agreementMutation.mutateAsync(data); }}
-              loading={agreementMutation.isPending}
-              hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
-            />
-          )}
+          <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Formalizar Acordo — {client.nome_completo}</DialogTitle>
+              </DialogHeader>
+              <AgreementCalculator
+                clients={clientRecords}
+                cpf={client.cpf}
+                clientName={client.nome_completo}
+                credor={client.credor}
+                onAgreementCreated={handleAgreementCreated}
+                hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
         <div>
           <ClientTimeline
