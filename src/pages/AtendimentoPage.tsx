@@ -285,6 +285,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             clientId={client.id}
             credorName={client.credor}
             currentCategoryId={client.debtor_category_id}
+            tenantId={tenant?.id}
+            clientCpf={client.cpf}
           />
           <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
             <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">

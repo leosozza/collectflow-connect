@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard } from "lucide-react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags } from "lucide-react";
 
 interface TimelineItem {
   id: string;
@@ -49,6 +49,7 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   payment:     { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
   system:      { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
   ai:          { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  debtor_category: { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -57,6 +58,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   payment: <CreditCard className="w-3.5 h-3.5 text-teal-500" />,
   message: <Zap className="w-3.5 h-3.5 text-violet-500" />,
   system: <Bot className="w-3.5 h-3.5 text-slate-500" />,
+  debtor_category: <Tags className="w-3.5 h-3.5 text-pink-500" />,
 };
 
 const formatDuration = (seconds: number) => {

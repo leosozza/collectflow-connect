@@ -1,28 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Gravar Categorização do Devedor no Histórico (client_events)
+### Correções aplicadas
 
-## Mudança
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-No `DebtorCategoryPanel.tsx`, após atualizar o `debtor_category_id` no client, inserir um registro em `client_events` com:
-- `event_type`: `"debtor_category"`
-- `event_source`: `"operator"`
-- `event_channel`: `null`
-- `event_value`: nome da categoria selecionada (ou `"removed"` se desmarcou)
-- `metadata`: `{ category_id, category_name, category_color, previous_category_id }`
-- `tenant_id`, `client_id`, `client_cpf` extraídos do contexto
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-## Arquivo: `src/components/atendimento/DebtorCategoryPanel.tsx`
-
-- Adicionar props `tenantId` e `clientCpf` ao componente
-- Na `mutationFn`, após o update do client, fazer um insert em `client_events`
-- Buscar o nome da categoria selecionada a partir do array `categories` local
-
-## Arquivo: `src/pages/AtendimentoPage.tsx`
-
-- Passar `tenantId={tenant?.id}` e `clientCpf={client.cpf}` como props ao `DebtorCategoryPanel`
-
-## Arquivo: `src/components/atendimento/ClientTimeline.tsx`
-
-- Adicionar tratamento do `event_type === "debtor_category"` na renderização da timeline para exibir a mudança de categoria com ícone e texto adequados
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)

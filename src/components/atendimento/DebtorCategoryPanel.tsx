@@ -8,12 +8,13 @@ interface Props {
   clientId: string;
   credorName: string;
   currentCategoryId?: string | null;
+  tenantId?: string;
+  clientCpf?: string;
 }
 
-const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId }: Props) => {
+const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf }: Props) => {
   const queryClient = useQueryClient();
 
-  // Fetch credor_id by name (client.credor stores the name)
   const { data: credor } = useQuery({
     queryKey: ["credor-by-name", credorName],
     queryFn: async () => {
@@ -45,11 +46,35 @@ const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId }: Props)
 
   const mutation = useMutation({
     mutationFn: async (categoryId: string | null) => {
+      // Update client
       const { error } = await supabase
         .from("clients")
         .update({ debtor_category_id: categoryId } as any)
         .eq("id", clientId);
       if (error) throw error;
+
+      // Log to client_events
+      if (tenantId && clientCpf) {
+        const selectedCat = categories.find((c: any) => c.id === categoryId);
+        const { error: eventError } = await supabase
+          .from("client_events")
+          .insert({
+            tenant_id: tenantId,
+            client_id: clientId,
+            client_cpf: clientCpf,
+            event_type: "debtor_category",
+            event_source: "operator",
+            event_channel: null,
+            event_value: selectedCat ? selectedCat.nome : "removed",
+            metadata: {
+              category_id: categoryId,
+              category_name: selectedCat?.nome || null,
+              category_color: selectedCat?.cor || null,
+              previous_category_id: currentCategoryId || null,
+            },
+          });
+        if (eventError) console.error("Error logging debtor_category event:", eventError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["atendimento-client", clientId] });
