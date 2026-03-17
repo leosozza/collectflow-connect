@@ -1,22 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Ajustar botões WhatsApp + Formalizar Acordo no ClientHeader
+### Correções aplicadas
 
-## Mudanças em `src/components/atendimento/ClientHeader.tsx`
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-### 1. Usar o mesmo ícone SVG de WhatsApp da Carteira
-Copiar o componente `WhatsAppIcon` do `ClientDetailHeader.tsx` (SVG oficial do WhatsApp) e usar no lugar do `MessageCircle` genérico. Estilizar com `bg-green-500/10 text-green-500 hover:bg-green-500/20` — mesmo visual do perfil na carteira.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### 2. Mover botões para a mesma linha dos stats financeiros
-Remover a `div` separada de botões centralizados (linhas 212-230). Inserir os botões **dentro** da linha principal do header (linha 169), ao lado dos financial stats, para ficarem na mesma linha sem aumentar o card.
-
-### 3. Reduzir fonte do botão Formalizar Acordo
-Usar `size="sm"` e `text-sm` ao invés de `size="lg"` e `text-base`, para caber na linha e ficar alinhado com os outros elementos.
-
-### Layout resultante (linha principal):
-```
-[Avatar] [Nome + CPF/Credor] [Em Aberto | Total Pago | Atraso] [🟢WhatsApp] [Formalizar Acordo]
-```
-
-Tudo em uma única linha flex, sem linha extra de botões.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
