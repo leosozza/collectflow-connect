@@ -74,7 +74,7 @@ export const atendimentoFieldsService = {
       .eq("id", id) as any);
 
     if (error) {
-      logger.error("Error toggling field visibility", error);
+      logger.error("atendimentoFieldsService", "toggleFieldVisibility", error);
       throw error;
     }
   },
