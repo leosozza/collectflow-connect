@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
 import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
-import ClientTimeline from "@/components/atendimento/ClientTimeline";
+import ClientTimeline, { ClientObservations } from "@/components/atendimento/ClientTimeline";
 
 interface AtendimentoPageProps {
   clientId?: string;
@@ -256,9 +256,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         callingPhone={callingPhone}
       />
 
-      {/* Main content */}
+      {/* Main content — 3 columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 space-y-4">
+        <div className="space-y-4">
           <DispositionPanel
             onDisposition={handleDisposition}
             onNegotiate={() => setShowNegotiation(true)}
@@ -278,14 +278,17 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             />
           )}
         </div>
-        <div className="lg:col-span-2">
+        <div>
           <ClientTimeline
             dispositions={dispositions}
             agreements={agreements}
+          />
+        </div>
+        <div>
+          <ClientObservations
             observacoes={client.observacoes}
             onSaveNote={handleSaveNote}
             savingNote={savingNote}
-            operatorName={profile?.full_name || "Operador"}
           />
         </div>
       </div>
