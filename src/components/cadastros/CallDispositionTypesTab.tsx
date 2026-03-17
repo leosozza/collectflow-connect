@@ -156,7 +156,6 @@ const CallDispositionTypesTab = () => {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Grupo</TableHead>
-              <TableHead>Ordem</TableHead>
               <TableHead>Ativo</TableHead>
               <TableHead className="w-20">Ações</TableHead>
             </TableRow>
@@ -170,7 +169,7 @@ const CallDispositionTypesTab = () => {
                     {GROUP_OPTIONS.find(g => g.value === t.group_name)?.label || t.group_name}
                   </Badge>
                 </TableCell>
-                <TableCell>{t.sort_order}</TableCell>
+                
                 <TableCell>
                   <Badge variant={t.active ? "default" : "secondary"}>
                     {t.active ? "Sim" : "Não"}
@@ -216,14 +215,6 @@ const CallDispositionTypesTab = () => {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Ordem</Label>
-              <Input
-                type="number"
-                value={form.sort_order}
-                onChange={e => setForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-              />
             </div>
             {form.id && (
               <div className="flex items-center gap-2">
