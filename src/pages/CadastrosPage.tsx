@@ -6,8 +6,6 @@ import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
 import TipoStatusList from "@/components/cadastros/TipoStatusList";
-import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
-import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
 
 import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
