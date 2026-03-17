@@ -33,11 +33,11 @@ const DEFAULT_FIELDS: { field_key: string; label: string }[] = [
 
 export const atendimentoFieldsService = {
   async fetchFieldConfig(tenantId: string): Promise<FieldConfig[]> {
-    const { data, error } = await supabase
-      .from("atendimento_field_config")
+    const { data, error } = await (supabase
+      .from("atendimento_field_config" as any)
       .select("*")
       .eq("tenant_id", tenantId)
-      .order("sort_order", { ascending: true });
+      .order("sort_order", { ascending: true }) as any);
 
     if (error) {
       logger.error("Error fetching atendimento field config", error);
