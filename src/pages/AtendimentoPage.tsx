@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
+import DebtorCategoryPanel from "@/components/atendimento/DebtorCategoryPanel";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientTimeline, { ClientObservations } from "@/components/atendimento/ClientTimeline";
 
