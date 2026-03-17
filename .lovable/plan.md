@@ -1,17 +1,32 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Mover Permissões e Grade de Comissão para dentro de Usuários (com abas)
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Resumo
+Remover o grupo "Acesso" do menu lateral de Cadastros e incorporar **Permissões** e **Grade de Comissão** como abas dentro da seção Usuários, usando o componente `Tabs`.
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+## Mudanças
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+### 1. `src/pages/UsersPage.tsx`
+- Envolver o conteúdo atual em uma estrutura de `Tabs` com 3 abas:
+  - **Usuários** (conteúdo atual do UsersPage)
+  - **Permissões** (`UserPermissionsTab`)
+  - **Grade de Comissão** (`CommissionGradesTab`)
+- Importar `Tabs, TabsList, TabsTrigger, TabsContent` e os dois componentes
+
+### 2. `src/pages/CadastrosPage.tsx`
+- Remover o grupo "Acesso" inteiro (itens `permissoes` e `grade_comissao`)
+- Remover as renderizações condicionais para `permissoes` e `grade_comissao`
+- Remover imports não usados: `UserPermissionsTab`, `CommissionGradesTab`, `Shield`, `TrendingUp`
+
+### Estrutura final do menu Cadastros
+```text
+Cadastros
+  Credores | Usuários | Equipes | Perfil do Devedor | Tipo de Dívida | Tipo de Status | Categorização da Chamada
+```
+
+### Estrutura das abas dentro de Usuários
+```text
+[Usuários] [Permissões] [Grade de Comissão]
+```
+
