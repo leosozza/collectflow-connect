@@ -94,28 +94,40 @@ const CarteiraPage = () => {
     higienizados: urlHigienizados,
   }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
 
-  const setFilters = useMemo(() => {
-    return (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
+  const [, setSearchParamsRaw] = useSearchParams();
+
+  const FILTER_DEFAULTS: Record<string, any> = useMemo(() => ({
+    status: "todos", credor: "todos", dateFrom: "", dateTo: "", search: "",
+    tipoDevedorId: "", tipoDividaId: "", statusCobrancaId: "", semAcordo: false,
+    cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
+    valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
+  }), []);
+
+  const setFilters = useCallback(
+    (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
       const resolved = typeof newFilters === 'function' ? newFilters(filters) : newFilters;
-      setUrlStatus(resolved.status);
-      setUrlCredor(resolved.credor);
-      setUrlDateFrom(resolved.dateFrom);
-      setUrlDateTo(resolved.dateTo);
-      setUrlSearch(resolved.search);
-      setUrlTipoDevedorId(resolved.tipoDevedorId);
-      setUrlTipoDividaId(resolved.tipoDividaId);
-      setUrlStatusCobrancaId(resolved.statusCobrancaId);
-      setUrlSemAcordo(resolved.semAcordo);
-      setUrlCadastroDe(resolved.cadastroDe);
-      setUrlCadastroAte(resolved.cadastroAte);
-      setUrlQuitados(resolved.quitados);
-      setUrlValorAbertoDe(resolved.valorAbertoDe);
-      setUrlValorAbertoAte(resolved.valorAbertoAte);
-      setUrlSemContato(resolved.semContato);
-      setUrlEmDia(resolved.emDia);
-      setUrlHigienizados(resolved.higienizados);
-    };
-  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados]);
+      setSearchParamsRaw((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, defaultVal] of Object.entries(FILTER_DEFAULTS)) {
+          const val = resolved[key];
+          const isDefault = typeof defaultVal === "boolean"
+            ? val === defaultVal
+            : typeof defaultVal === "number"
+              ? Number(val) === defaultVal
+              : val === defaultVal;
+          if (isDefault) {
+            next.delete(key);
+          } else if (typeof defaultVal === "boolean") {
+            next.set(key, val ? "1" : "0");
+          } else {
+            next.set(key, String(val));
+          }
+        }
+        return next;
+      }, { replace: true });
+    },
+    [filters, setSearchParamsRaw, FILTER_DEFAULTS]
+  );
 
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formOpen, setFormOpen] = useState(false);
