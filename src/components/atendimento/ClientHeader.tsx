@@ -218,6 +218,20 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
           </div>
         </div>
 
+        {/* Centered action button */}
+        {onNegotiate && (
+          <div className="flex justify-center pb-4">
+            <Button
+              onClick={onNegotiate}
+              size="lg"
+              className="gap-2 font-bold text-base px-8"
+            >
+              <Handshake className="w-5 h-5" />
+              FORMALIZAR ACORDO
+            </Button>
+          </div>
+        )}
+
         {/* Expand trigger */}
         <CollapsibleTrigger asChild>
           <button className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border-t border-border rounded-b-xl">
