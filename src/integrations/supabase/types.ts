@@ -1016,12 +1016,17 @@ export type Database = {
           phone: string | null
           phone2: string | null
           phone3: string | null
+          preferred_channel: string | null
           propensity_score: number | null
           quebra: number | null
+          score_confidence: string | null
+          score_reason: string | null
+          score_updated_at: string | null
           status: Database["public"]["Enums"]["client_status"]
           status_cobranca_id: string | null
           status_cobranca_locked_at: string | null
           status_cobranca_locked_by: string | null
+          suggested_queue: string | null
           tenant_id: string | null
           tipo_devedor_id: string | null
           tipo_divida_id: string | null
@@ -1059,12 +1064,17 @@ export type Database = {
           phone?: string | null
           phone2?: string | null
           phone3?: string | null
+          preferred_channel?: string | null
           propensity_score?: number | null
           quebra?: number | null
+          score_confidence?: string | null
+          score_reason?: string | null
+          score_updated_at?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
@@ -1102,12 +1112,17 @@ export type Database = {
           phone?: string | null
           phone2?: string | null
           phone3?: string | null
+          preferred_channel?: string | null
           propensity_score?: number | null
           quebra?: number | null
+          score_confidence?: string | null
+          score_reason?: string | null
+          score_updated_at?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
