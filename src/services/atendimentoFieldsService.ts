@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 export interface FieldConfig {
   id: string;
   tenant_id: string;
+  credor_id: string;
   field_key: string;
   label: string;
   visible: boolean;
@@ -32,11 +33,11 @@ const DEFAULT_FIELDS: { field_key: string; label: string }[] = [
 ];
 
 export const atendimentoFieldsService = {
-  async fetchFieldConfig(tenantId: string): Promise<FieldConfig[]> {
+  async fetchFieldConfig(credorId: string): Promise<FieldConfig[]> {
     const { data, error } = await (supabase
       .from("atendimento_field_config" as any)
       .select("*")
-      .eq("tenant_id", tenantId)
+      .eq("credor_id", credorId)
       .order("sort_order", { ascending: true }) as any);
 
     if (error) {
@@ -46,9 +47,10 @@ export const atendimentoFieldsService = {
     return (data as FieldConfig[]) || [];
   },
 
-  async seedDefaultFields(tenantId: string): Promise<FieldConfig[]> {
+  async seedDefaultFields(tenantId: string, credorId: string): Promise<FieldConfig[]> {
     const rows = DEFAULT_FIELDS.map((f, i) => ({
       tenant_id: tenantId,
+      credor_id: credorId,
       field_key: f.field_key,
       label: f.label,
       visible: true,
@@ -57,7 +59,7 @@ export const atendimentoFieldsService = {
 
     const { data, error } = await (supabase
       .from("atendimento_field_config" as any)
-      .upsert(rows, { onConflict: "tenant_id,field_key" })
+      .upsert(rows, { onConflict: "credor_id,field_key" })
       .select() as any);
 
     if (error) {

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useTenant } from "@/hooks/useTenant";
 import { atendimentoFieldsService } from "@/services/atendimentoFieldsService";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ClientHeaderProps {
   client: any;
@@ -31,43 +32,98 @@ const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string |
   );
 };
 
-const FIELD_RENDERERS: Record<string, (client: any) => { label: string; value: string | null; icon?: React.ElementType }> = {
-  phone: (c) => ({ label: "Telefone 1", value: c.phone ? formatPhone(c.phone) : null, icon: Phone }),
-  phone2: (c) => ({ label: "Telefone 2", value: c.phone2 ? formatPhone(c.phone2) : null, icon: Phone }),
-  phone3: (c) => ({ label: "Telefone 3", value: c.phone3 ? formatPhone(c.phone3) : null, icon: Phone }),
-  email: (c) => ({ label: "E-mail", value: c.email, icon: Mail }),
-  endereco: (c) => ({ label: "Endereço", value: c.endereco, icon: MapPin }),
-  bairro: (c) => ({ label: "Bairro", value: c.bairro, icon: MapPin }),
-  cidade: (c) => ({ label: "Cidade", value: c.cidade, icon: MapPin }),
-  uf: (c) => ({ label: "UF", value: c.uf }),
-  cep: (c) => ({ label: "CEP", value: c.cep ? formatCEP(c.cep) : null }),
-  external_id: (c) => ({ label: "Cód. Devedor", value: c.external_id, icon: Tag }),
-  cod_contrato: (c) => ({ label: "Cód. Contrato", value: c.cod_contrato, icon: FileText }),
-  valor_saldo: (c) => ({ label: "Valor Saldo", value: c.valor_saldo != null ? formatCurrency(c.valor_saldo) : null, icon: DollarSign }),
-  valor_atualizado: (c) => ({ label: "Valor Atualizado", value: c.valor_atualizado != null ? formatCurrency(c.valor_atualizado) : null, icon: DollarSign }),
-  data_vencimento: (c) => ({ label: "Data Vencimento", value: c.data_vencimento ? formatDate(c.data_vencimento) : null }),
-  tipo_devedor: (c) => ({ label: "Perfil Devedor", value: c.tipo_devedor_id || null }),
-  tipo_divida: (c) => ({ label: "Tipo de Dívida", value: c.tipo_divida_id || null }),
-  status_cobranca: (c) => ({ label: "Status Cobrança", value: c.status_cobranca_id || null }),
-  observacoes: (c) => ({ label: "Observações", value: c.observacoes ? (c.observacoes.length > 80 ? c.observacoes.slice(0, 80) + "…" : c.observacoes) : null }),
-};
-
 const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
 
+  // Resolve credor_id from credor name
+  const { data: credorData } = useQuery({
+    queryKey: ["credor-by-name", tenantId, client?.credor],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("credores")
+        .select("id")
+        .eq("tenant_id", tenantId!)
+        .eq("razao_social", client.credor)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!tenantId && !!client?.credor,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const credorId = credorData?.id;
+
   const { data: fieldConfig } = useQuery({
-    queryKey: ["atendimento-field-config", tenantId],
-    queryFn: () => atendimentoFieldsService.fetchFieldConfig(tenantId!),
-    enabled: !!tenantId,
+    queryKey: ["atendimento-field-config", credorId],
+    queryFn: () => atendimentoFieldsService.fetchFieldConfig(credorId!),
+    enabled: !!credorId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // If no config exists yet, show all fields; otherwise only visible ones
+  // Resolve lookup names for UUID fields
+  const { data: tipoDevedorName } = useQuery({
+    queryKey: ["tipo-devedor-name", client?.tipo_devedor_id],
+    queryFn: async () => {
+      if (!client?.tipo_devedor_id) return null;
+      const { data } = await supabase.from("tipos_devedor").select("nome").eq("id", client.tipo_devedor_id).maybeSingle();
+      return data?.nome || null;
+    },
+    enabled: !!client?.tipo_devedor_id,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: tipoDividaName } = useQuery({
+    queryKey: ["tipo-divida-name", client?.tipo_divida_id],
+    queryFn: async () => {
+      if (!client?.tipo_divida_id) return null;
+      const { data } = await supabase.from("tipos_divida").select("nome").eq("id", client.tipo_divida_id).maybeSingle();
+      return data?.nome || null;
+    },
+    enabled: !!client?.tipo_divida_id,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: statusCobrancaName } = useQuery({
+    queryKey: ["status-cobranca-name", client?.status_cobranca_id],
+    queryFn: async () => {
+      if (!client?.status_cobranca_id) return null;
+      const { data } = await supabase.from("tipos_status").select("nome").eq("id", client.status_cobranca_id).maybeSingle();
+      return data?.nome || null;
+    },
+    enabled: !!client?.status_cobranca_id,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const FIELD_RENDERERS: Record<string, () => { label: string; value: string | null; icon?: React.ElementType }> = {
+    phone: () => ({ label: "Telefone 1", value: client.phone ? formatPhone(client.phone) : null, icon: Phone }),
+    phone2: () => ({ label: "Telefone 2", value: client.phone2 ? formatPhone(client.phone2) : null, icon: Phone }),
+    phone3: () => ({ label: "Telefone 3", value: client.phone3 ? formatPhone(client.phone3) : null, icon: Phone }),
+    email: () => ({ label: "E-mail", value: client.email, icon: Mail }),
+    endereco: () => ({ label: "Endereço", value: client.endereco, icon: MapPin }),
+    bairro: () => ({ label: "Bairro", value: client.bairro, icon: MapPin }),
+    cidade: () => ({ label: "Cidade", value: client.cidade, icon: MapPin }),
+    uf: () => ({ label: "UF", value: client.uf }),
+    cep: () => ({ label: "CEP", value: client.cep ? formatCEP(client.cep) : null }),
+    external_id: () => ({ label: "Cód. Devedor", value: client.external_id, icon: Tag }),
+    cod_contrato: () => ({ label: "Cód. Contrato", value: client.cod_contrato, icon: FileText }),
+    valor_saldo: () => ({ label: "Valor Saldo", value: client.valor_saldo != null ? formatCurrency(client.valor_saldo) : null, icon: DollarSign }),
+    valor_atualizado: () => ({ label: "Valor Atualizado", value: client.valor_atualizado != null ? formatCurrency(client.valor_atualizado) : null, icon: DollarSign }),
+    data_vencimento: () => ({ label: "Data Vencimento", value: client.data_vencimento ? formatDate(client.data_vencimento) : null }),
+    tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
+    tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
+    status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
+    observacoes: () => ({ label: "Observações", value: client.observacoes ? (client.observacoes.length > 80 ? client.observacoes.slice(0, 80) + "…" : client.observacoes) : null }),
+  };
+
+  const ALL_FIELD_KEYS = Object.keys(FIELD_RENDERERS);
+
+  // If config exists for this credor, use it; otherwise show all fields
   const visibleFields = fieldConfig && fieldConfig.length > 0
     ? fieldConfig.filter((f) => f.visible).sort((a, b) => a.sort_order - b.sort_order)
-    : Object.keys(FIELD_RENDERERS).map((key, i) => ({ field_key: key, sort_order: i }));
+    : ALL_FIELD_KEYS.map((key, i) => ({ field_key: key, sort_order: i }));
 
   const statusBadge = (() => {
     const s = client.status;
@@ -136,7 +192,7 @@ const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHead
               {visibleFields.map((f) => {
                 const renderer = FIELD_RENDERERS[f.field_key];
                 if (!renderer) return null;
-                const { label, value, icon } = renderer(client);
+                const { label, value, icon } = renderer();
                 if (!value) return null;
                 return <InfoItem key={f.field_key} label={label} value={value} icon={icon} />;
               })}
