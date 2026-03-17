@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useTenant } from "@/hooks/useTenant";
+import { useModules } from "@/hooks/useModules";
 import { atendimentoFieldsService } from "@/services/atendimentoFieldsService";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface ClientHeaderProps {
   client: any;
