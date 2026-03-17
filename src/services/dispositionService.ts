@@ -15,11 +15,71 @@ export interface CallDisposition {
 export const DISPOSITION_TYPES: Record<string, string> = {
   voicemail: "Caixa Postal",
   interrupted: "Ligação Interrompida",
-  wrong_contact: "Contato Incorreto",
-  callback: "Retornar Ligação",
-  negotiated: "Negociar",
   no_answer: "Não Atende",
-  promise: "Promessa de Pagamento",
+  cpc: "CPC (Contato com a Pessoa Certa)",
+  wrong_contact: "Contato Pessoa Errada",
+};
+
+export interface DbDispositionType {
+  id: string;
+  tenant_id: string;
+  key: string;
+  label: string;
+  group_name: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+}
+
+export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
+  const { data, error } = await supabase
+    .from("call_disposition_types")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data || []) as DbDispositionType[];
+};
+
+export const createDispositionType = async (params: {
+  tenant_id: string;
+  key: string;
+  label: string;
+  group_name?: string;
+  sort_order?: number;
+}): Promise<DbDispositionType> => {
+  const { data, error } = await supabase
+    .from("call_disposition_types")
+    .insert(params as any)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as DbDispositionType;
+};
+
+export const updateDispositionType = async (id: string, params: Partial<{
+  label: string;
+  group_name: string;
+  sort_order: number;
+  active: boolean;
+}>): Promise<DbDispositionType> => {
+  const { data, error } = await supabase
+    .from("call_disposition_types")
+    .update(params as any)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as DbDispositionType;
+};
+
+export const deleteDispositionType = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from("call_disposition_types")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 };
 
 export type DispositionType = string;

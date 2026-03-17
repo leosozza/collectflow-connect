@@ -545,6 +545,47 @@ export type Database = {
           },
         ]
       }
+      call_disposition_types: {
+        Row: {
+          active: boolean
+          created_at: string
+          group_name: string
+          id: string
+          key: string
+          label: string
+          sort_order: number
+          tenant_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          group_name?: string
+          id?: string
+          key: string
+          label: string
+          sort_order?: number
+          tenant_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          group_name?: string
+          id?: string
+          key?: string
+          label?: string
+          sort_order?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_disposition_types_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_dispositions: {
         Row: {
           client_id: string

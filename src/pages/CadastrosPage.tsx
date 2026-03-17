@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUrlState } from "@/hooks/useUrlState";
-import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Puzzle } from "lucide-react";
+import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Shield, TrendingUp, Puzzle, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
@@ -10,6 +10,7 @@ import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
 import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
+import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -79,6 +80,7 @@ const CadastrosPage = () => {
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
+        { key: "categorizacao_chamada", label: "Categorização da Chamada", icon: Headset },
       ],
     },
     {
@@ -185,6 +187,7 @@ const CadastrosPage = () => {
         {active === "permissoes" && <UserPermissionsTab />}
         {active === "grade_comissao" && <CommissionGradesTab />}
         {active === "campos_personalizados" && <CustomFieldsConfig />}
+        {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
       </div>
     </div>
   );

@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Headset, ChevronRight, Handshake, CalendarClock, Check
 } from "lucide-react";
-import { DispositionType, getDispositionTypes, getCustomDispositionList } from "@/services/dispositionService";
+import { DispositionType, DISPOSITION_TYPES, fetchTenantDispositionTypes } from "@/services/dispositionService";
 import { useTenant } from "@/hooks/useTenant";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 interface DispositionPanelProps {
@@ -16,22 +17,41 @@ interface DispositionPanelProps {
 }
 
 const DEFAULT_GROUP_MAP: Record<string, string> = {
-  callback: "agendar",
   voicemail: "resultado",
   interrupted: "resultado",
   no_answer: "resultado",
+  cpc: "resultado",
   wrong_contact: "contato",
-  promise: "contato",
 };
 
 const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPanelProps) => {
   const { tenant } = useTenant();
-  const settings = (tenant?.settings as Record<string, any>) || {};
+  const tenantId = tenant?.id;
   const [selected, setSelected] = useState<string | null>(null);
   const [callbackDate, setCallbackDate] = useState("");
 
-  const dispositionTypes = useMemo(() => getDispositionTypes(settings), [settings]);
-  const dispositionList = useMemo(() => getCustomDispositionList(settings), [settings]);
+  const { data: dbTypes } = useQuery({
+    queryKey: ["call-disposition-types", tenantId],
+    queryFn: () => fetchTenantDispositionTypes(tenantId!),
+    enabled: !!tenantId,
+  });
+
+  const dispositionList = useMemo(() => {
+    if (dbTypes && dbTypes.length > 0) {
+      return dbTypes.map(d => ({ key: d.key, label: d.label, group: d.group_name }));
+    }
+    return Object.entries(DISPOSITION_TYPES).map(([key, label]) => ({
+      key,
+      label,
+      group: DEFAULT_GROUP_MAP[key] || "resultado",
+    }));
+  }, [dbTypes]);
+
+  const dispositionTypes = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of dispositionList) map[d.key] = d.label;
+    return map;
+  }, [dispositionList]);
 
   const handleDisposition = async (type: string) => {
     try {
@@ -54,18 +74,9 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
     }
   };
 
-  const resultadoGroup = dispositionList.filter(d => {
-    const g = d.group || DEFAULT_GROUP_MAP[d.key];
-    return g === "resultado";
-  });
-  const contatoGroup = dispositionList.filter(d => {
-    const g = d.group || DEFAULT_GROUP_MAP[d.key];
-    return g === "contato";
-  });
-  const otherGroup = dispositionList.filter(d => {
-    const g = d.group || DEFAULT_GROUP_MAP[d.key];
-    return !g || !["agendar", "resultado", "contato"].includes(g);
-  });
+  const resultadoGroup = dispositionList.filter(d => d.group === "resultado");
+  const contatoGroup = dispositionList.filter(d => d.group === "contato");
+  const otherGroup = dispositionList.filter(d => !d.group || !["agendar", "resultado", "contato"].includes(d.group));
 
   const renderChip = (d: { key: string; label: string }) => {
     const isSelected = selected === d.key;
@@ -92,7 +103,7 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <Headset className="w-4 h-4" />
-            Categorização do Chamado
+            Categorização da Chamada
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -143,14 +154,14 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
             </div>
           )}
 
-          {/* NEGOCIAR AGORA */}
+          {/* FORMALIZAR ACORDO */}
           <Button
             className="w-full h-14 gap-3 text-base font-bold bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-primary-foreground"
             onClick={onNegotiate}
             disabled={loading}
           >
             <Handshake className="w-5 h-5" />
-            NEGOCIAR AGORA
+            FORMALIZAR ACORDO
           </Button>
         </CardContent>
       </Card>
