@@ -40,6 +40,21 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const navigate = useNavigate();
+  const { isModuleEnabled } = useModules();
+
+  const openWhatsApp = () => {
+    if (!client.phone) {
+      toast({ title: "Cliente sem telefone cadastrado", variant: "destructive" });
+      return;
+    }
+    const cleanPhone = client.phone.replace(/\D/g, "");
+    if (isModuleEnabled("whatsapp")) {
+      navigate(`/contact-center/whatsapp?phone=${cleanPhone}`);
+    } else {
+      window.open(`https://wa.me/55${cleanPhone}`, "_blank");
+    }
+  };
 
   // Resolve credor_id from credor name
   const { data: credorData } = useQuery({
