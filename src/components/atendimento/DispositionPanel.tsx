@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Headset, ChevronRight, Handshake, CalendarClock, Check
+  Headset, ChevronRight, CalendarClock, Check
 } from "lucide-react";
 import { DispositionType, DISPOSITION_TYPES, fetchTenantDispositionTypes } from "@/services/dispositionService";
 import { useTenant } from "@/hooks/useTenant";
