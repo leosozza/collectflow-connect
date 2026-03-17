@@ -130,12 +130,14 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     cod_contrato: () => ({ label: "Cód. Contrato", value: client.cod_contrato, icon: FileText }),
     valor_saldo: () => {
       const records = clientRecords.length > 0 ? clientRecords : [client];
-      const total = records.reduce((sum, r) => sum + (Number(r.valor_saldo) || 0), 0);
+      const pending = records.filter((r) => r.status === "pendente");
+      const total = pending.reduce((sum, r) => sum + (Number(r.valor_saldo) || 0), 0);
       return { label: "Valor Saldo", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
     },
     valor_atualizado: () => {
       const records = clientRecords.length > 0 ? clientRecords : [client];
-      const total = records.reduce((sum, r) => sum + (Number(r.valor_atualizado) || 0), 0);
+      const pending = records.filter((r) => r.status === "pendente");
+      const total = pending.reduce((sum, r) => sum + (Number(r.valor_atualizado) || 0), 0);
       return { label: "Valor Atualizado", value: total > 0 ? formatCurrency(total) : null, icon: DollarSign };
     },
     data_vencimento: () => ({ label: "Data Vencimento", value: client.data_vencimento ? formatDate(client.data_vencimento) : null }),
