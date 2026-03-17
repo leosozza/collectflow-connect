@@ -169,7 +169,7 @@ const CallDispositionTypesTab = () => {
                     {GROUP_OPTIONS.find(g => g.value === t.group_name)?.label || t.group_name}
                   </Badge>
                 </TableCell>
-                <TableCell>{t.sort_order}</TableCell>
+                
                 <TableCell>
                   <Badge variant={t.active ? "default" : "secondary"}>
                     {t.active ? "Sim" : "Não"}
