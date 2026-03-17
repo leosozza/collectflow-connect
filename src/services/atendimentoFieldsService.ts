@@ -55,10 +55,10 @@ export const atendimentoFieldsService = {
       sort_order: i,
     }));
 
-    const { data, error } = await supabase
-      .from("atendimento_field_config")
+    const { data, error } = await (supabase
+      .from("atendimento_field_config" as any)
       .upsert(rows, { onConflict: "tenant_id,field_key" })
-      .select();
+      .select() as any);
 
     if (error) {
       logger.error("Error seeding default fields", error);
