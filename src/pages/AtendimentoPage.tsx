@@ -119,38 +119,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     },
   });
 
-  // Agreement mutation
-  const agreementMutation = useMutation({
-    mutationFn: async (data: {
-      discount_percent: number; new_installments: number; proposed_total: number;
-      new_installment_value: number; first_due_date: string; notes?: string;
-      requiresApproval?: boolean; approvalReason?: string;
-    }) => {
-      if (!user?.id || !tenant?.id || !client) throw new Error("Dados não encontrados");
-      return createAgreement({
-        client_cpf: client.cpf, client_name: client.nome_completo, credor: client.credor,
-        original_total: totalAberto, proposed_total: data.proposed_total,
-        discount_percent: data.discount_percent, new_installments: data.new_installments,
-        new_installment_value: data.new_installment_value, first_due_date: data.first_due_date, notes: data.notes,
-      }, user.id, tenant.id, { requiresApproval: data.requiresApproval, approvalReason: data.approvalReason });
-    },
-    onSuccess: () => {
-      trackAction("criar_acordo_atendimento", { client_id: id });
-      toast.success("Acordo criado com sucesso!");
-      setShowNegotiation(false);
-      queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
-      if (tenant?.id && profile?.id) {
-        createDisposition({ client_id: id!, tenant_id: tenant.id, operator_id: profile.id, disposition_type: "negotiated", notes: "Acordo gerado" })
-          .then(() => {
-            queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
-            if (effectiveAgentId && settings.threecplus_domain) {
-              qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
-            }
-          });
-      }
-    },
-    onError: () => { toast.error("Erro ao criar acordo"); },
-  });
+  const handleAgreementCreated = () => {
+    trackAction("criar_acordo_atendimento", { client_id: id });
+    toast.success("Acordo criado com sucesso!");
+    setShowNegotiation(false);
+    queryClient.invalidateQueries({ queryKey: ["atendimento-agreements"] });
+    if (tenant?.id && profile?.id) {
+      createDisposition({ client_id: id!, tenant_id: tenant.id, operator_id: profile.id, disposition_type: "negotiated", notes: "Acordo gerado" })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+          if (effectiveAgentId && settings.threecplus_domain) {
+            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
+          }
+        });
+    }
+  };
 
   // Save observation
   const handleSaveNote = async (note: string) => {
