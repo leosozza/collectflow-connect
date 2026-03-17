@@ -34,7 +34,7 @@ interface ClientHeaderProps {
 const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2 min-w-0">
+    <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
       <div className="min-w-0">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
@@ -152,7 +152,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
     tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
     status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
-    observacoes: () => ({ label: "Observações", value: client.observacoes ? (client.observacoes.length > 80 ? client.observacoes.slice(0, 80) + "…" : client.observacoes) : null }),
+    
   };
 
   const ALL_FIELD_KEYS = Object.keys(FIELD_RENDERERS);
@@ -248,8 +248,8 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
         {/* Expanded content */}
         <CollapsibleContent>
-          <div className="px-6 pb-5 pt-3">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
+          <div className="px-6 py-4 border-t border-border">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
               {visibleFields.map((f) => {
                 const renderer = FIELD_RENDERERS[f.field_key];
                 if (!renderer) return null;

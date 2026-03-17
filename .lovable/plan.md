@@ -1,21 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Corrigir Layout e Observações no "Mais Informações do Devedor"
+### Correções aplicadas
 
-## Problemas Identificados
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-1. **Layout desalinhado**: O grid expandido usa `grid-cols-2 md:grid-cols-3 lg:grid-cols-4` com `gap-x-6 gap-y-3`, mas os itens têm tamanhos inconsistentes — o campo "Observações" ocupa espaço desproporcional e quebra o alinhamento visual.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-2. **Campo Observações mostrando dados errados**: O campo `observacoes` em `ClientHeader` puxa `client.observacoes`, que é o campo onde o sistema concatena notas de operadores (formato `data | operador texto`). Esse campo **não** deveria aparecer no card de informações cadastrais do devedor — ele já é exibido na seção de "Observações" da timeline (`ClientObservations`). No card expandido, apenas dados originais/cadastrais devem aparecer.
-
-## Mudanças
-
-### 1. `src/components/atendimento/ClientHeader.tsx`
-
-- **Remover** o campo `observacoes` do `FIELD_RENDERERS` — esse dado não é informação cadastral original, é histórico de notas de operadores e já é exibido na timeline.
-- **Ajustar o grid** da `CollapsibleContent` para um layout mais uniforme e alinhado com o card principal:
-  - Usar `grid-cols-4` fixo em telas `lg+` com gap consistente
-  - Adicionar `border-t border-border` no topo da área expandida para continuidade visual com o card
-  - Remover o `pt-3` e usar padding uniforme `py-4 px-6`
-- **Melhorar o `InfoItem`**: garantir que todos os itens tenham altura mínima consistente para alinhamento em grid
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
