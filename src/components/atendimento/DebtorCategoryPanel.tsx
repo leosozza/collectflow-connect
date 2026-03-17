@@ -24,7 +24,7 @@ const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId }: Props)
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string } | null;
+      return data as any;
     },
     enabled: !!credorName,
   });
