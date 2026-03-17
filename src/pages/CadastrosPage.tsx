@@ -88,7 +88,6 @@ const CadastrosPage = () => {
       items: [
         { key: "permissoes", label: "Permissões", icon: Shield },
         { key: "grade_comissao", label: "Grade de Comissão", icon: TrendingUp },
-        { key: "campos_personalizados", label: "Campos Personalizados", icon: Puzzle },
       ],
     },
   ];
