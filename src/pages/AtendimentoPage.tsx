@@ -270,6 +270,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         diasAtraso={diasAtraso}
         onCall={handleCall}
         callingPhone={callingPhone}
+        onNegotiate={() => setShowNegotiation(true)}
       />
 
       {/* Main content — 3 columns */}
