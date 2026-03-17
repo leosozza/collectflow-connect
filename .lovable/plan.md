@@ -1,24 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Fix: Seed dos defaults mesmo com registros existentes
+### Correções aplicadas
 
-## Problema
-O banco tem apenas 1 registro ("Cliente Seu Madruga"). A lógica de seed verifica `types.length === 0`, então como já existe 1 registro, os 5 defaults nunca são inseridos.
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## Solução
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### 1. `src/services/dispositionService.ts` — usar upsert no seed
-Alterar `seedDefaultDispositionTypes` para usar **upsert** com `onConflict: 'tenant_id,key'` em vez de `insert`. Assim, se os defaults já existirem, não duplica; se não existirem, insere.
-
-### 2. `src/components/cadastros/CallDispositionTypesTab.tsx` — corrigir condição do seed
-Mudar a condição de `types.length === 0` para verificar se **faltam keys defaults**:
-```typescript
-const missingDefaults = DEFAULT_DISPOSITION_LIST.some(
-  d => !types.find(t => t.key === d.key)
-);
-```
-Se `missingDefaults` for true e `!seeded`, executar o seed (upsert). Após o seed, invalidar a query para recarregar a lista completa (5 defaults + "Cliente Seu Madruga").
-
-### Resultado esperado
-A aba mostrará 6 registros: os 5 padrões + "Cliente Seu Madruga", todos editáveis.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
