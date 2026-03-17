@@ -8,6 +8,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
+import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
