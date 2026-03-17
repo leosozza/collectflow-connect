@@ -11,7 +11,6 @@ import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
 
 import CustomFieldsConfig from "@/components/cadastros/CustomFieldsConfig";
 import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
-import AtendimentoFieldsConfig from "@/components/cadastros/AtendimentoFieldsConfig";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
