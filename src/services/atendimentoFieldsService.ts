@@ -40,7 +40,7 @@ export const atendimentoFieldsService = {
       .order("sort_order", { ascending: true }) as any);
 
     if (error) {
-      logger.error("Error fetching atendimento field config", error);
+      logger.error("atendimentoFieldsService", "fetchFieldConfig", error);
       throw error;
     }
     return (data as FieldConfig[]) || [];
