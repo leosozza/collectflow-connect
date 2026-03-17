@@ -6,16 +6,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCPF } from "@/lib/formatters";
-import { createAgreement } from "@/services/agreementService";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import ClientHeader from "@/components/atendimento/ClientHeader";
 import DispositionPanel from "@/components/atendimento/DispositionPanel";
-import NegotiationPanel from "@/components/atendimento/NegotiationPanel";
+import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientTimeline, { ClientObservations } from "@/components/atendimento/ClientTimeline";
 
 interface AtendimentoPageProps {
