@@ -6,6 +6,7 @@ import {
   updateDispositionType,
   deleteDispositionType,
   seedDefaultDispositionTypes,
+  DEFAULT_DISPOSITION_LIST,
   type DbDispositionType,
 } from "@/services/dispositionService";
 import { supabase } from "@/integrations/supabase/client";
