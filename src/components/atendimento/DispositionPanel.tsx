@@ -134,9 +134,8 @@ const DispositionPanel = ({ onDisposition, onNegotiate, loading }: DispositionPa
   return (
     <Card className="border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <span className="material-icons-round text-base" style={{ fontFamily: "Material Icons Round" }}>category</span>
-          Categorização do Chamado
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Categorização da Chamada
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
