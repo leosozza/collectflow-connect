@@ -307,7 +307,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
             <TabsTrigger value="regua" className="flex-1">Régua</TabsTrigger>
-            <TabsTrigger value="scripts" className="flex-1">Scripts</TabsTrigger>
+            <TabsTrigger value="personalizacao" className="flex-1">Personalização</TabsTrigger>
             <TabsTrigger value="assinatura" className="flex-1">Assinatura</TabsTrigger>
             <TabsTrigger value="portal" className="flex-1">Portal</TabsTrigger>
           </TabsList>
