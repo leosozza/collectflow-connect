@@ -180,16 +180,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
                 {statusBadge.label}
               </Badge>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <Button
-                onClick={openWhatsApp}
-                size="sm"
-                className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-9 w-9 p-0"
-                title="Abrir WhatsApp"
-              >
-                <MessageCircle className="w-4 h-4 fill-white" />
-              </Button>
-            </div>
+            
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
               <span className="flex items-center gap-1.5">
