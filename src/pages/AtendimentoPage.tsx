@@ -83,11 +83,15 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
       const { data, error } = await supabase
-        .from("agreements").select("*")
+        .from("agreements").select("*, profiles:created_by(full_name)")
         .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []).map((a: any) => ({
+        ...a,
+        creator_name: a.profiles?.full_name || null,
+        profiles: undefined,
+      }));
     },
     enabled: !!client?.cpf,
   });
