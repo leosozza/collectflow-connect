@@ -501,6 +501,41 @@ export type Database = {
           },
         ]
       }
+      atendimento_field_config: {
+        Row: {
+          field_key: string
+          id: string
+          label: string
+          sort_order: number
+          tenant_id: string
+          visible: boolean
+        }
+        Insert: {
+          field_key: string
+          id?: string
+          label: string
+          sort_order?: number
+          tenant_id: string
+          visible?: boolean
+        }
+        Update: {
+          field_key?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          tenant_id?: string
+          visible?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_field_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
