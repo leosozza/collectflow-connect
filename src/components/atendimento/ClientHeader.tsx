@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface ClientHeaderProps {
   client: any;
+  clientRecords?: any[];
   totalAberto: number;
   totalPago: number;
   totalParcelas: number;
