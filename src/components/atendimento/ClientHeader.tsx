@@ -248,8 +248,8 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
         {/* Expanded content */}
         <CollapsibleContent>
-          <div className="px-6 pb-5 pt-3">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
+          <div className="px-6 py-4 border-t border-border">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
               {visibleFields.map((f) => {
                 const renderer = FIELD_RENDERERS[f.field_key];
                 if (!renderer) return null;
