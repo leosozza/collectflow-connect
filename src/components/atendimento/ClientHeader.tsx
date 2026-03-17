@@ -52,7 +52,7 @@ const ClientHeader = ({ client, totalAberto, totalPago, diasAtraso }: ClientHead
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-4 flex-wrap">
+    <div className="bg-card rounded-xl border border-border p-6 flex items-center gap-6 flex-wrap">
       {/* Avatar */}
       <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">
         {initials}
