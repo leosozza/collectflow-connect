@@ -4,20 +4,35 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox } from "lucide-react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause } from "lucide-react";
+import { useRef } from "react";
 
 interface TimelineItem {
   id: string;
   date: string;
-  type: "disposition" | "agreement" | "message" | "payment" | "note";
+  type: "disposition" | "agreement" | "message" | "payment" | "note" | "call";
   title: string;
   detail?: string;
   operator?: string;
+  recordingUrl?: string;
+  durationSeconds?: number;
+}
+
+interface CallLog {
+  id: string;
+  phone?: string;
+  agent_name?: string;
+  status?: string;
+  duration_seconds?: number;
+  recording_url?: string | null;
+  campaign_name?: string;
+  called_at: string;
 }
 
 interface ClientTimelineProps {
   dispositions: CallDisposition[];
   agreements: any[];
+  callLogs?: CallLog[];
 }
 
 interface ClientObservationsProps {
@@ -26,7 +41,46 @@ interface ClientObservationsProps {
   savingNote?: boolean;
 }
 
-const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
+const formatDuration = (seconds: number) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
+
+const InlineAudioPlayer = ({ url }: { url: string }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setPlaying(!playing);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1 ml-2">
+      <button
+        onClick={toggle}
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+        title={playing ? "Pausar" : "Ouvir gravação"}
+      >
+        {playing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+      </button>
+      <audio
+        ref={audioRef}
+        src={url}
+        onEnded={() => setPlaying(false)}
+        preload="none"
+      />
+    </span>
+  );
+};
+
+const ClientTimeline = ({ dispositions, agreements, callLogs = [] }: ClientTimelineProps) => {
   const [showAll, setShowAll] = useState(false);
 
   const items: TimelineItem[] = [];
@@ -53,9 +107,28 @@ const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
     });
   });
 
+  callLogs.forEach((c) => {
+    items.push({
+      id: `call-${c.id}`,
+      date: c.called_at,
+      type: "call",
+      title: `Ligação — ${c.status || "realizada"}`,
+      detail: c.phone ? `Tel: ${c.phone}` : undefined,
+      operator: c.agent_name || undefined,
+      recordingUrl: c.recording_url || undefined,
+      durationSeconds: c.duration_seconds || 0,
+    });
+  });
+
   items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const visibleItems = showAll ? items : items.slice(0, 5);
+
+  const getItemBorderColor = (type: string) => {
+    if (type === "call") return "border-blue-200 bg-blue-50/50";
+    if (type === "agreement") return "border-green-200 bg-green-50/50";
+    return "border-amber-100 bg-amber-50/50";
+  };
 
   return (
     <Card className="border-border h-full">
@@ -86,12 +159,16 @@ const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
             <div className="space-y-3">
               {visibleItems.map((item) => (
                 <div key={item.id} className="relative">
-                  {/* Hollow dot */}
-                  <div className="absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 border-muted-foreground/30 bg-card" />
-                  {/* Card */}
-                  <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3">
+                  <div className={`absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 bg-card ${item.type === "call" ? "border-blue-400" : "border-muted-foreground/30"}`} />
+                  <div className={`border rounded-lg p-3 ${getItemBorderColor(item.type)}`}>
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold text-foreground">{item.title}</span>
+                      <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                        {item.type === "call" && <Phone className="w-3.5 h-3.5 text-blue-500" />}
+                        {item.title}
+                        {item.type === "call" && item.durationSeconds !== undefined && item.durationSeconds > 0 && (
+                          <span className="text-xs font-normal text-muted-foreground">({formatDuration(item.durationSeconds)})</span>
+                        )}
+                      </span>
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -101,6 +178,12 @@ const ClientTimeline = ({ dispositions, agreements }: ClientTimelineProps) => {
                     )}
                     {item.detail && (
                       <p className="text-xs text-muted-foreground mt-1 italic">"{item.detail}"</p>
+                    )}
+                    {item.type === "call" && item.recordingUrl && (
+                      <div className="mt-1.5 flex items-center">
+                        <span className="text-xs text-blue-600 font-medium">Gravação</span>
+                        <InlineAudioPlayer url={item.recordingUrl} />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -128,7 +211,6 @@ const ClientObservations = ({ observacoes, onSaveNote, savingNote }: ClientObser
       const lines = block.trim().split("\n");
       const header = lines[0] || "";
       const body = lines.slice(1).join("\n").trim();
-      // Try to parse "DD/MM/YYYY - HH:MM | OperatorName"
       const match = header.match(/^(.+?)\s*\|\s*(.+)$/);
       const datetime = match ? match[1].trim() : header;
       const operator = match ? match[2].trim() : "";

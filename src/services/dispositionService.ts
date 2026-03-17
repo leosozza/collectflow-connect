@@ -200,3 +200,71 @@ export const qualifyOn3CPlus = async (params: {
     console.error("qualifyOn3CPlus error (non-blocking):", err);
   }
 };
+
+/**
+ * Fetch recent call data from 3CPlus for the given agent and save to call_logs.
+ * Best-effort: errors are logged but never block the main flow.
+ */
+export const saveCallLog = async (params: {
+  tenantId: string;
+  clientId: string;
+  clientCpf: string;
+  agentId: number;
+  tenantSettings: Record<string, any>;
+  operatorName?: string;
+}): Promise<void> => {
+  try {
+    const domain = params.tenantSettings.threecplus_domain;
+    const apiToken = params.tenantSettings.threecplus_api_token;
+    if (!domain || !apiToken) return;
+
+    // Fetch calls from the last 30 minutes for this agent
+    const now = new Date();
+    const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    const formatDt = (d: Date) => d.toISOString().split("T")[0] + " " + d.toTimeString().split(" ")[0];
+
+    const { data: reportData, error: reportError } = await supabase.functions.invoke("threecplus-proxy", {
+      body: {
+        action: "calls_report",
+        domain,
+        api_token: apiToken,
+        agent_id: params.agentId,
+        startDate: formatDt(thirtyMinAgo),
+        endDate: formatDt(now),
+      },
+    });
+
+    if (reportError) {
+      console.error("saveCallLog: error fetching calls_report", reportError);
+      return;
+    }
+
+    // 3CPlus returns { data: [...calls] } or array directly
+    const calls = Array.isArray(reportData) ? reportData : (reportData?.data || reportData?.results || []);
+    if (!Array.isArray(calls) || calls.length === 0) return;
+
+    // Take the most recent call
+    const latestCall = calls[0];
+
+    const { error: insertError } = await supabase.from("call_logs" as any).insert({
+      tenant_id: params.tenantId,
+      client_id: params.clientId,
+      client_cpf: params.clientCpf.replace(/\D/g, ""),
+      phone: latestCall.phone || latestCall.destination || latestCall.phone_number || "",
+      agent_name: params.operatorName || latestCall.agent_name || "",
+      operator_id: String(params.agentId),
+      call_id_external: String(latestCall.id || latestCall.call_id || ""),
+      status: latestCall.status || latestCall.qualification || "unknown",
+      duration_seconds: Number(latestCall.duration || latestCall.talk_time || 0),
+      recording_url: latestCall.recording_url || latestCall.recording || latestCall.audio_url || null,
+      campaign_name: latestCall.campaign_name || latestCall.campaign || "",
+      called_at: latestCall.created_at || latestCall.start_time || new Date().toISOString(),
+    } as any);
+
+    if (insertError) {
+      console.error("saveCallLog: error inserting call_log", insertError);
+    }
+  } catch (err) {
+    console.error("saveCallLog error (non-blocking):", err);
+  }
+};

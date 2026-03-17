@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCPF } from "@/lib/formatters";
-import { createDisposition, fetchDispositions, qualifyOn3CPlus, type DispositionType } from "@/services/dispositionService";
+import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { ArrowLeft, Home } from "lucide-react";
@@ -92,6 +92,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     enabled: !!client?.cpf,
   });
 
+  const { data: callLogs = [] } = useQuery({
+    queryKey: ["atendimento-call-logs", client?.cpf],
+    queryFn: async () => {
+      const cpf = client!.cpf;
+      const rawCpf = cpf.replace(/\D/g, "");
+      const { data, error } = await supabase
+        .from("call_logs" as any).select("*")
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
+        .order("called_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!client?.cpf,
+  });
+
   const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
 
   // Disposition mutation
@@ -112,6 +127,19 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
       if (tenant?.id && id) {
         executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
+      }
+      // Save call log from 3CPlus after disposition
+      if (effectiveAgentId && settings.threecplus_domain && tenant?.id && client?.cpf) {
+        saveCallLog({
+          tenantId: tenant.id,
+          clientId: id!,
+          clientCpf: client.cpf,
+          agentId: effectiveAgentId,
+          tenantSettings: settings,
+          operatorName: profile?.full_name || undefined,
+        }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["atendimento-call-logs"] });
+        }).catch(console.error);
       }
       if (effectiveAgentId && settings.threecplus_domain) {
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId });
@@ -267,6 +295,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
           <ClientTimeline
             dispositions={dispositions}
             agreements={agreements}
+            callLogs={callLogs}
           />
         </div>
         <div>

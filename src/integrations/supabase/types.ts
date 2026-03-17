@@ -634,6 +634,72 @@ export type Database = {
           },
         ]
       }
+      call_logs: {
+        Row: {
+          agent_name: string | null
+          call_id_external: string | null
+          called_at: string
+          campaign_name: string | null
+          client_cpf: string | null
+          client_id: string | null
+          created_at: string | null
+          duration_seconds: number | null
+          id: string
+          operator_id: string | null
+          phone: string | null
+          recording_url: string | null
+          status: string | null
+          tenant_id: string
+        }
+        Insert: {
+          agent_name?: string | null
+          call_id_external?: string | null
+          called_at?: string
+          campaign_name?: string | null
+          client_cpf?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          operator_id?: string | null
+          phone?: string | null
+          recording_url?: string | null
+          status?: string | null
+          tenant_id: string
+        }
+        Update: {
+          agent_name?: string | null
+          call_id_external?: string | null
+          called_at?: string
+          campaign_name?: string | null
+          client_cpf?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          operator_id?: string | null
+          phone?: string | null
+          recording_url?: string | null
+          status?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_credores: {
         Row: {
           campaign_id: string
