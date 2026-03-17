@@ -1,0 +1,1 @@
+ALTER TABLE public.call_disposition_types ADD CONSTRAINT call_disposition_types_tenant_id_key_unique UNIQUE (tenant_id, key);
