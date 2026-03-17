@@ -68,10 +68,10 @@ export const atendimentoFieldsService = {
   },
 
   async toggleFieldVisibility(id: string, visible: boolean): Promise<void> {
-    const { error } = await supabase
-      .from("atendimento_field_config")
+    const { error } = await (supabase
+      .from("atendimento_field_config" as any)
       .update({ visible })
-      .eq("id", id);
+      .eq("id", id) as any);
 
     if (error) {
       logger.error("Error toggling field visibility", error);
