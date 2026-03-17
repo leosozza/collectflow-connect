@@ -12,7 +12,6 @@ import { toast } from "sonner";
 
 interface DispositionPanelProps {
   onDisposition: (type: DispositionType, notes?: string, scheduledCallback?: string) => Promise<void>;
-  onNegotiate: () => void;
   loading?: boolean;
 }
 
