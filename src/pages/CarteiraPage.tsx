@@ -182,10 +182,10 @@ const CarteiraPage = () => {
   const { data: agreementCpfs = new Set<string>() } = useQuery({
     queryKey: ["agreement-cpfs"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
-      if (error) throw error;
+      const query = supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
+      const data = await fetchAllRows(query);
       const cpfSet = new Set<string>();
-      (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
+      data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
   });
