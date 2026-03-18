@@ -1,5 +1,5 @@
 import { useSearchParams, useLocation } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 
 const STORAGE_PREFIX = "urlstate:";
 
