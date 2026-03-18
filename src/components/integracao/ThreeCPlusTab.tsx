@@ -232,6 +232,15 @@ const ThreeCPlusTab = () => {
         </Card>
       )}
 
+      {/* Teste de Envio de Mailing */}
+      {campaigns.length > 0 && (
+        <MailingTestCard
+          campaigns={campaigns}
+          domain={domain}
+          apiToken={apiToken}
+        />
+      )}
+
       {/* Disposition → Qualification Mapping */}
       <Card>
         <CardHeader>
