@@ -2,9 +2,27 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, MessageSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  ContextMenuLabel,
+} from "@/components/ui/context-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Conversation } from "@/services/conversationService";
 
 interface ConversationTag {
@@ -22,6 +40,8 @@ interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
   onSelect: (conv: Conversation) => void;
+  onStatusChange?: (convId: string, status: string) => void;
+  onDelete?: (convId: string) => void;
   instances: { id: string; name: string }[];
   tags?: ConversationTag[];
   tagAssignments?: TagAssignment[];
@@ -88,12 +108,19 @@ function ConversationAvatar({ conv }: { conv: Conversation }) {
   );
 }
 
-const ConversationList = ({ conversations, selectedId, onSelect, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false }: ConversationListProps) => {
+const statusLabels: Record<string, string> = {
+  open: "Aberta",
+  waiting: "Aguardando",
+  closed: "Fechada",
+};
+
+const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Build a set of conversation IDs that have the selected tag
   const taggedConvIds = useMemo(() => {
@@ -136,6 +163,13 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
     { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
     { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
   ];
+
+  const handleConfirmDelete = () => {
+    if (deleteTarget && onDelete) {
+      onDelete(deleteTarget);
+    }
+    setDeleteTarget(null);
+  };
 
   return (
     <div className="flex flex-col h-full border-r border-border bg-card">
@@ -243,83 +277,131 @@ const ConversationList = ({ conversations, selectedId, onSelect, instances, tags
           filtered.map((conv) => {
             const displayName = conv.client_name || (conv.remote_name?.toLowerCase() !== SYSTEM_NAME ? conv.remote_name : null) || conv.remote_phone;
             return (
-              <button
-                key={conv.id}
-                onClick={() => onSelect(conv)}
-                className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors overflow-hidden ${
-                  selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3 w-full min-w-0">
-                  <ConversationAvatar conv={conv} />
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
-                        {displayName}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-                        {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-[2px] gap-1">
-                      <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
-                        {conv.remote_phone}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {(() => {
-                          const deadline = (conv as any).sla_deadline_at;
-                          if (!deadline) return null;
-                          const deadlineDate = new Date(deadline);
-                          const now = new Date();
-                          if (deadlineDate < now) {
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <AlertTriangle className="w-3 h-3 text-destructive" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          }
-                          const createdAt = new Date(conv.created_at);
-                          const totalMs = deadlineDate.getTime() - createdAt.getTime();
-                          const remainingMs = deadlineDate.getTime() - now.getTime();
-                          if (totalMs > 0 && remainingMs < totalMs * 0.25) {
-                            const mins = Math.round(remainingMs / 60000);
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Clock className="w-3 h-3 text-yellow-500" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          }
-                          return null;
-                        })()}
-                        <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
-                        {conv.unread_count > 0 && (
-                          <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">
-                            {conv.unread_count}
-                          </Badge>
-                        )}
+              <ContextMenu key={conv.id}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    onClick={() => onSelect(conv)}
+                    className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors overflow-hidden ${
+                      selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 w-full min-w-0">
+                      <ConversationAvatar conv={conv} />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
+                            {displayName}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                            {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-[2px] gap-1">
+                          <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
+                            {conv.remote_phone}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(() => {
+                              const deadline = (conv as any).sla_deadline_at;
+                              if (!deadline) return null;
+                              const deadlineDate = new Date(deadline);
+                              const now = new Date();
+                              if (deadlineDate < now) {
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <AlertTriangle className="w-3 h-3 text-destructive" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              }
+                              const createdAt = new Date(conv.created_at);
+                              const totalMs = deadlineDate.getTime() - createdAt.getTime();
+                              const remainingMs = deadlineDate.getTime() - now.getTime();
+                              if (totalMs > 0 && remainingMs < totalMs * 0.25) {
+                                const mins = Math.round(remainingMs / 60000);
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Clock className="w-3 h-3 text-yellow-500" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              }
+                              return null;
+                            })()}
+                            <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
+                            {conv.unread_count > 0 && (
+                              <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">
+                                {conv.unread_count}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </button>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-52">
+                  <ContextMenuLabel className="text-xs text-muted-foreground">Alterar status</ContextMenuLabel>
+                  {(["open", "waiting", "closed"] as const).map((s) => (
+                    <ContextMenuItem
+                      key={s}
+                      disabled={conv.status === s}
+                      onClick={() => onStatusChange?.(conv.id, s)}
+                      className="gap-2"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${statusColors[s]}`} />
+                      {statusLabels[s]}
+                      {conv.status === s && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
+                    </ContextMenuItem>
+                  ))}
+                  {isAdmin && onDelete && (
+                    <>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onClick={() => setDeleteTarget(conv.id)}
+                        className="text-destructive focus:text-destructive gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Excluir conversa
+                      </ContextMenuItem>
+                    </>
+                  )}
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })
         )}
       </ScrollArea>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta conversa? Todas as mensagens serão removidas permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
