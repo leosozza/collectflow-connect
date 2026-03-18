@@ -1,5 +1,5 @@
 import { useSearchParams, useLocation } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 
 const STORAGE_PREFIX = "urlstate:";
 
@@ -44,8 +44,6 @@ export function useUrlState(
   const [searchParams, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
   const sk = storageKey(pathname, key);
-  const restoredRef = useRef(false);
-
   // Read: URL → sessionStorage → default
   const value = useMemo(() => {
     const raw = searchParams.get(key);
@@ -65,37 +63,6 @@ export function useUrlState(
     }
     return effective;
   }, [searchParams, key, defaultValue, sk]);
-
-  // Restore: if sessionStorage has value but URL doesn't, push to URL once
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-    const raw = searchParams.get(key);
-    if (raw !== null) return; // URL already has it
-    const stored = ssGet(sk);
-    if (stored === null) return; // nothing to restore
-
-    // Check if stored equals default — if so, don't pollute URL
-    const isDefault =
-      Array.isArray(defaultValue)
-        ? stored === defaultValue.join(",") || (stored === "" && defaultValue.length === 0)
-        : typeof defaultValue === "boolean"
-          ? (stored === "1" || stored === "true") === defaultValue
-          : typeof defaultValue === "number"
-            ? Number(stored) === defaultValue
-            : stored === defaultValue;
-
-    if (isDefault) return;
-
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set(key, stored);
-        return next;
-      },
-      { replace: true }
-    );
-  }, []); // run once on mount
 
   const setValue = useCallback(
     (val: any) => {
@@ -149,8 +116,6 @@ export function useUrlFilters<T extends Record<string, string>>(
 ): [T, (key: keyof T, value: string) => void, () => void] {
   const [searchParams, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
-  const restoredRef = useRef(false);
-
   const filters = useMemo((): T => {
     const result = { ...defaults };
     for (const key of Object.keys(defaults)) {
@@ -166,31 +131,6 @@ export function useUrlFilters<T extends Record<string, string>>(
     }
     return result;
   }, [searchParams, defaults, pathname]);
-
-  // Restore stored values to URL on mount
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-    const toRestore: Record<string, string> = {};
-    for (const key of Object.keys(defaults)) {
-      if (searchParams.get(key) !== null) continue;
-      const stored = ssGet(storageKey(pathname, key));
-      if (stored !== null && stored !== defaults[key]) {
-        toRestore[key] = stored;
-      }
-    }
-    if (Object.keys(toRestore).length === 0) return;
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [k, v] of Object.entries(toRestore)) {
-          next.set(k, v);
-        }
-        return next;
-      },
-      { replace: true }
-    );
-  }, []);
 
   const setFilter = useCallback(
     (key: keyof T, value: string) => {
