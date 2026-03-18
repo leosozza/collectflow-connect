@@ -556,7 +556,7 @@ const MaxListPage = () => {
     return {
       nome_completo: (record.nome_completo || "").trim(),
       cpf: record.cpf || "",
-      credor: "YBRASIL",
+      credor: selectedCredorName,
       valor_parcela: record.valor_parcela || record.valor_saldo || 0,
       data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
       data_pagamento: record.data_pagamento || null,
