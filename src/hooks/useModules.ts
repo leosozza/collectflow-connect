@@ -11,7 +11,11 @@ export const useModules = () => {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_my_enabled_modules");
       if (error) throw error;
-      return (data as string[]) || [];
+      const slugs = (data as string[]) || [];
+      if (slugs.length === 0) {
+        console.warn("[useModules] get_my_enabled_modules returned empty — system_modules or tenant_modules may not be populated");
+      }
+      return slugs;
     },
     enabled: !!tenant?.id && !isSuperAdmin,
     staleTime: 5 * 60 * 1000,

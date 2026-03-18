@@ -64,9 +64,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
   ];
 
+  const contactCenterEnabled = isModuleEnabled("contact_center");
   const contactCenterItems = [
-    ...(permissions.canViewTelefonia && isModuleEnabled("telefonia") ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
-    ...(permissions.canViewContactCenter && isModuleEnabled("whatsapp") ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
+    ...(permissions.canViewTelefonia && (contactCenterEnabled || isModuleEnabled("telefonia")) ? [{ label: "Telefonia", icon: Phone, path: "/contact-center/telefonia" }] : []),
+    ...(permissions.canViewContactCenter && (contactCenterEnabled || isModuleEnabled("whatsapp")) ? [{ label: "WhatsApp", icon: MessageCircle, path: "/contact-center/whatsapp" }] : []),
   ];
 
   const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
