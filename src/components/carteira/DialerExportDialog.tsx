@@ -244,7 +244,8 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
           const totalProcessed = prev + prevErr;
           addLog("info", `══════════════════════════════════`);
           addLog("info", `📊 RESUMO DO ENVIO`);
-          addLog("info", `Total: ${allMailings.length} contatos`);
+          addLog("info", `Total válidos: ${allMailings.length} contatos`);
+          if (invalidMailings.length > 0) addLog("info", `⚠ Ignorados (sem telefone): ${invalidMailings.length}`);
           addLog("success", `✅ Enviados: ${prev}`);
           if (prevErr > 0) addLog("error", `❌ Erros: ${prevErr}`);
           addLog("info", `⏱ Duração: ${duration}`);
