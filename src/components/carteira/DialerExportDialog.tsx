@@ -89,12 +89,22 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     }
   };
 
+  const formatElapsed = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+  };
+
   const resetState = () => {
     setSentCount(0);
     setErrorCount(0);
     setLogs([]);
     setPaused(false);
     setFinished(false);
+    setWasCancelled(false);
+    setStartTime(null);
+    setElapsedTime("");
     pausedRef.current = false;
     cancelledRef.current = false;
   };
