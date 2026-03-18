@@ -376,7 +376,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
                     <span>Total: {totalMailings}</span>
                   </div>
                 </div>
-                )
+                }
 
                 {/* Pause / Resume */}
                 {sending && (
