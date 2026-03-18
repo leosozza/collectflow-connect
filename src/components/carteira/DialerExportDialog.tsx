@@ -38,6 +38,15 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
 
+  const uniqueClients = useMemo(() => {
+    const map = new Map<string, Client>();
+    selectedClients.forEach((c) => {
+      const cpf = c.cpf.replace(/\D/g, "");
+      if (!map.has(cpf)) map.set(cpf, c);
+    });
+    return Array.from(map.values());
+  }, [selectedClients]);
+
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [sending, setSending] = useState(false);
