@@ -100,6 +100,12 @@ Regras:
         break;
       }
 
+      case "extract_cpf": {
+        systemPrompt = `Você é um extrator de dados de conversas de cobrança em português brasileiro. Analise o histórico da conversa e extraia CPFs (11 dígitos, com ou sem formatação como 000.000.000-00) e nomes completos de pessoas mencionados. Se não encontrar CPFs ou nomes, retorne arrays vazios.`;
+        userPrompt = `Histórico da conversa:\n${messagesContext}\n\nExtraia todos os CPFs e nomes completos de pessoas mencionados nesta conversa.`;
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Ação inválida. Use: suggest, summarize, classify" }), {
           status: 400,
