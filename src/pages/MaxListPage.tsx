@@ -234,6 +234,7 @@ const MaxListPage = () => {
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
   const [count, setCount] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState("");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
