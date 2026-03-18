@@ -1,38 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Plano: Menu de Contexto na Lista de Conversas do WhatsApp
+### Correções aplicadas
 
-## O que será feito
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-Adicionar um menu de contexto (clique direito) em cada item da lista de conversas do WhatsApp, com as seguintes opções:
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-1. **Marcar como Aberta / Aguardando / Fechada** — alterar status da conversa
-2. **Excluir conversa** — visível apenas para usuários com `role === "admin"`
-
-## Alterações
-
-### 1. `ConversationList.tsx`
-- Importar `ContextMenu` do shadcn/ui e `AlertDialog` para confirmação de exclusão
-- Envolver cada item de conversa com `<ContextMenu>` + `<ContextMenuTrigger>` + `<ContextMenuContent>`
-- Opções do menu:
-  - Alterar status (3 opções, destacando o status atual)
-  - Separador
-  - "Excluir conversa" (apenas se `isAdmin === true`, com estilo destrutivo vermelho)
-- Ao clicar "Excluir", abrir `AlertDialog` de confirmação antes de executar
-
-### 2. `ConversationList.tsx` — Props
-- Adicionar props: `onStatusChange(convId, status)` e `onDelete(convId)`
-- O componente pai (`WhatsAppChatLayout`) passará as callbacks
-
-### 3. `WhatsAppChatLayout.tsx`
-- Criar função `handleDeleteConversation` que deleta `chat_messages` e depois a `conversation` do banco
-- Se a conversa excluída for a selecionada, limpar a seleção
-- Recarregar lista após exclusão
-
-### 4. `conversationService.ts`
-- Adicionar função `deleteConversation(id)` que deleta mensagens associadas e a conversa
-
-## Segurança
-- A exclusão só aparece no menu para `isAdmin === true` (verificado via `usePermissions` no layout pai)
-- RLS existente nas tabelas `conversations` e `chat_messages` já protege no backend
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)

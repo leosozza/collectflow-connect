@@ -15,6 +15,7 @@ import {
   sendInternalNote,
   updateConversationStatus,
   markConversationRead,
+  deleteConversation,
 } from "@/services/conversationService";
 import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappInstanceService";
 import ConversationList from "./ConversationList";
@@ -319,14 +320,33 @@ const WhatsAppChatLayout = () => {
     await handleSendMedia(file);
   };
 
-  const handleStatusChange = async (status: string) => {
-    if (!selectedConv) return;
+  const handleStatusChangeFromList = async (convId: string, status: string) => {
     try {
-      await updateConversationStatus(selectedConv.id, status);
-      setSelectedConv({ ...selectedConv, status: status as any });
+      await updateConversationStatus(convId, status);
+      if (selectedConv?.id === convId) {
+        setSelectedConv({ ...selectedConv, status: status as any });
+      }
       loadConversations();
     } catch {
       toast.error("Erro ao atualizar status");
+    }
+  };
+
+  const handleStatusChange = async (status: string) => {
+    if (!selectedConv) return;
+    await handleStatusChangeFromList(selectedConv.id, status);
+  };
+
+  const handleDeleteConversation = async (convId: string) => {
+    try {
+      await deleteConversation(convId);
+      if (selectedConv?.id === convId) {
+        setSelectedConv(null);
+      }
+      toast.success("Conversa excluída");
+      loadConversations();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir conversa");
     }
   };
 
@@ -345,6 +365,8 @@ const WhatsAppChatLayout = () => {
             conversations={conversations}
             selectedId={selectedConv?.id || null}
             onSelect={handleSelectConv}
+            onStatusChange={handleStatusChangeFromList}
+            onDelete={handleDeleteConversation}
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
             tags={tags}
             tagAssignments={tagAssignments}
