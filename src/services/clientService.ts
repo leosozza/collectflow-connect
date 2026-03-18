@@ -102,10 +102,9 @@ export const fetchClients = async (filters?: {
     if (filters?.tipoDividaId) query = query.eq("tipo_divida_id", filters.tipoDividaId);
     if (filters?.statusCobrancaId) query = query.eq("status_cobranca_id", filters.statusCobrancaId);
 
-    const { data, error } = await query;
-    if (error) throw error;
-    logger.info(MODULE, "fetch", { count: data?.length ?? 0 });
-    return (data as Client[]) || [];
+    const data = await fetchAllRows<Client>(query);
+    logger.info(MODULE, "fetch", { count: data.length });
+    return data;
   } catch (error) {
     handleServiceError(error, MODULE);
   }

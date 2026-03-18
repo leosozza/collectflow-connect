@@ -196,16 +196,15 @@ const CarteiraPage = () => {
     queryFn: async () => {
       const ids = new Set<string>();
       // 1. Client IDs from call_dispositions
-      const { data: dispositions } = await supabase
-        .from("call_dispositions")
-        .select("client_id");
-      (dispositions || []).forEach((d: any) => ids.add(d.client_id));
+      const dispositions = await fetchAllRows(
+        supabase.from("call_dispositions").select("client_id")
+      );
+      dispositions.forEach((d: any) => ids.add(d.client_id));
       // 2. Client IDs from conversations (linked via client_id)
-      const { data: convos } = await supabase
-        .from("conversations" as any)
-        .select("client_id")
-        .not("client_id", "is", null);
-      (convos || []).forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
+      const convos = await fetchAllRows(
+        supabase.from("conversations" as any).select("client_id").not("client_id", "is", null)
+      );
+      convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
     },
     enabled: !!tenant?.id,
