@@ -44,8 +44,6 @@ export function useUrlState(
   const [searchParams, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
   const sk = storageKey(pathname, key);
-  const restoredRef = useRef(false);
-
   // Read: URL → sessionStorage → default
   const value = useMemo(() => {
     const raw = searchParams.get(key);
@@ -65,37 +63,6 @@ export function useUrlState(
     }
     return effective;
   }, [searchParams, key, defaultValue, sk]);
-
-  // Restore: if sessionStorage has value but URL doesn't, push to URL once
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-    const raw = searchParams.get(key);
-    if (raw !== null) return; // URL already has it
-    const stored = ssGet(sk);
-    if (stored === null) return; // nothing to restore
-
-    // Check if stored equals default — if so, don't pollute URL
-    const isDefault =
-      Array.isArray(defaultValue)
-        ? stored === defaultValue.join(",") || (stored === "" && defaultValue.length === 0)
-        : typeof defaultValue === "boolean"
-          ? (stored === "1" || stored === "true") === defaultValue
-          : typeof defaultValue === "number"
-            ? Number(stored) === defaultValue
-            : stored === defaultValue;
-
-    if (isDefault) return;
-
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set(key, stored);
-        return next;
-      },
-      { replace: true }
-    );
-  }, []); // run once on mount
 
   const setValue = useCallback(
     (val: any) => {
