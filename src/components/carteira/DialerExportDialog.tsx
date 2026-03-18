@@ -367,6 +367,15 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
                           <p className="font-semibold text-green-600 dark:text-green-400">{sentCount}</p>
                         </div>
                       </div>
+                      {skippedCount > 0 && (
+                        <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                          <Ban className="w-4 h-4 text-amber-500" />
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Ignorados</span>
+                            <p className="font-semibold text-amber-600 dark:text-amber-400">{skippedCount}</p>
+                          </div>
+                        </div>
+                      )}
                       {errorCount > 0 && (
                         <div className="flex items-center gap-2 rounded-md bg-background p-2">
                           <XCircle className="w-4 h-4 text-destructive" />
