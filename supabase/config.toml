@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.targetdata-enrich]
 verify_jwt = false
+
+[functions.seed-modules]
+verify_jwt = false
