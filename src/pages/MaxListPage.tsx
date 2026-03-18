@@ -52,7 +52,7 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
   );
 };
 
-const ALLOWED_SLUGS = ["maxfama", "temis"];
+const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
 const BATCH_SIZE = 200;
 
 interface MaxSystemItem {
