@@ -123,7 +123,8 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
     resetState();
     setSending(true);
-
+    const t0 = Date.now();
+    setStartTime(t0);
     const allMailings = uniqueClients.map((c) => ({
       identifier: c.cpf.replace(/\D/g, ""),
       phone: c.phone?.replace(/\D/g, "") || "",
