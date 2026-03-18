@@ -111,14 +111,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     resetState();
     setSending(true);
 
-    // Deduplicate by CPF
-    const uniqueClients = new Map<string, Client>();
-    selectedClients.forEach((c) => {
-      const cpf = c.cpf.replace(/\D/g, "");
-      if (!uniqueClients.has(cpf)) uniqueClients.set(cpf, c);
-    });
-
-    const allMailings = Array.from(uniqueClients.values()).map((c) => ({
+    const allMailings = uniqueClients.map((c) => ({
       identifier: c.cpf.replace(/\D/g, ""),
       phone: c.phone?.replace(/\D/g, "") || "",
       Nome: c.nome_completo,
