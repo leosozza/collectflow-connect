@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
         url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/${body.list_id}/mailing`, authParam);
         method = 'POST';
         reqBody = JSON.stringify({
-          header: ['identifier', 'areacodephone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
+          header: ['identifier', 'phone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
           mailing: body.mailings,
         });
         break;

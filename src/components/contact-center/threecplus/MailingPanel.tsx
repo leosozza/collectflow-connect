@@ -77,7 +77,7 @@ const MailingPanel = () => {
       const parts = line.split(";").map((p) => p.trim());
       return {
         identifier: (parts[0] || "").replace(/\D/g, ""),
-        areacodephone: (parts[1] || "").replace(/\D/g, ""),
+        phone: (parts[1] || "").replace(/\D/g, ""),
         Nome: parts[2] || "",
         Extra1: parts[3] || "",
         Extra2: parts[4] || "",

@@ -84,7 +84,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
       const mailings = Array.from(uniqueClients.values()).map((c) => ({
         identifier: c.cpf.replace(/\D/g, ""),
-        areacodephone: c.phone?.replace(/\D/g, "") || "",
+        phone: c.phone?.replace(/\D/g, "") || "",
         Nome: c.nome_completo,
         Extra1: c.credor,
         Extra2: String(c.valor_parcela),
