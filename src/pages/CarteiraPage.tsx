@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/supabaseUtils";
 import PropensityBadge from "@/components/carteira/PropensityBadge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -181,10 +182,10 @@ const CarteiraPage = () => {
   const { data: agreementCpfs = new Set<string>() } = useQuery({
     queryKey: ["agreement-cpfs"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
-      if (error) throw error;
+      const query = supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
+      const data = await fetchAllRows(query);
       const cpfSet = new Set<string>();
-      (data || []).forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
+      data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
   });
@@ -195,16 +196,15 @@ const CarteiraPage = () => {
     queryFn: async () => {
       const ids = new Set<string>();
       // 1. Client IDs from call_dispositions
-      const { data: dispositions } = await supabase
-        .from("call_dispositions")
-        .select("client_id");
-      (dispositions || []).forEach((d: any) => ids.add(d.client_id));
+      const dispositions = await fetchAllRows(
+        supabase.from("call_dispositions").select("client_id")
+      );
+      dispositions.forEach((d: any) => ids.add(d.client_id));
       // 2. Client IDs from conversations (linked via client_id)
-      const { data: convos } = await supabase
-        .from("conversations" as any)
-        .select("client_id")
-        .not("client_id", "is", null);
-      (convos || []).forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
+      const convos = await fetchAllRows(
+        supabase.from("conversations" as any).select("client_id").not("client_id", "is", null)
+      );
+      convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
     },
     enabled: !!tenant?.id,

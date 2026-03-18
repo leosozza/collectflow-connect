@@ -1,45 +1,23 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Correção: Limite de 1000 registros na Carteira
+### Correções aplicadas
 
-## Problema
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-A função `fetchClients` no `clientService.ts` não define `.limit()`, então o Supabase aplica o limite padrão de **1000 linhas**. Com ~6819 clientes no banco, apenas 1000 são retornados. Após agrupamento por CPF único no frontend, aparecem ~241 clientes.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-Esse mesmo limite de 1000 também afeta as queries de `agreements` e `call_dispositions` na CarteiraPage.
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
 
-## Solução
+## Correção: Limite de 1000 registros na Carteira — IMPLEMENTADO ✅
 
-Implementar **paginação automática** no `fetchClients` para buscar todos os registros em lotes, e aplicar o mesmo padrão nas demais queries afetadas.
-
-### 1. Criar helper de paginação (`src/lib/supabaseUtils.ts`)
-
-Função utilitária `fetchAllRows` que faz queries em lotes de 1000 registros até esgotar os resultados:
-
-```typescript
-export async function fetchAllRows(query, pageSize = 1000) {
-  let allData = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await query.range(from, from + pageSize - 1);
-    if (error) throw error;
-    allData.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-    from += pageSize;
-  }
-  return allData;
-}
-```
-
-### 2. Atualizar `fetchClients` (`src/services/clientService.ts`)
-
-Usar `.range()` em loop para buscar todos os registros em vez de uma única query limitada a 1000.
-
-### 3. Atualizar queries na CarteiraPage
-
-Aplicar o mesmo padrão nas queries de `agreements` (linha 184) e `call_dispositions` (linha 198-201) que também podem atingir o limite de 1000.
-
-## Resultado
-
-Todos os clientes importados aparecerão na Carteira, sem limite artificial de 1000 registros.
-
+- Criado helper `fetchAllRows` em `src/lib/supabaseUtils.ts` para paginação automática
+- `fetchClients` agora busca todos os registros em lotes de 1000
+- Queries de `agreements` e `call_dispositions` na CarteiraPage também paginadas
