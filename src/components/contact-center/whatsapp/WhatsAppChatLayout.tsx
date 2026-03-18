@@ -320,14 +320,33 @@ const WhatsAppChatLayout = () => {
     await handleSendMedia(file);
   };
 
-  const handleStatusChange = async (status: string) => {
-    if (!selectedConv) return;
+  const handleStatusChangeFromList = async (convId: string, status: string) => {
     try {
-      await updateConversationStatus(selectedConv.id, status);
-      setSelectedConv({ ...selectedConv, status: status as any });
+      await updateConversationStatus(convId, status);
+      if (selectedConv?.id === convId) {
+        setSelectedConv({ ...selectedConv, status: status as any });
+      }
       loadConversations();
     } catch {
       toast.error("Erro ao atualizar status");
+    }
+  };
+
+  const handleStatusChange = async (status: string) => {
+    if (!selectedConv) return;
+    await handleStatusChangeFromList(selectedConv.id, status);
+  };
+
+  const handleDeleteConversation = async (convId: string) => {
+    try {
+      await deleteConversation(convId);
+      if (selectedConv?.id === convId) {
+        setSelectedConv(null);
+      }
+      toast.success("Conversa excluída");
+      loadConversations();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir conversa");
     }
   };
 
