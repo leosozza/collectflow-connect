@@ -1,38 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Plano: Corrigir erro `removeChild` no MaxListPage
+### Correções aplicadas
 
-## Problema
-O erro `NotFoundError: Failed to execute 'removeChild'` ocorre ao desmontar o `MaxListPage` enquanto Popovers do Radix UI ainda possuem nós portalizados no DOM. Isso acontece porque:
-1. O `ConfiguracoesPage` usa renderização condicional (`{active === "maxlist" && <MaxListPage />}`) que desmonta abruptamente o componente
-2. O Radix Popover cria portais no `<body>` que entram em conflito com a desmontagem do React
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-## Alterações
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-### 1. `src/pages/ConfiguracoesPage.tsx`
-Trocar a renderização condicional por CSS `display:none` para tabs inativas, evitando a desmontagem abrupta dos componentes com portais:
-
-```tsx
-{/* Em vez de: {active === "maxlist" && <MaxListPage />} */}
-<div style={{ display: active === "integracao" ? "block" : "none" }}>
-  <IntegracaoPage />
-</div>
-<div style={{ display: active === "maxlist" ? "block" : "none" }}>
-  {isMaxList && <MaxListPage />}
-</div>
-{/* Similar para as outras tabs */}
-```
-
-Isso mantém os componentes montados (sem conflito de portais) mas ocultos visualmente.
-
-### 2. Alternativa mais leve (se performance for preocupação)
-Fechar popovers explicitamente antes da troca de aba. Porém, a abordagem de CSS `display:none` é mais robusta e simples.
-
-## Detalhes técnicos
-- O erro é cosmético — não causa crash visível, apenas polui o console
-- A solução `display:none` evita re-montagem desnecessária mas mantém os componentes em memória
-- Lazy-load com `useState` para só montar uma tab quando ela for visitada pela primeira vez (evita carregar todas as tabs no load inicial)
-
-## Resultado
-Elimina completamente o `removeChild` error e o warning de ref do Calendar.
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
