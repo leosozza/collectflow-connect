@@ -99,6 +99,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
   const resetState = () => {
     setSentCount(0);
+    setSkippedCount(0);
     setErrorCount(0);
     setLogs([]);
     setPaused(false);
