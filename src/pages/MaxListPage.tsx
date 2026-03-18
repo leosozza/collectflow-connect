@@ -53,7 +53,7 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
 };
 
 const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 1000;
 
 interface MaxSystemItem {
   ContractNumber: string;
@@ -125,10 +125,10 @@ function extractYear(dateStr: string): string | null {
   return null;
 }
 
-function mapItem(item: MaxSystemItem): MappedRecord {
+function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
   const dtVenc = removeTimestamp(item.PaymentDateQuery);
   return {
-    CREDOR: "YBRASIL",
+    CREDOR: credorName,
     COD_DEVEDOR: item.IdRecord,
     COD_CONTRATO: item.ContractNumber?.trim() || "",
     NOME_DEVEDOR: item.ResponsibleName,
@@ -242,6 +242,22 @@ const MaxListPage = () => {
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedCredorName, setSelectedCredorName] = useState<string>("");
+
+  const { data: credores } = useQuery({
+    queryKey: ["credores_maxlist", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credores")
+        .select("id, razao_social")
+        .eq("tenant_id", tenant!.id)
+        .order("razao_social");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenant?.id,
+  });
+
   const { data: tiposStatus } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
     queryFn: async () => {
@@ -334,7 +350,7 @@ const MaxListPage = () => {
 
       const json = await response.json();
       const items = (json.Items || []) as MaxSystemItem[];
-      const mapped = items.map(mapItem);
+      const mapped = items.map((item) => mapItem(item, selectedCredorName));
 
       setRawItems(items);
       setData(mapped);
@@ -540,7 +556,7 @@ const MaxListPage = () => {
     return {
       nome_completo: (record.nome_completo || "").trim(),
       cpf: record.cpf || "",
-      credor: "YBRASIL",
+      credor: selectedCredorName,
       valor_parcela: record.valor_parcela || record.valor_saldo || 0,
       data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
       data_pagamento: record.data_pagamento || null,
@@ -755,7 +771,7 @@ const MaxListPage = () => {
       total_records: records.length,
       inserted: totalInserted,
       skipped: totalSkipped,
-      credor: "YBRASIL",
+      credor: selectedCredorName,
     });
   };
 
@@ -887,6 +903,19 @@ const MaxListPage = () => {
           {data.length > 0 && (
             <div className="flex flex-wrap items-end gap-4 mt-4 pt-4 border-t">
               <div className="space-y-1">
+                <Label className="text-xs font-semibold">Credor *</Label>
+                <Select value={selectedCredorName} onValueChange={setSelectedCredorName}>
+                  <SelectTrigger className="w-[240px]">
+                    <SelectValue placeholder="Selecione o credor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {credores?.map((c) => (
+                      <SelectItem key={c.id} value={c.razao_social}>{c.razao_social}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
                 <Label className="text-xs font-semibold">Status ao importar no Rivo</Label>
                 <Select value={selectedStatusCobrancaId} onValueChange={setSelectedStatusCobrancaId}>
                   <SelectTrigger className="w-[240px]">
@@ -900,7 +929,13 @@ const MaxListPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="secondary" onClick={handleSendToCRM} disabled={importing}>
+              <Button variant="secondary" onClick={() => {
+                if (!selectedCredorName) {
+                  toast.error("Selecione um credor antes de importar");
+                  return;
+                }
+                handleSendToCRM();
+              }} disabled={importing || !selectedCredorName}>
                 {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
                 {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
               </Button>
