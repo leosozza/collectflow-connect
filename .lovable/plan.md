@@ -1,24 +1,38 @@
 
 
-# Plano: Atualizar credenciais Negociarie para TESS MODELS
+# Plano: Corrigir erro `removeChild` no MaxListPage
 
 ## Problema
-As credenciais atuais da API Negociarie pertencem a outro cliente. Precisamos atualizar para as credenciais da TESS MODELS.
+O erro `NotFoundError: Failed to execute 'removeChild'` ocorre ao desmontar o `MaxListPage` enquanto Popovers do Radix UI ainda possuem nós portalizados no DOM. Isso acontece porque:
+1. O `ConfiguracoesPage` usa renderização condicional (`{active === "maxlist" && <MaxListPage />}`) que desmonta abruptamente o componente
+2. O Radix Popover cria portais no `<body>` que entram em conflito com a desmontagem do React
 
 ## Alterações
 
-### 1. Atualizar secrets no backend
-Atualizar os dois secrets existentes com os novos valores:
+### 1. `src/pages/ConfiguracoesPage.tsx`
+Trocar a renderização condicional por CSS `display:none` para tabs inativas, evitando a desmontagem abrupta dos componentes com portais:
 
-- **NEGOCIARIE_CLIENT_ID** → `1306`
-- **NEGOCIARIE_CLIENT_SECRET** → `yXsCjsDI8X66seF0CwRsxrtmxj2yZuLf`
+```tsx
+{/* Em vez de: {active === "maxlist" && <MaxListPage />} */}
+<div style={{ display: active === "integracao" ? "block" : "none" }}>
+  <IntegracaoPage />
+</div>
+<div style={{ display: active === "maxlist" ? "block" : "none" }}>
+  {isMaxList && <MaxListPage />}
+</div>
+{/* Similar para as outras tabs */}
+```
 
-### 2. Corrigir erro de build
-O erro `Failed to load native binding` do `@swc/core` será resolvido com rebuild dos módulos nativos.
+Isso mantém os componentes montados (sem conflito de portais) mas ocultos visualmente.
 
-### 3. Testar conexão
-Após atualizar os secrets, testar a edge function `negociarie-proxy` com action `test-connection` para confirmar que as novas credenciais funcionam.
+### 2. Alternativa mais leve (se performance for preocupação)
+Fechar popovers explicitamente antes da troca de aba. Porém, a abordagem de CSS `display:none` é mais robusta e simples.
 
-## Nenhuma alteração de código necessária
-Os secrets são consumidos pela edge function existente via `Deno.env.get()` — basta atualizar os valores.
+## Detalhes técnicos
+- O erro é cosmético — não causa crash visível, apenas polui o console
+- A solução `display:none` evita re-montagem desnecessária mas mantém os componentes em memória
+- Lazy-load com `useState` para só montar uma tab quando ela for visitada pela primeira vez (evita carregar todas as tabs no load inicial)
+
+## Resultado
+Elimina completamente o `removeChild` error e o warning de ref do Calendar.
 
