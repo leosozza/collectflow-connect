@@ -365,6 +365,8 @@ const WhatsAppChatLayout = () => {
             conversations={conversations}
             selectedId={selectedConv?.id || null}
             onSelect={handleSelectConv}
+            onStatusChange={handleStatusChangeFromList}
+            onDelete={handleDeleteConversation}
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
             tags={tags}
             tagAssignments={tagAssignments}
