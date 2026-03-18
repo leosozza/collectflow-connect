@@ -1,40 +1,45 @@
 
 
-# Diagnóstico e Plano de Correção — Produção
+# Plano: Corrigir módulos ausentes em Produção e Test
 
-## Causa Raiz
+## Diagnóstico Confirmado
 
-A migration que insere os dados em `system_modules` e `tenant_modules` foi criada e aplicada no ambiente **Test**, mas **nunca foi publicada** para o ambiente **Live**. Por isso:
+Ambos os ambientes (Test e Live) têm **0 registros** em `system_modules` e `tenant_modules`. A migration `20260318181648` foi criada mas nunca foi aplicada em nenhum dos dois ambientes.
 
-- **Live**: `system_modules` = 0 registros, `tenant_modules` = 0 registros
-- **Test**: `system_modules` = 12 registros, `tenant_modules` = 11 registros
+As tabelas e schemas existem corretamente em ambos, incluindo RLS policies adequadas. O problema é exclusivamente **dados ausentes**.
 
-Quando o `get_my_enabled_modules()` retorna um array vazio, o `ModuleGuard` bloqueia todos os módulos (Contact Center, WhatsApp, Telefonia, etc.).
+| Tabela | Test | Live |
+|--------|------|------|
+| `system_modules` | 0 | 0 |
+| `tenant_modules` | 0 | 0 |
 
-## Estado Atual do Live
+## Causa
 
-| Tabela | Live | Test | Status |
-|--------|------|------|--------|
-| `system_modules` | 0 | 12 | **VAZIA — causa do problema** |
-| `tenant_modules` | 0 | 11 | **VAZIA — causa do problema** |
-| `plans` | 3 | 3 | OK |
-| `tenants` | 1 | 1 | OK |
-| `credores` | 1 | 1 | OK |
-| `permission_profiles` | 4 | 4 | OK |
-| `call_disposition_types` | 5 | 5 | OK |
-| `commission_grades` | 2 | 2 | OK |
-| `token_packages` | 5 | 5 | OK |
-| `tenant_tokens` | 1 | 1 | OK |
+A migration foi salva como arquivo vazio e depois editada, mas o banco não a re-executou.
 
 ## Solução
 
-**Passo único**: Publicar o projeto. A migration `20260318181648_f57715fc...` já contém os INSERTs necessários para popular `system_modules` (12 módulos) e `tenant_modules` (11 módulos habilitados para Y.BRASIL). Ao publicar, essa migration será executada automaticamente no Live.
+Usar a **ferramenta de inserção de dados** (não migration) para popular diretamente ambos os ambientes:
 
-Não há necessidade de criar novas migrations ou alterar código. Todas as outras tabelas de referência já estão corretamente populadas no Live.
+### Passo 1 — Inserir os 12 módulos em `system_modules`
+
+Inserir via ferramenta de insert nos dois ambientes (Test + Live):
+
+- `crm_core` (core)
+- `contact_center`, `whatsapp`, `telefonia`, `automacao`, `portal_devedor`, `relatorios`, `gamificacao`, `financeiro`, `integracoes`, `api_publica`, `ia_negociacao`
+
+### Passo 2 — Habilitar módulos para tenant Y.BRASIL
+
+Inserir em `tenant_modules` para o tenant `39a450f8-7a40-46e5-8bc7-708da5043ec7`, habilitando todos os módulos não-core (11 registros).
+
+### Passo 3 — Verificar
+
+Consultar `get_my_enabled_modules()` no Live para confirmar que retorna os slugs corretos.
 
 ## Resultado Esperado
 
-Após publicação:
-- `get_my_enabled_modules()` retornará os 12 slugs (11 não-core + 1 core)
-- Contact Center, WhatsApp, Telefonia e todos os outros módulos ficarão visíveis no sidebar e acessíveis em `rivoconnect.com`
+Após a inserção:
+- Contact Center, WhatsApp, Telefonia e todos os outros módulos ficam visíveis no sidebar
+- `ModuleGuard` libera o acesso às rotas protegidas
+- Não é necessário republicar — os dados ficam disponíveis imediatamente
 
