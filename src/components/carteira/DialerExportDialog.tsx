@@ -54,6 +54,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
   // Progress state
   const [totalMailings, setTotalMailings] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
   const [sentCount, setSentCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
