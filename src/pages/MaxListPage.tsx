@@ -329,39 +329,62 @@ const MaxListPage = () => {
 
     setSearching(true);
     setData([]);
+    setRawItems([]);
     setCount(null);
+    setSearchProgress("Iniciando consulta...");
 
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const PAGE_SIZE = 5000;
 
-      const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=50000`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      let allItems: MaxSystemItem[] = [];
+      let skip = 0;
+      let totalCount = 0;
+      let firstPage = true;
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Erro ao consultar MaxSystem");
+      while (true) {
+        const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}`;
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "Erro ao consultar MaxSystem");
+        }
+
+        const json = await response.json();
+        const items = (json.Items || []) as MaxSystemItem[];
+
+        if (firstPage) {
+          totalCount = json.Count || 0;
+          firstPage = false;
+        }
+
+        allItems = allItems.concat(items);
+        setSearchProgress(`Carregando ${allItems.length} de ${totalCount} registros...`);
+
+        // If we got fewer items than requested or reached total, stop
+        if (items.length < PAGE_SIZE || allItems.length >= totalCount) break;
+        skip += PAGE_SIZE;
       }
 
-      const json = await response.json();
-      const items = (json.Items || []) as MaxSystemItem[];
-      const mapped = items.map((item) => mapItem(item, selectedCredorName));
-
-      setRawItems(items);
+      const mapped = allItems.map((item) => mapItem(item, selectedCredorName));
+      setRawItems(allItems);
       setData(mapped);
       setSelectedIndexes(new Set());
-      setCount(json.Count ?? mapped.length);
-      toast.success(`${json.Count ?? mapped.length} registros encontrados`);
+      setCount(totalCount);
+      toast.success(`${totalCount} registros encontrados`);
     } catch (err: any) {
       toast.error(err.message || "Erro ao buscar dados");
     } finally {
       setSearching(false);
+      setSearchProgress("");
     }
   };
 
