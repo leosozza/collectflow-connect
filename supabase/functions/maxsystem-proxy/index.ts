@@ -207,9 +207,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // === Installments endpoint (existing) ===
+    // === Installments endpoint (single-page, delegated pagination to frontend) ===
     const filter = url.searchParams.get("filter") || "";
-    const totalTop = parseInt(url.searchParams.get("top") || "50000", 10);
+    const MAX_PAGE = 5000;
+    const requestedTop = Math.min(parseInt(url.searchParams.get("top") || "5000", 10), MAX_PAGE);
+    const skip = parseInt(url.searchParams.get("skip") || "0", 10);
 
     if (!filter) {
       return new Response(JSON.stringify({ error: "Filter is required" }), {
@@ -218,39 +220,19 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Paginate to avoid memory limit — fetch in chunks of 5000
-    const PAGE_SIZE = 5000;
-    let allItems: unknown[] = [];
-    let totalCount = 0;
-    let skip = 0;
-    let fetched = 0;
+    const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${requestedTop}&%24skip=${skip}&%24orderby=ResponsibleCPF+desc&%24filter=${encodeURI(filter)}`;
 
-    while (fetched < totalTop) {
-      const chunkTop = Math.min(PAGE_SIZE, totalTop - fetched);
-      const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${chunkTop}&%24skip=${skip}&%24orderby=ResponsibleCPF+desc&%24filter=${encodeURI(filter)}`;
-
-      const response = await fetch(maxUrl);
-      if (!response.ok) {
-        const text = await response.text();
-        return new Response(JSON.stringify({ error: "MaxSystem error", details: text }), {
-          status: response.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const data = await response.json();
-      const items = data.Items || [];
-      totalCount = data.Count || totalCount;
-
-      allItems = allItems.concat(items);
-      fetched += items.length;
-      skip += chunkTop;
-
-      // If we got fewer items than requested, there are no more
-      if (items.length < chunkTop) break;
+    const response = await fetch(maxUrl);
+    if (!response.ok) {
+      const text = await response.text();
+      return new Response(JSON.stringify({ error: "MaxSystem error", details: text }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(JSON.stringify({ Items: allItems, Count: totalCount }), {
+    const data = await response.json();
+    return new Response(JSON.stringify({ Items: data.Items || [], Count: data.Count || 0 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
