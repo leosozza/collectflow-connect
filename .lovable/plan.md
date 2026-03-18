@@ -1,15 +1,38 @@
 
 
-# Plano: Deletar credor YBRASIL do ambiente Test
+# Plano: Menu de Contexto na Lista de Conversas do WhatsApp
 
-O credor YBRASIL ainda existe no ambiente Test e precisa ser removido. O ambiente Live já está correto.
+## O que será feito
 
-## Ação
+Adicionar um menu de contexto (clique direito) em cada item da lista de conversas do WhatsApp, com as seguintes opções:
 
-Executar no **Test**:
-```sql
-DELETE FROM credores WHERE id = '79180313-fc3f-4f7f-9cba-01db19a339f3';
-```
+1. **Marcar como Aberta / Aguardando / Fechada** — alterar status da conversa
+2. **Excluir conversa** — visível apenas para usuários com `role === "admin"`
 
-Isso deixará apenas o credor **TESS MODELS PRODUTOS FOTOGRAFICOS LTDA** em ambos os ambientes, alinhado com o tenant **Y.BRASIL**.
+## Alterações
+
+### 1. `ConversationList.tsx`
+- Importar `ContextMenu` do shadcn/ui e `AlertDialog` para confirmação de exclusão
+- Envolver cada item de conversa com `<ContextMenu>` + `<ContextMenuTrigger>` + `<ContextMenuContent>`
+- Opções do menu:
+  - Alterar status (3 opções, destacando o status atual)
+  - Separador
+  - "Excluir conversa" (apenas se `isAdmin === true`, com estilo destrutivo vermelho)
+- Ao clicar "Excluir", abrir `AlertDialog` de confirmação antes de executar
+
+### 2. `ConversationList.tsx` — Props
+- Adicionar props: `onStatusChange(convId, status)` e `onDelete(convId)`
+- O componente pai (`WhatsAppChatLayout`) passará as callbacks
+
+### 3. `WhatsAppChatLayout.tsx`
+- Criar função `handleDeleteConversation` que deleta `chat_messages` e depois a `conversation` do banco
+- Se a conversa excluída for a selecionada, limpar a seleção
+- Recarregar lista após exclusão
+
+### 4. `conversationService.ts`
+- Adicionar função `deleteConversation(id)` que deleta mensagens associadas e a conversa
+
+## Segurança
+- A exclusão só aparece no menu para `isAdmin === true` (verificado via `usePermissions` no layout pai)
+- RLS existente nas tabelas `conversations` e `chat_messages` já protege no backend
 
