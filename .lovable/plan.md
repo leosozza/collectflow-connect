@@ -1,43 +1,23 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Correção: Validação e formatação de mailing 3CPlus
+### Correções aplicadas
 
-## Problema
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-Dos 520 clientes enviados, apenas 383 aparecem no 3CPlus. A diferença (137 contatos) é rejeitada silenciosamente pela API por problemas de validação:
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-1. **Telefones vazios** — clientes sem telefone são enviados com `phone: ""`, o 3CPlus descarta
-2. **Falta do prefixo "55"** — a API 3CPlus exige telefones com código de país (ex: `5511999998888`), mas enviamos apenas `11999998888`
-3. **Telefones inválidos** — números com menos de 10 dígitos (sem DDD) são rejeitados
-4. **Sem feedback por contato** — a API retorna HTTP 200 mesmo quando descarta contatos individuais, e o sistema não detecta isso
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
 
-## Solução
+## Correção: Limite de 1000 registros na Carteira — IMPLEMENTADO ✅
 
-### Arquivo: `src/components/carteira/DialerExportDialog.tsx`
-
-1. **Filtrar clientes sem telefone válido** antes do envio:
-   - Remover clientes com `phone` vazio/nulo
-   - Remover telefones com menos de 10 dígitos (após limpar)
-   - Mostrar no log quantos foram ignorados por falta de telefone
-
-2. **Adicionar prefixo "55"** a todos os telefones que não começam com "55":
-   ```typescript
-   const rawPhone = c.phone?.replace(/\D/g, "") || "";
-   const phone = rawPhone.length >= 10 
-     ? (rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`)
-     : "";
-   ```
-
-3. **Exibir contagem de descartados** no log e no resumo final:
-   - "X contatos ignorados (sem telefone válido)"
-   - Adicionar campo `skippedCount` no card de resumo
-
-4. **Verificar contagem real na API** após envio — comparar total enviado com total registrado na lista (usando `get_campaign_lists`) e logar divergências
-
-## Resultado
-
-- Apenas contatos com telefone válido serão enviados
-- Telefones formatados corretamente com prefixo "55"
-- Operador saberá exatamente quantos foram ignorados e por quê
-- A contagem no log baterá com o 3CPlus
-
+- Criado helper `fetchAllRows` em `src/lib/supabaseUtils.ts` para paginação automática
+- `fetchClients` agora busca todos os registros em lotes de 1000
+- Queries de `agreements` e `call_dispositions` na CarteiraPage também paginadas

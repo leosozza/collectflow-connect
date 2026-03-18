@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info, Clock, AlertTriangle, Ban } from "lucide-react";
 import { toast } from "sonner";
 
 interface DialerExportDialogProps {
@@ -54,6 +54,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
   // Progress state
   const [totalMailings, setTotalMailings] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
   const [sentCount, setSentCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -98,6 +99,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
   const resetState = () => {
     setSentCount(0);
+    setSkippedCount(0);
     setErrorCount(0);
     setLogs([]);
     setPaused(false);
@@ -125,17 +127,39 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     setSending(true);
     const t0 = Date.now();
     setStartTime(t0);
-    const allMailings = uniqueClients.map((c) => ({
-      identifier: c.cpf.replace(/\D/g, ""),
-      phone: c.phone?.replace(/\D/g, "") || "",
-      Nome: c.nome_completo,
-      Extra1: c.credor,
-      Extra2: String(c.valor_parcela),
-      Extra3: c.id,
-    }));
+    const allPrepared = uniqueClients.map((c) => {
+      const rawPhone = c.phone?.replace(/\D/g, "") || "";
+      const phone = rawPhone.length >= 10
+        ? (rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`)
+        : "";
+      return {
+        identifier: c.cpf.replace(/\D/g, ""),
+        phone,
+        Nome: c.nome_completo,
+        Extra1: c.credor,
+        Extra2: String(c.valor_parcela),
+        Extra3: c.id,
+      };
+    });
 
+    const invalidMailings = allPrepared.filter((m) => !m.phone);
+    const allMailings = allPrepared.filter((m) => !!m.phone);
+
+    setSkippedCount(invalidMailings.length);
     setTotalMailings(allMailings.length);
+
+    if (invalidMailings.length > 0) {
+      addLog("info", `⚠ ${invalidMailings.length} contatos ignorados (sem telefone válido)`);
+    }
     addLog("info", `Iniciando envio de ${allMailings.length} contatos em lotes de ${BATCH_SIZE}...`);
+
+    if (allMailings.length === 0) {
+      addLog("error", "Nenhum contato com telefone válido para enviar.");
+      setSending(false);
+      setFinished(true);
+      setElapsedTime(formatElapsed(Date.now() - t0));
+      return;
+    }
 
     try {
       // 1. Create list
@@ -220,7 +244,8 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
           const totalProcessed = prev + prevErr;
           addLog("info", `══════════════════════════════════`);
           addLog("info", `📊 RESUMO DO ENVIO`);
-          addLog("info", `Total: ${allMailings.length} contatos`);
+          addLog("info", `Total válidos: ${allMailings.length} contatos`);
+          if (invalidMailings.length > 0) addLog("info", `⚠ Ignorados (sem telefone): ${invalidMailings.length}`);
           addLog("success", `✅ Enviados: ${prev}`);
           if (prevErr > 0) addLog("error", `❌ Erros: ${prevErr}`);
           addLog("info", `⏱ Duração: ${duration}`);
@@ -343,6 +368,15 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
                           <p className="font-semibold text-green-600 dark:text-green-400">{sentCount}</p>
                         </div>
                       </div>
+                      {skippedCount > 0 && (
+                        <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                          <Ban className="w-4 h-4 text-amber-500" />
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Ignorados</span>
+                            <p className="font-semibold text-amber-600 dark:text-amber-400">{skippedCount}</p>
+                          </div>
+                        </div>
+                      )}
                       {errorCount > 0 && (
                         <div className="flex items-center gap-2 rounded-md bg-background p-2">
                           <XCircle className="w-4 h-4 text-destructive" />
