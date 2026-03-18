@@ -116,8 +116,6 @@ export function useUrlFilters<T extends Record<string, string>>(
 ): [T, (key: keyof T, value: string) => void, () => void] {
   const [searchParams, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
-  const restoredRef = useRef(false);
-
   const filters = useMemo((): T => {
     const result = { ...defaults };
     for (const key of Object.keys(defaults)) {
@@ -133,31 +131,6 @@ export function useUrlFilters<T extends Record<string, string>>(
     }
     return result;
   }, [searchParams, defaults, pathname]);
-
-  // Restore stored values to URL on mount
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-    const toRestore: Record<string, string> = {};
-    for (const key of Object.keys(defaults)) {
-      if (searchParams.get(key) !== null) continue;
-      const stored = ssGet(storageKey(pathname, key));
-      if (stored !== null && stored !== defaults[key]) {
-        toRestore[key] = stored;
-      }
-    }
-    if (Object.keys(toRestore).length === 0) return;
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [k, v] of Object.entries(toRestore)) {
-          next.set(k, v);
-        }
-        return next;
-      },
-      { replace: true }
-    );
-  }, []);
 
   const setFilter = useCallback(
     (key: keyof T, value: string) => {
