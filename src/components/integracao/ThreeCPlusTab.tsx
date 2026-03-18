@@ -52,7 +52,7 @@ const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; do
       // Step 2: Send mailing
       const mailings = [{
         identifier: testCpf.replace(/\D/g, ""),
-        areacodephone: testPhone.replace(/\D/g, ""),
+        phone: testPhone.replace(/\D/g, ""),
         Nome: testName,
         Extra1: "TESTE",
         Extra2: "0.00",
