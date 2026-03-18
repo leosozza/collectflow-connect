@@ -1,10 +1,25 @@
-import { useSearchParams } from "react-router-dom";
-import { useCallback, useMemo } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+
+const STORAGE_PREFIX = "urlstate:";
+
+function storageKey(pathname: string, key: string) {
+  return `${STORAGE_PREFIX}${pathname}:${key}`;
+}
+
+function ssGet(k: string): string | null {
+  try { return sessionStorage.getItem(k); } catch { return null; }
+}
+function ssSet(k: string, v: string) {
+  try { sessionStorage.setItem(k, v); } catch { /* quota */ }
+}
+function ssRemove(k: string) {
+  try { sessionStorage.removeItem(k); } catch { /* noop */ }
+}
 
 /**
  * Sync a single value with a URL search param.
- * - Default values are omitted from URL (clean URLs).
- * - Supports string, number, boolean, and string[] (comma-separated).
+ * Persists to sessionStorage so values survive route changes.
  */
 export function useUrlState(
   key: string,
@@ -27,39 +42,84 @@ export function useUrlState(
   defaultValue: string | number | boolean | string[]
 ): [any, (val: any) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { pathname } = useLocation();
+  const sk = storageKey(pathname, key);
+  const restoredRef = useRef(false);
 
+  // Read: URL → sessionStorage → default
   const value = useMemo(() => {
     const raw = searchParams.get(key);
-    if (raw === null) return defaultValue;
+    const effective = raw ?? ssGet(sk);
 
-    // string[]
+    if (effective === null) return defaultValue;
+
     if (Array.isArray(defaultValue)) {
-      return raw === "" ? [] : raw.split(",");
+      return effective === "" ? [] : effective.split(",");
     }
-    // boolean
     if (typeof defaultValue === "boolean") {
-      return raw === "1" || raw === "true";
+      return effective === "1" || effective === "true";
     }
-    // number
     if (typeof defaultValue === "number") {
-      const n = Number(raw);
+      const n = Number(effective);
       return isNaN(n) ? defaultValue : n;
     }
-    // string
-    return raw;
-  }, [searchParams, key, defaultValue]);
+    return effective;
+  }, [searchParams, key, defaultValue, sk]);
+
+  // Restore: if sessionStorage has value but URL doesn't, push to URL once
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const raw = searchParams.get(key);
+    if (raw !== null) return; // URL already has it
+    const stored = ssGet(sk);
+    if (stored === null) return; // nothing to restore
+
+    // Check if stored equals default — if so, don't pollute URL
+    const isDefault =
+      Array.isArray(defaultValue)
+        ? stored === defaultValue.join(",") || (stored === "" && defaultValue.length === 0)
+        : typeof defaultValue === "boolean"
+          ? (stored === "1" || stored === "true") === defaultValue
+          : typeof defaultValue === "number"
+            ? Number(stored) === defaultValue
+            : stored === defaultValue;
+
+    if (isDefault) return;
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set(key, stored);
+        return next;
+      },
+      { replace: true }
+    );
+  }, []); // run once on mount
 
   const setValue = useCallback(
     (val: any) => {
+      const isDefault =
+        Array.isArray(defaultValue) && Array.isArray(val)
+          ? val.length === (defaultValue as string[]).length &&
+            val.every((v: string, i: number) => v === (defaultValue as string[])[i])
+          : val === defaultValue;
+
+      // Update sessionStorage
+      if (isDefault) {
+        ssRemove(sk);
+      } else if (typeof val === "boolean") {
+        ssSet(sk, val ? "1" : "0");
+      } else if (Array.isArray(val)) {
+        ssSet(sk, val.join(","));
+      } else {
+        ssSet(sk, String(val));
+      }
+
+      // Update URL
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          const isDefault =
-            Array.isArray(defaultValue) && Array.isArray(val)
-              ? val.length === (defaultValue as string[]).length &&
-                val.every((v: string, i: number) => v === (defaultValue as string[])[i])
-              : val === defaultValue;
-
           if (isDefault) {
             next.delete(key);
           } else if (typeof val === "boolean") {
@@ -74,7 +134,7 @@ export function useUrlState(
         { replace: true }
       );
     },
-    [key, defaultValue, setSearchParams]
+    [key, defaultValue, setSearchParams, sk]
   );
 
   return [value, setValue];
@@ -82,12 +142,14 @@ export function useUrlState(
 
 /**
  * Sync a record of filters with URL search params.
- * All values are strings. Default values are omitted from URL.
+ * Persists to sessionStorage so values survive route changes.
  */
 export function useUrlFilters<T extends Record<string, string>>(
   defaults: T
 ): [T, (key: keyof T, value: string) => void, () => void] {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { pathname } = useLocation();
+  const restoredRef = useRef(false);
 
   const filters = useMemo((): T => {
     const result = { ...defaults };
@@ -95,13 +157,49 @@ export function useUrlFilters<T extends Record<string, string>>(
       const raw = searchParams.get(key);
       if (raw !== null) {
         (result as any)[key] = raw;
+      } else {
+        const stored = ssGet(storageKey(pathname, key));
+        if (stored !== null) {
+          (result as any)[key] = stored;
+        }
       }
     }
     return result;
-  }, [searchParams, defaults]);
+  }, [searchParams, defaults, pathname]);
+
+  // Restore stored values to URL on mount
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const toRestore: Record<string, string> = {};
+    for (const key of Object.keys(defaults)) {
+      if (searchParams.get(key) !== null) continue;
+      const stored = ssGet(storageKey(pathname, key));
+      if (stored !== null && stored !== defaults[key]) {
+        toRestore[key] = stored;
+      }
+    }
+    if (Object.keys(toRestore).length === 0) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(toRestore)) {
+          next.set(k, v);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, []);
 
   const setFilter = useCallback(
     (key: keyof T, value: string) => {
+      const sk = storageKey(pathname, key as string);
+      if (value === defaults[key]) {
+        ssRemove(sk);
+      } else {
+        ssSet(sk, value);
+      }
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -115,10 +213,13 @@ export function useUrlFilters<T extends Record<string, string>>(
         { replace: true }
       );
     },
-    [defaults, setSearchParams]
+    [defaults, setSearchParams, pathname]
   );
 
   const clearAll = useCallback(() => {
+    for (const key of Object.keys(defaults)) {
+      ssRemove(storageKey(pathname, key));
+    }
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -129,7 +230,7 @@ export function useUrlFilters<T extends Record<string, string>>(
       },
       { replace: true }
     );
-  }, [defaults, setSearchParams]);
+  }, [defaults, setSearchParams, pathname]);
 
   return [filters, setFilter, clearAll];
 }
