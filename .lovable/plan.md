@@ -15,3 +15,9 @@
 #### Pendente (ação manual)
 - **Leaked Password Protection** — habilitar manualmente no backend
 - **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+
+## Correção: Limite de 1000 registros na Carteira — IMPLEMENTADO ✅
+
+- Criado helper `fetchAllRows` em `src/lib/supabaseUtils.ts` para paginação automática
+- `fetchClients` agora busca todos os registros em lotes de 1000
+- Queries de `agreements` e `call_dispositions` na CarteiraPage também paginadas
