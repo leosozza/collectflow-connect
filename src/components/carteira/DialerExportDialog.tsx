@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info } from "lucide-react";
+import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info, Clock, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface DialerExportDialogProps {
