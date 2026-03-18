@@ -771,7 +771,7 @@ const MaxListPage = () => {
       total_records: records.length,
       inserted: totalInserted,
       skipped: totalSkipped,
-      credor: "YBRASIL",
+      credor: selectedCredorName,
     });
   };
 
