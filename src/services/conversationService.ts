@@ -202,10 +202,3 @@ export async function linkClientToConversation(conversationId: string, clientId:
     .update({ client_id: clientId } as any)
     .eq("id", conversationId);
   if (error) throw error;
-}
-  const { error } = await supabase
-    .from("conversations" as any)
-    .update({ client_id: clientId } as any)
-    .eq("id", conversationId);
-  if (error) throw error;
-}
