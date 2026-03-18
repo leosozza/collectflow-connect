@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 import { DISPOSITION_TYPES } from "@/services/dispositionService";
 
