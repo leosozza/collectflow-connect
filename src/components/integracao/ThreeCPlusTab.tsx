@@ -74,7 +74,23 @@ const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; do
       });
       if (sendError) throw sendError;
 
-      addLog("success", `Resposta do 3CPlus: ${JSON.stringify(sendData).slice(0, 500)}`);
+      // Detect API-level errors (e.g. 422)
+      const httpStatus = sendData?.status;
+      const responseBody = JSON.stringify(sendData, null, 2);
+
+      if (httpStatus && httpStatus >= 400) {
+        addLog("error", `❌ API retornou HTTP ${httpStatus}`);
+        addLog("error", `Detalhes: ${responseBody.slice(0, 600)}`);
+        // Show validation errors if present
+        if (sendData?.data?.errors) {
+          Object.entries(sendData.data.errors).forEach(([field, msgs]: [string, any]) => {
+            addLog("error", `Campo "${field}": ${Array.isArray(msgs) ? msgs.join(", ") : msgs}`);
+          });
+        }
+      } else {
+        addLog("success", `✅ Mailing enviado com sucesso! HTTP ${httpStatus || 200}`);
+        addLog("info", `Resposta: ${responseBody.slice(0, 500)}`);
+      }
 
       // Step 3: Verify — get campaign lists to check if mailing was received
       addLog("info", "Verificando lista na campanha...");
