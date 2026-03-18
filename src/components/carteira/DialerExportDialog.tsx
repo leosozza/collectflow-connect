@@ -127,17 +127,39 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     setSending(true);
     const t0 = Date.now();
     setStartTime(t0);
-    const allMailings = uniqueClients.map((c) => ({
-      identifier: c.cpf.replace(/\D/g, ""),
-      phone: c.phone?.replace(/\D/g, "") || "",
-      Nome: c.nome_completo,
-      Extra1: c.credor,
-      Extra2: String(c.valor_parcela),
-      Extra3: c.id,
-    }));
+    const allPrepared = uniqueClients.map((c) => {
+      const rawPhone = c.phone?.replace(/\D/g, "") || "";
+      const phone = rawPhone.length >= 10
+        ? (rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`)
+        : "";
+      return {
+        identifier: c.cpf.replace(/\D/g, ""),
+        phone,
+        Nome: c.nome_completo,
+        Extra1: c.credor,
+        Extra2: String(c.valor_parcela),
+        Extra3: c.id,
+      };
+    });
 
+    const invalidMailings = allPrepared.filter((m) => !m.phone);
+    const allMailings = allPrepared.filter((m) => !!m.phone);
+
+    setSkippedCount(invalidMailings.length);
     setTotalMailings(allMailings.length);
+
+    if (invalidMailings.length > 0) {
+      addLog("info", `⚠ ${invalidMailings.length} contatos ignorados (sem telefone válido)`);
+    }
     addLog("info", `Iniciando envio de ${allMailings.length} contatos em lotes de ${BATCH_SIZE}...`);
+
+    if (allMailings.length === 0) {
+      addLog("error", "Nenhum contato com telefone válido para enviar.");
+      setSending(false);
+      setFinished(true);
+      setElapsedTime(formatElapsed(Date.now() - t0));
+      return;
+    }
 
     try {
       // 1. Create list
