@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Link2, Unlink, Search, Tag, FileText } from "lucide-react";
+import { User, Link2, Unlink, Search, Tag, FileText, Bot, Loader2 } from "lucide-react";
 import { Conversation, ChatMessage, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -49,6 +49,9 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
   const [showSearch, setShowSearch] = useState(false);
   const [assignedTags, setAssignedTags] = useState<ConversationTag[]>([]);
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
+  const [aiLinking, setAiLinking] = useState(false);
+  const [aiCandidates, setAiCandidates] = useState<SimpleClient[]>([]);
+  const [showAiResults, setShowAiResults] = useState(false);
 
   // Fetch linked client
   useEffect(() => {
@@ -64,7 +67,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       .then(({ data }) => {
         const client = data as SimpleClient | null;
         setLinkedClient(client);
-        // Fetch status cobrança name/color
         if (client?.status_cobranca_id) {
           supabase
             .from("tipos_status")
@@ -115,7 +117,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     const { data } = await supabase
       .from("clients")
       .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id")
-      .or(`nome_completo.ilike.%${searchTerm}%,cpf.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+      .or(`nome_completo.ilike.%${searchTerm}%,cpf.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,phone2.ilike.%${searchTerm}%,phone3.ilike.%${searchTerm}%`)
       .limit(5);
     setSearchResults((data as SimpleClient[] | null) || []);
     setSearching(false);
@@ -127,6 +129,8 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       await linkClientToConversation(conversation.id, clientId);
       toast.success("Cliente vinculado!");
       setShowSearch(false);
+      setShowAiResults(false);
+      setAiCandidates([]);
       setSearchTerm("");
       setSearchResults([]);
       onClientLinked();
@@ -144,6 +148,79 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       onClientLinked();
     } catch {
       toast.error("Erro ao desvincular");
+    }
+  };
+
+  const handleAiLink = async () => {
+    if (!conversation || messages.length === 0) return;
+    setAiLinking(true);
+    setShowAiResults(false);
+    setAiCandidates([]);
+
+    try {
+      const chatMessages = messages.slice(-30).map((m) => ({
+        direction: m.direction,
+        content: m.content,
+      }));
+
+      const { data, error } = await supabase.functions.invoke("chat-ai-suggest", {
+        body: { action: "extract_cpf", messages: chatMessages },
+      });
+
+      if (error) throw error;
+
+      const cpfs: string[] = (data?.cpfs || []).map((c: string) => c.replace(/\D/g, ""));
+      const names: string[] = data?.names || [];
+
+      if (cpfs.length === 0 && names.length === 0) {
+        toast.info("Nenhum CPF ou nome encontrado na conversa");
+        setAiLinking(false);
+        return;
+      }
+
+      // Search by extracted CPFs and names
+      const orFilters: string[] = [];
+      for (const cpf of cpfs) {
+        if (cpf.length >= 11) {
+          orFilters.push(`cpf.ilike.%${cpf.slice(-11)}%`);
+        }
+      }
+      for (const name of names) {
+        if (name.trim()) {
+          orFilters.push(`nome_completo.ilike.%${name.trim()}%`);
+        }
+      }
+
+      if (orFilters.length === 0) {
+        toast.info("Nenhum dado válido extraído pela IA");
+        setAiLinking(false);
+        return;
+      }
+
+      const { data: candidates } = await supabase
+        .from("clients")
+        .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id")
+        .or(orFilters.join(","))
+        .limit(5);
+
+      const found = (candidates as SimpleClient[] | null) || [];
+      if (found.length === 0) {
+        toast.info("Nenhum cliente encontrado com os dados extraídos");
+      } else if (found.length === 1) {
+        // Auto-link if single match
+        await handleLink(found[0].id);
+        toast.success(`Cliente "${found[0].nome_completo}" vinculado automaticamente pela IA`);
+        setAiLinking(false);
+        return;
+      } else {
+        setAiCandidates(found);
+        setShowAiResults(true);
+      }
+    } catch (err: any) {
+      console.error("AI link error:", err);
+      toast.error("Erro ao buscar via IA");
+    } finally {
+      setAiLinking(false);
     }
   };
 
@@ -248,6 +325,28 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               <p className="text-[11px] text-muted-foreground mb-2">
                 Vincule um cliente para formalizar acordos e ver informações detalhadas.
               </p>
+
+              {/* AI Link results */}
+              {showAiResults && aiCandidates.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] font-medium text-primary">Candidatos encontrados pela IA:</p>
+                  {aiCandidates.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => handleLink(c.id)}
+                      className="w-full text-left p-2 rounded border border-primary/30 hover:bg-accent/30 text-xs"
+                    >
+                      <div className="font-medium">{c.nome_completo}</div>
+                      <div className="text-muted-foreground">CPF: {c.cpf}</div>
+                      <div className="text-muted-foreground">Credor: {c.credor}</div>
+                    </button>
+                  ))}
+                  <Button variant="ghost" size="sm" className="text-xs w-full" onClick={() => { setShowAiResults(false); setAiCandidates([]); }}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+
               {showSearch ? (
                 <div className="space-y-2">
                   <div className="flex gap-1">
@@ -276,16 +375,34 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                     Cancelar
                   </Button>
                 </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs"
-                  onClick={() => setShowSearch(true)}
-                >
-                  <Link2 className="w-3 h-3 mr-1" />
-                  Vincular Cliente
-                </Button>
+              ) : !showAiResults && (
+                <div className="space-y-2">
+                  {messages.length > 0 && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={handleAiLink}
+                      disabled={aiLinking}
+                    >
+                      {aiLinking ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Bot className="w-3 h-3 mr-1" />
+                      )}
+                      {aiLinking ? "Analisando..." : "Vincular por IA"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => setShowSearch(true)}
+                  >
+                    <Link2 className="w-3 h-3 mr-1" />
+                    Busca Manual
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
