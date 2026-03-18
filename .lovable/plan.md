@@ -1,23 +1,33 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Resumo Final de Envio de Mailing
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Problema
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+Quando o envio termina, o log mostra apenas "✅ Envio concluído!" sem um resumo consolidado dos resultados (total enviado, erros, tempo decorrido, etc.).
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+## Solução
 
-## Correção: Limite de 1000 registros na Carteira — IMPLEMENTADO ✅
+Adicionar um **card de resumo final** que aparece ao término do envio, com:
 
-- Criado helper `fetchAllRows` em `src/lib/supabaseUtils.ts` para paginação automática
-- `fetchClients` agora busca todos os registros em lotes de 1000
-- Queries de `agreements` e `call_dispositions` na CarteiraPage também paginadas
+- Total de contatos processados
+- Quantidade enviada com sucesso
+- Quantidade com erro
+- Tempo total de execução
+- Status: Concluído / Cancelado
+
+### Alterações no `src/components/carteira/DialerExportDialog.tsx`
+
+1. **Adicionar state para tempo de início** (`startTime`) registrado ao iniciar o envio
+2. **Adicionar log de resumo** ao final do loop de envio com as métricas consolidadas:
+   ```
+   ══════════════════════════════════
+   📊 RESUMO DO ENVIO
+   Total: 520 contatos
+   ✅ Enviados: 480
+   ❌ Erros: 40
+   ⏱ Duração: 2m 35s
+   ══════════════════════════════════
+   ```
+3. **Renderizar card visual de resumo** quando `finished === true`, acima do log, com ícones e cores para cada métrica (verde para sucesso, vermelho para erros, cinza para total)
+
