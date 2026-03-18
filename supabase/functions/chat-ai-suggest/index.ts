@@ -248,6 +248,8 @@ Regras:
       const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
       if (toolCall?.function?.arguments) {
         result = JSON.parse(toolCall.function.arguments);
+      } else if (action === "extract_cpf") {
+        result = { cpfs: [], names: [] };
       } else {
         result = { intent: "outro", confidence: 0, suggested_tags: [], summary: "Não classificado" };
       }
