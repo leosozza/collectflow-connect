@@ -125,10 +125,10 @@ function extractYear(dateStr: string): string | null {
   return null;
 }
 
-function mapItem(item: MaxSystemItem): MappedRecord {
+function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
   const dtVenc = removeTimestamp(item.PaymentDateQuery);
   return {
-    CREDOR: "YBRASIL",
+    CREDOR: credorName,
     COD_DEVEDOR: item.IdRecord,
     COD_CONTRATO: item.ContractNumber?.trim() || "",
     NOME_DEVEDOR: item.ResponsibleName,
