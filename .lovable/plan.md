@@ -1,17 +1,50 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Correção do envio de mailing para 3CPlus
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## Problema
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+A API do 3CPlus retorna erro 422: `"O campo Telefone é obrigatório"` no path `mailing.0.phone`. O payload atual usa `areacodephone` como campo de telefone, mas a API espera `phone`.
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+## Causa
+
+No edge function `threecplus-proxy`, o `send_mailing` envia:
+- **header**: `['identifier', 'areacodephone', ...]`
+- **mailing**: objetos com campo `areacodephone`
+
+A API 3CPlus exige o campo `phone` (não `areacodephone`).
+
+## Correção
+
+### 1. Edge function (`supabase/functions/threecplus-proxy/index.ts`)
+
+Alterar o header e o mapeamento do mailing de `areacodephone` para `phone`:
+
+```js
+header: ['identifier', 'phone', 'Nome', 'Extra1', 'Extra2', 'Extra3'],
+```
+
+### 2. Componente de teste (`src/components/integracao/ThreeCPlusTab.tsx`)
+
+No `MailingTestCard`, alterar o payload de teste:
+
+```js
+// De:
+areacodephone: testPhone.replace(/\D/g, ""),
+// Para:
+phone: testPhone.replace(/\D/g, ""),
+```
+
+### 3. Qualquer outro ponto que monte mailings
+
+Verificar se há outros locais no código que enviam `areacodephone` ao `send_mailing` e corrigir para `phone`.
+
+## Resultado
+
+O payload enviado à API ficará:
+```json
+{"identifier":"00000000000","phone":"11945542245","Nome":"Contato Teste",...}
+```
+
+Alinhado com o que a API 3CPlus exige.
+
