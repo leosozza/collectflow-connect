@@ -202,13 +202,34 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
       if (!cancelledRef.current) {
         addLog("success", "✅ Envio concluído!");
         toast.success(`Mailing enviado para o discador!`);
+      } else {
+        setWasCancelled(true);
       }
     } catch (err: any) {
       addLog("error", `Erro fatal: ${err.message}`);
       toast.error("Erro ao enviar para discador: " + (err.message || ""));
     } finally {
+      const duration = formatElapsed(Date.now() - t0);
+      setElapsedTime(duration);
       setSending(false);
       setFinished(true);
+
+      // Add summary log
+      setSentCount((prev) => {
+        setErrorCount((prevErr) => {
+          const totalProcessed = prev + prevErr;
+          addLog("info", `══════════════════════════════════`);
+          addLog("info", `📊 RESUMO DO ENVIO`);
+          addLog("info", `Total: ${allMailings.length} contatos`);
+          addLog("success", `✅ Enviados: ${prev}`);
+          if (prevErr > 0) addLog("error", `❌ Erros: ${prevErr}`);
+          addLog("info", `⏱ Duração: ${duration}`);
+          addLog("info", `Status: ${cancelledRef.current ? "Cancelado" : "Concluído"}`);
+          addLog("info", `══════════════════════════════════`);
+          return prevErr;
+        });
+        return prev;
+      });
     }
   };
 
