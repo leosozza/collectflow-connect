@@ -247,7 +247,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
               <Users className="w-5 h-5 text-primary" />
-              <span className="text-sm font-medium">{selectedClients.length} clientes selecionados</span>
+              <span className="text-sm font-medium">{uniqueClients.length} clientes selecionados</span>
             </div>
 
             {!showProgress && (
