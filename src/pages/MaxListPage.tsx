@@ -350,7 +350,7 @@ const MaxListPage = () => {
 
       const json = await response.json();
       const items = (json.Items || []) as MaxSystemItem[];
-      const mapped = items.map(mapItem);
+      const mapped = items.map((item) => mapItem(item, selectedCredorName));
 
       setRawItems(items);
       setData(mapped);
