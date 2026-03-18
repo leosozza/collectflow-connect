@@ -174,7 +174,35 @@ export async function markConversationRead(id: string) {
   if (error) throw error;
 }
 
+export async function deleteConversation(id: string) {
+  // Delete messages first (FK constraint)
+  const { error: msgError } = await supabase
+    .from("chat_messages" as any)
+    .delete()
+    .eq("conversation_id", id);
+  if (msgError) throw msgError;
+
+  // Delete tag assignments
+  await supabase
+    .from("conversation_tag_assignments" as any)
+    .delete()
+    .eq("conversation_id", id);
+
+  // Delete conversation
+  const { error } = await supabase
+    .from("conversations" as any)
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function linkClientToConversation(conversationId: string, clientId: string | null) {
+  const { error } = await supabase
+    .from("conversations" as any)
+    .update({ client_id: clientId } as any)
+    .eq("id", conversationId);
+  if (error) throw error;
+}
   const { error } = await supabase
     .from("conversations" as any)
     .update({ client_id: clientId } as any)
