@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     let systemPrompt = "";
     let userPrompt = "";
-    const useToolCalling = action === "classify";
+    const useToolCalling = action === "classify" || action === "extract_cpf";
 
     switch (action) {
       case "suggest": {
