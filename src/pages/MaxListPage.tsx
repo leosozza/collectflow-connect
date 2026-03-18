@@ -242,6 +242,22 @@ const MaxListPage = () => {
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedCredorName, setSelectedCredorName] = useState<string>("");
+
+  const { data: credores } = useQuery({
+    queryKey: ["credores_maxlist", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credores")
+        .select("id, razao_social")
+        .eq("tenant_id", tenant!.id)
+        .order("razao_social");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenant?.id,
+  });
+
   const { data: tiposStatus } = useQuery({
     queryKey: ["tipos_status", tenant?.id],
     queryFn: async () => {
