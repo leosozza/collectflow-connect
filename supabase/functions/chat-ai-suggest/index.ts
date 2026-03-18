@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     let systemPrompt = "";
     let userPrompt = "";
-    const useToolCalling = action === "classify";
+    const useToolCalling = action === "classify" || action === "extract_cpf";
 
     switch (action) {
       case "suggest": {
@@ -100,6 +100,12 @@ Regras:
         break;
       }
 
+      case "extract_cpf": {
+        systemPrompt = `Você é um extrator de dados de conversas de cobrança em português brasileiro. Analise o histórico da conversa e extraia CPFs (11 dígitos, com ou sem formatação como 000.000.000-00) e nomes completos de pessoas mencionados. Se não encontrar CPFs ou nomes, retorne arrays vazios.`;
+        userPrompt = `Histórico da conversa:\n${messagesContext}\n\nExtraia todos os CPFs e nomes completos de pessoas mencionados nesta conversa.`;
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Ação inválida. Use: suggest, summarize, classify" }), {
           status: 400,
@@ -118,7 +124,7 @@ Regras:
     // Enable streaming for suggest action
     const useStream = action === "suggest";
 
-    if (useToolCalling) {
+    if (action === "classify") {
       aiBody.tools = [
         {
           type: "function",
@@ -164,6 +170,34 @@ Regras:
         },
       ];
       aiBody.tool_choice = { type: "function", function: { name: "classify_intent" } };
+    } else if (action === "extract_cpf") {
+      aiBody.tools = [
+        {
+          type: "function",
+          function: {
+            name: "extract_client_data",
+            description: "Extrai CPFs e nomes completos mencionados na conversa",
+            parameters: {
+              type: "object",
+              properties: {
+                cpfs: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Lista de CPFs encontrados (apenas dígitos, 11 caracteres)",
+                },
+                names: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Lista de nomes completos de pessoas encontrados",
+                },
+              },
+              required: ["cpfs", "names"],
+              additionalProperties: false,
+            },
+          },
+        },
+      ];
+      aiBody.tool_choice = { type: "function", function: { name: "extract_client_data" } };
     }
 
     if (useStream) {
@@ -214,6 +248,8 @@ Regras:
       const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
       if (toolCall?.function?.arguments) {
         result = JSON.parse(toolCall.function.arguments);
+      } else if (action === "extract_cpf") {
+        result = { cpfs: [], names: [] };
       } else {
         result = { intent: "outro", confidence: 0, suggested_tags: [], summary: "Não classificado" };
       }

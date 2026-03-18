@@ -1,53 +1,17 @@
 
+## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-# Plano: Vinculação de Cliente por IA + Múltiplos Números por CPF
+### Correções aplicadas
 
-## Contexto
+#### Fase 1 — Segurança Crítica ✅
+1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
+2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
+3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
+4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
 
-Atualmente, a vinculação de cliente a conversas WhatsApp é feita apenas por telefone (`findClientByPhone`). Se o número não bater, a conversa fica sem cliente. Além disso, o webhook só busca nos campos `phone`, mas a tabela já tem `phone2` e `phone3`.
+#### Fase 2 — Performance ✅
+5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
 
-## Alterações
-
-### 1. Webhook: Buscar em phone, phone2 e phone3
-
-**`supabase/functions/whatsapp-webhook/index.ts`** — Alterar `findClientByPhone` para buscar com `or` nos 3 campos de telefone, aumentando a chance de match automático.
-
-```sql
-.or(`phone.like.%suffix%,phone2.like.%suffix%,phone3.like.%suffix%`)
-```
-
-### 2. Botão "Vincular por IA" no ContactSidebar
-
-**`src/components/contact-center/whatsapp/ContactSidebar.tsx`** — Quando não há cliente vinculado e a conversa tem mensagens, adicionar um botão "Vincular por IA" que:
-- Envia as últimas mensagens da conversa para a edge function `chat-ai-suggest`
-- Usa uma nova action `extract_cpf` que pede à IA para extrair CPFs mencionados na conversa
-- Com o CPF extraído, busca o cliente na tabela `clients` e oferece para vincular
-
-### 3. Nova action `extract_cpf` na edge function
-
-**`supabase/functions/chat-ai-suggest/index.ts`** — Adicionar case `extract_cpf`:
-- System prompt instrui a IA a procurar CPFs (11 dígitos, com ou sem formatação) e nomes completos nas mensagens
-- Usa tool calling para retornar: `{ cpfs: string[], names: string[] }`
-- Frontend usa os CPFs/nomes para buscar candidatos na tabela `clients` e exibir opções
-
-### 4. Fluxo no ContactSidebar
-
-Quando o operador clica "Vincular por IA":
-1. Chama `chat-ai-suggest` com `action: "extract_cpf"` e as mensagens
-2. Recebe CPFs e nomes extraídos
-3. Busca na tabela `clients` por CPF (exato) ou nome (ilike)
-4. Exibe lista de candidatos encontrados para o operador confirmar a vinculação
-5. Operador clica no cliente correto → vincula via `linkClientToConversation`
-
-### 5. Busca manual ampliada
-
-A busca manual existente no ContactSidebar já busca por `phone` — adicionar `phone2` e `phone3` ao filtro `or`.
-
-## Resumo de arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `whatsapp-webhook/index.ts` | Buscar phone + phone2 + phone3 |
-| `chat-ai-suggest/index.ts` | Nova action `extract_cpf` com tool calling |
-| `ContactSidebar.tsx` | Botão "Vincular por IA", fluxo de extração + confirmação |
-
+#### Pendente (ação manual)
+- **Leaked Password Protection** — habilitar manualmente no backend
+- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)

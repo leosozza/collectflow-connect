@@ -61,11 +61,12 @@ Deno.serve(async (req) => {
       }
 
       for (const variant of variants) {
+        const suffix = variant.slice(-10);
         const { data: client } = await supabase
           .from("clients")
           .select("id")
           .eq("tenant_id", tenantId)
-          .like("phone", `%${variant.slice(-10)}%`)
+          .or(`phone.ilike.%${suffix}%,phone2.ilike.%${suffix}%,phone3.ilike.%${suffix}%`)
           .limit(1)
           .maybeSingle();
 
