@@ -124,7 +124,7 @@ Regras:
     // Enable streaming for suggest action
     const useStream = action === "suggest";
 
-    if (useToolCalling) {
+    if (action === "classify") {
       aiBody.tools = [
         {
           type: "function",
@@ -170,6 +170,34 @@ Regras:
         },
       ];
       aiBody.tool_choice = { type: "function", function: { name: "classify_intent" } };
+    } else if (action === "extract_cpf") {
+      aiBody.tools = [
+        {
+          type: "function",
+          function: {
+            name: "extract_client_data",
+            description: "Extrai CPFs e nomes completos mencionados na conversa",
+            parameters: {
+              type: "object",
+              properties: {
+                cpfs: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Lista de CPFs encontrados (apenas dígitos, 11 caracteres)",
+                },
+                names: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Lista de nomes completos de pessoas encontrados",
+                },
+              },
+              required: ["cpfs", "names"],
+              additionalProperties: false,
+            },
+          },
+        },
+      ];
+      aiBody.tool_choice = { type: "function", function: { name: "extract_client_data" } };
     }
 
     if (useStream) {
