@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { Client } from "@/services/clientService";
@@ -37,6 +37,15 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
+
+  const uniqueClients = useMemo(() => {
+    const map = new Map<string, Client>();
+    selectedClients.forEach((c) => {
+      const cpf = c.cpf.replace(/\D/g, "");
+      if (!map.has(cpf)) map.set(cpf, c);
+    });
+    return Array.from(map.values());
+  }, [selectedClients]);
 
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("");
@@ -102,14 +111,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     resetState();
     setSending(true);
 
-    // Deduplicate by CPF
-    const uniqueClients = new Map<string, Client>();
-    selectedClients.forEach((c) => {
-      const cpf = c.cpf.replace(/\D/g, "");
-      if (!uniqueClients.has(cpf)) uniqueClients.set(cpf, c);
-    });
-
-    const allMailings = Array.from(uniqueClients.values()).map((c) => ({
+    const allMailings = uniqueClients.map((c) => ({
       identifier: c.cpf.replace(/\D/g, ""),
       phone: c.phone?.replace(/\D/g, "") || "",
       Nome: c.nome_completo,
@@ -245,7 +247,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
               <Users className="w-5 h-5 text-primary" />
-              <span className="text-sm font-medium">{selectedClients.length} clientes selecionados</span>
+              <span className="text-sm font-medium">{uniqueClients.length} clientes selecionados</span>
             </div>
 
             {!showProgress && (
