@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Allowed tenant slugs
-const ALLOWED_SLUGS = ["maxfama", "temis"];
+const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
 
 // State number to UF abbreviation map
 const STATE_TO_UF: Record<number, string> = {
