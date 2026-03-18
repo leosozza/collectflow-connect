@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info } from "lucide-react";
+import { Loader2, Phone, Users, Pause, Play, CheckCircle2, XCircle, Info, Clock, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface DialerExportDialogProps {
@@ -59,6 +59,9 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [paused, setPaused] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [wasCancelled, setWasCancelled] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState("");
   const pausedRef = useRef(false);
   const cancelledRef = useRef(false);
 
@@ -86,12 +89,22 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
     }
   };
 
+  const formatElapsed = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+  };
+
   const resetState = () => {
     setSentCount(0);
     setErrorCount(0);
     setLogs([]);
     setPaused(false);
     setFinished(false);
+    setWasCancelled(false);
+    setStartTime(null);
+    setElapsedTime("");
     pausedRef.current = false;
     cancelledRef.current = false;
   };
@@ -110,7 +123,8 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
 
     resetState();
     setSending(true);
-
+    const t0 = Date.now();
+    setStartTime(t0);
     const allMailings = uniqueClients.map((c) => ({
       identifier: c.cpf.replace(/\D/g, ""),
       phone: c.phone?.replace(/\D/g, "") || "",
@@ -188,13 +202,34 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
       if (!cancelledRef.current) {
         addLog("success", "✅ Envio concluído!");
         toast.success(`Mailing enviado para o discador!`);
+      } else {
+        setWasCancelled(true);
       }
     } catch (err: any) {
       addLog("error", `Erro fatal: ${err.message}`);
       toast.error("Erro ao enviar para discador: " + (err.message || ""));
     } finally {
+      const duration = formatElapsed(Date.now() - t0);
+      setElapsedTime(duration);
       setSending(false);
       setFinished(true);
+
+      // Add summary log
+      setSentCount((prev) => {
+        setErrorCount((prevErr) => {
+          const totalProcessed = prev + prevErr;
+          addLog("info", `══════════════════════════════════`);
+          addLog("info", `📊 RESUMO DO ENVIO`);
+          addLog("info", `Total: ${allMailings.length} contatos`);
+          addLog("success", `✅ Enviados: ${prev}`);
+          if (prevErr > 0) addLog("error", `❌ Erros: ${prevErr}`);
+          addLog("info", `⏱ Duração: ${duration}`);
+          addLog("info", `Status: ${cancelledRef.current ? "Cancelado" : "Concluído"}`);
+          addLog("info", `══════════════════════════════════`);
+          return prevErr;
+        });
+        return prev;
+      });
     }
   };
 
@@ -278,6 +313,57 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
             {/* Progress Section */}
             {showProgress && (
               <div className="space-y-3">
+                {/* Summary Card - shown when finished */}
+                {finished && (
+                  <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      {wasCancelled ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      ) : errorCount === 0 ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <Info className="w-4 h-4 text-primary" />
+                      )}
+                      <span>
+                        {wasCancelled ? "Envio Cancelado" : "Envio Concluído"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Total</span>
+                          <p className="font-semibold">{totalMailings}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Enviados</span>
+                          <p className="font-semibold text-green-600 dark:text-green-400">{sentCount}</p>
+                        </div>
+                      </div>
+                      {errorCount > 0 && (
+                        <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                          <XCircle className="w-4 h-4 text-destructive" />
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Erros</span>
+                            <p className="font-semibold text-destructive">{errorCount}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Duração</span>
+                          <p className="font-semibold">{elapsedTime}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!finished && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progresso</span>
@@ -290,6 +376,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
                     <span>Total: {totalMailings}</span>
                   </div>
                 </div>
+                )}
 
                 {/* Pause / Resume */}
                 {sending && (
