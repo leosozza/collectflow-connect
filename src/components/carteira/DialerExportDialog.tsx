@@ -313,6 +313,57 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
             {/* Progress Section */}
             {showProgress && (
               <div className="space-y-3">
+                {/* Summary Card - shown when finished */}
+                {finished && (
+                  <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      {wasCancelled ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      ) : errorCount === 0 ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <Info className="w-4 h-4 text-primary" />
+                      )}
+                      <span>
+                        {wasCancelled ? "Envio Cancelado" : "Envio Concluído"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Total</span>
+                          <p className="font-semibold">{totalMailings}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Enviados</span>
+                          <p className="font-semibold text-green-600 dark:text-green-400">{sentCount}</p>
+                        </div>
+                      </div>
+                      {errorCount > 0 && (
+                        <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                          <XCircle className="w-4 h-4 text-destructive" />
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Erros</span>
+                            <p className="font-semibold text-destructive">{errorCount}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 rounded-md bg-background p-2">
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                        <div className="text-xs">
+                          <span className="text-muted-foreground">Duração</span>
+                          <p className="font-semibold">{elapsedTime}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!finished && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progresso</span>
@@ -325,6 +376,7 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
                     <span>Total: {totalMailings}</span>
                   </div>
                 </div>
+                )
 
                 {/* Pause / Resume */}
                 {sending && (
