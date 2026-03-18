@@ -74,22 +74,22 @@ Deno.serve(async (req) => {
 
     // 5. Seed sa_modules
     const saModules = [
-      { slug: "dashboard", name: "Dashboard", icon: "LayoutDashboard", sort_order: 0 },
-      { slug: "comercial_pipeline", name: "Pipeline de Vendas", icon: "Target", sort_order: 0 },
-      { slug: "comercial_leads", name: "Leads", icon: "UserPlus", sort_order: 1 },
-      { slug: "suporte", name: "Suporte", icon: "Headphones", sort_order: 1 },
-      { slug: "comercial_empresas", name: "Empresas", icon: "Building2", sort_order: 2 },
-      { slug: "gestao_equipes", name: "Gestão de Equipes", icon: "Users", sort_order: 2 },
-      { slug: "comercial_atividades", name: "Atividades", icon: "Calendar", sort_order: 3 },
-      { slug: "treinamentos_reunioes", name: "Treinamentos e Reuniões", icon: "GraduationCap", sort_order: 3 },
-      { slug: "comercial_relatorios", name: "Relatórios Comerciais", icon: "BarChart3", sort_order: 4 },
-      { slug: "servicos_tokens", name: "Serviços e Tokens", icon: "Package", sort_order: 4 },
-      { slug: "permissoes_modulos", name: "Permissões e Módulos", icon: "Shield", sort_order: 5 },
-      { slug: "integracoes", name: "Integrações", icon: "Settings", sort_order: 7 },
-      { slug: "gestao_inquilinos", name: "Gestão de Clientes", icon: "Building2", sort_order: 8 },
-      { slug: "gestao_financeira", name: "Gestão Financeira", icon: "DollarSign", sort_order: 9 },
-      { slug: "roadmap", name: "Roadmap", icon: "Map", sort_order: 10 },
-      { slug: "gestao_usuarios", name: "Gestão de Usuários", icon: "UserPlus", sort_order: 12 },
+      { slug: "dashboard", name: "Dashboard", icon: "LayoutDashboard", sort_order: 0, sidebar_group: "root", route_path: "/admin" },
+      { slug: "comercial_pipeline", name: "Pipeline de Vendas", icon: "Target", sort_order: 0, sidebar_group: "Comercial", route_path: "/admin/comercial/pipeline" },
+      { slug: "comercial_leads", name: "Leads", icon: "UserPlus", sort_order: 1, sidebar_group: "Comercial", route_path: "/admin/comercial/leads" },
+      { slug: "suporte", name: "Suporte", icon: "Headphones", sort_order: 1, sidebar_group: "Operação", route_path: "/admin/suporte" },
+      { slug: "comercial_empresas", name: "Empresas", icon: "Building2", sort_order: 2, sidebar_group: "Comercial", route_path: "/admin/comercial/empresas" },
+      { slug: "gestao_equipes", name: "Gestão de Equipes", icon: "Users", sort_order: 2, sidebar_group: "Operação", route_path: "/admin/equipes" },
+      { slug: "comercial_atividades", name: "Atividades", icon: "Calendar", sort_order: 3, sidebar_group: "Comercial", route_path: "/admin/comercial/atividades" },
+      { slug: "treinamentos_reunioes", name: "Treinamentos e Reuniões", icon: "GraduationCap", sort_order: 3, sidebar_group: "Operação", route_path: "/admin/treinamentos" },
+      { slug: "comercial_relatorios", name: "Relatórios Comerciais", icon: "BarChart3", sort_order: 4, sidebar_group: "Comercial", route_path: "/admin/comercial/relatorios" },
+      { slug: "servicos_tokens", name: "Serviços e Tokens", icon: "Package", sort_order: 4, sidebar_group: "Automação e Serviços", route_path: "/admin/servicos" },
+      { slug: "permissoes_modulos", name: "Permissões e Módulos", icon: "Shield", sort_order: 5, sidebar_group: "Automação e Serviços", route_path: "/admin/permissoes" },
+      { slug: "integracoes", name: "Integrações", icon: "Settings", sort_order: 7, sidebar_group: "Automação e Serviços", route_path: "/admin/configuracoes" },
+      { slug: "gestao_inquilinos", name: "Gestão de Clientes", icon: "Building2", sort_order: 8, sidebar_group: "Gestão de Clientes", route_path: "/admin/tenants" },
+      { slug: "gestao_financeira", name: "Gestão Financeira", icon: "DollarSign", sort_order: 9, sidebar_group: "Administração", route_path: "/admin/financeiro" },
+      { slug: "roadmap", name: "Roadmap", icon: "Map", sort_order: 10, sidebar_group: "Configurações", route_path: "/admin/roadmap" },
+      { slug: "gestao_usuarios", name: "Gestão de Usuários", icon: "UserPlus", sort_order: 12, sidebar_group: "Configurações", route_path: "/admin/usuarios" },
     ];
 
     const { error: saError } = await supabase
