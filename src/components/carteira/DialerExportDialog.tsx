@@ -59,6 +59,9 @@ const DialerExportDialog = ({ open, onClose, selectedClients }: DialerExportDial
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [paused, setPaused] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [wasCancelled, setWasCancelled] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState("");
   const pausedRef = useRef(false);
   const cancelledRef = useRef(false);
 
