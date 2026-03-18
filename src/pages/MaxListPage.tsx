@@ -917,7 +917,7 @@ const MaxListPage = () => {
           <div className="flex gap-2 mt-4">
             <Button onClick={handleSearch} disabled={searching}>
               {searching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
-              Buscar
+              {searching && searchProgress ? searchProgress : "Buscar"}
             </Button>
             <Button variant="outline" onClick={handleDownloadExcel} disabled={data.length === 0}>
               <Download className="w-4 h-4 mr-2" />
