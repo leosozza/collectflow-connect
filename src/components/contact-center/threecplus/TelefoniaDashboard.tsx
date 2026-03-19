@@ -44,7 +44,7 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const { openAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
+  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
