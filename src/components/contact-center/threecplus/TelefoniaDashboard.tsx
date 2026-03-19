@@ -465,7 +465,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     setReconnectingSip(true);
     try {
       const result = await invoke("connect_agent", { agent_id: operatorAgentId });
-      if (result?.status && result.status >= 400) {
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
         toast.error(result.detail || "Falha ao reconectar MicroSIP");
       } else {
         toast.success("Reconectando MicroSIP. Atenda a chamada.");
