@@ -119,12 +119,7 @@ const ThreeCPlusPanel = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Telefonia</h1>
-        <p className="text-sm text-muted-foreground">Gerencie campanhas, operadores e chamadas</p>
-      </div>
+    <div className="space-y-4">
 
       {/* Level 1 — Group navigation */}
       <div className="flex items-center gap-3">
