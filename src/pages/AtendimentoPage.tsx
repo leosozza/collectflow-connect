@@ -27,8 +27,9 @@ interface AtendimentoPageProps {
 }
 
 const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: AtendimentoPageProps) => {
+  const { clientId: paramClientId } = useParams<{ clientId: string }>();
   const [searchParams] = useSearchParams();
-  const id = propClientId || searchParams.get("clientId");
+  const id = propClientId || paramClientId || searchParams.get("clientId");
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
