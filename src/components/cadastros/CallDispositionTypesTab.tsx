@@ -165,9 +165,16 @@ const CallDispositionTypesTab = () => {
             ? `${types.length} categorização(ões) configurada(s).`
             : "Carregando categorizações..."}
         </p>
-        <Button size="sm" onClick={openNew}>
-          <Plus className="w-4 h-4 mr-1" /> Nova Categorização
-        </Button>
+        <div className="flex gap-2">
+          {has3CPlus && (
+            <Button size="sm" variant="outline" onClick={triggerSync} disabled={syncing}>
+              {syncing ? "Sincronizando..." : "🔄 Sincronizar 3CPlus"}
+            </Button>
+          )}
+          <Button size="sm" onClick={openNew}>
+            <Plus className="w-4 h-4 mr-1" /> Nova Categorização
+          </Button>
+        </div>
       </div>
 
       {types.length > 0 && (

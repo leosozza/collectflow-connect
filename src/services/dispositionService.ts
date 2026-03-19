@@ -101,6 +101,70 @@ export const deleteDispositionType = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
+/**
+ * Sync RIVO disposition types to 3CPlus as a Qualification List.
+ * Only runs when the tenant has 3CPlus credentials configured.
+ * Returns the disposition map (key → qualification_id) or null if sync skipped.
+ */
+export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record<string, number> | null> => {
+  try {
+    // Fetch tenant settings
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("settings")
+      .eq("id", tenantId)
+      .single();
+
+    const settings = (tenantData?.settings as Record<string, any>) || {};
+    const domain = settings.threecplus_domain;
+    const apiToken = settings.threecplus_api_token;
+
+    if (!domain || !apiToken) {
+      logger.info("syncDispositionsTo3CPlus: no 3CPlus credentials, skipping");
+      return null;
+    }
+
+    // Fetch all active disposition types
+    const types = await fetchTenantDispositionTypes(tenantId);
+
+    // Call the sync_dispositions action on the edge function
+    const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+      body: {
+        action: "sync_dispositions",
+        domain,
+        api_token: apiToken,
+        dispositions: types.map(t => ({ key: t.key, label: t.label, active: t.active })),
+      },
+    });
+
+    if (error) {
+      logger.error("syncDispositionsTo3CPlus edge function error", error);
+      return null;
+    }
+
+    const dispositionMap = data?.disposition_map as Record<string, number> | undefined;
+    if (!dispositionMap) return null;
+
+    // Save the map to tenant settings
+    const updatedSettings = {
+      ...settings,
+      threecplus_disposition_map: dispositionMap,
+      threecplus_qualification_list_id: data.list_id,
+    };
+
+    await supabase
+      .from("tenants")
+      .update({ settings: updatedSettings } as any)
+      .eq("id", tenantId);
+
+    logger.info("syncDispositionsTo3CPlus: synced successfully", { count: Object.keys(dispositionMap).length });
+    return dispositionMap;
+  } catch (err) {
+    logger.error("syncDispositionsTo3CPlus error (non-blocking)", err);
+    return null;
+  }
+};
+
 export type DispositionType = string;
 
 export interface CustomDispositionType {
