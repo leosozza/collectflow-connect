@@ -426,16 +426,27 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  // Load pause intervals when agent is online
+  // Load pause intervals from campaign's work_break_group_id
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      const data = await invoke("list_work_break_intervals", { campaign_id: campaignId });
+      // Find the campaign to get its work_break_group_id
+      const campaign = campaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
+      const groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
+      
+      if (!groupId) {
+        console.log("[Telefonia] Campanha sem work_break_group_id, sem intervalos de pausa");
+        setPauseIntervals([]);
+        return;
+      }
+
+      console.log("[Telefonia] Carregando intervalos do grupo:", groupId);
+      const data = await invoke("list_work_break_group_intervals", { group_id: groupId });
       const list = Array.isArray(data) ? data : data?.data || [];
       setPauseIntervals(list);
     } catch {
       setPauseIntervals([]);
     }
-  }, [invoke]);
+  }, [invoke, campaigns]);
 
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
