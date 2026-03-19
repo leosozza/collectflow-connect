@@ -826,8 +826,10 @@ Deno.serve(async (req) => {
 
       // ── Hangup Call (agent-level) ──
       case 'hangup_call': {
-        const err = requireField(body, 'agent_id', corsHeaders);
-        if (err) return err;
+        const err1 = requireField(body, 'agent_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'call_id', corsHeaders);
+        if (err2) return err2;
         const agentHangup = await resolveAgentToken(baseUrl, authParam, body.agent_id);
         if (!agentHangup || !agentHangup.api_token) {
           return new Response(
@@ -835,9 +837,9 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        url = `${baseUrl}/agent/hangup?api_token=${agentHangup.api_token}`;
+        url = `${baseUrl}/agent/call/${body.call_id}/hangup?api_token=${agentHangup.api_token}`;
         method = 'POST';
-        console.log(`Hanging up call for agent ${body.agent_id}`);
+        console.log(`Hanging up call ${body.call_id} for agent ${body.agent_id}`);
         break;
       }
 
