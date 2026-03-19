@@ -15,6 +15,29 @@ function buildUrl(baseUrl: string, path: string, authParam: string, queryParams?
   return url;
 }
 
+async function resolveAgentToken(baseUrl: string, authParam: string, agentId: number | string): Promise<any | null> {
+  const url = buildUrl(baseUrl, 'users', authParam, { per_page: '500' });
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) {
+    console.error(`resolveAgentToken: GET /users failed with status ${res.status}`);
+    return null;
+  }
+  const raw = await res.json();
+  // Support paginated { data: { data: [...] } }, flat { data: [...] }, or raw [...]
+  const list = (raw?.data?.data && Array.isArray(raw.data.data))
+    ? raw.data.data
+    : Array.isArray(raw?.data) ? raw.data
+    : Array.isArray(raw) ? raw : [];
+  const numId = Number(agentId);
+  const agent = list.find((u: any) => u.id === numId || Number(u.id) === numId) || null;
+  if (agent) {
+    console.log(`resolveAgentToken: Found agent ${agentId} (api_token present: ${!!agent.api_token}, extension: ${agent.extension || 'none'})`);
+  } else {
+    console.error(`resolveAgentToken: Agent ${agentId} NOT found in ${list.length} users`);
+  }
+  return agent;
+}
+
 function requireField(body: Record<string, any>, field: string, corsHeaders: Record<string, string>) {
   if (!body[field]) {
     return new Response(
