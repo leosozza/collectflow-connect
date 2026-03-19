@@ -30,6 +30,15 @@ export interface DbDispositionType {
   sort_order: number;
   active: boolean;
   created_at: string;
+  color: string;
+  impact: string;
+  behavior: string;
+  is_conversion: boolean;
+  is_cpc: boolean;
+  is_unknown: boolean;
+  is_callback: boolean;
+  is_schedule: boolean;
+  is_blocklist: boolean;
 }
 
 export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
@@ -44,11 +53,11 @@ export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbD
 };
 
 export const DEFAULT_DISPOSITION_LIST = [
-  { key: "voicemail", label: "Caixa Postal", group_name: "resultado", sort_order: 0 },
-  { key: "interrupted", label: "Ligação Interrompida", group_name: "resultado", sort_order: 1 },
-  { key: "no_answer", label: "Não Atende", group_name: "resultado", sort_order: 2 },
-  { key: "cpc", label: "CPC (Contato com a Pessoa Certa)", group_name: "resultado", sort_order: 3 },
-  { key: "wrong_contact", label: "Contato Pessoa Errada", group_name: "contato", sort_order: 4 },
+  { key: "voicemail", label: "Caixa Postal", group_name: "resultado", sort_order: 0, color: "blue", impact: "negativo", behavior: "repetir", is_conversion: false, is_cpc: false, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: false },
+  { key: "interrupted", label: "Ligação Interrompida", group_name: "resultado", sort_order: 1, color: "yellow", impact: "negativo", behavior: "repetir", is_conversion: false, is_cpc: false, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: false },
+  { key: "no_answer", label: "Não Atende", group_name: "resultado", sort_order: 2, color: "red", impact: "negativo", behavior: "repetir", is_conversion: false, is_cpc: false, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: false },
+  { key: "cpc", label: "CPC (Contato com a Pessoa Certa)", group_name: "resultado", sort_order: 3, color: "green", impact: "positivo", behavior: "repetir", is_conversion: false, is_cpc: true, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: false },
+  { key: "wrong_contact", label: "Contato Pessoa Errada", group_name: "contato", sort_order: 4, color: "black", impact: "negativo", behavior: "nao_discar", is_conversion: false, is_cpc: false, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: true },
 ];
 
 export const seedDefaultDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
@@ -67,6 +76,15 @@ export const createDispositionType = async (params: {
   label: string;
   group_name?: string;
   sort_order?: number;
+  color?: string;
+  impact?: string;
+  behavior?: string;
+  is_conversion?: boolean;
+  is_cpc?: boolean;
+  is_unknown?: boolean;
+  is_callback?: boolean;
+  is_schedule?: boolean;
+  is_blocklist?: boolean;
 }): Promise<DbDispositionType> => {
   const { data, error } = await supabase
     .from("call_disposition_types")
@@ -82,6 +100,15 @@ export const updateDispositionType = async (id: string, params: Partial<{
   group_name: string;
   sort_order: number;
   active: boolean;
+  color: string;
+  impact: string;
+  behavior: string;
+  is_conversion: boolean;
+  is_cpc: boolean;
+  is_unknown: boolean;
+  is_callback: boolean;
+  is_schedule: boolean;
+  is_blocklist: boolean;
 }>): Promise<DbDispositionType> => {
   const { data, error } = await supabase
     .from("call_disposition_types")
@@ -103,12 +130,10 @@ export const deleteDispositionType = async (id: string): Promise<void> => {
 
 /**
  * Sync RIVO disposition types to 3CPlus as a Qualification List.
- * Only runs when the tenant has 3CPlus credentials configured.
- * Returns the disposition map (key → qualification_id) or null if sync skipped.
+ * Now includes extended properties (impact, behavior, flags).
  */
 export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record<string, number> | null> => {
   try {
-    // Fetch tenant settings
     const { data: tenantData } = await supabase
       .from("tenants")
       .select("settings")
@@ -124,16 +149,20 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
       return null;
     }
 
-    // Fetch all active disposition types
     const types = await fetchTenantDispositionTypes(tenantId);
 
-    // Call the sync_dispositions action on the edge function
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
       body: {
         action: "sync_dispositions",
         domain,
         api_token: apiToken,
-        dispositions: types.map(t => ({ key: t.key, label: t.label, active: t.active })),
+        dispositions: types.map(t => ({
+          key: t.key, label: t.label, active: t.active,
+          color: t.color, impact: t.impact, behavior: t.behavior,
+          is_conversion: t.is_conversion, is_cpc: t.is_cpc,
+          is_unknown: t.is_unknown, is_callback: t.is_callback,
+          is_schedule: t.is_schedule, is_blocklist: t.is_blocklist,
+        })),
       },
     });
 
@@ -145,7 +174,6 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
     const dispositionMap = data?.disposition_map as Record<string, number> | undefined;
     if (!dispositionMap) return null;
 
-    // Save the map to tenant settings
     const updatedSettings = {
       ...settings,
       threecplus_disposition_map: dispositionMap,
@@ -175,16 +203,11 @@ export interface CustomDispositionType {
   group?: string;
 }
 
-/**
- * Resolve disposition types from tenant settings or fallback to defaults.
- */
 export const getDispositionTypes = (tenantSettings?: Record<string, any>): Record<string, string> => {
   const custom = tenantSettings?.custom_disposition_types as CustomDispositionType[] | undefined;
   if (custom && Array.isArray(custom) && custom.length > 0) {
     const map: Record<string, string> = {};
-    for (const c of custom) {
-      map[c.key] = c.label;
-    }
+    for (const c of custom) map[c.key] = c.label;
     return map;
   }
   return DISPOSITION_TYPES;
@@ -246,7 +269,6 @@ export const createDisposition = async (params: {
 
 /**
  * Auto-qualify the active call on 3CPlus after a Rivo disposition.
- * Best-effort: errors are logged but never block the main flow.
  */
 export const qualifyOn3CPlus = async (params: {
   dispositionType: string;
@@ -283,7 +305,6 @@ export const qualifyOn3CPlus = async (params: {
 
 /**
  * Fetch recent call data from 3CPlus for the given agent and save to call_logs.
- * Best-effort: errors are logged but never block the main flow.
  */
 export const saveCallLog = async (params: {
   tenantId: string;
@@ -298,7 +319,6 @@ export const saveCallLog = async (params: {
     const apiToken = params.tenantSettings.threecplus_api_token;
     if (!domain || !apiToken) return;
 
-    // Fetch calls from the last 30 minutes for this agent
     const now = new Date();
     const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
     const formatDt = (d: Date) => d.toISOString().split("T")[0] + " " + d.toTimeString().split(" ")[0];
@@ -319,11 +339,9 @@ export const saveCallLog = async (params: {
       return;
     }
 
-    // 3CPlus returns { data: [...calls] } or array directly
     const calls = Array.isArray(reportData) ? reportData : (reportData?.data || reportData?.results || []);
     if (!Array.isArray(calls) || calls.length === 0) return;
 
-    // Take the most recent call
     const latestCall = calls[0];
 
     const { error: insertError } = await supabase.from("call_logs" as any).insert({
