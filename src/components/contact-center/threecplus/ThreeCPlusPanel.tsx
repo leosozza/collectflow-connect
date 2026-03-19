@@ -123,9 +123,15 @@ const ThreeCPlusPanel = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Page header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Telefonia</h1>
+        <p className="text-sm text-muted-foreground">Gerencie campanhas, operadores e chamadas</p>
+      </div>
+
       {/* Level 1 — Group navigation */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {groups.map((g) => {
           const Icon = g.icon;
           const isActive = activeGroup === g.id;
@@ -150,8 +156,8 @@ const ThreeCPlusPanel = () => {
       {/* Level 2 — Sub-tab navigation */}
       {currentGroup.tabs.length > 1 && (
         <>
-          <div className="border-t border-border" />
-          <div className="flex items-center gap-1.5 px-1">
+          <div className="border-t border-border my-1" />
+          <div className="flex items-center gap-2 px-1 py-2">
             {currentGroup.tabs.map((t) => {
               const Icon = t.icon;
               const isActive = activeTab === t.value;
