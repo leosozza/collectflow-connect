@@ -1,31 +1,32 @@
 
 
-# Plano: Corrigir intervalos de pausa e abertura de ficha na chamada
+# Plano: Adicionar logs de debug para retornos da 3CPlus
 
-## Problema 1: Intervalos de pausa vazios
+## Problema
 
-No `TelefoniaDashboard.tsx` (linha 416), a funcao `loadPauseIntervals` chama a action `list_work_break_intervals` que **nao existe** no proxy. A action correta e `list_work_break_group_intervals` com `group_id`.
+Quando uma chamada entra, a ficha nao abre. Precisamos visibilidade no console (mesmo em producao) sobre o que esta retornando da API 3CPlus para diagnosticar: qual o status do agente, se o campo `phone`/`remote_phone` esta presente, e o que `company_calls` retorna.
 
-O fluxo correto e:
-1. Pegar o `work_break_group_id` da campanha ativa do agente
-2. Chamar `list_work_break_group_intervals` com esse `group_id`
+## Mudancas
 
-**Correcao** em `TelefoniaDashboard.tsx`:
-- Modificar `loadPauseIntervals` para receber o `campaignId`, encontrar a campanha nos dados ja carregados, extrair `work_break_group_id`, e chamar `list_work_break_group_intervals` com `group_id`
-- Se a campanha nao tiver `work_break_group_id`, deixar vazio (sem erro silencioso)
+### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-## Problema 2: Ficha nao abre quando chamada entra
+Adicionar `console.log` nos seguintes pontos:
 
-O `TelefoniaAtendimentoWrapper` usa `useClientByPhone` para resolver o cliente pelo telefone. Se o telefone nao bate (formato diferente, DDD/DDI), a ficha nao abre. Alem disso, o componente renderiza inline (embedded) mas o usuario espera navegar para `/atendimento/:clientId`.
+1. **Apos `fetchAll` resolver os dados** (~linha 278-311): logar `agentList`, `callsData`, e o `myAgent` encontrado com todos os campos relevantes
+2. **Na deteccao de `isOnCall`** (~linha 486): logar o status do agente, phone, remote_phone, call_id
+3. **No `TelefoniaAtendimentoWrapper`**: logar o telefone recebido e o resultado do `useClientByPhone`
 
-**Correcao** em `TelefoniaDashboard.tsx`:
-- Quando `isOnCall` e o cliente e encontrado pelo phone, navegar para `/atendimento/${client.id}` ao inves de renderizar embedded
-- Manter o fallback embedded para quando o cliente nao e encontrado (opcao de cadastrar)
-- Adicionar logs de debug para facilitar diagnostico futuro
+Formato dos logs:
+```
+console.log("[3CPlus] agents_status response:", JSON.stringify(agentList));
+console.log("[3CPlus] company_calls response:", JSON.stringify(callsData));
+console.log("[3CPlus] myAgent:", JSON.stringify(myAgent));
+console.log("[3CPlus] isOnCall:", isOnCall, "phone:", myAgent?.phone, "remote_phone:", myAgent?.remote_phone);
+```
 
 ## Arquivos alterados
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix `loadPauseIntervals` para usar `work_break_group_id` da campanha; navegar para `/atendimento/:clientId` quando chamada detectada |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Adicionar console.log nos pontos de polling e deteccao de chamada |
 
