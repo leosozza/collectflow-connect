@@ -27,7 +27,9 @@ import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 /** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
+  console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "agentId:", agentId, "callId:", callId);
   const { client, isLoading } = useClientByPhone(clientPhone);
+  console.log("[3CPlus] useClientByPhone result — client:", client ? { id: client.id, nome: client.nome_completo, phone: client.phone } : null, "isLoading:", isLoading);
   const navigate = useNavigate();
   const hasNavigated = useRef(false);
 
@@ -278,7 +280,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
+      console.log("[3CPlus] agents_status response:", JSON.stringify(agentList));
+      console.log("[3CPlus] company_calls response:", JSON.stringify(callsData));
       setAgents(agentList);
+
+      // Log myAgent match
+      if (operatorAgentId) {
+        const foundAgent = agentList.find((a: any) => a.id === operatorAgentId || a.agent_id === operatorAgentId);
+        console.log("[3CPlus] operatorAgentId:", operatorAgentId, "myAgent found:", JSON.stringify(foundAgent));
+      }
 
       const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
 
@@ -486,6 +496,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
+
+  // Debug log for call detection
+  if (isOperatorView && myAgent) {
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone, "call_id:", myAgent.call_id, "current_call_id:", myAgent.current_call_id);
+  }
 
   const handleReconnectSip = async () => {
     if (!operatorAgentId) return;
