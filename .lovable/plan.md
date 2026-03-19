@@ -1,71 +1,81 @@
 
-Plano curto para corrigir os 2 pontos:
 
-## Diagnóstico
-1. **O widget não abre ao entrar na campanha** porque hoje ele só é acionado dentro do bloco `isOnCall` em `TelefoniaDashboard.tsx`. Ou seja: sem ligação ativa, o widget nunca é aberto.
-2. **O botão DESLIGAR retorna “recurso não encontrado”** porque o proxy está chamando `POST /agent/hangup`, mas a documentação da 3CPlus indica o endpoint correto como `POST /agent/call/{call-id}/hangup`.
-3. **Além disso, o front nem exige `callId` para desligar** e o botão aparece com base apenas em “agente + integração configurada”, então ele pode ficar visível mesmo sem uma chamada realmente ativa.
+# Reformular Widget Flutuante: Pausa + Auto-expansão
 
-## O que vou ajustar
+## O que muda
 
-### 1) Abrir o widget assim que o operador entrar na campanha
-**Arquivo:** `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
-
-- Abrir o widget **logo após login bem-sucedido na campanha**, sem esperar a ligação cair.
-- Adicionar também uma **reidratação automática**: se o operador já estiver online em uma campanha após refresh/navegação, o widget volta a aparecer.
-- Trocar a lógica atual “abrir só quando `isOnCall`” por uma sincronização em 2 etapas:
-  - **campanha aberta** → widget flutuante aparece em modo “aguardando ligação”
-  - **ligação detectada** → widget recebe `clientId/callId` e expande para atendimento
-
-### 2) Evoluir o widget para suportar estado “sem cliente ainda”
+### 1) Widget minimizado — nova barra de controles
 **Arquivo:** `src/hooks/useAtendimentoModal.tsx`
 
-- Permitir abrir o widget mesmo **sem `clientId`**.
-- Adicionar estado do widget para:
-  - campanha ativa / aguardando ligação
-  - chamada ativa / cliente resolvido
-- Quando ainda não houver cliente, mostrar uma versão compacta com status do operador e cronômetro.
-- Quando a chamada cair e o cliente for identificado, atualizar o widget existente em vez de criar outro.
+A barra minimizada atual mostra: `[grip] [icon] nome [timer] [expand] [close]`
 
-### 3) Corrigir o identificador da chamada
+Nova barra: `[grip] [timer] [Pausa ▼] [expand] [close]`
+
+- **Timer**: cronômetro visível sempre
+- **Pausa**: botão que abre Popover com lista de intervalos vinculados à campanha (mesma lógica já existente no `TelefoniaDashboard`)
+- **Expandir**: abre o painel completo
+- **Fechar**: fecha o widget
+
+Para isso, o contexto do widget precisa receber dados adicionais:
+- `pauseIntervals: any[]` — lista de pausas disponíveis
+- `onPause: (intervalId: number) => void` — callback para pausar
+- `onUnpause: () => void` — callback para retomar
+- `isPaused: boolean` — estado atual do agente
+
+O `TelefoniaDashboard` já possui toda essa lógica (`handlePause`, `handleUnpause`, `pauseIntervals`, `isPaused`). Vou expor esses dados via contexto do widget para que a barra flutuante os consuma.
+
+### 2) Auto-expansão quando ligação cai
+**Arquivo:** `src/hooks/useAtendimentoModal.tsx`
+
+Quando `updateAtendimento()` é chamado (ou seja, cliente identificado + chamada ativa), o widget deve:
+- Sair do modo minimizado automaticamente (`setIsMinimized(false)`)
+- Centralizar na tela
+
+Isso já acontece parcialmente no `updateAtendimento`, mas preciso garantir que force a expansão mesmo se `hasCustomPosition` estiver true.
+
+### 3) Passar dados de pausa para o widget
 **Arquivo:** `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-- Passar um `callId` canônico para o widget usando prioridade como:
-  - `activeCall.id`
-  - `activeCall.call_id`
-  - `myAgent.current_call_id`
-  - `myAgent.call_id`
-- Isso é importante porque o `company_calls` atual já traz `id: "call:..."`, e esse valor precisa chegar até o botão DESLIGAR.
+Após rehydration/login, além de `openWaiting(agentId)`, vou chamar um novo método `setWidgetPauseControls(...)` que alimenta o contexto com as pausas e callbacks.
 
-### 4) Corrigir o botão DESLIGAR no front
-**Arquivo:** `src/pages/AtendimentoPage.tsx`
+## Detalhes técnicos
 
-- Alterar `handleHangup` para exigir `callId`.
-- Enviar `call_id` junto com `agent_id` para o proxy.
-- Mudar a regra do botão para aparecer apenas quando houver **chamada real ativa**:
-  - usar `hasActiveCall={!!callId}`
-  - se não houver `callId`, mostrar erro claro em vez de tentar desligar
+### Contexto expandido (`useAtendimentoModal.tsx`)
 
-### 5) Corrigir o endpoint no proxy 3CPlus
-**Arquivo:** `supabase/functions/threecplus-proxy/index.ts`
+```typescript
+interface AtendimentoModalContextType {
+  // ... existentes
+  setPauseControls: (controls: PauseControls) => void;
+}
 
-- Trocar a ação `hangup_call` de:
-  - `POST /agent/hangup`
-- Para:
-  - `POST /agent/call/{call-id}/hangup`
-- Validar `call_id` como obrigatório.
-- Manter a resolução do token do agente, mas montar a URL correta para a chamada.
+interface PauseControls {
+  intervals: any[];
+  isPaused: boolean;
+  onPause: (intervalId: number) => void;
+  onUnpause: () => void;
+}
+```
 
-## Resultado esperado
-- Ao entrar na campanha, o operador já vê o **widget flutuante global** em qualquer tela.
-- Quando a ligação cair, o widget é atualizado/expandido rapidamente com o atendimento.
-- O botão **DESLIGAR** passa a usar o endpoint correto da 3CPlus e só aparece quando existir uma chamada válida.
+### Widget minimizado — novo layout
 
-## Arquivos a ajustar
-- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
-- `src/hooks/useAtendimentoModal.tsx`
-- `src/pages/AtendimentoPage.tsx`
-- `supabase/functions/threecplus-proxy/index.ts`
+```text
+┌───────────────────────────────────────────────┐
+│ [≡] 02:34  [☕ Pausa ▼]  [⬜ Expandir] [✕]  │
+└───────────────────────────────────────────────┘
+```
 
-## Observação técnica importante
-Hoje o dashboard ainda renderiza o atendimento “inline” no estado `isOnCall`. Eu vou refatorar essa parte para o dashboard atuar só como **sincronizador do widget**, evitando depender da tela atual para abrir o atendimento.
+Quando `isPaused === true`, o botão Pausa vira "Retomar" (ícone Play).
+
+O Popover de pausas usa o mesmo markup já existente no TelefoniaDashboard (linhas 733-758).
+
+### Auto-expansão no `updateAtendimento`
+
+Forçar `setIsMinimized(false)` e `centerPosition()` sempre que `clientId` é definido (ligação identificada).
+
+## Arquivos a editar
+1. `src/hooks/useAtendimentoModal.tsx` — novo contexto de pausa, layout da barra, auto-expand
+2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — alimentar controles de pausa no widget
+
+## Nota sobre o componente floating-nav
+O componente `floating-nav.tsx` compartilhado na mensagem serve apenas como inspiração visual. Ele usa `framer-motion` e um padrão de nav diferente. Vou aproveitar a ideia de barra flutuante compacta mas implementar com a arquitetura existente (sem adicionar `framer-motion` como dependência).
+
