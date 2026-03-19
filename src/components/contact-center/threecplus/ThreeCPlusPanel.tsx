@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, ListOrdered, Route, PhoneIncoming, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan, MessageSquareText } from "lucide-react";
+import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, ListOrdered, Route, PhoneIncoming, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,6 @@ import QualificationsPanel from "./QualificationsPanel";
 import BlockListPanel from "./BlockListPanel";
 import TeamsPanel from "./TeamsPanel";
 import SchedulesPanel from "./SchedulesPanel";
-import SMSPanel from "./SMSPanel";
 import UsersPanel from "./UsersPanel";
 import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
 import RoutesPanel from "./RoutesPanel";
@@ -44,6 +43,7 @@ const groups = [
       { value: "history", label: "Histórico", icon: PhoneCall },
       { value: "receptive", label: "Receptivo", icon: PhoneIncoming },
       { value: "schedules", label: "Agendamentos", icon: CalendarClock },
+      { value: "blocklist", label: "Bloqueio", icon: ShieldBan },
     ],
   },
   {
@@ -54,8 +54,6 @@ const groups = [
       { value: "office-hours", label: "Horários", icon: Clock },
       { value: "qualifications", label: "Qualificações", icon: Award },
       { value: "teams", label: "Equipes", icon: UsersRound },
-      { value: "blocklist", label: "Bloqueio", icon: ShieldBan },
-      { value: "sms", label: "SMS", icon: MessageSquareText },
     ],
   },
 ] as const;
