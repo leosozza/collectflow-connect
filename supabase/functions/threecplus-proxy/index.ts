@@ -741,26 +741,14 @@ Deno.serve(async (req) => {
         if (err2) return err2;
         const err3 = requireField(body, 'qualification_id', corsHeaders);
         if (err3) return err3;
-        // Resolve agent token via GET /users
-        const usersUrlQualify = buildUrl(baseUrl, 'users', authParam);
-        const usersResQualify = await fetch(usersUrlQualify, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResQualify.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResQualify.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataQualify = await usersResQualify.json();
-        const usersListQualify = Array.isArray(usersDataQualify) ? usersDataQualify : usersDataQualify?.data || [];
-        const targetQualify = usersListQualify.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetQualify || !targetQualify.api_token) {
+        const agentQualify = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentQualify || !agentQualify.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthQualify = `api_token=${targetQualify.api_token}`;
-        url = `${baseUrl}/agent/call/${body.call_id}/qualify?${agentAuthQualify}`;
+        url = `${baseUrl}/agent/call/${body.call_id}/qualify?api_token=${agentQualify.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ qualification_id: body.qualification_id });
         console.log(`Qualifying call ${body.call_id} with qualification ${body.qualification_id} for agent ${body.agent_id}`);
