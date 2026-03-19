@@ -41,6 +41,7 @@ import AdminUsuariosHubPage from "./pages/admin/AdminUsuariosHubPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
 import SuperAdminLayout from "./components/SuperAdminLayout";
+import { AtendimentoModalProvider } from "./hooks/useAtendimentoModal";
 import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
 import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
