@@ -117,7 +117,7 @@ const ThreeCPlusPanel = () => {
   return (
     <div className="space-y-4">
       {/* Level 1 — Group navigation */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="flex items-center gap-2">
         {groups.map((g) => {
           const Icon = g.icon;
           const isActive = activeGroup === g.id;
@@ -126,13 +126,13 @@ const ThreeCPlusPanel = () => {
               key={g.id}
               onClick={() => handleGroupChange(g.id)}
               className={cn(
-                "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all",
+                "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-md"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : "bg-card text-muted-foreground border border-border hover:bg-accent hover:text-foreground"
               )}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-3.5 h-3.5" />
               {g.label}
             </button>
           );
