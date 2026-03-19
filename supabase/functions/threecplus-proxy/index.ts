@@ -100,12 +100,14 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, 'campaigns', authParam);
         method = 'POST';
-        reqBody = JSON.stringify({
+        const campaignPayload: Record<string, any> = {
           name: body.campaign_name,
           start_time: body.start_time || '08:00',
           end_time: body.end_time || '18:30',
-          qualification_list: body.qualification_list_id || null,
-        });
+        };
+        if (body.qualification_list_id) campaignPayload.qualification_list = body.qualification_list_id;
+        if (body.work_break_group_id) campaignPayload.work_break_group_id = body.work_break_group_id;
+        reqBody = JSON.stringify(campaignPayload);
         break;
       }
 
