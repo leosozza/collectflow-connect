@@ -44,8 +44,8 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const navigate = useNavigate();
-  const hasNavigated = useRef(false);
+  const { openAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
+  const hasOpened = useRef(false);
 
   // Query by CPF when available
   const { data: clientByCpf, isLoading: cpfLoading } = useQuery({
@@ -69,14 +69,14 @@ const TelefoniaAtendimentoWrapper = ({
 
   console.log("[3CPlus] resolved — clientDbId:", clientDbId, "cpfResult:", clientByCpf?.id, "phoneResult:", clientByPhone?.id, "final:", resolvedId, "isLoading:", isLoading);
 
-  // Navigate to atendimento when client is resolved
+  // Open atendimento modal when client is resolved
   useEffect(() => {
-    if (resolvedId && !hasNavigated.current) {
-      hasNavigated.current = true;
-      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", resolvedId);
-      navigate(`/atendimento/${resolvedId}`);
+    if (resolvedId && !hasOpened.current && !modalIsOpen) {
+      hasOpened.current = true;
+      console.log("[Telefonia] Cliente encontrado, abrindo modal para", resolvedId);
+      openAtendimento(resolvedId, agentId, callId);
     }
-  }, [resolvedId, navigate]);
+  }, [resolvedId, openAtendimento, modalIsOpen, agentId, callId]);
 
   // Reset navigation flag when inputs change
   useEffect(() => {
