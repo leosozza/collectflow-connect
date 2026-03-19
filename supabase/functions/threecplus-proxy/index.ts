@@ -966,10 +966,27 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Handle 204 No Content as success (used by agent/login, agent/connect, etc.)
+    if (response.status === 204 || (response.status >= 200 && response.status < 300 && response.headers.get('content-length') === '0')) {
+      console.log(`3CPlus response: ${response.status} (no content — treating as success)`);
+      return new Response(
+        JSON.stringify({ status: response.status, success: true, no_content: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Check if response is JSON before parsing
     const respContentType = response.headers.get('content-type') || '';
     if (!respContentType.includes('application/json')) {
       const textBody = await response.text();
+      // If status is 2xx but no JSON, still treat as success
+      if (response.status >= 200 && response.status < 300) {
+        console.log(`3CPlus response: ${response.status} (non-JSON success): ${textBody.substring(0, 100)}`);
+        return new Response(
+          JSON.stringify({ status: response.status, success: true, no_content: true }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       console.error(`3CPlus returned non-JSON (${respContentType}): ${textBody.substring(0, 200)}`);
       return new Response(
         JSON.stringify({ status: response.status, detail: `API returned non-JSON response (status ${response.status}). The endpoint may be unavailable.` }),
