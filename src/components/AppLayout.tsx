@@ -71,6 +71,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
+  const isFullBleedRoute = location.pathname === "/contact-center/whatsapp";
   const showContactCenter = contactCenterItems.length > 0;
 
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
