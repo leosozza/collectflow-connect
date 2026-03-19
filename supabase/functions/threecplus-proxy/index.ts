@@ -863,6 +863,100 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Hangup Call (agent-level) ──
+      case 'hangup_call': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        const usersUrlHangup = buildUrl(baseUrl, 'users', authParam);
+        const usersResHangup = await fetch(usersUrlHangup, { headers: { 'Content-Type': 'application/json' } });
+        if (!usersResHangup.ok) {
+          return new Response(
+            JSON.stringify({ status: usersResHangup.status, detail: 'Falha ao buscar token do agente' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const usersDataHangup = await usersResHangup.json();
+        const usersListHangup = Array.isArray(usersDataHangup) ? usersDataHangup : usersDataHangup?.data || [];
+        const targetHangup = usersListHangup.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
+        if (!targetHangup || !targetHangup.api_token) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const agentAuthHangup = `api_token=${targetHangup.api_token}`;
+        url = `${baseUrl}/agent/hangup?${agentAuthHangup}`;
+        method = 'POST';
+        console.log(`Hanging up call for agent ${body.agent_id}`);
+        break;
+      }
+
+      // ── Sync Dispositions (bulk create/update qualifications in a list) ──
+      case 'sync_dispositions': {
+        const err = requireField(body, 'dispositions', corsHeaders);
+        if (err) return err;
+
+        // 1. Find or create a list named "RIVO Tabulações"
+        const listsUrl = buildUrl(baseUrl, 'qualification_lists', authParam);
+        const listsRes = await fetch(listsUrl, { headers: { 'Content-Type': 'application/json' } });
+        const listsData = await listsRes.json();
+        const allLists = Array.isArray(listsData) ? listsData : listsData?.data || [];
+        let rivoList = allLists.find((l: any) => l.name === 'RIVO Tabulações');
+        
+        if (!rivoList) {
+          const createRes = await fetch(buildUrl(baseUrl, 'qualification_lists', authParam), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'RIVO Tabulações' }),
+          });
+          rivoList = await createRes.json();
+        }
+
+        const listId = rivoList.id;
+
+        // 2. Fetch existing items in the list
+        const itemsUrl = buildUrl(baseUrl, `qualification_lists/${listId}/qualifications`, authParam);
+        const itemsRes = await fetch(itemsUrl, { headers: { 'Content-Type': 'application/json' } });
+        const itemsData = await itemsRes.json();
+        const existingItems = Array.isArray(itemsData) ? itemsData : itemsData?.data || [];
+
+        const dispositions = body.dispositions as Array<{ key: string; label: string; active: boolean }>;
+        const resultMap: Record<string, number> = {};
+
+        // 3. Create or update items
+        for (const disp of dispositions) {
+          if (!disp.active) continue;
+          const existing = existingItems.find((item: any) => item.name === disp.label);
+          if (existing) {
+            resultMap[disp.key] = existing.id;
+          } else {
+            const createItemRes = await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications`, authParam), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: disp.label }),
+            });
+            const newItem = await createItemRes.json();
+            resultMap[disp.key] = newItem.id;
+          }
+        }
+
+        // 4. Remove items that are no longer active
+        const activeLabels = new Set(dispositions.filter(d => d.active).map(d => d.label));
+        for (const item of existingItems) {
+          if (!activeLabels.has(item.name)) {
+            await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications/${item.id}`, authParam), {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ status: 200, list_id: listId, disposition_map: resultMap }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ status: 400, detail: `Unknown action: ${action}` }),

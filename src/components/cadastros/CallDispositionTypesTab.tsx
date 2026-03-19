@@ -6,6 +6,7 @@ import {
   updateDispositionType,
   deleteDispositionType,
   seedDefaultDispositionTypes,
+  syncDispositionsTo3CPlus,
   DEFAULT_DISPOSITION_LIST,
   type DbDispositionType,
 } from "@/services/dispositionService";
@@ -53,6 +54,9 @@ const CallDispositionTypesTab = () => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [seeded, setSeeded] = useState(false);
+  const settings = (tenant?.settings as Record<string, any>) || {};
+  const has3CPlus = !!(settings.threecplus_domain && settings.threecplus_api_token);
+  const [syncing, setSyncing] = useState(false);
 
   const { data: types = [], isLoading } = useQuery({
     queryKey: ["call-disposition-types", tenantId],
@@ -88,12 +92,26 @@ const CallDispositionTypesTab = () => {
     }
   }, [isLoading, tenantId, types, seeded, seedMut.isPending]);
 
+  const triggerSync = async () => {
+    if (!has3CPlus || !tenantId) return;
+    setSyncing(true);
+    try {
+      await syncDispositionsTo3CPlus(tenantId);
+      toast.success("Tabulações sincronizadas com 3CPlus");
+    } catch {
+      toast.error("Erro ao sincronizar com 3CPlus");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const createMut = useMutation({
     mutationFn: (p: Parameters<typeof createDispositionType>[0]) => createDispositionType(p),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização criada");
       setOpen(false);
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao criar categorização"),
   });
@@ -105,6 +123,7 @@ const CallDispositionTypesTab = () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização atualizada");
       setOpen(false);
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao atualizar"),
   });
@@ -114,6 +133,7 @@ const CallDispositionTypesTab = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização removida");
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao remover"),
   });
@@ -145,9 +165,16 @@ const CallDispositionTypesTab = () => {
             ? `${types.length} categorização(ões) configurada(s).`
             : "Carregando categorizações..."}
         </p>
-        <Button size="sm" onClick={openNew}>
-          <Plus className="w-4 h-4 mr-1" /> Nova Categorização
-        </Button>
+        <div className="flex gap-2">
+          {has3CPlus && (
+            <Button size="sm" variant="outline" onClick={triggerSync} disabled={syncing}>
+              {syncing ? "Sincronizando..." : "🔄 Sincronizar 3CPlus"}
+            </Button>
+          )}
+          <Button size="sm" onClick={openNew}>
+            <Plus className="w-4 h-4 mr-1" /> Nova Categorização
+          </Button>
+        </div>
       </div>
 
       {types.length > 0 && (

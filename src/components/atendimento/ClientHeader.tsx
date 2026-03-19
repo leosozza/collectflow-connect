@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -30,6 +30,9 @@ interface ClientHeaderProps {
   onCall?: (phone: string) => void;
   callingPhone?: boolean;
   onNegotiate?: () => void;
+  onHangup?: () => void;
+  hangingUp?: boolean;
+  hasActiveCall?: boolean;
 }
 
 const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
@@ -45,7 +48,7 @@ const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string |
   );
 };
 
-const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate }: ClientHeaderProps) => {
+const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate, onHangup, hangingUp, hasActiveCall }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
@@ -243,6 +246,19 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            {hasActiveCall && onHangup && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onHangup}
+                disabled={hangingUp}
+                className="gap-1.5 font-bold text-xs px-4"
+                title="Desligar ligação"
+              >
+                <PhoneOff className="w-4 h-4" />
+                DESLIGAR
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
