@@ -246,6 +246,19 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            {hasActiveCall && onHangup && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onHangup}
+                disabled={hangingUp}
+                className="gap-1.5 font-bold text-xs px-4"
+                title="Desligar ligação"
+              >
+                <PhoneOff className="w-4 h-4" />
+                DESLIGAR
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

@@ -109,7 +109,6 @@ const ThreeCPlusPanel = () => {
     blocklist: <BlockListPanel />,
     teams: <TeamsPanel />,
     schedules: <SchedulesPanel />,
-    sms: <SMSPanel />,
     users: <UsersPanel />,
     receptive: <ReceptiveQueuesPanel />,
     routes: <RoutesPanel />,
