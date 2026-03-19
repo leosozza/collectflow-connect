@@ -255,27 +255,25 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
-          <div className="flex items-center gap-1">
+        <header className="h-12 bg-card border-b border-border flex items-center justify-between px-3 lg:px-4">
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="lg:hidden h-8 w-8"
               onClick={() => setSidebarOpen(true)}
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="hidden lg:flex"
+              className="hidden lg:flex h-8 w-8"
               onClick={() => setCollapsed(!collapsed)}
               title={collapsed ? "Expandir menu" : "Recolher menu"}
             >
-              {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+              {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </Button>
-          </div>
-          <div className="flex items-center gap-2">
             {(() => {
               const pageTitles: Record<string, string> = {
                 "/": "Dashboard",
@@ -298,7 +296,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               };
               const title = pageTitles[location.pathname];
               return title ? (
-                <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+                <h1 className="text-sm font-semibold text-foreground">{title}</h1>
               ) : null;
             })()}
           </div>
