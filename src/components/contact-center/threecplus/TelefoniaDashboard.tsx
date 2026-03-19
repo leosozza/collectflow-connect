@@ -495,6 +495,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
+  // Debug log for call detection
+  if (isOperatorView && myAgent) {
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone, "call_id:", myAgent.call_id, "current_call_id:", myAgent.current_call_id);
+  }
+
   const handleReconnectSip = async () => {
     if (!operatorAgentId) return;
     setReconnectingSip(true);
