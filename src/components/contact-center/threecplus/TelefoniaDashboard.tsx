@@ -239,6 +239,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
   const [reconnectingSip, setReconnectingSip] = useState(false);
+  const hasRehydrated = useRef(false);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
