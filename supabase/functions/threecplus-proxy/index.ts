@@ -15,6 +15,29 @@ function buildUrl(baseUrl: string, path: string, authParam: string, queryParams?
   return url;
 }
 
+async function resolveAgentToken(baseUrl: string, authParam: string, agentId: number | string): Promise<any | null> {
+  const url = buildUrl(baseUrl, 'users', authParam, { per_page: '500' });
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) {
+    console.error(`resolveAgentToken: GET /users failed with status ${res.status}`);
+    return null;
+  }
+  const raw = await res.json();
+  // Support paginated { data: { data: [...] } }, flat { data: [...] }, or raw [...]
+  const list = (raw?.data?.data && Array.isArray(raw.data.data))
+    ? raw.data.data
+    : Array.isArray(raw?.data) ? raw.data
+    : Array.isArray(raw) ? raw : [];
+  const numId = Number(agentId);
+  const agent = list.find((u: any) => u.id === numId || Number(u.id) === numId) || null;
+  if (agent) {
+    console.log(`resolveAgentToken: Found agent ${agentId} (api_token present: ${!!agent.api_token}, extension: ${agent.extension || 'none'})`);
+  } else {
+    console.error(`resolveAgentToken: Agent ${agentId} NOT found in ${list.length} users`);
+  }
+  return agent;
+}
+
 function requireField(body: Record<string, any>, field: string, corsHeaders: Record<string, string>) {
   if (!body[field]) {
     return new Response(
@@ -613,29 +636,14 @@ Deno.serve(async (req) => {
         if (err1) return err1;
         const err2 = requireField(body, 'campaign_id', corsHeaders);
         if (err2) return err2;
-        // Resolve agent token via GET /users
-        const usersUrlLogin = buildUrl(baseUrl, 'users', authParam);
-        const usersResLogin = await fetch(usersUrlLogin, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResLogin.ok) {
-          const errText = await usersResLogin.text();
-          console.error(`Failed to fetch users for agent token: ${usersResLogin.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResLogin.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataLogin = await usersResLogin.json();
-        const usersList = Array.isArray(usersDataLogin) ? usersDataLogin : usersDataLogin?.data || [];
-        const targetUser = usersList.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetUser || !targetUser.api_token) {
-          console.error(`Agent ${body.agent_id} not found or has no api_token. Users count: ${usersList.length}`);
+        const agentLogin = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentLogin || !agentLogin.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthLogin = `api_token=${targetUser.api_token}`;
-        url = `${baseUrl}/agent/login?${agentAuthLogin}`;
+        url = `${baseUrl}/agent/login?api_token=${agentLogin.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ campaign: body.campaign_id });
         console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/login`);
@@ -645,27 +653,14 @@ Deno.serve(async (req) => {
       case 'connect_agent': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        const usersUrlConnect = buildUrl(baseUrl, 'users', authParam);
-        const usersResConnect = await fetch(usersUrlConnect, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResConnect.ok) {
-          const errText = await usersResConnect.text();
-          console.error(`Failed to fetch users for agent connect: ${usersResConnect.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResConnect.status, detail: 'Falha ao buscar token do agente para connect' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataConnect = await usersResConnect.json();
-        const usersListConnect = Array.isArray(usersDataConnect) ? usersDataConnect : usersDataConnect?.data || [];
-        const targetConnect = usersListConnect.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetConnect || !targetConnect.api_token) {
+        const agentConnect = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentConnect || !agentConnect.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthConnect = `api_token=${targetConnect.api_token}`;
-        url = `${baseUrl}/agent/connect?${agentAuthConnect}`;
+        url = `${baseUrl}/agent/connect?api_token=${agentConnect.api_token}`;
         method = 'POST';
         console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/connect`);
         break;
@@ -674,28 +669,14 @@ Deno.serve(async (req) => {
       case 'logout_agent_self': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        // Resolve agent token via GET /users
-        const usersUrlLogout = buildUrl(baseUrl, 'users', authParam);
-        const usersResLogout = await fetch(usersUrlLogout, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResLogout.ok) {
-          const errText = await usersResLogout.text();
-          console.error(`Failed to fetch users for agent logout: ${usersResLogout.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResLogout.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataLogout = await usersResLogout.json();
-        const usersListLogout = Array.isArray(usersDataLogout) ? usersDataLogout : usersDataLogout?.data || [];
-        const targetLogout = usersListLogout.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetLogout || !targetLogout.api_token) {
+        const agentLogout = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentLogout || !agentLogout.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthLogout = `api_token=${targetLogout.api_token}`;
-        url = `${baseUrl}/agent/logout?${agentAuthLogout}`;
+        url = `${baseUrl}/agent/logout?api_token=${agentLogout.api_token}`;
         method = 'POST';
         console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/logout`);
         break;
@@ -704,28 +685,14 @@ Deno.serve(async (req) => {
       case 'agent_available_campaigns': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        // Resolve agent token via GET /users
-        const usersUrlCamp = buildUrl(baseUrl, 'users', authParam);
-        const usersResCamp = await fetch(usersUrlCamp, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResCamp.ok) {
-          const errText = await usersResCamp.text();
-          console.error(`Failed to fetch users for agent campaigns: ${usersResCamp.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResCamp.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataCamp = await usersResCamp.json();
-        const usersListCamp = Array.isArray(usersDataCamp) ? usersDataCamp : usersDataCamp?.data || [];
-        const targetCamp = usersListCamp.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetCamp || !targetCamp.api_token) {
+        const agentCamp = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentCamp || !agentCamp.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthCamp = `api_token=${targetCamp.api_token}`;
-        url = `${baseUrl}/agent/campaigns?${agentAuthCamp}`;
+        url = `${baseUrl}/agent/campaigns?api_token=${agentCamp.api_token}`;
         console.log(`Resolved agent token for ${body.agent_id}, calling GET /agent/campaigns`);
         break;
       }
@@ -736,26 +703,14 @@ Deno.serve(async (req) => {
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        // Resolve agent token
-        const usersUrlPause = buildUrl(baseUrl, 'users', authParam);
-        const usersResPause = await fetch(usersUrlPause, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResPause.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResPause.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataPause = await usersResPause.json();
-        const usersListPause = Array.isArray(usersDataPause) ? usersDataPause : usersDataPause?.data || [];
-        const targetPause = usersListPause.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetPause || !targetPause.api_token) {
+        const agentPause = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentPause || !agentPause.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthPause = `api_token=${targetPause.api_token}`;
-        url = `${baseUrl}/agent/pause?${agentAuthPause}`;
+        url = `${baseUrl}/agent/pause?api_token=${agentPause.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ work_break_interval_id: body.interval_id });
         console.log(`Pausing agent ${body.agent_id} with interval ${body.interval_id}`);
@@ -765,25 +720,14 @@ Deno.serve(async (req) => {
       case 'unpause_agent': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        const usersUrlUnpause = buildUrl(baseUrl, 'users', authParam);
-        const usersResUnpause = await fetch(usersUrlUnpause, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResUnpause.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResUnpause.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataUnpause = await usersResUnpause.json();
-        const usersListUnpause = Array.isArray(usersDataUnpause) ? usersDataUnpause : usersDataUnpause?.data || [];
-        const targetUnpause = usersListUnpause.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetUnpause || !targetUnpause.api_token) {
+        const agentUnpause = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentUnpause || !agentUnpause.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthUnpause = `api_token=${targetUnpause.api_token}`;
-        url = `${baseUrl}/agent/unpause?${agentAuthUnpause}`;
+        url = `${baseUrl}/agent/unpause?api_token=${agentUnpause.api_token}`;
         method = 'POST';
         console.log(`Unpausing agent ${body.agent_id}`);
         break;
@@ -797,26 +741,14 @@ Deno.serve(async (req) => {
         if (err2) return err2;
         const err3 = requireField(body, 'qualification_id', corsHeaders);
         if (err3) return err3;
-        // Resolve agent token via GET /users
-        const usersUrlQualify = buildUrl(baseUrl, 'users', authParam);
-        const usersResQualify = await fetch(usersUrlQualify, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResQualify.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResQualify.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataQualify = await usersResQualify.json();
-        const usersListQualify = Array.isArray(usersDataQualify) ? usersDataQualify : usersDataQualify?.data || [];
-        const targetQualify = usersListQualify.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetQualify || !targetQualify.api_token) {
+        const agentQualify = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentQualify || !agentQualify.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthQualify = `api_token=${targetQualify.api_token}`;
-        url = `${baseUrl}/agent/call/${body.call_id}/qualify?${agentAuthQualify}`;
+        url = `${baseUrl}/agent/call/${body.call_id}/qualify?api_token=${agentQualify.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ qualification_id: body.qualification_id });
         console.log(`Qualifying call ${body.call_id} with qualification ${body.qualification_id} for agent ${body.agent_id}`);
@@ -867,25 +799,14 @@ Deno.serve(async (req) => {
       case 'hangup_call': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        const usersUrlHangup = buildUrl(baseUrl, 'users', authParam);
-        const usersResHangup = await fetch(usersUrlHangup, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResHangup.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResHangup.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataHangup = await usersResHangup.json();
-        const usersListHangup = Array.isArray(usersDataHangup) ? usersDataHangup : usersDataHangup?.data || [];
-        const targetHangup = usersListHangup.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetHangup || !targetHangup.api_token) {
+        const agentHangup = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentHangup || !agentHangup.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthHangup = `api_token=${targetHangup.api_token}`;
-        url = `${baseUrl}/agent/hangup?${agentAuthHangup}`;
+        url = `${baseUrl}/agent/hangup?api_token=${agentHangup.api_token}`;
         method = 'POST';
         console.log(`Hanging up call for agent ${body.agent_id}`);
         break;
