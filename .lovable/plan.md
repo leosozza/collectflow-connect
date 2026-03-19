@@ -1,81 +1,61 @@
 
 
-# Correção: Intervalos e Qualificações 3CPlus — Endpoints Corretos
+# Plano: Reorganização Telefonia + Desligar Ligação + Unificação Tabulações
 
-## Diagnóstico
+## 1. Mover Bloqueio para "Chamadas" e Remover SMS
 
-Após análise da documentação oficial da API 3CPlus, identifiquei os problemas:
+**Arquivo:** `ThreeCPlusPanel.tsx`
 
-### Intervalos (Pausas)
-- **Problema**: O código usa `campaigns/{id}/intervals` para criar/editar, mas esse endpoint é apenas leitura (GET). O POST retorna 405.
-- **API correta**: Intervalos são gerenciados via **Work Break Groups** (globais, não por campanha):
-  - `GET /work_break_group` — listar grupos
-  - `POST /work_break_group` — criar grupo
-  - `PUT /work_break_group/{id}` — atualizar
-  - `DELETE /work_break_group/{id}` — excluir
-  - Intervalos dentro dos grupos:
-    - `GET /work_break_group/{id}/intervals` — listar
-    - `POST /work_break_group/{id}/intervals` — criar
-    - `PUT /work_break_group/{id}/intervals/{interval-id}` — atualizar
-    - `DELETE /work_break_group/{id}/intervals/{interval-id}` — excluir
-
-### Qualificações (Tabulações)
-- **Problema**: O código usa `/qualifications` que não existe (retorna 404).
-- **API correta**: Qualificações são gerenciadas via **Qualification Lists** (globais):
-  - `GET /qualification_lists` — listar listas
-  - `POST /qualification_lists` — criar lista
-  - `PUT /qualification_lists/{id}` — atualizar
-  - `DELETE /qualification_lists/{id}` — excluir
-  - Qualificações dentro das listas:
-    - `GET /qualification_lists/{id}/qualifications` — listar
-    - `POST /qualification_lists/{id}/qualifications` — criar
-    - `PUT /qualification_lists/{id}/qualifications/{qual-id}` — atualizar
-    - `DELETE /qualification_lists/{id}/qualifications/{qual-id}` — excluir
-
-### Campanhas
-- Ao criar campanha, pode-se associar `qualification_list` e `work_break_group_id`
+- Mover `{ value: "blocklist", label: "Bloqueio", icon: ShieldBan }` do grupo "Controle" para o grupo "Chamadas"
+- Remover `{ value: "sms", label: "SMS", icon: MessageSquareText }` do grupo "Controle"
+- Remover import do `SMSPanel` e entrada no `contentMap`
 
 ---
 
-## Plano de Implementação
+## 2. Botão "Desligar Ligação" na tela de Atendimento
 
-### 1. Atualizar Edge Function `threecplus-proxy`
-Adicionar os novos actions para os endpoints corretos:
-- `list_work_break_groups`, `create_work_break_group`, `update_work_break_group`, `delete_work_break_group`
-- `list_work_break_group_intervals`, `create_work_break_group_interval`, `update_work_break_group_interval`, `delete_work_break_group_interval`
-- `list_qualification_lists`, `create_qualification_list`, `update_qualification_list`, `delete_qualification_list`
-- `list_qualification_list_items`, `create_qualification_list_item`, `update_qualification_list_item`, `delete_qualification_list_item`
+**Arquivos:** `threecplus-proxy/index.ts`, `AtendimentoPage.tsx`, `ClientHeader.tsx`
 
-Remover os actions antigos que usam endpoints errados (`list_qualifications`, `create_qualification`, etc.).
+A API 3CPlus possui o endpoint `POST /agent/hangup` (usando o token do agente, igual pause/unpause). 
 
-### 2. Reescrever `WorkBreakIntervalsPanel.tsx`
-- Remover seletor de campanha (intervalos são globais)
-- Estrutura em 2 níveis: Grupos de Pausa → Intervalos dentro de cada grupo
-- Listar grupos com expand/collapse para ver intervalos
-- CRUD para grupos e intervalos dentro de cada grupo
-
-### 3. Reescrever `QualificationsPanel.tsx`
-- Estrutura em 2 níveis: Listas de Qualificação → Qualificações dentro de cada lista
-- Listar listas com expand/collapse para ver qualificações
-- CRUD completo para listas e qualificações individuais
-
-### 4. Atualizar `CampaignsPanel.tsx`
-- No dialog de criação, adicionar seletores para:
-  - **Lista de Qualificação** (dropdown com listas existentes)
-  - **Grupo de Pausas** (dropdown com grupos existentes)
-- Carregar as listas e grupos disponíveis para popular os dropdowns
-
-### 5. Verificação de Funcionalidade
-Tudo que for criado/editado/excluído nesses painéis será refletido diretamente no 3CPlus via API REST.
+- **Edge Function**: Adicionar action `hangup_call` que busca o token do agente e chama `POST /agent/hangup`
+- **ClientHeader**: Adicionar botão vermelho "Desligar" ao lado do botão de ligar, visível quando há um `agentId` configurado
+- **AtendimentoPage**: Criar handler `handleHangup` que invoca `threecplus-proxy` com action `hangup_call`
 
 ---
 
-## Arquivos Alterados
+## 3. Unificação Tabulações RIVO ↔ 3CPlus
 
-| Arquivo | Ação |
+**Conceito**: As tabulações do RIVO (tabela `call_disposition_types`) passam a ser a fonte única. Quando o tenant tem 3CPlus configurado, o sistema sincroniza automaticamente com a Qualification List da 3CPlus.
+
+**Fluxo**:
+1. Operador gerencia tabulações em **Cadastros → Tabulações** (como já faz hoje)
+2. Ao criar/editar/excluir uma tabulação, se o tenant tem 3CPlus configurado:
+   - O sistema busca/cria uma Qualification List dedicada no 3CPlus (ex: "RIVO - Tabulações")
+   - Sincroniza os itens: cria/atualiza/remove qualificações correspondentes na 3CPlus
+   - Salva o mapeamento `{ rivo_key → 3cplus_qualification_id }` em `tenant.settings.threecplus_disposition_map`
+3. Tenants sem 3CPlus continuam usando normalmente sem mudança alguma
+
+**Arquivos alterados:**
+
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar ~12 novos actions, remover 6 antigos |
-| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Reescrever: global com grupos + intervalos |
-| `src/components/contact-center/threecplus/QualificationsPanel.tsx` | Reescrever: listas + qualificações aninhadas |
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Adicionar seletores de qualification_list e work_break_group na criação |
+| `ThreeCPlusPanel.tsx` | Mover blocklist, remover SMS |
+| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `hangup_call` |
+| `AtendimentoPage.tsx` | Adicionar handler `handleHangup`, passar para ClientHeader |
+| `ClientHeader.tsx` | Adicionar botão "Desligar" |
+| `CallDispositionTypesTab.tsx` | Após criar/editar/excluir tabulação, chamar função de sync com 3CPlus |
+| `services/dispositionService.ts` | Adicionar `syncDispositionsTo3CPlus()` — busca/cria lista, sincroniza itens, atualiza mapeamento |
+| `QualificationsPanel.tsx` | Remover do menu (ou transformar em visualização read-only com aviso "Gerencie em Cadastros → Tabulações") |
+
+**Lógica da sincronização** (`syncDispositionsTo3CPlus`):
+1. Verificar se tenant tem `threecplus_domain` e `threecplus_api_token`
+2. Buscar listas de qualificação existentes no 3CPlus
+3. Encontrar ou criar lista "RIVO Tabulações"
+4. Buscar qualificações existentes na lista
+5. Comparar com `call_disposition_types` ativas do tenant
+6. Criar novas, atualizar existentes, remover as que não existem mais
+7. Salvar mapa `{ key: qualification_id }` em `tenants.settings.threecplus_disposition_map`
+
+**Compatibilidade multi-tenant**: A sincronização só ocorre quando o tenant tem credenciais 3CPlus. Sem credenciais = comportamento atual inalterado.
 
