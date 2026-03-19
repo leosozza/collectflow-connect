@@ -284,7 +284,7 @@ const App = () => (
               }
             />
             <Route
-              path="/atendimento"
+              path="/atendimento/:clientId?"
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
