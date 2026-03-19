@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUrlState } from "@/hooks/useUrlState";
+import { useParams, useNavigate } from "react-router-dom";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";
@@ -32,7 +32,10 @@ interface NavGroup {
 }
 
 const CadastrosPage = () => {
-  const [active, setActive] = useUrlState("tab", "credores");
+  const { tab } = useParams();
+  const navigate = useNavigate();
+  const active = tab || "credores";
+  const setActive = (key: string) => navigate(`/cadastros/${key}`, { replace: true });
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
 
@@ -78,7 +81,7 @@ const CadastrosPage = () => {
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
-        { key: "categorizacao_chamada", label: "Tabulação de Chamada", icon: Headset },
+        { key: "tabulacao_chamada", label: "Tabulação de Chamada", icon: Headset },
       ],
     },
   ];
@@ -175,7 +178,7 @@ const CadastrosPage = () => {
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
         
-        {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
+        {active === "tabulacao_chamada" && <CallDispositionTypesTab />}
         
       </div>
     </div>
