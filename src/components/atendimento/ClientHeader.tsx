@@ -48,7 +48,7 @@ const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string |
   );
 };
 
-const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate }: ClientHeaderProps) => {
+const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate, onHangup, hangingUp, hasActiveCall }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
