@@ -1,61 +1,73 @@
 
 
-# Plano: Reorganização Telefonia + Desligar Ligação + Unificação Tabulações
+# Plano: Renomear para "Tabulação de Chamada" + Propriedades 3CPlus
 
-## 1. Mover Bloqueio para "Chamadas" e Remover SMS
+## Resumo
 
-**Arquivo:** `ThreeCPlusPanel.tsx`
-
-- Mover `{ value: "blocklist", label: "Bloqueio", icon: ShieldBan }` do grupo "Controle" para o grupo "Chamadas"
-- Remover `{ value: "sms", label: "SMS", icon: MessageSquareText }` do grupo "Controle"
-- Remover import do `SMSPanel` e entrada no `contentMap`
+Renomear todas as referências de "Categorização da Chamada" para "Tabulação de Chamada" e adicionar as propriedades de qualificação do 3CPlus (cor, impacto, comportamento, flags booleanas) à tabela `call_disposition_types`, replicando a lógica do screenshot.
 
 ---
 
-## 2. Botão "Desligar Ligação" na tela de Atendimento
+## 1. Migração — Novas colunas na tabela `call_disposition_types`
 
-**Arquivos:** `threecplus-proxy/index.ts`, `AtendimentoPage.tsx`, `ClientHeader.tsx`
+Adicionar as colunas que espelham a estrutura de qualificação do 3CPlus:
 
-A API 3CPlus possui o endpoint `POST /agent/hangup` (usando o token do agente, igual pause/unpause). 
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `color` | text | Cor visual (red, blue, green, yellow, black, pink) |
+| `impact` | text | "positivo" ou "negativo" |
+| `behavior` | text | "repetir" ou "nao_discar" |
+| `is_conversion` | boolean | Flag Conversão |
+| `is_cpc` | boolean | Flag CPC |
+| `is_unknown` | boolean | Flag Desconhece |
+| `is_callback` | boolean | Flag Callback |
+| `is_schedule` | boolean | Flag Agendamento |
+| `is_blocklist` | boolean | Flag Lista de Bloqueio |
 
-- **Edge Function**: Adicionar action `hangup_call` que busca o token do agente e chama `POST /agent/hangup`
-- **ClientHeader**: Adicionar botão vermelho "Desligar" ao lado do botão de ligar, visível quando há um `agentId` configurado
-- **AtendimentoPage**: Criar handler `handleHangup` que invoca `threecplus-proxy` com action `hangup_call`
+Todos com `DEFAULT false` / `DEFAULT 'negativo'` etc. para não quebrar registros existentes.
 
----
-
-## 3. Unificação Tabulações RIVO ↔ 3CPlus
-
-**Conceito**: As tabulações do RIVO (tabela `call_disposition_types`) passam a ser a fonte única. Quando o tenant tem 3CPlus configurado, o sistema sincroniza automaticamente com a Qualification List da 3CPlus.
-
-**Fluxo**:
-1. Operador gerencia tabulações em **Cadastros → Tabulações** (como já faz hoje)
-2. Ao criar/editar/excluir uma tabulação, se o tenant tem 3CPlus configurado:
-   - O sistema busca/cria uma Qualification List dedicada no 3CPlus (ex: "RIVO - Tabulações")
-   - Sincroniza os itens: cria/atualiza/remove qualificações correspondentes na 3CPlus
-   - Salva o mapeamento `{ rivo_key → 3cplus_qualification_id }` em `tenant.settings.threecplus_disposition_map`
-3. Tenants sem 3CPlus continuam usando normalmente sem mudança alguma
-
-**Arquivos alterados:**
+## 2. Renomear textos — Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `ThreeCPlusPanel.tsx` | Mover blocklist, remover SMS |
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `hangup_call` |
-| `AtendimentoPage.tsx` | Adicionar handler `handleHangup`, passar para ClientHeader |
-| `ClientHeader.tsx` | Adicionar botão "Desligar" |
-| `CallDispositionTypesTab.tsx` | Após criar/editar/excluir tabulação, chamar função de sync com 3CPlus |
-| `services/dispositionService.ts` | Adicionar `syncDispositionsTo3CPlus()` — busca/cria lista, sincroniza itens, atualiza mapeamento |
-| `QualificationsPanel.tsx` | Remover do menu (ou transformar em visualização read-only com aviso "Gerencie em Cadastros → Tabulações") |
+| `CadastrosPage.tsx` | `label: "Tabulação de Chamada"` |
+| `CallDispositionTypesTab.tsx` | Todos os textos: "Nova Tabulação", "Editar Tabulação", toasts |
+| `DispositionPanel.tsx` | CardTitle: "Tabulação da Chamada" |
 
-**Lógica da sincronização** (`syncDispositionsTo3CPlus`):
-1. Verificar se tenant tem `threecplus_domain` e `threecplus_api_token`
-2. Buscar listas de qualificação existentes no 3CPlus
-3. Encontrar ou criar lista "RIVO Tabulações"
-4. Buscar qualificações existentes na lista
-5. Comparar com `call_disposition_types` ativas do tenant
-6. Criar novas, atualizar existentes, remover as que não existem mais
-7. Salvar mapa `{ key: qualification_id }` em `tenants.settings.threecplus_disposition_map`
+## 3. Expandir formulário de criação/edição — `CallDispositionTypesTab.tsx`
 
-**Compatibilidade multi-tenant**: A sincronização só ocorre quando o tenant tem credenciais 3CPlus. Sem credenciais = comportamento atual inalterado.
+O dialog de criar/editar tabulação passa a incluir:
+- **Cor**: Select com opções (vermelho, azul, verde, amarelo, preto, rosa)
+- **Impacto**: Select (Positivo / Negativo)
+- **Comportamento**: Select (Repetir / Não discar novamente)
+- **6 checkboxes**: Conversão, CPC, Desconhece, Callback, Agendamento, Lista de Bloqueio
+
+## 4. Expandir tabela de listagem — `CallDispositionTypesTab.tsx`
+
+A tabela passa a mostrar todas as colunas do screenshot:
+- Bolinha de cor | Nome | Impacto | Comportamento | Conversão | CPC | Desconhece | Callback | Agendamento | Lista de Bloqueio
+- Valores booleanos exibidos como ✓ ou —
+
+## 5. Atualizar sincronização com 3CPlus
+
+O `syncDispositionsTo3CPlus` no `dispositionService.ts` passará a enviar as novas propriedades ao criar/atualizar qualificações na API 3CPlus, mapeando:
+- `impact` → campo da API
+- `behavior` → campo da API  
+- flags booleanas → campos correspondentes
+
+## 6. Atualizar defaults
+
+O `DEFAULT_DISPOSITION_LIST` será expandido com valores padrão para as novas propriedades.
+
+---
+
+## Arquivos alterados
+
+| Arquivo | Ação |
+|---|---|
+| **Migração SQL** | Adicionar 9 colunas à `call_disposition_types` |
+| `src/pages/CadastrosPage.tsx` | Renomear label |
+| `src/components/cadastros/CallDispositionTypesTab.tsx` | Renomear textos + expandir form e tabela |
+| `src/components/atendimento/DispositionPanel.tsx` | Renomear título do card |
+| `src/services/dispositionService.ts` | Atualizar interface, defaults, e sync |
 
