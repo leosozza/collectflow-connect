@@ -249,12 +249,48 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         notes: notes || undefined,
       };
 
-      await createAgreement(data, user.id, profile.tenant_id, outOfStandard.isOut ? {
+      const agreement = await createAgreement(data, user.id, profile.tenant_id, outOfStandard.isOut ? {
         requiresApproval: true,
         approvalReason: outOfStandard.reasons.join("; "),
       } : undefined);
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
+
+      // Generate boletos automatically via Negociarie
+      if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
+        setGeneratingBoletos(true);
+        try {
+          const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
+            number: inst.number,
+            value: inst.value,
+            dueDate: inst.dueDate,
+          }));
+
+          const boletoResult = await negociarieService.generateAgreementBoletos(
+            {
+              id: agreement.id,
+              client_cpf: cpf,
+              credor,
+              tenant_id: profile.tenant_id,
+              client_name: clientName,
+            },
+            boletoInstallments
+          );
+
+          if (boletoResult.success > 0 && boletoResult.failed === 0) {
+            toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
+          } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
+            toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
+          } else if (boletoResult.failed > 0) {
+            toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
+          }
+        } catch (boletoErr: any) {
+          toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
+        } finally {
+          setGeneratingBoletos(false);
+        }
+      }
+
       onAgreementCreated();
     } catch (err: any) {
       toast.error(err.message || "Erro ao gravar acordo");
