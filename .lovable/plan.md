@@ -1,48 +1,39 @@
 
 
-# Plano: Selecionar agentes ao criar campanha no 3CPlus
+# Plano: Rota `/atendimento/:clientId` para abertura direta de fichas
 
 ## Problema
-Ao criar uma campanha no painel de Campanhas 3CPlus, não há opção para selecionar os agentes que devem pertencer à campanha. Isso obriga o admin a configurar manualmente no painel externo do 3CPlus.
 
-## Solução
-Adicionar seleção multi-agente no dialog de criação de campanha e, após criar a campanha, chamar `POST /campaigns/{id}/agents` na API do 3CPlus para vincular os agentes selecionados.
+A tela de atendimento usa `?clientId=` como query param, mas quando uma chamada cai no 3CPlus, o sistema depende do `useClientByPhone` para resolver o cliente pelo telefone. Se o telefone não bate, a ficha não abre. Precisamos de uma rota path-based (`/atendimento/:clientId`) para que o sistema possa navegar diretamente para o cliente correto por ID.
 
 ## Mudanças
 
-### 1. Proxy — Nova action `add_agents_to_campaign`
-**Arquivo**: `supabase/functions/threecplus-proxy/index.ts`
+### 1. `src/App.tsx` — Adicionar rota `/atendimento/:clientId`
 
-Adicionar case `add_agents_to_campaign`:
-- Requer `campaign_id` e `agent_ids` (array de IDs numéricos)
-- Chama `POST /campaigns/{campaign_id}/agents` com body `{ "users": agent_ids }`
-- Também adicionar `list_campaign_agents` (`GET /campaigns/{campaign_id}/agents`) e `remove_campaign_agent` (`DELETE /campaigns/{campaign_id}/agents/{agent_id}`) para uso futuro
+Adicionar nova rota path-based que passa o `clientId` via params, além da rota existente `/atendimento` (query param):
 
-### 2. CampaignsPanel — Seleção de agentes no dialog
-**Arquivo**: `src/components/contact-center/threecplus/CampaignsPanel.tsx`
-
-- Buscar lista de usuários/agentes via `list_users` (já existe no proxy)
-- No dialog "Nova Campanha", adicionar seleção multi-agente com checkboxes
-- Após `create_campaign` retornar o ID da nova campanha, chamar `add_agents_to_campaign` com os agentes selecionados
-- Mostrar feedback: "Campanha criada e X agentes vinculados"
-- Na expansão da campanha, mostrar os agentes vinculados além das listas de mailing
-
-### 3. Fluxo completo
-
-```text
-Dialog "Nova Campanha"
-├── Nome, Horários, Qualificação, Pausas (existente)
-├── [NOVO] Seleção de Agentes (multi-select com checkboxes)
-└── Botão "Criar"
-    ├── POST /campaigns → retorna campaign.id
-    ├── POST /campaigns/{id}/agents → { users: [selected_ids] }
-    └── Toast: "Campanha criada com X agentes"
 ```
+<Route path="/atendimento/:clientId" element={<ProtectedRoute requireTenant><AppLayout><AtendimentoPage /></AppLayout></ProtectedRoute>} />
+```
+
+### 2. `src/pages/AtendimentoPage.tsx` — Aceitar `useParams`
+
+Atualizar para ler o `clientId` de `useParams()` além do query param e da prop:
+
+```typescript
+const { clientId: paramClientId } = useParams();
+const id = propClientId || paramClientId || searchParams.get("clientId");
+```
+
+### 3. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — Navegar por ID quando possível
+
+No `TelefoniaAtendimentoWrapper`, após resolver o cliente via `useClientByPhone`, usar a rota `/atendimento/{clientId}` para navegação. Isso garante que a URL sempre identifique o cliente.
 
 ## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Actions: `add_agents_to_campaign`, `list_campaign_agents`, `remove_campaign_agent` |
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Multi-select de agentes no dialog + vincular após criação + listar agentes na expansão |
+| `src/App.tsx` | Nova rota `/atendimento/:clientId` |
+| `src/pages/AtendimentoPage.tsx` | Ler `clientId` de `useParams` |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `/atendimento/{id}` na navegação |
 
