@@ -23,12 +23,27 @@ import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
-import AtendimentoPage from "@/pages/AtendimentoPage";
 
-/** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
+
+/** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
   const { client, isLoading } = useClientByPhone(clientPhone);
   const navigate = useNavigate();
+  const hasNavigated = useRef(false);
+
+  // Navigate to atendimento when client is resolved
+  useEffect(() => {
+    if (client && !hasNavigated.current) {
+      hasNavigated.current = true;
+      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", client.id);
+      navigate(`/atendimento/${client.id}`);
+    }
+  }, [client, navigate]);
+
+  // Reset navigation flag when phone changes
+  useEffect(() => {
+    hasNavigated.current = false;
+  }, [clientPhone]);
 
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
@@ -69,7 +84,8 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
     );
   }
 
-  return <AtendimentoPage clientId={client.id} agentId={agentId} callId={callId} embedded />;
+  // Client found but navigation in progress
+  return <div className="p-4 text-center text-muted-foreground text-sm">Abrindo ficha do cliente...</div>;
 };
 
 interface TelefoniaDashboardProps {
@@ -410,16 +426,27 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  // Load pause intervals when agent is online
+  // Load pause intervals from campaign's work_break_group_id
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      const data = await invoke("list_work_break_intervals", { campaign_id: campaignId });
+      // Find the campaign to get its work_break_group_id
+      const campaign = campaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
+      const groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
+      
+      if (!groupId) {
+        console.log("[Telefonia] Campanha sem work_break_group_id, sem intervalos de pausa");
+        setPauseIntervals([]);
+        return;
+      }
+
+      console.log("[Telefonia] Carregando intervalos do grupo:", groupId);
+      const data = await invoke("list_work_break_group_intervals", { group_id: groupId });
       const list = Array.isArray(data) ? data : data?.data || [];
       setPauseIntervals(list);
     } catch {
       setPauseIntervals([]);
     }
-  }, [invoke]);
+  }, [invoke, campaigns]);
 
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
