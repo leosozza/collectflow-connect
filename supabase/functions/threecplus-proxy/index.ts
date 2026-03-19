@@ -923,22 +923,33 @@ Deno.serve(async (req) => {
         const dispositions = body.dispositions as Array<Record<string, any>>;
         const resultMap: Record<string, number> = {};
 
+        // Maps: RIVO string values -> 3CPlus integer codes
+        const BEHAVIOR_MAP: Record<string, number> = {
+          'nao_discar_telefone': 1,
+          'nao_discar_cliente': 2,
+          'repetir': 3,
+        };
+        const BLOCKLIST_MODE_MAP: Record<string, number> = {
+          'indeterminate': 1,
+          'custom': 2,
+        };
+
         // Helper: map RIVO disposition fields to 3CPlus qualification payload
         const buildQualPayload = (disp: Record<string, any>) => {
           const payload: Record<string, any> = { name: disp.label };
           if (disp.color) payload.color = disp.color;
-          if (disp.impact !== undefined) payload.positive_impact = disp.impact === 'positivo';
-          if (disp.behavior) payload.behavior = disp.behavior;
-          if (disp.is_conversion !== undefined) payload.is_conversion = !!disp.is_conversion;
-          if (disp.is_cpc !== undefined) payload.is_dmc = !!disp.is_cpc;
-          if (disp.is_unknown !== undefined) payload.is_unknown = !!disp.is_unknown;
-          if (disp.is_callback !== undefined) payload.is_callback = !!disp.is_callback;
-          if (disp.is_schedule !== undefined) payload.is_schedule = !!disp.is_schedule;
-          if (disp.is_blocklist !== undefined) payload.add_blocklist = !!disp.is_blocklist;
-          if (disp.schedule_allow_other_number !== undefined) payload.allow_schedule_for_another_number = !!disp.schedule_allow_other_number;
-          if (disp.schedule_days_limit !== undefined) payload.schedule_days_limit = disp.schedule_days_limit;
-          if (disp.blocklist_mode !== undefined) payload.blocklist_time_type = disp.blocklist_mode;
-          if (disp.blocklist_days !== undefined) payload.blocklist_days = disp.blocklist_days;
+          payload.positive_impact = disp.impact === 'positivo' ? 1 : 0;
+          payload.behavior = BEHAVIOR_MAP[disp.behavior] || 3;
+          if (disp.is_conversion !== undefined) payload.is_conversion = disp.is_conversion ? 1 : 0;
+          if (disp.is_cpc !== undefined) payload.is_dmc = disp.is_cpc ? 1 : 0;
+          if (disp.is_unknown !== undefined) payload.is_unknown = disp.is_unknown ? 1 : 0;
+          if (disp.is_callback !== undefined) payload.is_callback = disp.is_callback ? 1 : 0;
+          if (disp.is_schedule !== undefined) payload.is_schedule = disp.is_schedule ? 1 : 0;
+          if (disp.is_blocklist !== undefined) payload.add_blocklist = disp.is_blocklist ? 1 : 0;
+          if (disp.schedule_allow_other_number !== undefined) payload.allow_schedule_for_another_number = disp.schedule_allow_other_number ? 1 : 0;
+          if (disp.schedule_days_limit !== undefined) payload.schedule_days_limit = Number(disp.schedule_days_limit) || 7;
+          payload.blocklist_time_type = BLOCKLIST_MODE_MAP[disp.blocklist_mode] || 1;
+          if (disp.blocklist_days !== undefined) payload.blocklist_days = Number(disp.blocklist_days) || 0;
           return payload;
         };
 
