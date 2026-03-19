@@ -133,6 +133,7 @@ const CallDispositionTypesTab = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização removida");
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao remover"),
   });
