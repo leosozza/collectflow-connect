@@ -78,6 +78,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
     isDragging.current = true;
     dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
     e.preventDefault();
@@ -156,10 +158,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                   <Phone className="w-3.5 h-3.5 text-green-500 animate-pulse flex-shrink-0" />
                   <span className="text-sm font-medium truncate flex-1">{clientName}</span>
                   <span className="text-xs text-muted-foreground font-mono tabular-nums">{formatTime(elapsed)}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
                     <Maximize2 className="w-3.5 h-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </>
@@ -168,10 +170,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                   <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />
                   <span className="text-sm font-semibold truncate flex-1">Atendimento — {clientName}</span>
                   <span className="text-xs text-muted-foreground font-mono tabular-nums mr-2">{formatTime(elapsed)}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize} onMouseDown={e => e.stopPropagation()}>
                     <Minimize2 className="w-3.5 h-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </>
