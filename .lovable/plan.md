@@ -1,28 +1,72 @@
 
 
-# Plano: Rotas path-based para Cadastros
+# Plano: Alinhar Tabulação de Chamada com layout 3CPlus
 
-## Problema atual
-A página `/cadastros` usa query param (`?tab=credores`) para controlar a aba ativa. O usuário quer URLs como `/cadastros/tabulacao_chamada`.
+## Diferenças identificadas
 
-## Mudanças
+| Aspecto | RIVO atual | 3CPlus referência |
+|---|---|---|
+| **Cor** | 6 cores nomeadas em Select | Grid de ~50 cores hex como bolinhas clicáveis |
+| **Comportamento** | 2 opções (Repetir / Não discar) | 3 opções (Repetir / Não discar telefone / Não discar cliente) |
+| **Impacto** | Select dropdown | Radio buttons inline |
+| **Flags** | Checkboxes em grid | Switches full-width em cards com bordas |
+| **Agendamento** | Checkbox simples | Switch expansível com sub-opções: "Agendar para outro número" + "Limite de dias" |
+| **Bloqueio** | Checkbox simples | Switch expansível com sub-opções: "Tempo indeterminado" vs "Dias personalizados" |
+| **Seções** | Sem divisão visual | Seções "Dados" e "Ações" com ícone e separador |
+| **Grupo** | Existe no RIVO | Não existe no 3CPlus |
 
-### 1. `App.tsx` — Alterar rota
-Substituir a rota única `/cadastros` por `/cadastros/:tab?` para aceitar o parâmetro de path opcional (default = "credores").
+## Mudanças propostas
 
-### 2. `CadastrosPage.tsx` — Usar `useParams` + `useNavigate`
-- Trocar `useUrlState("tab", "credores")` por `useParams()` para ler o tab ativo do path
-- Trocar `setActive(key)` por `navigate(/cadastros/${key})` 
-- Renomear key `categorizacao_chamada` → `tabulacao_chamada` para consistência com o novo nome
-- Manter todo o restante da lógica inalterado
+### 1. Migração DB — Novas colunas
 
-### 3. `AppLayout.tsx` / Links de navegação
-Verificar se links para `/cadastros` continuam funcionando (sim, pois o param é opcional com default).
+Adicionar 4 colunas para suportar sub-opções:
+- `schedule_allow_other_number` (boolean, default false)
+- `schedule_days_limit` (integer, default 7)
+- `blocklist_mode` (text, default 'indeterminate') — valores: 'indeterminate' | 'custom'
+- `blocklist_days` (integer, default 0)
+
+### 2. Comportamento — 3 opções
+
+Atualizar `BEHAVIOR_OPTIONS` para incluir a terceira opção:
+- "Repetir"
+- "Não discar novamente para o telefone"
+- "Não discar novamente para o cliente"
+
+### 3. Cor — Grid de bolinhas hex
+
+Substituir o Select de 6 cores por um Popover com grid de ~50 cores (as mesmas hex do 3CPlus). Armazenar o valor hex diretamente no campo `color` em vez de nomes como "blue".
+
+### 4. Impacto — Radio buttons
+
+Trocar o Select por radio buttons inline (Positivo / Negativo).
+
+### 5. Flags — Switches em cards
+
+Trocar checkboxes por Switches full-width dentro de cards com borda, replicando o visual do 3CPlus. Cada flag ocupa uma linha inteira.
+
+### 6. Agendamento e Bloqueio — Expansíveis
+
+Quando `is_schedule` é ativado, expandir para mostrar:
+- Toggle "Permitir agendar para outro número"
+- Input numérico "Limite de dias para agendar" (default 7)
+
+Quando `is_blocklist` é ativado, expandir para mostrar:
+- Radio "Tempo indeterminado"
+- Radio "Personalizar dias de bloqueio" + input numérico
+
+### 7. Layout com seções
+
+Dividir o dialog em duas seções com separador:
+- **Dados**: Nome, Cor, Impacto, Comportamento
+- **Ações**: Conversão, CPC, Desconhece, Callback, Agendamento, Bloqueio
+
+Remover o campo "Grupo" do formulário (manter na tabela se já existir dados, mas não exibir no form).
 
 ## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/App.tsx` | Rota `/cadastros` → `/cadastros/:tab?` |
-| `src/pages/CadastrosPage.tsx` | `useParams` + `navigate` em vez de `useUrlState`; renomear key |
+| **Migração SQL** | 4 novas colunas |
+| `CallDispositionTypesTab.tsx` | Redesign completo do dialog + cor hex grid + radios + switches + seções expansíveis |
+| `dispositionService.ts` | Atualizar interface `DbDispositionType` e `DEFAULT_DISPOSITION_LIST` com novos campos |
 
