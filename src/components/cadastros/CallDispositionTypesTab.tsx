@@ -54,6 +54,9 @@ const CallDispositionTypesTab = () => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [seeded, setSeeded] = useState(false);
+  const settings = (tenant?.settings as Record<string, any>) || {};
+  const has3CPlus = !!(settings.threecplus_domain && settings.threecplus_api_token);
+  const [syncing, setSyncing] = useState(false);
 
   const { data: types = [], isLoading } = useQuery({
     queryKey: ["call-disposition-types", tenantId],
