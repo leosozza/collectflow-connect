@@ -2,8 +2,18 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import AtendimentoPage from "@/pages/AtendimentoPage";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2 } from "lucide-react";
+import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2, Coffee, Play, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+interface PauseControls {
+  intervals: any[];
+  isPaused: boolean;
+  pausingWith: number | null;
+  unpausing: boolean;
+  onPause: (intervalId: number) => void;
+  onUnpause: () => void;
+}
 
 interface AtendimentoModalState {
   isOpen: boolean;
@@ -18,6 +28,7 @@ interface AtendimentoModalContextType {
   openWaiting: (agentId: number) => void;
   updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
   closeAtendimento: () => void;
+  setPauseControls: (controls: PauseControls | null) => void;
   isOpen: boolean;
 }
 
@@ -39,6 +50,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const headerRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
   const openedAt = useRef<number>(0);
+  const [pauseControls, setPauseControlsState] = useState<PauseControls | null>(null);
 
   useEffect(() => {
     if (!state.isOpen) { setElapsed(0); return; }
@@ -48,8 +60,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   }, [state.isOpen]);
 
   const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
+    if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
@@ -83,7 +97,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       return { isOpen: true, clientId: null, agentId, waitingForCall: true };
     });
     setIsMinimized(true);
-    setPosition({ x: window.innerWidth - 380, y: window.innerHeight - 64 });
+    setPosition({ x: window.innerWidth - 420, y: window.innerHeight - 64 });
     setHasCustomPosition(true);
   }, []);
 
@@ -97,14 +111,20 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       callId: callId ?? prev.callId,
       waitingForCall: false,
     }));
+    // Force expand and center when call arrives
     setIsMinimized(false);
-    if (!hasCustomPosition) centerPosition();
-  }, [hasCustomPosition, centerPosition]);
+    centerPosition();
+  }, [centerPosition]);
 
   const closeAtendimento = useCallback(() => {
     console.log("[AtendimentoModal] Closing");
     setState({ isOpen: false, clientId: null });
     setIsMinimized(false);
+    setPauseControlsState(null);
+  }, []);
+
+  const setPauseControls = useCallback((controls: PauseControls | null) => {
+    setPauseControlsState(controls);
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -135,19 +155,19 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
 
   const handleExpand = () => {
     setIsMinimized(false);
-    if (!hasCustomPosition) centerPosition();
+    centerPosition();
   };
 
   const handleMinimize = () => {
     setIsMinimized(true);
-    setPosition({ x: window.innerWidth - 380, y: window.innerHeight - 64 });
+    setPosition({ x: window.innerWidth - 420, y: window.innerHeight - 64 });
     setHasCustomPosition(true);
   };
 
-  const clientName = clientData?.nome_completo || (state.waitingForCall ? "Aguardando ligação..." : "Cliente");
+  const clientName = clientData?.nome_completo || "Cliente";
 
   return (
-    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, isOpen: state.isOpen }}>
+    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, setPauseControls, isOpen: state.isOpen }}>
       {children}
 
       {state.isOpen && (
@@ -164,52 +184,105 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
             style={{
               left: position.x,
               top: position.y,
-              width: isMinimized ? 360 : "min(95vw, 1600px)",
+              width: isMinimized ? "auto" : "min(95vw, 1600px)",
               height: isMinimized ? "auto" : (state.waitingForCall ? "auto" : "min(85vh, 900px)"),
             }}
           >
-            <div
-              ref={headerRef}
-              onMouseDown={handleMouseDown}
-              className={`flex items-center gap-2 px-3 select-none ${isMinimized
-                ? "py-2 cursor-grab active:cursor-grabbing"
-                : "py-2.5 border-b border-border cursor-grab active:cursor-grabbing bg-muted/50 rounded-t-xl"
-              }`}
-            >
-              <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            {/* ── MINIMIZED BAR ── */}
+            {isMinimized ? (
+              <div
+                ref={headerRef}
+                onMouseDown={handleMouseDown}
+                className="flex items-center gap-2 px-3 py-2 select-none cursor-grab active:cursor-grabbing"
+              >
+                <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
 
-              {isMinimized ? (
-                <>
-                  {state.waitingForCall ? (
-                    <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
-                  ) : (
-                    <Phone className="w-3.5 h-3.5 text-green-500 animate-pulse flex-shrink-0" />
-                  )}
-                  <span className="text-sm font-medium truncate flex-1">{clientName}</span>
-                  <span className="text-xs text-muted-foreground font-mono tabular-nums">{formatTime(elapsed)}</span>
-                  {!state.waitingForCall && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
-                      <Maximize2 className="w-3.5 h-3.5" />
+                {/* Timer */}
+                <span className="text-sm font-mono tabular-nums font-semibold text-foreground">{formatTime(elapsed)}</span>
+
+                {/* Pause/Resume button */}
+                {pauseControls && (
+                  pauseControls.isPaused ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs px-2"
+                      disabled={pauseControls.unpausing}
+                      onClick={() => pauseControls.onUnpause()}
+                      onMouseDown={e => e.stopPropagation()}
+                    >
+                      <Play className="w-3.5 h-3.5 text-emerald-500" />
+                      {pauseControls.unpausing ? "..." : "Retomar"}
                     </Button>
-                  )}
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
-                    <X className="w-3.5 h-3.5" />
+                  ) : (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs px-2"
+                          onMouseDown={e => e.stopPropagation()}
+                        >
+                          <Coffee className="w-3.5 h-3.5 text-amber-500" />
+                          Pausa
+                          <ChevronDown className="w-3 h-3" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 p-1" align="start" side="top">
+                        <div className="text-xs font-medium text-muted-foreground px-2 py-1.5">Selecione a pausa</div>
+                        {pauseControls.intervals.length === 0 ? (
+                          <div className="text-xs text-muted-foreground px-2 py-2">Nenhuma pausa disponível</div>
+                        ) : (
+                          pauseControls.intervals.map((iv: any) => (
+                            <button
+                              key={iv.id}
+                              className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+                              disabled={pauseControls.pausingWith === iv.id}
+                              onClick={() => pauseControls.onPause(iv.id)}
+                            >
+                              {pauseControls.pausingWith === iv.id ? "Pausando..." : (iv.name || iv.description || `Pausa ${iv.id}`)}
+                            </button>
+                          ))
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  )
+                )}
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Expand — only when there's a client (active call) */}
+                {state.clientId && !state.waitingForCall && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
+                    <Maximize2 className="w-3.5 h-3.5" />
                   </Button>
-                </>
-              ) : (
-                <>
-                  <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  <span className="text-sm font-semibold truncate flex-1">Atendimento — {clientName}</span>
-                  <span className="text-xs text-muted-foreground font-mono tabular-nums mr-2">{formatTime(elapsed)}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize} onMouseDown={e => e.stopPropagation()}>
-                    <Minimize2 className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                </>
-              )}
-            </div>
+                )}
+
+                {/* Close */}
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              /* ── EXPANDED HEADER ── */
+              <div
+                ref={headerRef}
+                onMouseDown={handleMouseDown}
+                className="flex items-center gap-2 px-3 py-2.5 border-b border-border select-none cursor-grab active:cursor-grabbing bg-muted/50 rounded-t-xl"
+              >
+                <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />
+                <span className="text-sm font-semibold truncate flex-1">Atendimento — {clientName}</span>
+                <span className="text-xs text-muted-foreground font-mono tabular-nums mr-2">{formatTime(elapsed)}</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize} onMouseDown={e => e.stopPropagation()}>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
 
             {!isMinimized && state.clientId && !state.waitingForCall && (
               <div className="overflow-y-auto p-4 sm:p-6" style={{ height: "calc(100% - 44px)" }}>
