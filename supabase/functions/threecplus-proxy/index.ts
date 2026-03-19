@@ -636,29 +636,14 @@ Deno.serve(async (req) => {
         if (err1) return err1;
         const err2 = requireField(body, 'campaign_id', corsHeaders);
         if (err2) return err2;
-        // Resolve agent token via GET /users
-        const usersUrlLogin = buildUrl(baseUrl, 'users', authParam);
-        const usersResLogin = await fetch(usersUrlLogin, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResLogin.ok) {
-          const errText = await usersResLogin.text();
-          console.error(`Failed to fetch users for agent token: ${usersResLogin.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResLogin.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataLogin = await usersResLogin.json();
-        const usersList = Array.isArray(usersDataLogin) ? usersDataLogin : usersDataLogin?.data || [];
-        const targetUser = usersList.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetUser || !targetUser.api_token) {
-          console.error(`Agent ${body.agent_id} not found or has no api_token. Users count: ${usersList.length}`);
+        const agentLogin = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentLogin || !agentLogin.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthLogin = `api_token=${targetUser.api_token}`;
-        url = `${baseUrl}/agent/login?${agentAuthLogin}`;
+        url = `${baseUrl}/agent/login?api_token=${agentLogin.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ campaign: body.campaign_id });
         console.log(`Resolved agent token for ${body.agent_id}, calling POST /agent/login`);
