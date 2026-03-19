@@ -653,7 +653,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State 3: On call → show atendimento (unified)
-    if (isOnCall && (myAgent?.phone || myAgent?.remote_phone)) {
+    if (isOnCall && (myAgent?.phone || myAgent?.remote_phone || mailingCpf || mailingClientId)) {
       return (
         <div className="space-y-0">
           {/* Top bar - on call */}
@@ -664,9 +664,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </div>
           </div>
           <TelefoniaAtendimentoWrapper
-            clientPhone={myAgent.phone || myAgent.remote_phone}
+            clientPhone={myAgent.phone || myAgent.remote_phone || ""}
             agentId={operatorAgentId!}
             callId={myAgent.call_id || myAgent.current_call_id}
+            clientCpf={mailingCpf}
+            clientDbId={mailingClientId}
           />
         </div>
       );
