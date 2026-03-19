@@ -1,75 +1,33 @@
 
 
-# Reestruturação Visual do Menu de Telefonia
+# Melhoria Visual do Menu de Telefonia
 
-## Estrutura de Sub-grupos
+## Problemas identificados (da screenshot)
 
-Reorganizar as 16 abas flat em 4 grupos principais com sub-abas:
+1. **Titulo "Telefonia"** no header esta pequeno (`text-sm`) — precisa ser maior como as demais paginas
+2. **Botoes de grupo** (Dashboard, Campanhas, Chamadas, Controle) ocupam toda a largura com `grid-cols-4` — precisam ser menores e alinhados a esquerda
+3. **Sub-abas** estao com estilo "apagado" — precisam de mais destaque visual
 
-```text
-┌─────────────┬─────────────┬─────────────┬─────────────┐
-│  Dashboard  │  Campanhas  │  Chamadas   │  Controle   │
-│  (principal)│  (principal)│  (principal)│  (principal) │
-├─────────────┼─────────────┼─────────────┼─────────────┤
-│ · Gráficos  │ · Mailing   │ · Receptivo │ · Usuários  │
-│ · Produtiv. │ · Rotas     │ · Agendamen.│ · Intervalos│
-│             │             │             │ · Horários  │
-│             │             │             │ · Qualific. │
-└─────────────┴─────────────┴─────────────┴─────────────┘
-```
+## Alteracoes
 
-Remove: SMS, Bloqueio, Equipes (podem ser adicionados depois se necessário — ou posso mantê-los em Controle se preferir).
+### 1. Header — Titulo maior (`AppLayout.tsx`)
+- Mudar o titulo de `text-sm` para `text-lg font-bold` para a rota `/contact-center/telefonia`, igualando ao padrao das demais paginas
 
-## Implementação Visual
+### 2. Botoes de grupo — Compactos e alinhados a esquerda (`ThreeCPlusPanel.tsx`)
+- Trocar `grid grid-cols-4 gap-2` por `flex items-center gap-2` — botoes ficam com largura automatica, agrupados a esquerda
+- Reduzir padding dos botoes de `px-4 py-3` para `px-3 py-2`
+- Reduzir texto de `text-sm` para `text-xs`
+- Icones menores: `w-3.5 h-3.5`
 
-**Arquivo:** `ThreeCPlusPanel.tsx`
+### 3. Sub-abas — Mais destaque visual (`ThreeCPlusPanel.tsx`)
+- Aba ativa: adicionar fundo mais forte `bg-primary/20 text-primary font-semibold border border-primary/40`
+- Abas inativas: `text-muted-foreground/80` com `border border-transparent` para manter alinhamento
+- Separador visual (linha fina) entre os grupos e as sub-abas
 
-1. **Barra principal**: 4 botões grandes com ícone + label (Dashboard, Campanhas, Chamadas, Controle) — estilo card/pill com destaque primário no ativo
-2. **Sub-barra**: Quando um grupo é selecionado, mostra suas sub-abas abaixo em pills menores
-3. **Navegação em 2 níveis**: Estado `activeGroup` + `activeTab` — grupo define quais sub-abas aparecem, tab define o conteúdo
+## Resumo
 
-## Itens removidos/realocados
-
-- **SMS, Bloqueio, Equipes** — serão mantidos dentro de "Controle" como sub-abas extras para não perder funcionalidade
-
-## Estrutura final de dados
-
-```typescript
-const groups = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, 
-    tabs: [
-      { value: "dashboard", label: "Visão Geral" },
-      { value: "chart", label: "Gráficos" },
-      { value: "agents-report", label: "Produtividade" },
-    ]},
-  { id: "campanhas", label: "Campanhas", icon: Megaphone,
-    tabs: [
-      { value: "campaigns", label: "Campanhas" },
-      { value: "mailing", label: "Mailing" },
-      { value: "routes", label: "Rotas" },
-    ]},
-  { id: "chamadas", label: "Chamadas", icon: PhoneCall,
-    tabs: [
-      { value: "history", label: "Histórico" },
-      { value: "receptive", label: "Receptivo" },
-      { value: "schedules", label: "Agendamentos" },
-    ]},
-  { id: "controle", label: "Controle", icon: Settings,
-    tabs: [
-      { value: "users", label: "Usuários" },
-      { value: "intervals", label: "Intervalos" },
-      { value: "office-hours", label: "Horários" },
-      { value: "qualifications", label: "Qualificações" },
-      { value: "teams", label: "Equipes" },
-      { value: "blocklist", label: "Bloqueio" },
-      { value: "sms", label: "SMS" },
-    ]},
-];
-```
-
-## Alterações
-
-| Arquivo | Mudança |
+| Arquivo | Mudanca |
 |---|---|
-| `ThreeCPlusPanel.tsx` | Redesign completo: navegação em 2 níveis (grupo + sub-aba), visual com cards para grupos principais e pills para sub-abas, manter todos os TabsContent existentes |
+| `AppLayout.tsx` | Titulo "Telefonia" maior (text-lg font-bold) |
+| `ThreeCPlusPanel.tsx` | Botoes de grupo compactos + flex a esquerda; sub-abas com mais destaque |
 
