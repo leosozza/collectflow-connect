@@ -1,75 +1,62 @@
 
-Do I know what the issue is? Yes.
 
-O que eu testei:
-- Entrei no preview com o usuário do Vitor e abri a tela `/contact-center/telefonia`.
-- Validei no backend que o Vitor está vinculado ao agente `100707`.
-- Testei diretamente as actions do proxy:
-  - `agent_available_campaigns` para o agente `100707` retornou campanhas válidas.
-  - `login_agent_to_campaign` retornou `status: 204`.
-  - `connect_agent` retornou `status: 204`.
-- Depois disso, consultei `agents_status` novamente e o Vitor mudou de `status: 0` para `status: 1`.
+# Plano: Geração automática de boletos na Negociarie ao criar acordo
 
-Problema exato:
-1. O backend está chamando a 3CPlus, mas o proxy trata respostas `204 No Content` como erro porque espera JSON em todos os casos.
-2. Para `agent/login` e `agent/connect`, a 3CPlus aparentemente usa `204` como sucesso sem corpo.
-3. O dropdown do operador ainda usa `list_campaigns` em vez de `agent_available_campaigns`, então o fluxo da tela não está alinhado com o fluxo correto por agente.
-4. O frontend não confirma o estado real do agente após login/conexão; ele decide com base na resposta bruta do proxy.
+## Resumo
 
-Arquivos a ajustar:
-- `supabase/functions/threecplus-proxy/index.ts`
-- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+Após o acordo ser gravado com sucesso no banco, o sistema gerará automaticamente os boletos (uma cobrança por parcela) na API Negociarie e salvará os links retornados para consulta posterior.
 
-Plano de correção:
-1. Corrigir o proxy para tratar `204` como sucesso
-   - Antes do parse JSON, se a resposta vier com `status === 204`, retornar um JSON normalizado como:
-   ```ts
-   { status: 204, success: true, no_content: true }
-   ```
-   - Aplicar isso especialmente ao fluxo de:
-     - `login_agent_to_campaign`
-     - `connect_agent`
-     - `logout_agent_self`
-     - `pause_agent`
-     - `unpause_agent`
-     - `hangup_call`
+## Mudanças
 
-2. Trocar a origem das campanhas do operador
-   - Na tela do operador, usar `agent_available_campaigns` quando houver `threecplus_agent_id`.
-   - Manter `list_campaigns` apenas para visão administrativa.
-   - Isso garante que o Vitor veja só campanhas realmente disponíveis para ele.
+### 1. `src/services/agreementService.ts` — Adicionar chamada à Negociarie após `createAgreement`
 
-3. Ajustar o fluxo do botão “Entrar na Campanha”
-   - Sequência:
-     - buscar campanhas do agente
-     - `login_agent_to_campaign`
-     - `connect_agent`
-     - refetch de `agents_status`
-   - Só mostrar erro se:
-     - o proxy devolver `status >= 400`, ou
-     - o agente continuar `status: 0` após a tentativa.
+Após o acordo ser criado com sucesso (e os títulos marcados como `em_acordo`), buscar os dados de endereço do cliente na tabela `clients` e chamar `negociarieService.novaCobranca()` para cada parcela simulada (entrada + parcelas regulares).
 
-4. Melhorar feedback da tela
-   - Se `204` vier do backend, tratar como sucesso silencioso.
-   - Mostrar mensagens mais específicas:
-     - “Campanha conectada com sucesso”
-     - “Agente entrou na campanha, mas o SIP ainda está offline”
-   - Não exibir mensagem de erro genérica para resposta vazia bem-sucedida.
+Lógica:
+- Buscar um registro do cliente (`clients`) pelo CPF + credor para obter nome, email, telefone, CEP, endereço, bairro, cidade, UF
+- Para cada parcela (entrada se houver + N parcelas mensais), chamar `negociarieService.novaCobranca()` com o payload flat que a API Negociarie espera (documento, nome, cep, endereco, bairro, cidade, uf, email, telefone, valor, vencimento, descricao)
+- Salvar cada cobrança retornada via `negociarieService.saveCobranca()` com referência ao `agreement_id`
+- Erros na geração de boletos NÃO devem impedir a criação do acordo — tratar com try/catch e logar o erro
+- Exibir toast de sucesso/falha parcial no frontend
 
-5. Adicionar logs temporários de diagnóstico no proxy
-   - Logar:
-     - `agent_id`
-     - `campaign_id`
-     - upstream status
-     - endpoint chamado (`/agent/login`, `/agent/connect`)
-   - Isso ajuda a confirmar se a 3CPlus está respondendo com `204` consistentemente.
+### 2. `src/components/client-detail/AgreementCalculator.tsx` — Feedback ao operador
 
-Resultado esperado após implementar:
-- O fluxo do Vitor deixa de interpretar sucesso `204` como falha.
-- A tela passa a listar campanhas corretas do agente.
-- O estado online/SIP passa a refletir o retorno real da 3CPlus.
-- Fica possível distinguir “login feito com sucesso” de “SIP ainda não registrou”.
+Após `createAgreement` retornar com sucesso:
+- Chamar uma nova função `generateAgreementBoletos()` passando o agreement criado + dados simulados (parcelas, datas, valores)
+- Mostrar loading "Gerando boletos..." durante o processo
+- Exibir toast com resultado: "X boletos gerados com sucesso" ou "Acordo criado, mas falha ao gerar boletos"
 
-Observação importante do teste:
-- O indício mais forte é que, após o teste direto, o Vitor passou para `status: 1`.
-- Isso mostra que o problema principal não é mais “não chamou a 3CPlus”, e sim “a aplicação está interpretando e exibindo o resultado de forma errada no fluxo do operador”.
+### 3. `src/services/negociarieService.ts` — Nova função `generateAgreementBoletos`
+
+Função que recebe:
+- `agreement` (id, cpf, credor, tenant_id)
+- `installments` (array de { value, dueDate, number })
+- Dados do devedor (nome, endereço, etc.)
+
+Para cada parcela:
+1. Chama `novaCobranca` com payload flat
+2. Salva resultado em `negociarie_cobrancas` com `agreement_id` como referência
+3. Retorna array de resultados (sucesso/falha por parcela)
+
+### 4. Migração SQL — Adicionar coluna `agreement_id` na tabela `negociarie_cobrancas`
+
+Adicionar `agreement_id UUID REFERENCES agreements(id)` para vincular cobranças geradas aos acordos.
+
+## Fluxo do operador
+
+1. Operador simula acordo no AgreementCalculator
+2. Clica "GRAVAR ACORDO"
+3. Sistema enriquece endereço (já existe)
+4. Sistema cria o acordo no banco
+5. **NOVO**: Sistema gera boletos na Negociarie automaticamente
+6. Operador vê feedback: "Acordo gravado e X boletos gerados"
+
+## Arquivos alterados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/services/negociarieService.ts` | Nova função `generateAgreementBoletos` |
+| `src/services/agreementService.ts` | Chamar geração de boletos após criar acordo |
+| `src/components/client-detail/AgreementCalculator.tsx` | Feedback visual de geração de boletos |
+| Migração SQL | Adicionar `agreement_id` em `negociarie_cobrancas` |
+
