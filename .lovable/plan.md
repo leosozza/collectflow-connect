@@ -1,39 +1,31 @@
 
 
-# Plano: Rota `/atendimento/:clientId` para abertura direta de fichas
+# Plano: Corrigir intervalos de pausa e abertura de ficha na chamada
 
-## Problema
+## Problema 1: Intervalos de pausa vazios
 
-A tela de atendimento usa `?clientId=` como query param, mas quando uma chamada cai no 3CPlus, o sistema depende do `useClientByPhone` para resolver o cliente pelo telefone. Se o telefone não bate, a ficha não abre. Precisamos de uma rota path-based (`/atendimento/:clientId`) para que o sistema possa navegar diretamente para o cliente correto por ID.
+No `TelefoniaDashboard.tsx` (linha 416), a funcao `loadPauseIntervals` chama a action `list_work_break_intervals` que **nao existe** no proxy. A action correta e `list_work_break_group_intervals` com `group_id`.
 
-## Mudanças
+O fluxo correto e:
+1. Pegar o `work_break_group_id` da campanha ativa do agente
+2. Chamar `list_work_break_group_intervals` com esse `group_id`
 
-### 1. `src/App.tsx` — Adicionar rota `/atendimento/:clientId`
+**Correcao** em `TelefoniaDashboard.tsx`:
+- Modificar `loadPauseIntervals` para receber o `campaignId`, encontrar a campanha nos dados ja carregados, extrair `work_break_group_id`, e chamar `list_work_break_group_intervals` com `group_id`
+- Se a campanha nao tiver `work_break_group_id`, deixar vazio (sem erro silencioso)
 
-Adicionar nova rota path-based que passa o `clientId` via params, além da rota existente `/atendimento` (query param):
+## Problema 2: Ficha nao abre quando chamada entra
 
-```
-<Route path="/atendimento/:clientId" element={<ProtectedRoute requireTenant><AppLayout><AtendimentoPage /></AppLayout></ProtectedRoute>} />
-```
+O `TelefoniaAtendimentoWrapper` usa `useClientByPhone` para resolver o cliente pelo telefone. Se o telefone nao bate (formato diferente, DDD/DDI), a ficha nao abre. Alem disso, o componente renderiza inline (embedded) mas o usuario espera navegar para `/atendimento/:clientId`.
 
-### 2. `src/pages/AtendimentoPage.tsx` — Aceitar `useParams`
-
-Atualizar para ler o `clientId` de `useParams()` além do query param e da prop:
-
-```typescript
-const { clientId: paramClientId } = useParams();
-const id = propClientId || paramClientId || searchParams.get("clientId");
-```
-
-### 3. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — Navegar por ID quando possível
-
-No `TelefoniaAtendimentoWrapper`, após resolver o cliente via `useClientByPhone`, usar a rota `/atendimento/{clientId}` para navegação. Isso garante que a URL sempre identifique o cliente.
+**Correcao** em `TelefoniaDashboard.tsx`:
+- Quando `isOnCall` e o cliente e encontrado pelo phone, navegar para `/atendimento/${client.id}` ao inves de renderizar embedded
+- Manter o fallback embedded para quando o cliente nao e encontrado (opcao de cadastrar)
+- Adicionar logs de debug para facilitar diagnostico futuro
 
 ## Arquivos alterados
 
-| Arquivo | Mudança |
+| Arquivo | Mudanca |
 |---|---|
-| `src/App.tsx` | Nova rota `/atendimento/:clientId` |
-| `src/pages/AtendimentoPage.tsx` | Ler `clientId` de `useParams` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `/atendimento/{id}` na navegação |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix `loadPauseIntervals` para usar `work_break_group_id` da campanha; navegar para `/atendimento/:clientId` quando chamada detectada |
 
