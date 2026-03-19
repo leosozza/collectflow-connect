@@ -938,7 +938,7 @@ Deno.serve(async (req) => {
         const buildQualPayload = (disp: Record<string, any>) => {
           const payload: Record<string, any> = { name: disp.label };
           if (disp.color) payload.color = disp.color;
-          payload.positive_impact = disp.impact === 'positivo' ? 1 : 0;
+          payload.impact = disp.impact === 'positivo' ? 1 : 0;
           payload.behavior = BEHAVIOR_MAP[disp.behavior] || 3;
           if (disp.is_conversion !== undefined) payload.is_conversion = disp.is_conversion ? 1 : 0;
           if (disp.is_cpc !== undefined) payload.is_dmc = disp.is_cpc ? 1 : 0;
