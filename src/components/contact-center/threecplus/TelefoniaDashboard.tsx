@@ -733,7 +733,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          {menuButton}
           <h2 className="text-lg font-semibold text-foreground truncate">Dashboard</h2>
         </div>
         <Popover>
