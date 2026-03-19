@@ -511,18 +511,49 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── Work Break Intervals ──
-      case 'list_work_break_intervals': {
-        const err = requireField(body, 'campaign_id', corsHeaders);
+      // ── Work Break Groups (global) ──
+      case 'list_work_break_groups':
+        url = buildUrl(baseUrl, 'work_break_group', authParam);
+        break;
+
+      case 'create_work_break_group': {
+        const err = requireField(body, 'name', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        url = buildUrl(baseUrl, 'work_break_group', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'create_work_break_interval': {
-        const err = requireField(body, 'campaign_id', corsHeaders);
+      case 'update_work_break_group': {
+        const err = requireField(body, 'group_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify({ name: body.name });
+        break;
+      }
+
+      case 'delete_work_break_group': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── Work Break Intervals inside a group ──
+      case 'list_work_break_group_intervals': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
+        break;
+      }
+
+      case 'create_work_break_group_interval': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
         method = 'POST';
         const intervalBody: Record<string, any> = { name: body.name };
         if (body.max_time) intervalBody.max_time = body.max_time;
@@ -530,12 +561,12 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'update_work_break_interval': {
-        const err1 = requireField(body, 'campaign_id', corsHeaders);
+      case 'update_work_break_group_interval': {
+        const err1 = requireField(body, 'group_id', corsHeaders);
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals/${body.interval_id}`, authParam);
         method = 'PUT';
         const updateBody: Record<string, any> = {};
         if (body.name) updateBody.name = body.name;
@@ -544,12 +575,12 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'delete_work_break_interval': {
-        const err1 = requireField(body, 'campaign_id', corsHeaders);
+      case 'delete_work_break_group_interval': {
+        const err1 = requireField(body, 'group_id', corsHeaders);
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals/${body.interval_id}`, authParam);
         method = 'DELETE';
         break;
       }
