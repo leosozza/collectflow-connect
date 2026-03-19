@@ -1,62 +1,48 @@
 
 
-# Plano: Geração automática de boletos na Negociarie ao criar acordo
+# Plano: Selecionar agentes ao criar campanha no 3CPlus
 
-## Resumo
+## Problema
+Ao criar uma campanha no painel de Campanhas 3CPlus, não há opção para selecionar os agentes que devem pertencer à campanha. Isso obriga o admin a configurar manualmente no painel externo do 3CPlus.
 
-Após o acordo ser gravado com sucesso no banco, o sistema gerará automaticamente os boletos (uma cobrança por parcela) na API Negociarie e salvará os links retornados para consulta posterior.
+## Solução
+Adicionar seleção multi-agente no dialog de criação de campanha e, após criar a campanha, chamar `POST /campaigns/{id}/agents` na API do 3CPlus para vincular os agentes selecionados.
 
 ## Mudanças
 
-### 1. `src/services/agreementService.ts` — Adicionar chamada à Negociarie após `createAgreement`
+### 1. Proxy — Nova action `add_agents_to_campaign`
+**Arquivo**: `supabase/functions/threecplus-proxy/index.ts`
 
-Após o acordo ser criado com sucesso (e os títulos marcados como `em_acordo`), buscar os dados de endereço do cliente na tabela `clients` e chamar `negociarieService.novaCobranca()` para cada parcela simulada (entrada + parcelas regulares).
+Adicionar case `add_agents_to_campaign`:
+- Requer `campaign_id` e `agent_ids` (array de IDs numéricos)
+- Chama `POST /campaigns/{campaign_id}/agents` com body `{ "users": agent_ids }`
+- Também adicionar `list_campaign_agents` (`GET /campaigns/{campaign_id}/agents`) e `remove_campaign_agent` (`DELETE /campaigns/{campaign_id}/agents/{agent_id}`) para uso futuro
 
-Lógica:
-- Buscar um registro do cliente (`clients`) pelo CPF + credor para obter nome, email, telefone, CEP, endereço, bairro, cidade, UF
-- Para cada parcela (entrada se houver + N parcelas mensais), chamar `negociarieService.novaCobranca()` com o payload flat que a API Negociarie espera (documento, nome, cep, endereco, bairro, cidade, uf, email, telefone, valor, vencimento, descricao)
-- Salvar cada cobrança retornada via `negociarieService.saveCobranca()` com referência ao `agreement_id`
-- Erros na geração de boletos NÃO devem impedir a criação do acordo — tratar com try/catch e logar o erro
-- Exibir toast de sucesso/falha parcial no frontend
+### 2. CampaignsPanel — Seleção de agentes no dialog
+**Arquivo**: `src/components/contact-center/threecplus/CampaignsPanel.tsx`
 
-### 2. `src/components/client-detail/AgreementCalculator.tsx` — Feedback ao operador
+- Buscar lista de usuários/agentes via `list_users` (já existe no proxy)
+- No dialog "Nova Campanha", adicionar seleção multi-agente com checkboxes
+- Após `create_campaign` retornar o ID da nova campanha, chamar `add_agents_to_campaign` com os agentes selecionados
+- Mostrar feedback: "Campanha criada e X agentes vinculados"
+- Na expansão da campanha, mostrar os agentes vinculados além das listas de mailing
 
-Após `createAgreement` retornar com sucesso:
-- Chamar uma nova função `generateAgreementBoletos()` passando o agreement criado + dados simulados (parcelas, datas, valores)
-- Mostrar loading "Gerando boletos..." durante o processo
-- Exibir toast com resultado: "X boletos gerados com sucesso" ou "Acordo criado, mas falha ao gerar boletos"
+### 3. Fluxo completo
 
-### 3. `src/services/negociarieService.ts` — Nova função `generateAgreementBoletos`
-
-Função que recebe:
-- `agreement` (id, cpf, credor, tenant_id)
-- `installments` (array de { value, dueDate, number })
-- Dados do devedor (nome, endereço, etc.)
-
-Para cada parcela:
-1. Chama `novaCobranca` com payload flat
-2. Salva resultado em `negociarie_cobrancas` com `agreement_id` como referência
-3. Retorna array de resultados (sucesso/falha por parcela)
-
-### 4. Migração SQL — Adicionar coluna `agreement_id` na tabela `negociarie_cobrancas`
-
-Adicionar `agreement_id UUID REFERENCES agreements(id)` para vincular cobranças geradas aos acordos.
-
-## Fluxo do operador
-
-1. Operador simula acordo no AgreementCalculator
-2. Clica "GRAVAR ACORDO"
-3. Sistema enriquece endereço (já existe)
-4. Sistema cria o acordo no banco
-5. **NOVO**: Sistema gera boletos na Negociarie automaticamente
-6. Operador vê feedback: "Acordo gravado e X boletos gerados"
+```text
+Dialog "Nova Campanha"
+├── Nome, Horários, Qualificação, Pausas (existente)
+├── [NOVO] Seleção de Agentes (multi-select com checkboxes)
+└── Botão "Criar"
+    ├── POST /campaigns → retorna campaign.id
+    ├── POST /campaigns/{id}/agents → { users: [selected_ids] }
+    └── Toast: "Campanha criada com X agentes"
+```
 
 ## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | Nova função `generateAgreementBoletos` |
-| `src/services/agreementService.ts` | Chamar geração de boletos após criar acordo |
-| `src/components/client-detail/AgreementCalculator.tsx` | Feedback visual de geração de boletos |
-| Migração SQL | Adicionar `agreement_id` em `negociarie_cobrancas` |
+| `supabase/functions/threecplus-proxy/index.ts` | Actions: `add_agents_to_campaign`, `list_campaign_agents`, `remove_campaign_agent` |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Multi-select de agentes no dialog + vincular após criação + listar agentes na expansão |
 
