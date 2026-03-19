@@ -12,7 +12,9 @@ import { toast } from "sonner";
 interface Campaign {
   id: number;
   name: string;
-  status: string;
+  status?: string;
+  paused?: boolean;
+  is_on_active_time?: boolean;
   start_time?: string;
   end_time?: string;
   dialer_settings?: {
