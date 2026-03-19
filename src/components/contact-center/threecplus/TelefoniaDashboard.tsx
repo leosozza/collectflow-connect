@@ -566,6 +566,23 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
+  // Feed pause controls into the floating widget
+  const isPausedStatus = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline) {
+      setPauseControls({
+        intervals: pauseIntervals,
+        isPaused: isPausedStatus,
+        pausingWith,
+        unpausing,
+        onPause: handlePause,
+        onUnpause: handleUnpause,
+      });
+    } else {
+      setPauseControls(null);
+    }
+  }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls]);
+
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
