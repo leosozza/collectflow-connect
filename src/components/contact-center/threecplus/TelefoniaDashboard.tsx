@@ -715,7 +715,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   // ── ADMIN VIEW ──
   const statusStr = (s: any) => String(s ?? "").toLowerCase().replace(/[\s-]/g, "_");
-  const onlineCount = agents.length;
+  const onlineAgents = agents.filter((a) => a.status !== 0 && statusStr(a.status) !== "offline");
+  const onlineCount = onlineAgents.length;
   const onCallCount = agents.filter((a) => a.status === 2 || ["on_call", "ringing"].includes(statusStr(a.status))).length;
   const pausedCount = agents.filter((a) => a.status === 3 || statusStr(a.status) === "paused").length;
   const idleCount = agents.filter((a) => a.status === 1 || ["idle", "available"].includes(statusStr(a.status))).length;

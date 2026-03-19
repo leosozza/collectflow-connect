@@ -71,7 +71,7 @@ function formatElapsedTime(startTimestamp?: number): string {
 }
 
 const AgentStatusTable = ({ agents, loading, onLogout, loggingOut, onAgentClick, agentMetrics = {} }: AgentStatusTableProps) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   if (loading && agents.length === 0) {
     return <Skeleton className="h-12 w-full rounded-xl" />;
