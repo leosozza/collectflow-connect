@@ -71,6 +71,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   ];
 
   const isContactCenterRoute = ["/contact-center/telefonia", "/contact-center/whatsapp"].some(p => location.pathname === p);
+  const isFullBleedRoute = location.pathname === "/contact-center/whatsapp";
   const showContactCenter = contactCenterItems.length > 0;
 
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
@@ -320,7 +321,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </header>
 
-        <main className={`flex-1 overflow-auto ${isContactCenterRoute ? "" : "p-4 lg:p-6"}`}>
+        <main className={`flex-1 overflow-auto ${isFullBleedRoute ? "" : "p-4 lg:p-6"}`}>
           {children}
         </main>
       </div>
