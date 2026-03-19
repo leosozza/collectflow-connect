@@ -32,7 +32,10 @@ interface NavGroup {
 }
 
 const CadastrosPage = () => {
-  const [active, setActive] = useUrlState("tab", "credores");
+  const { tab } = useParams();
+  const navigate = useNavigate();
+  const active = tab || "credores";
+  const setActive = (key: string) => navigate(`/cadastros/${key}`, { replace: true });
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
 
