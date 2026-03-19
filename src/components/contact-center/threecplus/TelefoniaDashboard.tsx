@@ -435,6 +435,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+  const { openWaiting } = useAtendimentoModal();
+
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;
     setLoggingIn(true);
@@ -450,6 +452,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao entrar na campanha");
       } else {
+        // Open widget in waiting mode immediately
+        openWaiting(operatorAgentId);
+
         // Auto-connect SIP/MicroSIP after successful login
         try {
           const connectResult = await invoke("connect_agent", {
