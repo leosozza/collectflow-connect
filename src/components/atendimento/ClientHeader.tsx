@@ -30,6 +30,9 @@ interface ClientHeaderProps {
   onCall?: (phone: string) => void;
   callingPhone?: boolean;
   onNegotiate?: () => void;
+  onHangup?: () => void;
+  hangingUp?: boolean;
+  hasActiveCall?: boolean;
 }
 
 const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
