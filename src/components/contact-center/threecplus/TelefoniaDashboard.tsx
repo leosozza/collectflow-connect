@@ -358,7 +358,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         agent_id: operatorAgentId,
         campaign_id: Number(selectedCampaign),
       });
-      if (result?.status && result.status >= 400) {
+      // Treat 204/success/no_content as success
+      const isSuccess = result?.success || result?.no_content || (result?.status && result.status >= 200 && result.status < 300);
+      const isError = result?.status && result.status >= 400;
+      
+      if (isError) {
         toast.error(result.detail || result.message || "Erro ao entrar na campanha");
       } else {
         // Auto-connect SIP/MicroSIP after successful login
@@ -366,7 +370,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           const connectResult = await invoke("connect_agent", {
             agent_id: operatorAgentId,
           });
-          if (connectResult?.status && connectResult.status >= 400) {
+          const connectSuccess = connectResult?.success || connectResult?.no_content || (connectResult?.status && connectResult.status >= 200 && connectResult.status < 300);
+          const connectError = connectResult?.status && connectResult.status >= 400;
+          
+          if (connectError) {
             toast.warning("Logado na campanha, mas falha ao conectar MicroSIP. Conecte manualmente.");
           } else {
             toast.success("Conectado! Atenda o MicroSIP para iniciar.");
