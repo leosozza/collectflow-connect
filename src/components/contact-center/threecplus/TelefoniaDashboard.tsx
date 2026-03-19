@@ -27,7 +27,9 @@ import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 /** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
+  console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "agentId:", agentId, "callId:", callId);
   const { client, isLoading } = useClientByPhone(clientPhone);
+  console.log("[3CPlus] useClientByPhone result — client:", client ? { id: client.id, nome: client.nome_completo, phone: client.phone } : null, "isLoading:", isLoading);
   const navigate = useNavigate();
   const hasNavigated = useRef(false);
 
