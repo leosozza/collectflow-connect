@@ -25,10 +25,25 @@ import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 import AtendimentoPage from "@/pages/AtendimentoPage";
 
-/** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
+/** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
   const { client, isLoading } = useClientByPhone(clientPhone);
   const navigate = useNavigate();
+  const hasNavigated = useRef(false);
+
+  // Navigate to atendimento when client is resolved
+  useEffect(() => {
+    if (client && !hasNavigated.current) {
+      hasNavigated.current = true;
+      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", client.id);
+      navigate(`/atendimento/${client.id}`);
+    }
+  }, [client, navigate]);
+
+  // Reset navigation flag when phone changes
+  useEffect(() => {
+    hasNavigated.current = false;
+  }, [clientPhone]);
 
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
@@ -69,7 +84,8 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
     );
   }
 
-  return <AtendimentoPage clientId={client.id} agentId={agentId} callId={callId} embedded />;
+  // Client found but navigation in progress
+  return <div className="p-4 text-center text-muted-foreground text-sm">Abrindo ficha do cliente...</div>;
 };
 
 interface TelefoniaDashboardProps {
