@@ -247,6 +247,27 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     finally { setCallingPhone(false); }
   };
 
+  const handleHangup = async () => {
+    const callAgentId = effectiveAgentId;
+    if (!callAgentId) { toast.error("Seu perfil não possui um agente 3CPlus vinculado"); return; }
+    const domain = settings.threecplus_domain;
+    const apiToken = settings.threecplus_api_token;
+    if (!domain || !apiToken) { toast.error("Telefonia 3CPlus não configurada"); return; }
+    setHangingUp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+        body: { action: "hangup_call", domain, api_token: apiToken, agent_id: callAgentId },
+      });
+      if (error) throw error;
+      if (data?.status && data.status >= 400) {
+        toast.error(data.detail || "Erro ao desligar");
+      } else {
+        toast.success("Ligação encerrada");
+      }
+    } catch { toast.error("Erro ao desligar ligação"); }
+    finally { setHangingUp(false); }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Breadcrumb */}
