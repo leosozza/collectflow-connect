@@ -251,14 +251,16 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   const handleHangup = async () => {
     const callAgentId = effectiveAgentId;
     if (!callAgentId) { toast.error("Agente não vinculado"); return; }
+    const activeCallId = callId;
+    if (!activeCallId) { toast.error("Nenhuma chamada ativa para desligar"); return; }
     const domain = settings.threecplus_domain;
     const apiToken = settings.threecplus_api_token;
     if (!domain || !apiToken) { toast.error("3CPlus não configurada"); return; }
-    console.log("[Hangup] Desligando — agentId:", callAgentId, "domain:", domain);
+    console.log("[Hangup] Desligando — agentId:", callAgentId, "callId:", activeCallId, "domain:", domain);
     setHangingUp(true);
     try {
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "hangup_call", domain, api_token: apiToken, agent_id: callAgentId },
+        body: { action: "hangup_call", domain, api_token: apiToken, agent_id: callAgentId, call_id: activeCallId },
       });
       console.log("[Hangup] Response:", JSON.stringify(data), "error:", error);
       if (error) throw error;
@@ -301,7 +303,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         onNegotiate={() => setShowNegotiation(true)}
         onHangup={handleHangup}
         hangingUp={hangingUp}
-        hasActiveCall={!!effectiveAgentId && !!settings.threecplus_domain}
+        hasActiveCall={!!callId}
       />
 
       {/* Main content — 3 columns */}

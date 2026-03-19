@@ -44,7 +44,7 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const { openAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
+  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
@@ -72,12 +72,12 @@ const TelefoniaAtendimentoWrapper = ({
 
   // Open atendimento modal when client is resolved
   useEffect(() => {
-    if (resolvedId && !hasOpened.current && !modalIsOpen) {
+    if (resolvedId && !hasOpened.current) {
       hasOpened.current = true;
-      console.log("[Telefonia] Cliente encontrado, abrindo modal para", resolvedId);
-      openAtendimento(resolvedId, agentId, callId);
+      console.log("[Telefonia] Cliente encontrado, atualizando widget para", resolvedId);
+      updateAtendimento(resolvedId, agentId, callId);
     }
-  }, [resolvedId, openAtendimento, modalIsOpen, agentId, callId]);
+  }, [resolvedId, updateAtendimento, agentId, callId]);
 
   // Reset flag when inputs change
   useEffect(() => {
@@ -239,6 +239,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
   const [reconnectingSip, setReconnectingSip] = useState(false);
+  const hasRehydrated = useRef(false);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -435,6 +436,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+  const { openWaiting } = useAtendimentoModal();
+
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;
     setLoggingIn(true);
@@ -450,6 +453,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao entrar na campanha");
       } else {
+        // Open widget in waiting mode immediately
+        openWaiting(operatorAgentId);
+
         // Auto-connect SIP/MicroSIP after successful login
         try {
           const connectResult = await invoke("connect_agent", {
@@ -551,6 +557,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       loadPauseIntervals(Number(myCampaignId));
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals]);
+
+  // Rehydrate widget when operator is already online after page refresh
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
+      hasRehydrated.current = true;
+      openWaiting(operatorAgentId);
+    }
+  }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
