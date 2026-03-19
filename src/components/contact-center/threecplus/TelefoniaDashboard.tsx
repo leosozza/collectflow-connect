@@ -557,6 +557,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals]);
 
+  // Rehydrate widget when operator is already online after page refresh
+  const hasRehydrated = useRef(false);
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
+      hasRehydrated.current = true;
+      openWaiting(operatorAgentId);
+    }
+  }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
+
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
