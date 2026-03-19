@@ -554,9 +554,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
-  // Debug log for call detection
+  // Debug log for call detection + mailing fields
+  const mailingCpf = myAgent?.mailing_identifier || myAgent?.identifier || "";
+  const mailingClientId = myAgent?.mailing_extra3 || myAgent?.Extra3 || myAgent?.extra3 || "";
   if (isOperatorView && myAgent) {
     console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone, "call_id:", myAgent.call_id, "current_call_id:", myAgent.current_call_id);
+    console.log("[3CPlus] mailing fields — identifier (CPF):", mailingCpf, "extra3 (clientId):", mailingClientId, "raw mailing keys:", Object.keys(myAgent).filter((k: string) => k.toLowerCase().includes("mailing") || k.toLowerCase().includes("extra") || k.toLowerCase().includes("identifier")).join(", "));
   }
 
   const handleReconnectSip = async () => {
