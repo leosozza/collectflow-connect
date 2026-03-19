@@ -720,25 +720,14 @@ Deno.serve(async (req) => {
       case 'unpause_agent': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        const usersUrlUnpause = buildUrl(baseUrl, 'users', authParam);
-        const usersResUnpause = await fetch(usersUrlUnpause, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResUnpause.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResUnpause.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataUnpause = await usersResUnpause.json();
-        const usersListUnpause = Array.isArray(usersDataUnpause) ? usersDataUnpause : usersDataUnpause?.data || [];
-        const targetUnpause = usersListUnpause.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetUnpause || !targetUnpause.api_token) {
+        const agentUnpause = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentUnpause || !agentUnpause.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthUnpause = `api_token=${targetUnpause.api_token}`;
-        url = `${baseUrl}/agent/unpause?${agentAuthUnpause}`;
+        url = `${baseUrl}/agent/unpause?api_token=${agentUnpause.api_token}`;
         method = 'POST';
         console.log(`Unpausing agent ${body.agent_id}`);
         break;
