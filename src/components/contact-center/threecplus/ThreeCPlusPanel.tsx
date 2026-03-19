@@ -1,18 +1,13 @@
 import { useState } from "react";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { AlertTriangle, Menu, ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, LayoutDashboard, Megaphone, ListOrdered, PhoneCall, BarChart3, Users2, Award, Timer, ShieldBan, UsersRound, CalendarClock, MessageSquareText, UserCog, PhoneIncoming, Route, Clock } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import CampaignsPanel from "./CampaignsPanel";
 import MailingPanel from "./MailingPanel";
 import CallHistoryPanel from "./CallHistoryPanel";
@@ -31,22 +26,22 @@ import OfficeHoursPanel from "./OfficeHoursPanel";
 import WorkBreakIntervalsPanel from "./WorkBreakIntervalsPanel";
 
 const tabs = [
-  { value: "dashboard", label: "Dashboard", group: "operation" },
-  { value: "campaigns", label: "Campanhas", group: "operation" },
-  { value: "mailing", label: "Mailing", group: "operation" },
-  { value: "history", label: "Chamadas", group: "operation" },
-  { value: "chart", label: "Gráficos", group: "operation" },
-  { value: "agents-report", label: "Produtividade", group: "operation" },
-  { value: "qualifications", label: "Qualificações", group: "admin" },
-  { value: "intervals", label: "Intervalos", group: "admin" },
-  { value: "blocklist", label: "Bloqueio", group: "admin" },
-  { value: "teams", label: "Equipes", group: "admin" },
-  { value: "schedules", label: "Agendamentos", group: "admin" },
-  { value: "sms", label: "SMS", group: "admin" },
-  { value: "users", label: "Usuários", group: "admin" },
-  { value: "receptive", label: "Receptivo", group: "admin" },
-  { value: "routes", label: "Rotas", group: "admin" },
-  { value: "office-hours", label: "Horários", group: "admin" },
+  { value: "dashboard", label: "Dashboard", group: "operation", icon: LayoutDashboard },
+  { value: "campaigns", label: "Campanhas", group: "operation", icon: Megaphone },
+  { value: "mailing", label: "Mailing", group: "operation", icon: ListOrdered },
+  { value: "history", label: "Chamadas", group: "operation", icon: PhoneCall },
+  { value: "chart", label: "Gráficos", group: "operation", icon: BarChart3 },
+  { value: "agents-report", label: "Produtividade", group: "operation", icon: Users2 },
+  { value: "qualifications", label: "Qualificações", group: "admin", icon: Award },
+  { value: "intervals", label: "Intervalos", group: "admin", icon: Timer },
+  { value: "blocklist", label: "Bloqueio", group: "admin", icon: ShieldBan },
+  { value: "teams", label: "Equipes", group: "admin", icon: UsersRound },
+  { value: "schedules", label: "Agendamentos", group: "admin", icon: CalendarClock },
+  { value: "sms", label: "SMS", group: "admin", icon: MessageSquareText },
+  { value: "users", label: "Usuários", group: "admin", icon: UserCog },
+  { value: "receptive", label: "Receptivo", group: "admin", icon: PhoneIncoming },
+  { value: "routes", label: "Rotas", group: "admin", icon: Route },
+  { value: "office-hours", label: "Horários", group: "admin", icon: Clock },
 ] as const;
 
 const ThreeCPlusPanel = () => {
@@ -71,62 +66,78 @@ const ThreeCPlusPanel = () => {
     );
   }
 
-  const activeLabel = tabs.find((t) => t.value === activeTab)?.label ?? "Dashboard";
-
-  // For operators, show only the dashboard (no menu)
   if (isOperator) {
     return <TelefoniaDashboard isOperatorView />;
   }
 
-  const menuButton = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 h-8 text-xs">
-          <Menu className="h-3.5 w-3.5" />
-          Menu
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        <DropdownMenuLabel>Operacional</DropdownMenuLabel>
-        {tabs.filter((t) => t.group === "operation").map((t) => (
-          <DropdownMenuItem
-            key={t.value}
-            onSelect={() => setActiveTab(t.value)}
-            className={activeTab === t.value ? "bg-accent font-medium" : ""}
-          >
-            {t.label}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Administrativo</DropdownMenuLabel>
-        {tabs.filter((t) => t.group === "admin").map((t) => (
-          <DropdownMenuItem
-            key={t.value}
-            onSelect={() => setActiveTab(t.value)}
-            className={activeTab === t.value ? "bg-accent font-medium" : ""}
-          >
-            {t.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-
-  const activeTabLabel = tabs.find((t) => t.value === activeTab)?.label;
+  const operationTabs = tabs.filter((t) => t.group === "operation");
+  const adminTabs = tabs.filter((t) => t.group === "admin");
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      {/* Navigation bar */}
+      <div className="border-b border-border bg-card/50 rounded-t-xl px-1">
+        <ScrollArea className="w-full">
+          <div className="flex items-center gap-0.5 py-1.5 px-1">
+            {operationTabs.map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.value;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setActiveTab(t.value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+
+            <Separator orientation="vertical" className="h-6 mx-1.5" />
+
+            {adminTabs.map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.value;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setActiveTab(t.value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
+
       {activeTab !== "dashboard" && (
-        <div className="flex items-center gap-3 px-4 pt-2">
+        <div className="flex items-center gap-3 px-4">
           <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8" onClick={() => setActiveTab("dashboard")}>
             <ArrowLeft className="w-3.5 h-3.5" />
             Dashboard
           </Button>
-          <span className="text-sm font-semibold text-foreground">{activeTabLabel}</span>
+          <span className="text-sm font-semibold text-foreground">
+            {tabs.find((t) => t.value === activeTab)?.label}
+          </span>
         </div>
       )}
 
-      <TabsContent value="dashboard"><TelefoniaDashboard menuButton={menuButton} /></TabsContent>
+      <TabsContent value="dashboard"><TelefoniaDashboard /></TabsContent>
       <TabsContent value="campaigns"><CampaignsPanel /></TabsContent>
       <TabsContent value="mailing"><MailingPanel /></TabsContent>
       <TabsContent value="history"><CallHistoryPanel /></TabsContent>

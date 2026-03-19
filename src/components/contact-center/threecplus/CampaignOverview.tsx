@@ -12,7 +12,9 @@ import { toast } from "sonner";
 interface Campaign {
   id: number;
   name: string;
-  status: string;
+  status?: string;
+  paused?: boolean;
+  is_on_active_time?: boolean;
   start_time?: string;
   end_time?: string;
   dialer_settings?: {
@@ -106,7 +108,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
           </TableHeader>
           <TableBody>
             {campaigns.map((c) => {
-              const isRunning = c.status === "running";
+              const isRunning = c.status === "running" || (!c.paused && c.is_on_active_time);
+              const statusLabel = c.paused ? "Pausada" : (c.is_on_active_time || c.status === "running") ? "Ativa" : "Inativa";
               const aggr = c.dialer_settings?.aggressiveness ?? 1;
               const total = c.statistics?.total || 0;
               const completed = c.statistics?.completed || 0;
@@ -116,8 +119,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                 <TableRow key={c.id} className={!isRunning ? "opacity-60" : ""}>
                   <TableCell className="py-2 text-sm font-medium">{c.name}</TableCell>
                   <TableCell className="py-2">
-                    <Badge variant={isRunning ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
-                      {isRunning ? "Ativa" : c.status || "Parada"}
+                    <Badge variant={isRunning ? "default" : c.paused ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
+                      {statusLabel}
                     </Badge>
                   </TableCell>
                   <TableCell className="py-2">

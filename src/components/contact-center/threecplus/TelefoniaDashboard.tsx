@@ -715,7 +715,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   // ── ADMIN VIEW ──
   const statusStr = (s: any) => String(s ?? "").toLowerCase().replace(/[\s-]/g, "_");
-  const onlineCount = agents.length;
+  const onlineAgents = agents.filter((a) => a.status !== 0 && statusStr(a.status) !== "offline");
+  const onlineCount = onlineAgents.length;
   const onCallCount = agents.filter((a) => a.status === 2 || ["on_call", "ringing"].includes(statusStr(a.status))).length;
   const pausedCount = agents.filter((a) => a.status === 3 || statusStr(a.status) === "paused").length;
   const idleCount = agents.filter((a) => a.status === 1 || ["idle", "available"].includes(statusStr(a.status))).length;
@@ -732,7 +733,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          {menuButton}
           <h2 className="text-lg font-semibold text-foreground truncate">Dashboard</h2>
         </div>
         <Popover>
