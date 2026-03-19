@@ -450,9 +450,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         <div className="flex items-center justify-center min-h-[60vh] p-4">
           <div className="bg-card rounded-xl border border-border p-8 space-y-5 max-w-md w-full">
             {!operatorAgentId ? (
-              <p className="text-sm text-muted-foreground text-center">
-                Seu perfil não possui um ID de agente 3CPlus vinculado.
-              </p>
+              <div className="text-center space-y-3">
+                <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+                  <WifiOff className="w-8 h-8 text-amber-500" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Agente não vinculado</h3>
+                <p className="text-sm text-muted-foreground">
+                  Seu perfil não possui um ID de agente 3CPlus configurado. Solicite ao seu administrador que vincule seu ID de agente no menu <strong>Cadastros → Usuários</strong>.
+                </p>
+              </div>
             ) : (
               <>
                 <div className="text-center">
