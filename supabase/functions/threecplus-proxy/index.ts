@@ -685,28 +685,14 @@ Deno.serve(async (req) => {
       case 'agent_available_campaigns': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        // Resolve agent token via GET /users
-        const usersUrlCamp = buildUrl(baseUrl, 'users', authParam);
-        const usersResCamp = await fetch(usersUrlCamp, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResCamp.ok) {
-          const errText = await usersResCamp.text();
-          console.error(`Failed to fetch users for agent campaigns: ${usersResCamp.status} ${errText.substring(0, 200)}`);
-          return new Response(
-            JSON.stringify({ status: usersResCamp.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataCamp = await usersResCamp.json();
-        const usersListCamp = Array.isArray(usersDataCamp) ? usersDataCamp : usersDataCamp?.data || [];
-        const targetCamp = usersListCamp.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetCamp || !targetCamp.api_token) {
+        const agentCamp = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentCamp || !agentCamp.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token de API` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthCamp = `api_token=${targetCamp.api_token}`;
-        url = `${baseUrl}/agent/campaigns?${agentAuthCamp}`;
+        url = `${baseUrl}/agent/campaigns?api_token=${agentCamp.api_token}`;
         console.log(`Resolved agent token for ${body.agent_id}, calling GET /agent/campaigns`);
         break;
       }
