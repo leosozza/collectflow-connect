@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { logAction } from "@/services/auditService";
+import { logger } from "@/lib/logger";
 
 export interface CallDisposition {
   id: string;
