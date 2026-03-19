@@ -294,6 +294,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         onCall={handleCall}
         callingPhone={callingPhone}
         onNegotiate={() => setShowNegotiation(true)}
+        onHangup={handleHangup}
+        hangingUp={hangingUp}
+        hasActiveCall={!!effectiveAgentId && !!settings.threecplus_domain}
       />
 
       {/* Main content — 3 columns */}
