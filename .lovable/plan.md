@@ -1,23 +1,39 @@
 
-## Auditoria de Estabilidade para Produção — IMPLEMENTADO ✅
 
-### Correções aplicadas
+# Resolucao das Limitacoes do Painel de Telefonia
 
-#### Fase 1 — Segurança Crítica ✅
-1. **5 políticas RLS públicas removidas:** `tenants`, `agreements`, `portal_payments`, `agreement_signatures`, `invite_links`
-2. **Funções SECURITY DEFINER criadas:** `lookup_tenant_by_slug`, `lookup_agreement_by_token`, `lookup_invite_by_token`
-3. **Escalação de privilégio corrigida:** `tenant_users` (super_admin), `tenant_tokens` (INSERT/UPDATE), `operator_points` (self-write)
-4. **payment_records** restrito a admins (INSERT/UPDATE/DELETE)
+## 1. Polling de 30s -- Reduzir para 10s no operador
 
-#### Fase 2 — Performance ✅
-5. **5 índices compostos criados:** `clients(tenant_id,status)`, `clients(tenant_id,cpf)`, `clients(tenant_id,credor)`, `agreements(tenant_id,status)`, `agreements(checkout_token)` parcial
+O intervalo de refresh e configuravel (15/30/60s) mas o padrao e 30s. Para operadores, o polling sera reduzido para **10s** por padrao, garantindo deteccao rapida de ligacoes.
 
-#### Pendente (ação manual)
-- **Leaked Password Protection** — habilitar manualmente no backend
-- **credores/whatsapp_instances** — criar views sem campos sensíveis para operadores (warning, não crítico)
+**Arquivo:** `TelefoniaDashboard.tsx`
+- Mudar o `useState(30)` para `useState(isOperatorView ? 10 : 30)` no `interval` state
+- Adicionar opcao "10 segundos" no Select do admin
 
-## Correção: Limite de 1000 registros na Carteira — IMPLEMENTADO ✅
+## 2. Alerta de threecplus_agent_id nao configurado
 
-- Criado helper `fetchAllRows` em `src/lib/supabaseUtils.ts` para paginação automática
-- `fetchClients` agora busca todos os registros em lotes de 1000
-- Queries de `agreements` e `call_dispositions` na CarteiraPage também paginadas
+Atualmente mostra apenas "Seu perfil nao possui um ID de agente 3CPlus vinculado" sem orientacao. Melhorar a mensagem com instrucoes claras e icone de alerta.
+
+**Arquivo:** `TelefoniaDashboard.tsx`
+- Melhorar o bloco de `!operatorAgentId` com instrucoes de como solicitar ao admin a configuracao
+
+## 3. Atendimento automatico -- fallback quando cliente nao existe no CRM
+
+Quando o cliente nao e encontrado pelo telefone, atualmente mostra apenas "Cliente nao encontrado". Adicionar botao para **cadastrar rapidamente** ou **abrir atendimento generico** mesmo sem match.
+
+**Arquivo:** `TelefoniaDashboard.tsx` (componente `TelefoniaAtendimentoWrapper`)
+- Adicionar botao "Cadastrar Cliente" que abre o formulario pre-preenchido com o telefone
+- Adicionar botao "Abrir Atendimento" mesmo sem cliente vinculado
+
+## 4. SpyButton -- ja funcional, sem alteracao necessaria
+
+O `SpyButton` ja implementa corretamente a chamada `spy_agent` via `threecplus-proxy`. Funciona se o endpoint 3CPlus estiver habilitado na conta. Nenhuma alteracao de codigo necessaria -- depende apenas da conta 3CPlus ter a feature ativa.
+
+---
+
+### Resumo das alteracoes
+
+| Arquivo | Mudanca |
+|---|---|
+| `TelefoniaDashboard.tsx` | Polling 10s para operadores, mensagem melhorada para agent_id ausente, botoes de acao no fallback de cliente nao encontrado |
+
