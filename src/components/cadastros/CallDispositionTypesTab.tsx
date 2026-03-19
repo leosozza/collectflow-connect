@@ -16,7 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -26,35 +28,31 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Check, Minus } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, Minus, Info, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
 
 const slugify = (text: string) =>
   text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
-const GROUP_OPTIONS = [
-  { value: "resultado", label: "Resultado do Contato" },
-  { value: "contato", label: "Erro de Cadastro" },
-  { value: "outros", label: "Outros" },
-];
-
-const COLOR_OPTIONS = [
-  { value: "blue", label: "Azul", hex: "#3b82f6" },
-  { value: "green", label: "Verde", hex: "#22c55e" },
-  { value: "red", label: "Vermelho", hex: "#ef4444" },
-  { value: "yellow", label: "Amarelo", hex: "#eab308" },
-  { value: "black", label: "Preto", hex: "#1e293b" },
-  { value: "pink", label: "Rosa", hex: "#ec4899" },
-];
-
-const IMPACT_OPTIONS = [
-  { value: "positivo", label: "Positivo" },
-  { value: "negativo", label: "Negativo" },
+const COLOR_PALETTE = [
+  "#FFDD00","#FCEA79","#D6BA00","#998500","#615400",
+  "#F17F0E","#FBD6A4","#FFAF2E","#C26000","#663300",
+  "#DE2128","#FFB2B3","#F65157","#A50D0D","#5E0808",
+  "#E34AB8","#FBC1E9","#F580D3","#B80F7D","#620E39",
+  "#A820CB","#E7A8FA","#C45DE0","#6E008F","#390057",
+  "#7036E4","#CCB6FC","#9C6BFF","#411C9C","#2B1269",
+  "#2497FD","#B8DDFF","#6CBAFE","#0062D7","#00298B",
+  "#1ABCAD","#98F1E8","#52DBCD","#009484","#006B5A",
+  "#28CC39","#A4F4A7","#69DE74","#049A04","#006B00",
+  "#8EBD00","#C6EF66","#A4D41C","#5F9400","#375200",
+  "#111111","#DEDEDE","#A5A5A5","#6C6C6C","#3A3A3A",
 ];
 
 const BEHAVIOR_OPTIONS = [
   { value: "repetir", label: "Repetir" },
-  { value: "nao_discar", label: "Não discar novamente" },
+  { value: "nao_discar_telefone", label: "Não discar novamente para o telefone" },
+  { value: "nao_discar_cliente", label: "Não discar novamente para o cliente" },
 ];
 
 interface FormState {
@@ -72,17 +70,77 @@ interface FormState {
   is_callback: boolean;
   is_schedule: boolean;
   is_blocklist: boolean;
+  schedule_allow_other_number: boolean;
+  schedule_days_limit: number;
+  blocklist_mode: string;
+  blocklist_days: number;
 }
 
 const emptyForm: FormState = {
   label: "", group_name: "resultado", sort_order: 0, active: true,
-  color: "blue", impact: "negativo", behavior: "repetir",
+  color: "#3b82f6", impact: "negativo", behavior: "repetir",
   is_conversion: false, is_cpc: false, is_unknown: false,
   is_callback: false, is_schedule: false, is_blocklist: false,
+  schedule_allow_other_number: false, schedule_days_limit: 7,
+  blocklist_mode: "indeterminate", blocklist_days: 0,
 };
 
 const BoolIcon = ({ value }: { value: boolean }) =>
   value ? <Check className="w-4 h-4 text-primary" /> : <Minus className="w-4 h-4 text-muted-foreground/30" />;
+
+const getBehaviorLabel = (b: string) => {
+  if (b === "nao_discar_telefone") return "Não discar telefone";
+  if (b === "nao_discar_cliente") return "Não discar cliente";
+  if (b === "nao_discar") return "Não discar";
+  return "Repetir";
+};
+
+const ColorPickerGrid = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-start gap-2 h-10">
+          <div className="w-5 h-5 rounded-full border border-border shrink-0" style={{ backgroundColor: value }} />
+          <span className="text-sm text-muted-foreground">{value}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-3" align="start">
+        <p className="text-sm font-medium mb-2">Selecione uma cor</p>
+        <div className="flex flex-wrap gap-1.5">
+          {COLOR_PALETTE.map(hex => (
+            <button
+              key={hex}
+              type="button"
+              className={`w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-125 border-2 ${value === hex ? "border-primary ring-2 ring-primary/30" : "border-transparent"}`}
+              style={{ backgroundColor: hex }}
+              onClick={() => { onChange(hex); setOpen(false); }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const SwitchCard = ({
+  label, tooltip, checked, onCheckedChange, children,
+}: {
+  label: string; tooltip?: string; checked: boolean; onCheckedChange: (v: boolean) => void; children?: React.ReactNode;
+}) => (
+  <div className="border rounded-md">
+    <div className="flex items-center justify-between px-4 h-10">
+      <div className="flex items-center gap-2">
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+        <Label className="font-normal cursor-pointer text-sm">{label}</Label>
+        {tooltip && <Info className="w-3.5 h-3.5 text-primary" />}
+      </div>
+    </div>
+    {checked && children && (
+      <div className="border-t bg-muted/30 px-4 py-3">{children}</div>
+    )}
+  </div>
+);
 
 const CallDispositionTypesTab = () => {
   const { tenant } = useTenant();
@@ -181,11 +239,15 @@ const CallDispositionTypesTab = () => {
     setForm({
       id: t.id, label: t.label, group_name: t.group_name,
       sort_order: t.sort_order, active: t.active,
-      color: t.color || "blue", impact: t.impact || "negativo",
+      color: t.color || "#3b82f6", impact: t.impact || "negativo",
       behavior: t.behavior || "repetir",
       is_conversion: t.is_conversion || false, is_cpc: t.is_cpc || false,
       is_unknown: t.is_unknown || false, is_callback: t.is_callback || false,
       is_schedule: t.is_schedule || false, is_blocklist: t.is_blocklist || false,
+      schedule_allow_other_number: (t as any).schedule_allow_other_number || false,
+      schedule_days_limit: (t as any).schedule_days_limit ?? 7,
+      blocklist_mode: (t as any).blocklist_mode || "indeterminate",
+      blocklist_days: (t as any).blocklist_days ?? 0,
     });
     setOpen(true);
   };
@@ -197,6 +259,10 @@ const CallDispositionTypesTab = () => {
       active: form.active, color: form.color, impact: form.impact, behavior: form.behavior,
       is_conversion: form.is_conversion, is_cpc: form.is_cpc, is_unknown: form.is_unknown,
       is_callback: form.is_callback, is_schedule: form.is_schedule, is_blocklist: form.is_blocklist,
+      schedule_allow_other_number: form.schedule_allow_other_number,
+      schedule_days_limit: form.schedule_days_limit,
+      blocklist_mode: form.blocklist_mode,
+      blocklist_days: form.blocklist_days,
     };
     if (form.id) {
       updateMut.mutate({ id: form.id, ...payload });
@@ -204,9 +270,6 @@ const CallDispositionTypesTab = () => {
       createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), ...payload });
     }
   };
-
-  const getColorHex = (color: string) =>
-    COLOR_OPTIONS.find(c => c.value === color)?.hex || "#3b82f6";
 
   return (
     <div className="space-y-4">
@@ -235,7 +298,6 @@ const CallDispositionTypesTab = () => {
               <TableRow>
                 <TableHead className="w-10">Cor</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Grupo</TableHead>
                 <TableHead>Impacto</TableHead>
                 <TableHead>Comportamento</TableHead>
                 <TableHead className="text-center">Conversão</TableHead>
@@ -254,23 +316,16 @@ const CallDispositionTypesTab = () => {
                   <TableCell>
                     <div
                       className="w-4 h-4 rounded-full border border-border"
-                      style={{ backgroundColor: getColorHex(t.color || "blue") }}
+                      style={{ backgroundColor: t.color || "#3b82f6" }}
                     />
                   </TableCell>
                   <TableCell className="font-medium">{t.label}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {GROUP_OPTIONS.find(g => g.value === t.group_name)?.label || t.group_name}
-                    </Badge>
-                  </TableCell>
                   <TableCell>
                     <Badge variant={t.impact === "positivo" ? "default" : "secondary"}>
                       {t.impact === "positivo" ? "Positivo" : "Negativo"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {t.behavior === "nao_discar" ? "Não discar" : "Repetir"}
-                  </TableCell>
+                  <TableCell className="text-sm">{getBehaviorLabel(t.behavior)}</TableCell>
                   <TableCell className="text-center"><BoolIcon value={t.is_conversion || false} /></TableCell>
                   <TableCell className="text-center"><BoolIcon value={t.is_cpc || false} /></TableCell>
                   <TableCell className="text-center"><BoolIcon value={t.is_unknown || false} /></TableCell>
@@ -304,114 +359,184 @@ const CallDispositionTypesTab = () => {
           <DialogHeader>
             <DialogTitle>{form.id ? "Editar" : "Nova"} Tabulação</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-            {/* Nome */}
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input
-                value={form.label}
-                onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-                placeholder="Ex: CPC (Contato com a Pessoa Certa)"
-              />
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
+
+            {/* ── Seção: Dados ── */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Info className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <h4 className="text-sm font-semibold">Dados</h4>
             </div>
 
-            {/* Grupo + Cor */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Grupo</Label>
-                <Select value={form.group_name} onValueChange={v => setForm(f => ({ ...f, group_name: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {GROUP_OPTIONS.map(g => (
-                      <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Nome</Label>
+                <Input
+                  value={form.label}
+                  onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder="Nome"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Cor</Label>
-                <Select value={form.color} onValueChange={v => setForm(f => ({ ...f, color: v }))}>
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getColorHex(form.color) }} />
-                      <SelectValue />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COLOR_OPTIONS.map(c => (
-                      <SelectItem key={c.value} value={c.value}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: c.hex }} />
-                          {c.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ColorPickerGrid value={form.color} onChange={v => setForm(f => ({ ...f, color: v }))} />
               </div>
             </div>
 
-            {/* Impacto + Comportamento */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Impacto</Label>
-                <Select value={form.impact} onValueChange={v => setForm(f => ({ ...f, impact: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {IMPACT_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Comportamento</Label>
-                <Select value={form.behavior} onValueChange={v => setForm(f => ({ ...f, behavior: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {BEHAVIOR_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Boolean flags */}
+            {/* Impacto — radio buttons inline */}
             <div className="space-y-2">
-              <Label>Flags</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {([
-                  { key: "is_conversion", label: "Conversão" },
-                  { key: "is_cpc", label: "CPC" },
-                  { key: "is_unknown", label: "Desconhece" },
-                  { key: "is_callback", label: "Callback" },
-                  { key: "is_schedule", label: "Agendamento" },
-                  { key: "is_blocklist", label: "Lista de Bloqueio" },
-                ] as const).map(flag => (
-                  <div key={flag.key} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={form[flag.key]}
-                      onCheckedChange={v => setForm(f => ({ ...f, [flag.key]: !!v }))}
-                    />
-                    <Label className="font-normal cursor-pointer">{flag.label}</Label>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Impacto dessa qualificação</Label>
+                <Info className="w-3.5 h-3.5 text-primary" />
               </div>
+              <RadioGroup
+                value={form.impact}
+                onValueChange={v => setForm(f => ({ ...f, impact: v }))}
+                className="flex gap-6"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="positivo" id="impact-positive" />
+                  <Label htmlFor="impact-positive" className="font-normal cursor-pointer">Positivo</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="negativo" id="impact-negative" />
+                  <Label htmlFor="impact-negative" className="font-normal cursor-pointer">Negativo</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* Comportamento */}
+            <div className="space-y-2">
+              <Label>Comportamento</Label>
+              <Select value={form.behavior} onValueChange={v => setForm(f => ({ ...f, behavior: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BEHAVIOR_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
+            {/* ── Seção: Ações ── */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Settings className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <h4 className="text-sm font-semibold">Ações</h4>
+            </div>
+
+            <div className="space-y-3">
+              <SwitchCard
+                label="A qualificação é uma conversão?"
+                tooltip="Define se esta tabulação conta como conversão"
+                checked={form.is_conversion}
+                onCheckedChange={v => setForm(f => ({ ...f, is_conversion: v }))}
+              />
+
+              <SwitchCard
+                label="CPC - Contato com a pessoa certa"
+                tooltip="Indica contato direto com o devedor"
+                checked={form.is_cpc}
+                onCheckedChange={v => setForm(f => ({ ...f, is_cpc: v }))}
+              />
+
+              <SwitchCard
+                label="Desconhece"
+                tooltip="O contato não reconhece a dívida"
+                checked={form.is_unknown}
+                onCheckedChange={v => setForm(f => ({ ...f, is_unknown: v }))}
+              />
+
+              <SwitchCard
+                label="Callback"
+                tooltip="Permite reagendar contato"
+                checked={form.is_callback}
+                onCheckedChange={v => setForm(f => ({ ...f, is_callback: v }))}
+              />
+
+              {/* Agendamento — expandível */}
+              <SwitchCard
+                label="Agendamento"
+                tooltip="Permite agendar nova ligação"
+                checked={form.is_schedule}
+                onCheckedChange={v => setForm(f => ({ ...f, is_schedule: v }))}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={form.schedule_allow_other_number}
+                      onCheckedChange={v => setForm(f => ({ ...f, schedule_allow_other_number: v }))}
+                    />
+                    <Label className="font-normal text-sm">Permitir agendar para outro número</Label>
+                  </div>
+                  <Separator orientation="vertical" className="hidden sm:block h-6" />
+                  <div className="flex items-center gap-2">
+                    <Label className="font-normal text-sm whitespace-nowrap">Limite de dias:</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      className="w-20 h-8"
+                      value={form.schedule_days_limit}
+                      onChange={e => setForm(f => ({ ...f, schedule_days_limit: Math.max(1, Number(e.target.value) || 7) }))}
+                    />
+                  </div>
+                </div>
+              </SwitchCard>
+
+              {/* Bloqueio — expandível */}
+              <SwitchCard
+                label="Adicionar número a lista de bloqueio"
+                tooltip="Bloqueia o número para futuras discagens"
+                checked={form.is_blocklist}
+                onCheckedChange={v => setForm(f => ({ ...f, is_blocklist: v }))}
+              >
+                <RadioGroup
+                  value={form.blocklist_mode}
+                  onValueChange={v => setForm(f => ({ ...f, blocklist_mode: v }))}
+                  className="flex flex-col sm:flex-row sm:items-center gap-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="indeterminate" id="block-indeterminate" />
+                    <Label htmlFor="block-indeterminate" className="font-normal cursor-pointer text-sm">Tempo indeterminado</Label>
+                  </div>
+                  <Separator orientation="vertical" className="hidden sm:block h-6" />
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="custom" id="block-custom" />
+                    <Label htmlFor="block-custom" className="font-normal cursor-pointer text-sm">Personalizar dias</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      className="w-20 h-8"
+                      value={form.blocklist_days}
+                      disabled={form.blocklist_mode !== "custom"}
+                      onChange={e => setForm(f => ({ ...f, blocklist_days: Math.max(0, Number(e.target.value) || 0) }))}
+                    />
+                  </div>
+                </RadioGroup>
+              </SwitchCard>
             </div>
 
             {/* Ativo toggle (only on edit) */}
             {form.id && (
-              <div className="flex items-center gap-2">
-                <Switch checked={form.active} onCheckedChange={v => setForm(f => ({ ...f, active: v }))} />
-                <Label>Ativo</Label>
-              </div>
+              <>
+                <Separator />
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.active} onCheckedChange={v => setForm(f => ({ ...f, active: v }))} />
+                  <Label>Ativo</Label>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending}>
-              {form.id ? "Salvar" : "Criar"}
+              {form.id ? "Salvar" : "Adicionar Qualificação"}
             </Button>
           </DialogFooter>
         </DialogContent>
