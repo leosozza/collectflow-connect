@@ -1,41 +1,41 @@
-# Plano: Enviar CPF no mailing e localizar ficha por CPF na chamada
 
-## Contexto
 
-O mailing enviado ao 3CPlus ja inclui o CPF como `identifier` e o ID do cliente como `Extra3`. Porem, quando a chamada retorna, o sistema tenta localizar o cliente apenas pelo telefone (`useClientByPhone`), que falha se o formato do numero nao bater. A 3CPlus retorna os dados do mailing no objeto do agente durante a chamada (campos como `mailing_identifier`, `mailing_extra3`, etc).
+# Plano: Extrair CPF/telefone do `company_calls` (nao do `agents_status`)
 
-## Mudancas
+## Diagnostico
 
-### 1. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+Os logs revelam o problema real:
 
-**Extrair dados do mailing do agente em chamada:**
+- **`agents_status`** retorna apenas: `{id, extension, name, status, status_start_time}` -- **sem phone, sem mailing fields**
+- **`company_calls`** retorna os dados do mailing, incluindo CPF e telefone, **mas indexados por status e por agente**:
+```json
+{"data":{"4":[{"agent":"100707","phone":"5531987471336","identifier":"03406715648","campaign_id":"251356",...}]}}
+```
 
-- Quando `isOnCall`, alem do `phone`/`remote_phone`, extrair:
-  - `myAgent.mailing_identifier` ou `myAgent.identifier` (CPF)
-  - `myAgent.mailing_extra3` ou `myAgent.Extra3` (client UUID)
-- Logar esses campos no console para debug
-- Passar `clientCpf` e `clientId` para o `TelefoniaAtendimentoWrapper`
+O codigo atual tenta ler `myAgent.mailing_identifier` e `myAgent.phone`, que nao existem no objeto retornado por `agents_status`. Os dados estao no `company_calls`, no objeto da chamada ativa do agente.
 
-**Atualizar `TelefoniaAtendimentoWrapper`:**
+## Correcao
 
-- Aceitar novas props: `clientCpf?: string` e `clientDbId?: string`
-- Prioridade de lookup:
-  1. Se `clientDbId` (UUID) estiver presente, navegar direto para `/atendimento/${clientDbId}`
-  2. Se `clientCpf` estiver presente, buscar cliente por CPF na tabela `clients`
-  3. Fallback: buscar por telefone (comportamento atual)
-- Criar query adicional para buscar por CPF quando disponivel
+### `TelefoniaDashboard.tsx`
 
-### 2. `src/components/carteira/DialerExportDialog.tsx`
+1. **Apos o `fetchAll`**, criar uma funcao que cruza `company_calls.data` com o `operatorAgentId` para encontrar a chamada ativa do agente:
+   - `company_calls.data` pode ser um objeto indexado por status (ex: `{"2": [...], "4": [...]}`) ou um array
+   - Iterar por todas as chamadas e encontrar a que tem `agent == operatorAgentId` e status de chamada ativa (status 2 = em ligacao)
+   - Extrair `identifier` (CPF), `phone`, e quaisquer campos `Extra` dessa chamada
 
-Ja envia `identifier` (CPF) e `Extra3` (client.id) -- nenhuma mudanca necessaria aqui.
+2. **Armazenar a chamada ativa do agente** em um state (`activeCall`) ou derivar via useMemo
 
-### 3. `src/components/contact-center/threecplus/MailingPanel.tsx`
+3. **Atualizar os logs** para mostrar os dados extraidos da chamada:
+```
+console.log("[3CPlus] activeCall for agent:", JSON.stringify(activeCall));
+console.log("[3CPlus] CPF:", activeCall?.identifier, "Phone:", activeCall?.phone);
+```
 
-Ja envia `identifier` (CPF) -- nenhuma mudanca necessaria aqui.
+4. **Passar para o `TelefoniaAtendimentoWrapper`** os dados corretos da chamada ativa ao inves dos campos inexistentes do agente
 
 ## Resumo
 
+| Arquivo | Mudanca |
+|---|---|
+| `TelefoniaDashboard.tsx` | Extrair chamada ativa do `companyCalls.data` cruzando com `operatorAgentId`; usar `identifier`/`phone` da chamada para lookup do cliente |
 
-| Arquivo                  | Mudanca                                                                                                                                                                                                                                                                                                                |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TelefoniaDashboard.tsx` | Extrair CPF/ID do mailing da chamada, passar para wrapper, priorizar lookup por ID > CPF > telefone e normalize o cpf para somente numeros e mostre toast como feedback se ocorrer algum erro e ao clicar no toast mostre o log detalhado do erro com botao para copiar e ao copiar mostre o resultado completo no log |
