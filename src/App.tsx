@@ -87,7 +87,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <TenantProvider>
-          <Routes>
+          <AtendimentoModalProvider>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route
