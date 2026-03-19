@@ -36,6 +36,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   const { trackAction } = useActivityTracker();
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [callingPhone, setCallingPhone] = useState(false);
+  const [hangingUp, setHangingUp] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const settings = (tenant?.settings as Record<string, any>) || {};
 
