@@ -396,7 +396,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     setLoggingOutSelf(true);
     try {
       const result = await invoke("logout_agent_self", { agent_id: operatorAgentId });
-      if (result?.status && result.status >= 400) {
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
