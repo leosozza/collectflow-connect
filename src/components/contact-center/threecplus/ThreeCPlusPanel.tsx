@@ -141,27 +141,30 @@ const ThreeCPlusPanel = () => {
 
       {/* Level 2 — Sub-tab navigation */}
       {currentGroup.tabs.length > 1 && (
-        <div className="flex items-center gap-1.5 px-1">
-          {currentGroup.tabs.map((t) => {
-            const Icon = t.icon;
-            const isActive = activeTab === t.value;
-            return (
-              <button
-                key={t.value}
-                onClick={() => setActiveTab(t.value)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                  isActive
-                    ? "bg-primary/15 text-primary border border-primary/30"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div className="border-t border-border" />
+          <div className="flex items-center gap-1.5 px-1">
+            {currentGroup.tabs.map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.value;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setActiveTab(t.value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all border",
+                    isActive
+                      ? "bg-primary/20 text-primary font-semibold border-primary/40"
+                      : "text-muted-foreground/80 border-transparent hover:bg-accent hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Content */}
