@@ -554,12 +554,33 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
-  // Debug log for call detection + mailing fields
-  const mailingCpf = myAgent?.mailing_identifier || myAgent?.identifier || "";
-  const mailingClientId = myAgent?.mailing_extra3 || myAgent?.Extra3 || myAgent?.extra3 || "";
+  // Extract active call for this agent from company_calls data
+  const activeCall = useMemo(() => {
+    if (!operatorAgentId || !companyCalls) return null;
+    const callsData = companyCalls?.data || companyCalls;
+    const agentIdStr = String(operatorAgentId);
+    let allCalls: any[] = [];
+    if (Array.isArray(callsData)) {
+      allCalls = callsData;
+    } else if (typeof callsData === "object" && callsData !== null) {
+      // company_calls.data is indexed by status: {"2": [...], "4": [...]}
+      for (const statusKey of Object.keys(callsData)) {
+        const group = callsData[statusKey];
+        if (Array.isArray(group)) allCalls.push(...group);
+      }
+    }
+    return allCalls.find((c: any) => String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr) || null;
+  }, [companyCalls, operatorAgentId]);
+
+  // Get mailing fields from active call (not from agents_status which lacks them)
+  const mailingCpf = activeCall?.identifier || activeCall?.mailing_identifier || "";
+  const mailingClientId = activeCall?.Extra3 || activeCall?.extra3 || activeCall?.mailing_extra3 || "";
+  const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
+
   if (isOperatorView && myAgent) {
-    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone, "call_id:", myAgent.call_id, "current_call_id:", myAgent.current_call_id);
-    console.log("[3CPlus] mailing fields — identifier (CPF):", mailingCpf, "extra3 (clientId):", mailingClientId, "raw mailing keys:", Object.keys(myAgent).filter((k: string) => k.toLowerCase().includes("mailing") || k.toLowerCase().includes("extra") || k.toLowerCase().includes("identifier")).join(", "));
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone);
+    console.log("[3CPlus] activeCall from company_calls:", JSON.stringify(activeCall));
+    console.log("[3CPlus] resolved mailing — CPF:", mailingCpf, "clientDbId:", mailingClientId, "phone:", activeCallPhone);
   }
 
   const handleReconnectSip = async () => {
@@ -653,7 +674,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State 3: On call → show atendimento (unified)
-    if (isOnCall && (myAgent?.phone || myAgent?.remote_phone || mailingCpf || mailingClientId)) {
+    if (isOnCall && (activeCallPhone || mailingCpf || mailingClientId)) {
       return (
         <div className="space-y-0">
           {/* Top bar - on call */}
@@ -664,9 +685,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </div>
           </div>
           <TelefoniaAtendimentoWrapper
-            clientPhone={myAgent.phone || myAgent.remote_phone || ""}
+            clientPhone={activeCallPhone}
             agentId={operatorAgentId!}
-            callId={myAgent.call_id || myAgent.current_call_id}
+            callId={activeCall?.call_id || myAgent?.call_id || myAgent?.current_call_id}
             clientCpf={mailingCpf}
             clientDbId={mailingClientId}
           />
