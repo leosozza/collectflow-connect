@@ -1,41 +1,39 @@
 
 
-# Plano: Extrair CPF/telefone do `company_calls` (nao do `agents_status`)
+# Plano: Modal de Atendimento ao receber chamada 3CPlus
 
-## Diagnostico
+## Objetivo
+Quando uma chamada do 3CPlus e atendida, ao inves de navegar para `/atendimento/:clientId`, abrir um Dialog/modal fullscreen com o `AtendimentoPage` embutido. Isso mantém o operador na pagina atual e e mais rapido (sem troca de rota).
 
-Os logs revelam o problema real:
+## Mudancas
 
-- **`agents_status`** retorna apenas: `{id, extension, name, status, status_start_time}` -- **sem phone, sem mailing fields**
-- **`company_calls`** retorna os dados do mailing, incluindo CPF e telefone, **mas indexados por status e por agente**:
-```json
-{"data":{"4":[{"agent":"100707","phone":"5531987471336","identifier":"03406715648","campaign_id":"251356",...}]}}
-```
+### 1. Criar contexto global `AtendimentoModalContext`
+**Novo arquivo**: `src/hooks/useAtendimentoModal.tsx`
 
-O codigo atual tenta ler `myAgent.mailing_identifier` e `myAgent.phone`, que nao existem no objeto retornado por `agents_status`. Os dados estao no `company_calls`, no objeto da chamada ativa do agente.
+- Context com `openAtendimento(clientId, agentId?, callId?)` e `closeAtendimento()`
+- State: `isOpen`, `clientId`, `agentId`, `callId`
+- Provider renderiza um `Dialog` fullscreen (max-w-7xl, max-h-[95vh]) contendo `AtendimentoPage` com `embedded={true}`
+- O dialog usa `overflow-y-auto` para scroll interno
 
-## Correcao
+### 2. Atualizar `TelefoniaAtendimentoWrapper` em `TelefoniaDashboard.tsx`
+- Importar `useAtendimentoModal`
+- Substituir `navigate(\`/atendimento/${resolvedId}\`)` por `openAtendimento(resolvedId, agentId, callId)`
+- Remover `useNavigate` e `hasNavigated` ref (substituir por ref que evita abrir duplicado)
 
-### `TelefoniaDashboard.tsx`
+### 3. Registrar o Provider no `App.tsx`
+- Envolver as rotas com `AtendimentoModalProvider` (dentro de `AuthProvider` e `TenantProvider`)
+- O modal fica disponivel globalmente em qualquer rota
 
-1. **Apos o `fetchAll`**, criar uma funcao que cruza `company_calls.data` com o `operatorAgentId` para encontrar a chamada ativa do agente:
-   - `company_calls.data` pode ser um objeto indexado por status (ex: `{"2": [...], "4": [...]}`) ou um array
-   - Iterar por todas as chamadas e encontrar a que tem `agent == operatorAgentId` e status de chamada ativa (status 2 = em ligacao)
-   - Extrair `identifier` (CPF), `phone`, e quaisquer campos `Extra` dessa chamada
-
-2. **Armazenar a chamada ativa do agente** em um state (`activeCall`) ou derivar via useMemo
-
-3. **Atualizar os logs** para mostrar os dados extraidos da chamada:
-```
-console.log("[3CPlus] activeCall for agent:", JSON.stringify(activeCall));
-console.log("[3CPlus] CPF:", activeCall?.identifier, "Phone:", activeCall?.phone);
-```
-
-4. **Passar para o `TelefoniaAtendimentoWrapper`** os dados corretos da chamada ativa ao inves dos campos inexistentes do agente
-
-## Resumo
+## Detalhes tecnicos
 
 | Arquivo | Mudanca |
 |---|---|
-| `TelefoniaDashboard.tsx` | Extrair chamada ativa do `companyCalls.data` cruzando com `operatorAgentId`; usar `identifier`/`phone` da chamada para lookup do cliente |
+| `src/hooks/useAtendimentoModal.tsx` | Novo — context + provider com Dialog fullscreen renderizando AtendimentoPage embedded |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Trocar `navigate()` por `openAtendimento()` no wrapper |
+| `src/App.tsx` | Adicionar `AtendimentoModalProvider` envolvendo rotas |
+
+## Notas
+- `AtendimentoPage` ja suporta `embedded={true}` que oculta breadcrumb/navegacao — perfeito para modal
+- O Dialog sera renderizado via portal, entao funciona em qualquer pagina sem conflito de layout
+- Abertura instantanea pois nao ha troca de rota, apenas mount do componente
 
