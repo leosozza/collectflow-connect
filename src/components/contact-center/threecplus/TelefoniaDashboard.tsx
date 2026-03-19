@@ -28,6 +28,7 @@ import AtendimentoPage from "@/pages/AtendimentoPage";
 /** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
   const { client, isLoading } = useClientByPhone(clientPhone);
+  const navigate = useNavigate();
 
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
@@ -36,11 +37,32 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
   if (!client) {
     return (
       <Card className="border-dashed m-3">
-        <CardContent className="flex items-center gap-3 py-6">
-          <UserX className="w-5 h-5 text-muted-foreground" />
-          <div>
-            <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
-            <p className="text-xs text-muted-foreground">Telefone: {clientPhone}</p>
+        <CardContent className="py-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <UserX className="w-5 h-5 text-amber-500" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
+              <p className="text-xs text-muted-foreground">Telefone detectado: {clientPhone}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => navigate(`/cadastro?phone=${encodeURIComponent(clientPhone)}`)}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Cadastrar Cliente
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => navigate(`/atendimento?phone=${encodeURIComponent(clientPhone)}`)}
+            >
+              <Phone className="w-3.5 h-3.5" />
+              Abrir Atendimento
+            </Button>
           </div>
         </CardContent>
       </Card>
