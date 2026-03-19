@@ -265,6 +265,34 @@ const CampaignsPanel = () => {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Lista de Qualificação</Label>
+                <Select value={selectedQualList} onValueChange={setSelectedQualList}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {qualLists.map((ql: any) => (
+                      <SelectItem key={ql.id} value={String(ql.id)}>{ql.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Grupo de Pausas</Label>
+                <Select value={selectedWorkBreakGroup} onValueChange={setSelectedWorkBreakGroup}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workBreakGroups.map((wbg: any) => (
+                      <SelectItem key={wbg.id} value={String(wbg.id)}>{wbg.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
