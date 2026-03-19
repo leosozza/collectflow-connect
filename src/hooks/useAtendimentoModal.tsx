@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import AtendimentoPage from "@/pages/AtendimentoPage";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Minimize2, Maximize2, GripHorizontal, Phone, PhoneOff } from "lucide-react";
+import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface AtendimentoModalState {
@@ -10,10 +10,13 @@ interface AtendimentoModalState {
   clientId: string | null;
   agentId?: number;
   callId?: string | number;
+  waitingForCall?: boolean;
 }
 
 interface AtendimentoModalContextType {
   openAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
+  openWaiting: (agentId: number) => void;
+  updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
   closeAtendimento: () => void;
   isOpen: boolean;
 }
@@ -37,7 +40,6 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const [elapsed, setElapsed] = useState(0);
   const openedAt = useRef<number>(0);
 
-  // Timer
   useEffect(() => {
     if (!state.isOpen) { setElapsed(0); return; }
     openedAt.current = Date.now();
@@ -51,7 +53,6 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
-  // Fetch client name for minimized bar
   const { data: clientData } = useQuery({
     queryKey: ["atendimento-widget-client", state.clientId],
     queryFn: async () => {
@@ -61,14 +62,44 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     enabled: !!state.clientId && state.isOpen,
   });
 
+  const centerPosition = useCallback(() => {
+    setPosition({
+      x: Math.max(0, (window.innerWidth - window.innerWidth * 0.95) / 2),
+      y: Math.max(0, (window.innerHeight - window.innerHeight * 0.85) / 2),
+    });
+  }, []);
+
   const openAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
     console.log("[AtendimentoModal] Opening for client:", clientId, "agent:", agentId, "call:", callId);
-    setState({ isOpen: true, clientId, agentId, callId });
+    setState({ isOpen: true, clientId, agentId, callId, waitingForCall: false });
     setIsMinimized(false);
-    if (!hasCustomPosition) {
-      setPosition({ x: Math.max(0, (window.innerWidth - window.innerWidth * 0.95) / 2), y: Math.max(0, (window.innerHeight - window.innerHeight * 0.85) / 2) });
-    }
-  }, [hasCustomPosition]);
+    if (!hasCustomPosition) centerPosition();
+  }, [hasCustomPosition, centerPosition]);
+
+  const openWaiting = useCallback((agentId: number) => {
+    console.log("[AtendimentoModal] Opening in waiting mode for agent:", agentId);
+    setState((prev) => {
+      if (prev.isOpen && prev.clientId) return prev;
+      return { isOpen: true, clientId: null, agentId, waitingForCall: true };
+    });
+    setIsMinimized(true);
+    setPosition({ x: window.innerWidth - 380, y: window.innerHeight - 64 });
+    setHasCustomPosition(true);
+  }, []);
+
+  const updateAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
+    console.log("[AtendimentoModal] Updating with client:", clientId, "call:", callId);
+    setState((prev) => ({
+      ...prev,
+      isOpen: true,
+      clientId,
+      agentId: agentId ?? prev.agentId,
+      callId: callId ?? prev.callId,
+      waitingForCall: false,
+    }));
+    setIsMinimized(false);
+    if (!hasCustomPosition) centerPosition();
+  }, [hasCustomPosition, centerPosition]);
 
   const closeAtendimento = useCallback(() => {
     console.log("[AtendimentoModal] Closing");
@@ -76,7 +107,6 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setIsMinimized(false);
   }, []);
 
-  // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
@@ -103,12 +133,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     };
   }, []);
 
-  // Reset position when expanding from minimized
   const handleExpand = () => {
     setIsMinimized(false);
-    if (!hasCustomPosition) {
-      setPosition({ x: Math.max(0, (window.innerWidth - window.innerWidth * 0.95) / 2), y: Math.max(0, (window.innerHeight - window.innerHeight * 0.85) / 2) });
-    }
+    if (!hasCustomPosition) centerPosition();
   };
 
   const handleMinimize = () => {
@@ -117,16 +144,15 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setHasCustomPosition(true);
   };
 
-  const clientName = clientData?.nome_completo || "Cliente";
+  const clientName = clientData?.nome_completo || (state.waitingForCall ? "Aguardando ligação..." : "Cliente");
 
   return (
-    <AtendimentoModalContext.Provider value={{ openAtendimento, closeAtendimento, isOpen: state.isOpen }}>
+    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, isOpen: state.isOpen }}>
       {children}
 
       {state.isOpen && (
         <>
-          {/* Backdrop only when expanded */}
-          {!isMinimized && (
+          {!isMinimized && !state.waitingForCall && (
             <div className="fixed inset-0 bg-black/40 z-[9998] animate-in fade-in-0 duration-200" onClick={handleMinimize} />
           )}
 
@@ -139,10 +165,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
               left: position.x,
               top: position.y,
               width: isMinimized ? 360 : "min(95vw, 1600px)",
-              height: isMinimized ? "auto" : "min(85vh, 900px)",
+              height: isMinimized ? "auto" : (state.waitingForCall ? "auto" : "min(85vh, 900px)"),
             }}
           >
-            {/* Draggable header */}
             <div
               ref={headerRef}
               onMouseDown={handleMouseDown}
@@ -155,12 +180,18 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
 
               {isMinimized ? (
                 <>
-                  <Phone className="w-3.5 h-3.5 text-green-500 animate-pulse flex-shrink-0" />
+                  {state.waitingForCall ? (
+                    <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                  ) : (
+                    <Phone className="w-3.5 h-3.5 text-green-500 animate-pulse flex-shrink-0" />
+                  )}
                   <span className="text-sm font-medium truncate flex-1">{clientName}</span>
                   <span className="text-xs text-muted-foreground font-mono tabular-nums">{formatTime(elapsed)}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  </Button>
+                  {!state.waitingForCall && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
@@ -180,17 +211,14 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
               )}
             </div>
 
-            {/* Content — only when expanded */}
-            {!isMinimized && (
+            {!isMinimized && state.clientId && !state.waitingForCall && (
               <div className="overflow-y-auto p-4 sm:p-6" style={{ height: "calc(100% - 44px)" }}>
-                {state.clientId && (
-                  <AtendimentoPage
-                    clientId={state.clientId}
-                    agentId={state.agentId}
-                    callId={state.callId}
-                    embedded
-                  />
-                )}
+                <AtendimentoPage
+                  clientId={state.clientId}
+                  agentId={state.agentId}
+                  callId={state.callId}
+                  embedded
+                />
               </div>
             )}
           </div>
