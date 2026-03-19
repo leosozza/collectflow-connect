@@ -30,7 +30,36 @@ const CampaignsPanel = () => {
   const [newCampaignName, setNewCampaignName] = useState("");
   const [newStartTime, setNewStartTime] = useState("08:00");
   const [newEndTime, setNewEndTime] = useState("18:30");
+  const [selectedQualList, setSelectedQualList] = useState("");
+  const [selectedWorkBreakGroup, setSelectedWorkBreakGroup] = useState("");
   const [creating, setCreating] = useState(false);
+
+  const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
+    const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+      body: { action, domain, api_token: apiToken, ...extra },
+    });
+    if (error) throw error;
+    return data;
+  }, [domain, apiToken]);
+
+  // Fetch qualification lists and work break groups for campaign creation
+  const { data: qualLists = [] } = useQuery({
+    queryKey: ["3cp-qualification-lists", domain],
+    queryFn: async () => {
+      const data = await invoke("list_qualification_lists");
+      return Array.isArray(data) ? data : data?.data || [];
+    },
+    enabled: hasCredentials,
+  });
+
+  const { data: workBreakGroups = [] } = useQuery({
+    queryKey: ["3cp-work-break-groups", domain],
+    queryFn: async () => {
+      const data = await invoke("list_work_break_groups");
+      return Array.isArray(data) ? data : data?.data || [];
+    },
+    enabled: hasCredentials,
+  });
 
   const loadCampaigns = async () => {
     if (!hasCredentials) return;
