@@ -178,7 +178,7 @@ const CadastrosPage = () => {
         {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
         
-        {active === "categorizacao_chamada" && <CallDispositionTypesTab />}
+        {active === "tabulacao_chamada" && <CallDispositionTypesTab />}
         
       </div>
     </div>
