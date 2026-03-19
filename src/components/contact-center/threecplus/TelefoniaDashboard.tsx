@@ -72,12 +72,12 @@ const TelefoniaAtendimentoWrapper = ({
 
   // Open atendimento modal when client is resolved
   useEffect(() => {
-    if (resolvedId && !hasOpened.current && !modalIsOpen) {
+    if (resolvedId && !hasOpened.current) {
       hasOpened.current = true;
-      console.log("[Telefonia] Cliente encontrado, abrindo modal para", resolvedId);
-      openAtendimento(resolvedId, agentId, callId);
+      console.log("[Telefonia] Cliente encontrado, atualizando widget para", resolvedId);
+      updateAtendimento(resolvedId, agentId, callId);
     }
-  }, [resolvedId, openAtendimento, modalIsOpen, agentId, callId]);
+  }, [resolvedId, updateAtendimento, agentId, callId]);
 
   // Reset flag when inputs change
   useEffect(() => {
