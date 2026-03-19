@@ -45,6 +45,7 @@ const TelefoniaAtendimentoWrapper = ({
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
   const { openAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
+  const navigate = useNavigate();
   const hasOpened = useRef(false);
 
   // Query by CPF when available
