@@ -123,6 +123,7 @@ const CallDispositionTypesTab = () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização atualizada");
       setOpen(false);
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao atualizar"),
   });
