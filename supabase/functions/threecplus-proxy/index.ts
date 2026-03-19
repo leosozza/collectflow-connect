@@ -703,26 +703,14 @@ Deno.serve(async (req) => {
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        // Resolve agent token
-        const usersUrlPause = buildUrl(baseUrl, 'users', authParam);
-        const usersResPause = await fetch(usersUrlPause, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResPause.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResPause.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataPause = await usersResPause.json();
-        const usersListPause = Array.isArray(usersDataPause) ? usersDataPause : usersDataPause?.data || [];
-        const targetPause = usersListPause.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetPause || !targetPause.api_token) {
+        const agentPause = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentPause || !agentPause.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthPause = `api_token=${targetPause.api_token}`;
-        url = `${baseUrl}/agent/pause?${agentAuthPause}`;
+        url = `${baseUrl}/agent/pause?api_token=${agentPause.api_token}`;
         method = 'POST';
         reqBody = JSON.stringify({ work_break_interval_id: body.interval_id });
         console.log(`Pausing agent ${body.agent_id} with interval ${body.interval_id}`);
