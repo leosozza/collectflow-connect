@@ -594,6 +594,8 @@ export type Database = {
         Row: {
           active: boolean
           behavior: string
+          blocklist_days: number
+          blocklist_mode: string
           color: string
           created_at: string
           group_name: string
@@ -607,12 +609,16 @@ export type Database = {
           is_unknown: boolean
           key: string
           label: string
+          schedule_allow_other_number: boolean
+          schedule_days_limit: number
           sort_order: number
           tenant_id: string
         }
         Insert: {
           active?: boolean
           behavior?: string
+          blocklist_days?: number
+          blocklist_mode?: string
           color?: string
           created_at?: string
           group_name?: string
@@ -626,12 +632,16 @@ export type Database = {
           is_unknown?: boolean
           key: string
           label: string
+          schedule_allow_other_number?: boolean
+          schedule_days_limit?: number
           sort_order?: number
           tenant_id: string
         }
         Update: {
           active?: boolean
           behavior?: string
+          blocklist_days?: number
+          blocklist_mode?: string
           color?: string
           created_at?: string
           group_name?: string
@@ -645,6 +655,8 @@ export type Database = {
           is_unknown?: boolean
           key?: string
           label?: string
+          schedule_allow_other_number?: boolean
+          schedule_days_limit?: number
           sort_order?: number
           tenant_id?: string
         }
