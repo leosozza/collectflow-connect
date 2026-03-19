@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAtendimentoModal } from "@/hooks/useAtendimentoModal";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -43,8 +44,9 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
+  const { openAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
   const navigate = useNavigate();
-  const hasNavigated = useRef(false);
+  const hasOpened = useRef(false);
 
   // Query by CPF when available
   const { data: clientByCpf, isLoading: cpfLoading } = useQuery({
@@ -68,18 +70,18 @@ const TelefoniaAtendimentoWrapper = ({
 
   console.log("[3CPlus] resolved — clientDbId:", clientDbId, "cpfResult:", clientByCpf?.id, "phoneResult:", clientByPhone?.id, "final:", resolvedId, "isLoading:", isLoading);
 
-  // Navigate to atendimento when client is resolved
+  // Open atendimento modal when client is resolved
   useEffect(() => {
-    if (resolvedId && !hasNavigated.current) {
-      hasNavigated.current = true;
-      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", resolvedId);
-      navigate(`/atendimento/${resolvedId}`);
+    if (resolvedId && !hasOpened.current && !modalIsOpen) {
+      hasOpened.current = true;
+      console.log("[Telefonia] Cliente encontrado, abrindo modal para", resolvedId);
+      openAtendimento(resolvedId, agentId, callId);
     }
-  }, [resolvedId, navigate]);
+  }, [resolvedId, openAtendimento, modalIsOpen, agentId, callId]);
 
-  // Reset navigation flag when inputs change
+  // Reset flag when inputs change
   useEffect(() => {
-    hasNavigated.current = false;
+    hasOpened.current = false;
   }, [clientPhone, clientCpf, clientDbId]);
 
   // Show error toast if lookup fails after loading

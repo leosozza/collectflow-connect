@@ -41,6 +41,7 @@ import AdminUsuariosHubPage from "./pages/admin/AdminUsuariosHubPage";
 import LandingPage from "./pages/LandingPage";
 import SupportAdminPage from "./pages/SupportAdminPage";
 import SuperAdminLayout from "./components/SuperAdminLayout";
+import { AtendimentoModalProvider } from "./hooks/useAtendimentoModal";
 import AdminFinanceiroPage from "./pages/admin/AdminFinanceiroPage";
 import AdminTreinamentosPage from "./pages/admin/AdminTreinamentosPage";
 import AdminConfiguracoesPage from "./pages/admin/AdminConfiguracoesPage";
@@ -86,6 +87,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <TenantProvider>
+          <AtendimentoModalProvider>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -352,6 +354,7 @@ const App = () => (
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </AtendimentoModalProvider>
           </TenantProvider>
         </AuthProvider>
       </BrowserRouter>
