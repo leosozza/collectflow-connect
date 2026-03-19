@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
+import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
@@ -64,6 +65,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [submitting, setSubmitting] = useState(false);
   const [enrichingAddress, setEnrichingAddress] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
+  const [generatingBoletos, setGeneratingBoletos] = useState(false);
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
 
   // Fetch credor rules and auto-fill honorários + aging discount
@@ -247,12 +249,48 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         notes: notes || undefined,
       };
 
-      await createAgreement(data, user.id, profile.tenant_id, outOfStandard.isOut ? {
+      const agreement = await createAgreement(data, user.id, profile.tenant_id, outOfStandard.isOut ? {
         requiresApproval: true,
         approvalReason: outOfStandard.reasons.join("; "),
       } : undefined);
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
+
+      // Generate boletos automatically via Negociarie
+      if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
+        setGeneratingBoletos(true);
+        try {
+          const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
+            number: inst.number,
+            value: inst.value,
+            dueDate: inst.dueDate,
+          }));
+
+          const boletoResult = await negociarieService.generateAgreementBoletos(
+            {
+              id: agreement.id,
+              client_cpf: cpf,
+              credor,
+              tenant_id: profile.tenant_id,
+              client_name: clientName,
+            },
+            boletoInstallments
+          );
+
+          if (boletoResult.success > 0 && boletoResult.failed === 0) {
+            toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
+          } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
+            toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
+          } else if (boletoResult.failed > 0) {
+            toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
+          }
+        } catch (boletoErr: any) {
+          toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
+        } finally {
+          setGeneratingBoletos(false);
+        }
+      }
+
       onAgreementCreated();
     } catch (err: any) {
       toast.error(err.message || "Erro ao gravar acordo");
@@ -521,23 +559,23 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
-      {enrichingAddress && (
+      {(enrichingAddress || generatingBoletos) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
-          {addressStatus}
+          {generatingBoletos ? "Gerando boletos na Negociarie..." : addressStatus}
         </div>
       )}
 
       <div className="flex gap-3">
         <Button
           onClick={handleSubmit}
-          disabled={submitting || !simulated || hasActiveAgreement}
+          disabled={submitting || generatingBoletos || !simulated || hasActiveAgreement}
           className="flex-1 gap-2"
           size="lg"
           variant={outOfStandard.isOut ? "outline" : "default"}
         >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
-          {enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
+          {submitting || generatingBoletos ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+          {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
         </Button>
       </div>
     </div>

@@ -1,0 +1,1 @@
+ALTER TABLE public.negociarie_cobrancas ADD COLUMN IF NOT EXISTS agreement_id UUID REFERENCES public.agreements(id) ON DELETE SET NULL;
