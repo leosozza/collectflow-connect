@@ -144,6 +144,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const [agents, setAgents] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [agentCampaigns, setAgentCampaigns] = useState<any[]>([]);
   const [companyCalls, setCompanyCalls] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
