@@ -522,7 +522,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                     <SelectValue placeholder="Selecione uma campanha..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {campaigns
+                    {(agentCampaigns.length > 0 ? agentCampaigns : campaigns)
                       .filter((c: any) => {
                         const s = String(c.status ?? "").toLowerCase();
                         return s === "running" || s === "paused" || !c.paused;
