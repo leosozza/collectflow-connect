@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
