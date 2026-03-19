@@ -559,23 +559,23 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
-      {enrichingAddress && (
+      {(enrichingAddress || generatingBoletos) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
-          {addressStatus}
+          {generatingBoletos ? "Gerando boletos na Negociarie..." : addressStatus}
         </div>
       )}
 
       <div className="flex gap-3">
         <Button
           onClick={handleSubmit}
-          disabled={submitting || !simulated || hasActiveAgreement}
+          disabled={submitting || generatingBoletos || !simulated || hasActiveAgreement}
           className="flex-1 gap-2"
           size="lg"
           variant={outOfStandard.isOut ? "outline" : "default"}
         >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
-          {enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
+          {submitting || generatingBoletos ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+          {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
         </Button>
       </div>
     </div>
