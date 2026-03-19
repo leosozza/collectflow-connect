@@ -593,9 +593,18 @@ export type Database = {
       call_disposition_types: {
         Row: {
           active: boolean
+          behavior: string
+          color: string
           created_at: string
           group_name: string
           id: string
+          impact: string
+          is_blocklist: boolean
+          is_callback: boolean
+          is_conversion: boolean
+          is_cpc: boolean
+          is_schedule: boolean
+          is_unknown: boolean
           key: string
           label: string
           sort_order: number
@@ -603,9 +612,18 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          behavior?: string
+          color?: string
           created_at?: string
           group_name?: string
           id?: string
+          impact?: string
+          is_blocklist?: boolean
+          is_callback?: boolean
+          is_conversion?: boolean
+          is_cpc?: boolean
+          is_schedule?: boolean
+          is_unknown?: boolean
           key: string
           label: string
           sort_order?: number
@@ -613,9 +631,18 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          behavior?: string
+          color?: string
           created_at?: string
           group_name?: string
           id?: string
+          impact?: string
+          is_blocklist?: boolean
+          is_callback?: boolean
+          is_conversion?: boolean
+          is_cpc?: boolean
+          is_schedule?: boolean
+          is_unknown?: boolean
           key?: string
           label?: string
           sort_order?: number
