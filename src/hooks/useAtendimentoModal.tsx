@@ -78,6 +78,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
     isDragging.current = true;
     dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
     e.preventDefault();
