@@ -92,12 +92,26 @@ const CallDispositionTypesTab = () => {
     }
   }, [isLoading, tenantId, types, seeded, seedMut.isPending]);
 
+  const triggerSync = async () => {
+    if (!has3CPlus || !tenantId) return;
+    setSyncing(true);
+    try {
+      await syncDispositionsTo3CPlus(tenantId);
+      toast.success("Tabulações sincronizadas com 3CPlus");
+    } catch {
+      toast.error("Erro ao sincronizar com 3CPlus");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const createMut = useMutation({
     mutationFn: (p: Parameters<typeof createDispositionType>[0]) => createDispositionType(p),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Categorização criada");
       setOpen(false);
+      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
     },
     onError: () => toast.error("Erro ao criar categorização"),
   });
