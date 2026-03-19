@@ -255,7 +255,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
+        <header className="h-12 bg-card border-b border-border flex items-center justify-between px-3 lg:px-4">
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
