@@ -23,7 +23,7 @@ import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
-import AtendimentoPage from "@/pages/AtendimentoPage";
+
 
 /** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
