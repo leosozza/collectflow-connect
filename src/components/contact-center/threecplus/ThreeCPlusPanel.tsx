@@ -84,7 +84,15 @@ const ThreeCPlusPanel = () => {
   }
 
   if (isOperator) {
-    return <TelefoniaDashboard isOperatorView />;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Telefonia</h1>
+          <p className="text-sm text-muted-foreground">Gerencie campanhas, operadores e chamadas</p>
+        </div>
+        <TelefoniaDashboard isOperatorView />
+      </div>
+    );
   }
 
   const currentGroup = groups.find((g) => g.id === activeGroup) || groups[0];
