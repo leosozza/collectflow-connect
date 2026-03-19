@@ -2752,6 +2752,7 @@ export type Database = {
       }
       negociarie_cobrancas: {
         Row: {
+          agreement_id: string | null
           callback_data: Json | null
           client_id: string | null
           created_at: string
@@ -2771,6 +2772,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          agreement_id?: string | null
           callback_data?: Json | null
           client_id?: string | null
           created_at?: string
@@ -2790,6 +2792,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          agreement_id?: string | null
           callback_data?: Json | null
           client_id?: string | null
           created_at?: string
@@ -2809,6 +2812,13 @@ export type Database = {
           valor?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "negociarie_cobrancas_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "negociarie_cobrancas_client_id_fkey"
             columns: ["client_id"]

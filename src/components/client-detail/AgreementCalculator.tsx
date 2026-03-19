@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
+import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
