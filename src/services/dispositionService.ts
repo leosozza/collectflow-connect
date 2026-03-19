@@ -39,6 +39,10 @@ export interface DbDispositionType {
   is_callback: boolean;
   is_schedule: boolean;
   is_blocklist: boolean;
+  schedule_allow_other_number: boolean;
+  schedule_days_limit: number;
+  blocklist_mode: string;
+  blocklist_days: number;
 }
 
 export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
