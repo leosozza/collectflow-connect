@@ -278,7 +278,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
+      console.log("[3CPlus] agents_status response:", JSON.stringify(agentList));
+      console.log("[3CPlus] company_calls response:", JSON.stringify(callsData));
       setAgents(agentList);
+
+      // Log myAgent match
+      if (operatorAgentId) {
+        const foundAgent = agentList.find((a: any) => a.id === operatorAgentId || a.agent_id === operatorAgentId);
+        console.log("[3CPlus] operatorAgentId:", operatorAgentId, "myAgent found:", JSON.stringify(foundAgent));
+      }
 
       const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
 
