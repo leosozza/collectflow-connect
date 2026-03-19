@@ -1,72 +1,75 @@
 
+Do I know what the issue is? Yes.
 
-# Plano: Corrigir parsing da lista de usuários no threecplus-proxy
+O que eu testei:
+- Entrei no preview com o usuário do Vitor e abri a tela `/contact-center/telefonia`.
+- Validei no backend que o Vitor está vinculado ao agente `100707`.
+- Testei diretamente as actions do proxy:
+  - `agent_available_campaigns` para o agente `100707` retornou campanhas válidas.
+  - `login_agent_to_campaign` retornou `status: 204`.
+  - `connect_agent` retornou `status: 204`.
+- Depois disso, consultei `agents_status` novamente e o Vitor mudou de `status: 0` para `status: 1`.
 
-## Problema identificado
+Problema exato:
+1. O backend está chamando a 3CPlus, mas o proxy trata respostas `204 No Content` como erro porque espera JSON em todos os casos.
+2. Para `agent/login` e `agent/connect`, a 3CPlus aparentemente usa `204` como sucesso sem corpo.
+3. O dropdown do operador ainda usa `list_campaigns` em vez de `agent_available_campaigns`, então o fluxo da tela não está alinhado com o fluxo correto por agente.
+4. O frontend não confirma o estado real do agente após login/conexão; ele decide com base na resposta bruta do proxy.
 
-A edge function `threecplus-proxy` tem uma **inconsistência crítica** na forma como busca o token do agente na API 3CPlus. A API retorna dados paginados no formato Laravel: `{ data: { data: [...users...], current_page: 1, ... } }`.
+Arquivos a ajustar:
+- `supabase/functions/threecplus-proxy/index.ts`
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-O `click2call` (que funciona) usa:
-```text
-per_page: '500'
-usersData?.data?.data  (3 níveis: response.data.data)
-```
+Plano de correção:
+1. Corrigir o proxy para tratar `204` como sucesso
+   - Antes do parse JSON, se a resposta vier com `status === 204`, retornar um JSON normalizado como:
+   ```ts
+   { status: 204, success: true, no_content: true }
+   ```
+   - Aplicar isso especialmente ao fluxo de:
+     - `login_agent_to_campaign`
+     - `connect_agent`
+     - `logout_agent_self`
+     - `pause_agent`
+     - `unpause_agent`
+     - `hangup_call`
 
-Mas `connect_agent`, `login_agent_to_campaign`, `logout_agent_self`, `pause_agent`, `unpause_agent`, `qualify_call`, `hangup_call` e `agent_available_campaigns` usam:
-```text
-sem per_page (paginação default)
-usersData?.data  (2 níveis: response.data) → retorna um OBJETO, não um array
-```
+2. Trocar a origem das campanhas do operador
+   - Na tela do operador, usar `agent_available_campaigns` quando houver `threecplus_agent_id`.
+   - Manter `list_campaigns` apenas para visão administrativa.
+   - Isso garante que o Vitor veja só campanhas realmente disponíveis para ele.
 
-Resultado: `.find()` é chamado sobre um objeto em vez de um array, o agente nunca é encontrado, e o `connect_agent` retorna silenciosamente o erro "Agente não encontrado ou sem token de API". O MicroSIP nunca é chamado.
+3. Ajustar o fluxo do botão “Entrar na Campanha”
+   - Sequência:
+     - buscar campanhas do agente
+     - `login_agent_to_campaign`
+     - `connect_agent`
+     - refetch de `agents_status`
+   - Só mostrar erro se:
+     - o proxy devolver `status >= 400`, ou
+     - o agente continuar `status: 0` após a tentativa.
 
-Isso pode ter começado a falhar após a API 3CPlus mudar o formato de resposta ou após o número de usuários ultrapassar o limite de paginação padrão.
+4. Melhorar feedback da tela
+   - Se `204` vier do backend, tratar como sucesso silencioso.
+   - Mostrar mensagens mais específicas:
+     - “Campanha conectada com sucesso”
+     - “Agente entrou na campanha, mas o SIP ainda está offline”
+   - Não exibir mensagem de erro genérica para resposta vazia bem-sucedida.
 
-## Mudança
+5. Adicionar logs temporários de diagnóstico no proxy
+   - Logar:
+     - `agent_id`
+     - `campaign_id`
+     - upstream status
+     - endpoint chamado (`/agent/login`, `/agent/connect`)
+   - Isso ajuda a confirmar se a 3CPlus está respondendo com `204` consistentemente.
 
-### `supabase/functions/threecplus-proxy/index.ts`
+Resultado esperado após implementar:
+- O fluxo do Vitor deixa de interpretar sucesso `204` como falha.
+- A tela passa a listar campanhas corretas do agente.
+- O estado online/SIP passa a refletir o retorno real da 3CPlus.
+- Fica possível distinguir “login feito com sucesso” de “SIP ainda não registrou”.
 
-1. **Criar uma função helper** `resolveAgentToken(baseUrl, authParam, agentId)` que:
-   - Busca GET /users com `per_page=500`
-   - Faz parsing correto: `data?.data?.data || data?.data || data` (suporta ambos os formatos)
-   - Retorna `{ api_token, extension }` ou `null`
-
-2. **Substituir o código duplicado** em todas as 8 actions que resolvem token de agente para usar esta helper
-
-### Actions afetadas
-
-| Action | Linha aprox. |
-|---|---|
-| `login_agent_to_campaign` | ~611 |
-| `connect_agent` | ~645 |
-| `logout_agent_self` | ~674 |
-| `agent_available_campaigns` | ~704 |
-| `pause_agent` | ~734 |
-| `unpause_agent` | ~765 |
-| `qualify_call` | ~793 |
-| `hangup_call` | ~867 |
-
-### Função helper (adicionada no topo do arquivo)
-
-```typescript
-async function resolveAgentToken(baseUrl: string, authParam: string, agentId: number | string) {
-  const url = buildUrl(baseUrl, 'users', authParam, { per_page: '500' });
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
-  if (!res.ok) return null;
-  const raw = await res.json();
-  // Support both paginated { data: { data: [...] } } and flat [...] or { data: [...] }
-  const list = (raw?.data?.data && Array.isArray(raw.data.data))
-    ? raw.data.data
-    : Array.isArray(raw?.data) ? raw.data
-    : Array.isArray(raw) ? raw : [];
-  const numId = Number(agentId);
-  return list.find((u: any) => u.id === numId || Number(u.id) === numId) || null;
-}
-```
-
-## Arquivo alterado
-
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Criar helper `resolveAgentToken` e substituir parsing em 8 actions |
-
+Observação importante do teste:
+- O indício mais forte é que, após o teste direto, o Vitor passou para `status: 1`.
+- Isso mostra que o problema principal não é mais “não chamou a 3CPlus”, e sim “a aplicação está interpretando e exibindo o resultado de forma errada no fluxo do operador”.
