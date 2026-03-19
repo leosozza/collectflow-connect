@@ -799,25 +799,14 @@ Deno.serve(async (req) => {
       case 'hangup_call': {
         const err = requireField(body, 'agent_id', corsHeaders);
         if (err) return err;
-        const usersUrlHangup = buildUrl(baseUrl, 'users', authParam);
-        const usersResHangup = await fetch(usersUrlHangup, { headers: { 'Content-Type': 'application/json' } });
-        if (!usersResHangup.ok) {
-          return new Response(
-            JSON.stringify({ status: usersResHangup.status, detail: 'Falha ao buscar token do agente' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        const usersDataHangup = await usersResHangup.json();
-        const usersListHangup = Array.isArray(usersDataHangup) ? usersDataHangup : usersDataHangup?.data || [];
-        const targetHangup = usersListHangup.find((u: any) => u.id === body.agent_id || u.id === Number(body.agent_id));
-        if (!targetHangup || !targetHangup.api_token) {
+        const agentHangup = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentHangup || !agentHangup.api_token) {
           return new Response(
             JSON.stringify({ status: 404, detail: `Agente ${body.agent_id} não encontrado ou sem token` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const agentAuthHangup = `api_token=${targetHangup.api_token}`;
-        url = `${baseUrl}/agent/hangup?${agentAuthHangup}`;
+        url = `${baseUrl}/agent/hangup?api_token=${agentHangup.api_token}`;
         method = 'POST';
         console.log(`Hanging up call for agent ${body.agent_id}`);
         break;
