@@ -78,9 +78,9 @@ const TelefoniaAtendimentoWrapper = ({
     }
   }, [resolvedId, openAtendimento, modalIsOpen, agentId, callId]);
 
-  // Reset navigation flag when inputs change
+  // Reset flag when inputs change
   useEffect(() => {
-    hasNavigated.current = false;
+    hasOpened.current = false;
   }, [clientPhone, clientCpf, clientDbId]);
 
   // Show error toast if lookup fails after loading

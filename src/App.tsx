@@ -353,6 +353,7 @@ const App = () => (
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </AtendimentoModalProvider>
           </TenantProvider>
         </AuthProvider>
       </BrowserRouter>
