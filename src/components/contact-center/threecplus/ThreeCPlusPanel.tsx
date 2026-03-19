@@ -122,7 +122,7 @@ const ThreeCPlusPanel = () => {
     <div className="space-y-4">
 
       {/* Level 1 — Group navigation */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-6 border-b border-border">
         {groups.map((g) => {
           const Icon = g.icon;
           const isActive = activeGroup === g.id;
@@ -131,13 +131,13 @@ const ThreeCPlusPanel = () => {
               key={g.id}
               onClick={() => handleGroupChange(g.id)}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all",
+                "flex items-center gap-2 pb-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-card text-muted-foreground border border-border hover:bg-accent hover:text-foreground"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
               )}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-4 h-4" />
               {g.label}
             </button>
           );
@@ -146,30 +146,27 @@ const ThreeCPlusPanel = () => {
 
       {/* Level 2 — Sub-tab navigation */}
       {currentGroup.tabs.length > 1 && (
-        <>
-          <div className="border-t border-border" />
-          <div className="flex items-center gap-2 px-1 py-1 -mt-2">
-            {currentGroup.tabs.map((t) => {
-              const Icon = t.icon;
-              const isActive = activeTab === t.value;
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setActiveTab(t.value)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all border",
-                    isActive
-                      ? "bg-primary/20 text-primary font-semibold border-primary/40"
-                      : "text-muted-foreground/80 border-transparent hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </>
+        <div className="flex items-center gap-2">
+          {currentGroup.tabs.map((t) => {
+            const Icon = t.icon;
+            const isActive = activeTab === t.value;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setActiveTab(t.value)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all border",
+                  isActive
+                    ? "bg-primary/15 text-primary font-semibold border-primary/30"
+                    : "text-muted-foreground border-transparent hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       )}
 
       {/* Content */}
