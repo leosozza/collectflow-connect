@@ -144,6 +144,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const [agents, setAgents] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [agentCampaigns, setAgentCampaigns] = useState<any[]>([]);
   const [companyCalls, setCompanyCalls] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -246,16 +247,30 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const fetchAll = useCallback(async () => {
     try {
-      const [agentsData, campaignsData, callsData] = await Promise.all([
+      const promises: Promise<any>[] = [
         invoke("agents_status").catch(() => []),
         invoke("list_campaigns").catch(() => []),
         invoke("company_calls").catch(() => null),
-      ]);
+      ];
+      // Fetch agent-specific campaigns if operator has an agent ID
+      if (operatorAgentId) {
+        promises.push(
+          invoke("agent_available_campaigns", { agent_id: operatorAgentId }).catch(() => [])
+        );
+      }
+
+      const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
       setAgents(agentList);
 
       const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+
+      // Set agent-specific campaigns
+      if (agentCampaignsData) {
+        const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+        setAgentCampaigns(agentCampList);
+      }
 
       const enriched = await Promise.all(
         campList
@@ -284,7 +299,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } finally {
       setLoading(false);
     }
-  }, [invoke]);
+  }, [invoke, operatorAgentId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -343,7 +358,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         agent_id: operatorAgentId,
         campaign_id: Number(selectedCampaign),
       });
-      if (result?.status && result.status >= 400) {
+      // Treat 204/success/no_content as success
+      const isSuccess = result?.success || result?.no_content || (result?.status && result.status >= 200 && result.status < 300);
+      const isError = result?.status && result.status >= 400;
+      
+      if (isError) {
         toast.error(result.detail || result.message || "Erro ao entrar na campanha");
       } else {
         // Auto-connect SIP/MicroSIP after successful login
@@ -351,7 +370,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           const connectResult = await invoke("connect_agent", {
             agent_id: operatorAgentId,
           });
-          if (connectResult?.status && connectResult.status >= 400) {
+          const connectSuccess = connectResult?.success || connectResult?.no_content || (connectResult?.status && connectResult.status >= 200 && connectResult.status < 300);
+          const connectError = connectResult?.status && connectResult.status >= 400;
+          
+          if (connectError) {
             toast.warning("Logado na campanha, mas falha ao conectar MicroSIP. Conecte manualmente.");
           } else {
             toast.success("Conectado! Atenda o MicroSIP para iniciar.");
@@ -374,7 +396,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     setLoggingOutSelf(true);
     try {
       const result = await invoke("logout_agent_self", { agent_id: operatorAgentId });
-      if (result?.status && result.status >= 400) {
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
@@ -442,7 +465,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     setReconnectingSip(true);
     try {
       const result = await invoke("connect_agent", { agent_id: operatorAgentId });
-      if (result?.status && result.status >= 400) {
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
         toast.error(result.detail || "Falha ao reconectar MicroSIP");
       } else {
         toast.success("Reconectando MicroSIP. Atenda a chamada.");
@@ -498,7 +522,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                     <SelectValue placeholder="Selecione uma campanha..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {campaigns
+                    {(agentCampaigns.length > 0 ? agentCampaigns : campaigns)
                       .filter((c: any) => {
                         const s = String(c.status ?? "").toLowerCase();
                         return s === "running" || s === "paused" || !c.paused;
