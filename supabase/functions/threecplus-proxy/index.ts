@@ -233,33 +233,71 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── NEW: Qualifications ──
-      case 'list_qualifications':
-        url = buildUrl(baseUrl, 'qualifications', authParam);
+      // ── Qualification Lists (global) ──
+      case 'list_qualification_lists':
+        url = buildUrl(baseUrl, 'qualification_lists', authParam);
         break;
 
-      case 'create_qualification': {
-        const err = requireField(body, 'qualification_data', corsHeaders);
+      case 'create_qualification_list': {
+        const err = requireField(body, 'name', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, 'qualifications', authParam);
+        url = buildUrl(baseUrl, 'qualification_lists', authParam);
         method = 'POST';
-        reqBody = JSON.stringify(body.qualification_data);
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'update_qualification': {
-        const err = requireField(body, 'qualification_id', corsHeaders);
+      case 'update_qualification_list': {
+        const err = requireField(body, 'list_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}`, authParam);
         method = 'PUT';
-        reqBody = JSON.stringify(body.qualification_data || {});
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'delete_qualification': {
-        const err = requireField(body, 'qualification_id', corsHeaders);
+      case 'delete_qualification_list': {
+        const err = requireField(body, 'list_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── Qualifications inside a list ──
+      case 'list_qualification_list_items': {
+        const err = requireField(body, 'list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications`, authParam);
+        break;
+      }
+
+      case 'create_qualification_list_item': {
+        const err = requireField(body, 'list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications`, authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ name: body.name, ...(body.item_data || {}) });
+        break;
+      }
+
+      case 'update_qualification_list_item': {
+        const err1 = requireField(body, 'list_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'item_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications/${body.item_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify({ name: body.name, ...(body.item_data || {}) });
+        break;
+      }
+
+      case 'delete_qualification_list_item': {
+        const err1 = requireField(body, 'list_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'item_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications/${body.item_id}`, authParam);
         method = 'DELETE';
         break;
       }
