@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUrlState } from "@/hooks/useUrlState";
+import { useParams, useNavigate } from "react-router-dom";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
 import EquipeList from "@/components/cadastros/EquipeList";

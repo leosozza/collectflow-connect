@@ -132,7 +132,7 @@ const App = () => (
               }
             />
             <Route
-              path="/cadastros"
+              path="/cadastros/:tab?"
               element={
                 <ProtectedRoute requireTenant>
                   <AppLayout>
