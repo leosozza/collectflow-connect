@@ -1,50 +1,54 @@
 
 
-# Plano: Corrigir sincronização de tabulações com 3CPlus
+# Plano: Corrigir campos inteiros na API 3CPlus
 
-## Problema identificado
+## Problema
 
-A lista "RIVO Tabulações" é criada com sucesso no 3CPlus, porém as qualificações individuais não aparecem dentro dela. Analisando o código da edge function `threecplus-proxy`, identifiquei dois problemas:
+Os logs da edge function mostram erro 422 em todas as qualificações:
+```
+"behavior":["O campo Comportamento deverá conter um número inteiro."]
+```
 
-1. **Campos insuficientes**: Ao criar cada qualificação, o código envia apenas `{ name: disp.label }`. A API do 3CPlus provavelmente exige campos adicionais como `color`, `positive_impact`, `behavior`, etc.
+O campo `behavior` está sendo enviado como string (`"repetir"`, `"nao_discar_cliente"`) mas a API 3CPlus exige um **inteiro**. Provavelmente `positive_impact` e `blocklist_time_type` também precisam ser inteiros.
 
-2. **Erros silenciosos**: O código não valida a resposta do `createItemRes` — se a API retorna erro, ele ignora silenciosamente e o `newItem.id` fica `undefined`.
+## Mapeamento correto (strings RIVO -> inteiros 3CPlus)
 
-## Mudanças
+| Campo RIVO | Valor enviado (errado) | Valor correto |
+|---|---|---|
+| `behavior: "repetir"` | `"repetir"` | `3` |
+| `behavior: "nao_discar_telefone"` | `"nao_discar_telefone"` | `1` |
+| `behavior: "nao_discar_cliente"` | `"nao_discar_cliente"` | `2` |
+| `positive_impact: true/false` | `true/false` | `1` / `0` |
+| `blocklist_time_type: "indeterminate"` | `"indeterminate"` | `1` |
+| `blocklist_time_type: "custom"` | `"custom"` | `2` |
 
-### 1. Edge function `threecplus-proxy/index.ts` — Ação `sync_dispositions`
+## Mudança
 
-- Enviar os campos completos ao criar qualificações: `name`, `color`, `positive_impact` (boolean), `behavior` (mapeado para valores da API 3CPlus), `is_conversion`, `is_dmc` (CPC), `is_unknown`, `is_callback`, `is_schedule`, `is_blocklist`
-- Adicionar verificação de `createItemRes.ok` e logging de erros
-- Mapear os valores do RIVO para o formato esperado pela API 3CPlus (ex: `impact: "positivo"` → `positive_impact: true`)
+### `supabase/functions/threecplus-proxy/index.ts` — Função `buildQualPayload`
 
-### 2. Mapeamento de campos RIVO → 3CPlus
+Adicionar mapeamento de strings para inteiros na função `buildQualPayload`:
 
-| Campo RIVO | Campo 3CPlus API |
-|---|---|
-| `label` | `name` |
-| `color` (hex) | `color` (hex) |
-| `impact === "positivo"` | `positive_impact: true` |
-| `behavior` | `behavior` (repetir/nao_discar_telefone/nao_discar_cliente) |
-| `is_conversion` | `is_conversion` |
-| `is_cpc` | `is_dmc` |
-| `is_unknown` | `is_unknown` |
-| `is_callback` | `is_callback` |
-| `is_schedule` | `is_schedule` |
-| `is_blocklist` | `add_blocklist` |
-| `schedule_allow_other_number` | `allow_schedule_for_another_number` |
-| `schedule_days_limit` | `schedule_days_limit` |
-| `blocklist_mode` | `blocklist_time_type` |
-| `blocklist_days` | `blocklist_days` |
+```typescript
+const BEHAVIOR_MAP: Record<string, number> = {
+  'nao_discar_telefone': 1,
+  'nao_discar_cliente': 2,
+  'repetir': 3,
+};
 
-### 3. Atualizar payload enviado pelo `dispositionService.ts`
+const BLOCKLIST_MODE_MAP: Record<string, number> = {
+  'indeterminate': 1,
+  'custom': 2,
+};
+```
 
-Incluir os campos `schedule_allow_other_number`, `schedule_days_limit`, `blocklist_mode`, `blocklist_days` no payload enviado para a edge function.
+E converter os campos:
+- `behavior` -> `BEHAVIOR_MAP[disp.behavior] || 3`
+- `positive_impact` -> `disp.impact === 'positivo' ? 1 : 0`
+- `blocklist_time_type` -> `BLOCKLIST_MODE_MAP[disp.blocklist_mode] || 1`
 
-## Arquivos alterados
+## Arquivo alterado
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Enviar campos completos + error handling na criação de qualificações |
-| `src/services/dispositionService.ts` | Incluir campos de agendamento/bloqueio no payload de sync |
+| `supabase/functions/threecplus-proxy/index.ts` | Converter `behavior`, `positive_impact` e `blocklist_time_type` de strings/booleans para inteiros |
 
