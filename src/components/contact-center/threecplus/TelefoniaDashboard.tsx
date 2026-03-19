@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ import AtendimentoPage from "@/pages/AtendimentoPage";
 /** Wrapper that resolves client by phone, then renders the unified AtendimentoPage */
 const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
   const { client, isLoading } = useClientByPhone(clientPhone);
+  const navigate = useNavigate();
 
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
@@ -35,11 +37,32 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
   if (!client) {
     return (
       <Card className="border-dashed m-3">
-        <CardContent className="flex items-center gap-3 py-6">
-          <UserX className="w-5 h-5 text-muted-foreground" />
-          <div>
-            <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
-            <p className="text-xs text-muted-foreground">Telefone: {clientPhone}</p>
+        <CardContent className="py-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <UserX className="w-5 h-5 text-amber-500" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
+              <p className="text-xs text-muted-foreground">Telefone detectado: {clientPhone}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => navigate(`/cadastro?phone=${encodeURIComponent(clientPhone)}`)}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Cadastrar Cliente
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => navigate(`/atendimento?phone=${encodeURIComponent(clientPhone)}`)}
+            >
+              <Phone className="w-3.5 h-3.5" />
+              Abrir Atendimento
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -125,7 +148,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [interval, setRefreshInterval] = useState(30);
+  const [interval, setRefreshInterval] = useState(isOperatorView ? 10 : 30);
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [selectedCampaign, setSelectedCampaign] = useState<string>("");
@@ -450,9 +473,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         <div className="flex items-center justify-center min-h-[60vh] p-4">
           <div className="bg-card rounded-xl border border-border p-8 space-y-5 max-w-md w-full">
             {!operatorAgentId ? (
-              <p className="text-sm text-muted-foreground text-center">
-                Seu perfil não possui um ID de agente 3CPlus vinculado.
-              </p>
+              <div className="text-center space-y-3">
+                <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+                  <WifiOff className="w-8 h-8 text-amber-500" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Agente não vinculado</h3>
+                <p className="text-sm text-muted-foreground">
+                  Seu perfil não possui um ID de agente 3CPlus configurado. Solicite ao seu administrador que vincule seu ID de agente no menu <strong>Cadastros → Usuários</strong>.
+                </p>
+              </div>
             ) : (
               <>
                 <div className="text-center">
@@ -740,6 +769,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="10">10 segundos</SelectItem>
                     <SelectItem value="15">15 segundos</SelectItem>
                     <SelectItem value="30">30 segundos</SelectItem>
                     <SelectItem value="60">60 segundos</SelectItem>
