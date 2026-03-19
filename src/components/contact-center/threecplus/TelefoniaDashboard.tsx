@@ -769,6 +769,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="10">10 segundos</SelectItem>
                     <SelectItem value="15">15 segundos</SelectItem>
                     <SelectItem value="30">30 segundos</SelectItem>
                     <SelectItem value="60">60 segundos</SelectItem>
