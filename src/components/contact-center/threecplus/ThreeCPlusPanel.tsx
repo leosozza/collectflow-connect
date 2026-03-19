@@ -147,8 +147,8 @@ const ThreeCPlusPanel = () => {
       {/* Level 2 — Sub-tab navigation */}
       {currentGroup.tabs.length > 1 && (
         <>
-          <div className="border-t border-border my-1" />
-          <div className="flex items-center gap-2 px-1 py-2">
+          <div className="border-t border-border" />
+          <div className="flex items-center gap-2 px-1 py-1 -mt-2">
             {currentGroup.tabs.map((t) => {
               const Icon = t.icon;
               const isActive = activeTab === t.value;
