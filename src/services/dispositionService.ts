@@ -166,6 +166,10 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
           is_conversion: t.is_conversion, is_cpc: t.is_cpc,
           is_unknown: t.is_unknown, is_callback: t.is_callback,
           is_schedule: t.is_schedule, is_blocklist: t.is_blocklist,
+          schedule_allow_other_number: t.schedule_allow_other_number,
+          schedule_days_limit: t.schedule_days_limit,
+          blocklist_mode: t.blocklist_mode,
+          blocklist_days: t.blocklist_days,
         })),
       },
     });

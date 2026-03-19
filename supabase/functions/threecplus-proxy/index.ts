@@ -920,23 +920,64 @@ Deno.serve(async (req) => {
         const itemsData = await itemsRes.json();
         const existingItems = Array.isArray(itemsData) ? itemsData : itemsData?.data || [];
 
-        const dispositions = body.dispositions as Array<{ key: string; label: string; active: boolean }>;
+        const dispositions = body.dispositions as Array<Record<string, any>>;
         const resultMap: Record<string, number> = {};
+
+        // Helper: map RIVO disposition fields to 3CPlus qualification payload
+        const buildQualPayload = (disp: Record<string, any>) => {
+          const payload: Record<string, any> = { name: disp.label };
+          if (disp.color) payload.color = disp.color;
+          if (disp.impact !== undefined) payload.positive_impact = disp.impact === 'positivo';
+          if (disp.behavior) payload.behavior = disp.behavior;
+          if (disp.is_conversion !== undefined) payload.is_conversion = !!disp.is_conversion;
+          if (disp.is_cpc !== undefined) payload.is_dmc = !!disp.is_cpc;
+          if (disp.is_unknown !== undefined) payload.is_unknown = !!disp.is_unknown;
+          if (disp.is_callback !== undefined) payload.is_callback = !!disp.is_callback;
+          if (disp.is_schedule !== undefined) payload.is_schedule = !!disp.is_schedule;
+          if (disp.is_blocklist !== undefined) payload.add_blocklist = !!disp.is_blocklist;
+          if (disp.schedule_allow_other_number !== undefined) payload.allow_schedule_for_another_number = !!disp.schedule_allow_other_number;
+          if (disp.schedule_days_limit !== undefined) payload.schedule_days_limit = disp.schedule_days_limit;
+          if (disp.blocklist_mode !== undefined) payload.blocklist_time_type = disp.blocklist_mode;
+          if (disp.blocklist_days !== undefined) payload.blocklist_days = disp.blocklist_days;
+          return payload;
+        };
 
         // 3. Create or update items
         for (const disp of dispositions) {
           if (!disp.active) continue;
           const existing = existingItems.find((item: any) => item.name === disp.label);
           if (existing) {
+            // Update existing item with full payload
+            const updatePayload = buildQualPayload(disp);
+            const updateItemRes = await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications/${existing.id}`, authParam), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatePayload),
+            });
+            if (!updateItemRes.ok) {
+              const errText = await updateItemRes.text();
+              console.error(`Failed to update qualification "${disp.label}": ${updateItemRes.status} ${errText.substring(0, 300)}`);
+            }
             resultMap[disp.key] = existing.id;
           } else {
+            const createPayload = buildQualPayload(disp);
+            console.log(`Creating qualification "${disp.label}" with payload:`, JSON.stringify(createPayload));
             const createItemRes = await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications`, authParam), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: disp.label }),
+              body: JSON.stringify(createPayload),
             });
+            if (!createItemRes.ok) {
+              const errText = await createItemRes.text();
+              console.error(`Failed to create qualification "${disp.label}": ${createItemRes.status} ${errText.substring(0, 300)}`);
+              continue;
+            }
             const newItem = await createItemRes.json();
-            resultMap[disp.key] = newItem.id;
+            if (newItem?.id) {
+              resultMap[disp.key] = newItem.id;
+            } else {
+              console.error(`Created qualification "${disp.label}" but got no id:`, JSON.stringify(newItem));
+            }
           }
         }
 
