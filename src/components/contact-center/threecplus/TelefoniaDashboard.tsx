@@ -25,33 +25,89 @@ import OperatorCallHistory from "./OperatorCallHistory";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
-/** Wrapper that resolves client by phone – navigates to /atendimento/:clientId when found */
-const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientPhone: string; agentId: number; callId?: string | number }) => {
-  console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "agentId:", agentId, "callId:", callId);
-  const { client, isLoading } = useClientByPhone(clientPhone);
-  console.log("[3CPlus] useClientByPhone result — client:", client ? { id: client.id, nome: client.nome_completo, phone: client.phone } : null, "isLoading:", isLoading);
+/** Wrapper that resolves client by mailing data (ID/CPF) or phone – navigates to /atendimento/:clientId when found */
+const TelefoniaAtendimentoWrapper = ({
+  clientPhone,
+  agentId,
+  callId,
+  clientCpf,
+  clientDbId,
+}: {
+  clientPhone: string;
+  agentId: number;
+  callId?: string | number;
+  clientCpf?: string;
+  clientDbId?: string;
+}) => {
+  const cleanCpf = clientCpf?.replace(/\D/g, "") || "";
+  console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
+
+  const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
   const navigate = useNavigate();
   const hasNavigated = useRef(false);
 
+  // Query by CPF when available
+  const { data: clientByCpf, isLoading: cpfLoading } = useQuery({
+    queryKey: ["client-by-cpf", cleanCpf],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("cpf", cleanCpf)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!cleanCpf && cleanCpf.length >= 11 && !clientDbId,
+  });
+
+  // Determine resolved client: priority ID > CPF > phone
+  const resolvedId = clientDbId || clientByCpf?.id || clientByPhone?.id;
+  const isLoading = (!clientDbId && cleanCpf.length >= 11 && cpfLoading) || phoneLoading;
+
+  console.log("[3CPlus] resolved — clientDbId:", clientDbId, "cpfResult:", clientByCpf?.id, "phoneResult:", clientByPhone?.id, "final:", resolvedId, "isLoading:", isLoading);
+
   // Navigate to atendimento when client is resolved
   useEffect(() => {
-    if (client && !hasNavigated.current) {
+    if (resolvedId && !hasNavigated.current) {
       hasNavigated.current = true;
-      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", client.id);
-      navigate(`/atendimento/${client.id}`);
+      console.log("[Telefonia] Cliente encontrado, navegando para /atendimento/", resolvedId);
+      navigate(`/atendimento/${resolvedId}`);
     }
-  }, [client, navigate]);
+  }, [resolvedId, navigate]);
 
-  // Reset navigation flag when phone changes
+  // Reset navigation flag when inputs change
   useEffect(() => {
     hasNavigated.current = false;
-  }, [clientPhone]);
+  }, [clientPhone, clientCpf, clientDbId]);
+
+  // Show error toast if lookup fails after loading
+  useEffect(() => {
+    if (!isLoading && !resolvedId && (clientPhone || cleanCpf)) {
+      const details = `Phone: ${clientPhone || "N/A"}\nCPF: ${cleanCpf || "N/A"}\nDB ID: ${clientDbId || "N/A"}\nCPF query result: ${clientByCpf === null ? "null" : JSON.stringify(clientByCpf)}\nPhone query result: ${clientByPhone === null ? "null" : JSON.stringify(clientByPhone)}`;
+      console.warn("[3CPlus] Cliente não encontrado. Detalhes:", details);
+      toast.error("Cliente não encontrado no CRM", {
+        description: "Clique para copiar log detalhado",
+        duration: 15000,
+        action: {
+          label: "Copiar log",
+          onClick: () => {
+            navigator.clipboard.writeText(details).then(() => {
+              console.log("[3CPlus] Log de erro copiado:\n", details);
+              toast.success("Log copiado para a área de transferência");
+            });
+          },
+        },
+      });
+    }
+  }, [isLoading, resolvedId, clientPhone, cleanCpf, clientDbId, clientByCpf, clientByPhone]);
 
   if (isLoading) {
-    return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente pelo telefone...</div>;
+    return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente...</div>;
   }
 
-  if (!client) {
+  if (!resolvedId) {
     return (
       <Card className="border-dashed m-3">
         <CardContent className="py-6 space-y-4">
@@ -59,7 +115,9 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
             <UserX className="w-5 h-5 text-amber-500" />
             <div>
               <p className="text-sm font-medium text-foreground">Cliente não encontrado no CRM</p>
-              <p className="text-xs text-muted-foreground">Telefone detectado: {clientPhone}</p>
+              <p className="text-xs text-muted-foreground">
+                {cleanCpf ? `CPF: ${cleanCpf}` : `Telefone: ${clientPhone}`}
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -67,7 +125,7 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
               size="sm"
               variant="outline"
               className="gap-1.5"
-              onClick={() => navigate(`/cadastro?phone=${encodeURIComponent(clientPhone)}`)}
+              onClick={() => navigate(`/cadastro?phone=${encodeURIComponent(clientPhone)}${cleanCpf ? `&cpf=${encodeURIComponent(cleanCpf)}` : ""}`)}
             >
               <Users className="w-3.5 h-3.5" />
               Cadastrar Cliente
@@ -86,7 +144,6 @@ const TelefoniaAtendimentoWrapper = ({ clientPhone, agentId, callId }: { clientP
     );
   }
 
-  // Client found but navigation in progress
   return <div className="p-4 text-center text-muted-foreground text-sm">Abrindo ficha do cliente...</div>;
 };
 
