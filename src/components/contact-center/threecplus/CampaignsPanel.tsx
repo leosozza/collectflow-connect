@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Plus, List, ChevronDown, ChevronUp } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, RefreshCw, Plus, List, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
@@ -23,6 +24,7 @@ const CampaignsPanel = () => {
   const [loading, setLoading] = useState(false);
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [campaignLists, setCampaignLists] = useState<Record<string, any[]>>({});
+  const [campaignAgents, setCampaignAgents] = useState<Record<string, any[]>>({});
   const [loadingLists, setLoadingLists] = useState<string | null>(null);
 
   // Create campaign dialog
@@ -32,7 +34,9 @@ const CampaignsPanel = () => {
   const [newEndTime, setNewEndTime] = useState("18:30");
   const [selectedQualList, setSelectedQualList] = useState("");
   const [selectedWorkBreakGroup, setSelectedWorkBreakGroup] = useState("");
+  const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
+  const [agentSearch, setAgentSearch] = useState("");
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -42,7 +46,17 @@ const CampaignsPanel = () => {
     return data;
   }, [domain, apiToken]);
 
-  // Fetch qualification lists and work break groups for campaign creation
+  // Fetch agents list
+  const { data: agentsList = [] } = useQuery({
+    queryKey: ["3cp-users-list", domain],
+    queryFn: async () => {
+      const data = await invoke("list_users");
+      const list = data?.data?.data || data?.data || (Array.isArray(data) ? data : []);
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: hasCredentials,
+  });
+
   const { data: qualLists = [] } = useQuery({
     queryKey: ["3cp-qualification-lists", domain],
     queryFn: async () => {
@@ -78,17 +92,23 @@ const CampaignsPanel = () => {
     }
   };
 
-  const loadLists = async (campaignId: string) => {
+  const loadListsAndAgents = async (campaignId: string) => {
     setLoadingLists(campaignId);
     try {
-      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "get_campaign_lists", domain, api_token: apiToken, campaign_id: campaignId },
-      });
-      if (error) throw error;
-      const lists = Array.isArray(data) ? data : data?.data || [];
+      const [listsRes, agentsRes] = await Promise.all([
+        supabase.functions.invoke("threecplus-proxy", {
+          body: { action: "get_campaign_lists", domain, api_token: apiToken, campaign_id: campaignId },
+        }),
+        supabase.functions.invoke("threecplus-proxy", {
+          body: { action: "list_campaign_agents", domain, api_token: apiToken, campaign_id: campaignId },
+        }),
+      ]);
+      const lists = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data?.data || [];
       setCampaignLists((prev) => ({ ...prev, [campaignId]: lists }));
+      const agents = Array.isArray(agentsRes.data) ? agentsRes.data : agentsRes.data?.data || [];
+      setCampaignAgents((prev) => ({ ...prev, [campaignId]: agents }));
     } catch {
-      toast.error("Erro ao carregar listas");
+      toast.error("Erro ao carregar detalhes da campanha");
     } finally {
       setLoadingLists(null);
     }
@@ -100,10 +120,28 @@ const CampaignsPanel = () => {
     } else {
       setExpandedCampaign(campaignId);
       if (!campaignLists[campaignId]) {
-        loadLists(campaignId);
+        loadListsAndAgents(campaignId);
       }
     }
   };
+
+  const toggleAgent = (agentId: number) => {
+    setSelectedAgentIds((prev) =>
+      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
+    );
+  };
+
+  const selectAllAgents = () => {
+    if (selectedAgentIds.length === agentsList.length) {
+      setSelectedAgentIds([]);
+    } else {
+      setSelectedAgentIds(agentsList.map((a: any) => a.id));
+    }
+  };
+
+  const filteredAgents = agentSearch.trim()
+    ? agentsList.filter((a: any) => a.name?.toLowerCase().includes(agentSearch.toLowerCase()))
+    : agentsList;
 
   const handleCreateCampaign = async () => {
     if (!newCampaignName.trim()) {
@@ -125,11 +163,40 @@ const CampaignsPanel = () => {
         },
       });
       if (error) throw error;
-      toast.success("Campanha criada com sucesso!");
+
+      const newCampaignId = data?.data?.id || data?.id;
+      let agentsLinked = 0;
+
+      if (newCampaignId && selectedAgentIds.length > 0) {
+        try {
+          await supabase.functions.invoke("threecplus-proxy", {
+            body: {
+              action: "add_agents_to_campaign",
+              domain,
+              api_token: apiToken,
+              campaign_id: newCampaignId,
+              agent_ids: selectedAgentIds,
+            },
+          });
+          agentsLinked = selectedAgentIds.length;
+        } catch (agentErr: any) {
+          console.error("Erro ao vincular agentes:", agentErr);
+          toast.warning("Campanha criada, mas falha ao vincular agentes");
+        }
+      }
+
+      if (agentsLinked > 0) {
+        toast.success(`Campanha criada com ${agentsLinked} agente(s) vinculado(s)!`);
+      } else {
+        toast.success("Campanha criada com sucesso!");
+      }
+
       setCreateOpen(false);
       setNewCampaignName("");
       setSelectedQualList("");
       setSelectedWorkBreakGroup("");
+      setSelectedAgentIds([]);
+      setAgentSearch("");
       loadCampaigns();
     } catch (err: any) {
       toast.error("Erro ao criar campanha: " + (err.message || ""));
@@ -208,22 +275,47 @@ const CampaignsPanel = () => {
               </div>
 
               {expandedCampaign === String(c.id) && (
-                <CardContent className="border-t pt-4 space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Listas de Mailing</p>
+                <CardContent className="border-t pt-4 space-y-4">
                   {loadingLists === String(c.id) ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Carregando listas...
+                      Carregando detalhes...
                     </div>
-                  ) : (campaignLists[String(c.id)] || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-2">Nenhuma lista encontrada</p>
                   ) : (
-                    (campaignLists[String(c.id)] || []).map((list: any) => (
-                      <div key={list.id} className="flex items-center justify-between p-2 rounded bg-muted/40 text-sm">
-                        <span>{list.name || `Lista ${list.id}`}</span>
-                        <span className="text-xs text-muted-foreground">ID: {list.id}</span>
+                    <>
+                      {/* Agents section */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" /> Agentes
+                        </p>
+                        {(campaignAgents[String(c.id)] || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Nenhum agente vinculado</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(campaignAgents[String(c.id)] || []).map((agent: any) => (
+                              <Badge key={agent.id} variant="outline" className="text-xs">
+                                {agent.name || `Agent ${agent.id}`}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))
+
+                      {/* Lists section */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Listas de Mailing</p>
+                        {(campaignLists[String(c.id)] || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Nenhuma lista encontrada</p>
+                        ) : (
+                          (campaignLists[String(c.id)] || []).map((list: any) => (
+                            <div key={list.id} className="flex items-center justify-between p-2 rounded bg-muted/40 text-sm">
+                              <span>{list.name || `Lista ${list.id}`}</span>
+                              <span className="text-xs text-muted-foreground">ID: {list.id}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
                   )}
                 </CardContent>
               )}
@@ -233,7 +325,7 @@ const CampaignsPanel = () => {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nova Campanha</DialogTitle>
             <DialogDescription>Crie uma nova campanha no 3CPlus</DialogDescription>
@@ -250,19 +342,11 @@ const CampaignsPanel = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Horário de início</Label>
-                <Input
-                  type="time"
-                  value={newStartTime}
-                  onChange={(e) => setNewStartTime(e.target.value)}
-                />
+                <Input type="time" value={newStartTime} onChange={(e) => setNewStartTime(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Horário de término</Label>
-                <Input
-                  type="time"
-                  value={newEndTime}
-                  onChange={(e) => setNewEndTime(e.target.value)}
-                />
+                <Input type="time" value={newEndTime} onChange={(e) => setNewEndTime(e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -291,6 +375,51 @@ const CampaignsPanel = () => {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Agent selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Users className="w-4 h-4" />
+                Agentes ({selectedAgentIds.length} selecionado{selectedAgentIds.length !== 1 ? "s" : ""})
+              </Label>
+              <Input
+                placeholder="Buscar agente..."
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                {agentsList.length > 0 && (
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 cursor-pointer hover:bg-muted/50"
+                    onClick={selectAllAgents}
+                  >
+                    <Checkbox
+                      checked={selectedAgentIds.length === agentsList.length && agentsList.length > 0}
+                      onCheckedChange={selectAllAgents}
+                    />
+                    <span className="text-xs font-medium">Selecionar todos</span>
+                  </div>
+                )}
+                {filteredAgents.map((agent: any) => (
+                  <div
+                    key={agent.id}
+                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30"
+                    onClick={() => toggleAgent(agent.id)}
+                  >
+                    <Checkbox
+                      checked={selectedAgentIds.includes(agent.id)}
+                      onCheckedChange={() => toggleAgent(agent.id)}
+                    />
+                    <span className="text-xs">{agent.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">#{agent.extension || agent.id}</span>
+                  </div>
+                ))}
+                {filteredAgents.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-3">Nenhum agente encontrado</p>
+                )}
               </div>
             </div>
           </div>

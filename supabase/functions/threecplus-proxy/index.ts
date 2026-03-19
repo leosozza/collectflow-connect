@@ -159,6 +159,35 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Campaign Agents ──
+      case 'add_agents_to_campaign': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'agent_ids', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents`, authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ users: body.agent_ids });
+        break;
+      }
+
+      case 'list_campaign_agents': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents`, authParam);
+        break;
+      }
+
+      case 'remove_campaign_agent': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'agent_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents/${body.agent_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
       // ── Agents ──
       case 'agents_online':
         url = buildUrl(baseUrl, 'agents/online', authParam);
