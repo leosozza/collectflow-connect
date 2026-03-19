@@ -65,6 +65,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [submitting, setSubmitting] = useState(false);
   const [enrichingAddress, setEnrichingAddress] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
+  const [generatingBoletos, setGeneratingBoletos] = useState(false);
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
 
   // Fetch credor rules and auto-fill honorários + aging discount
