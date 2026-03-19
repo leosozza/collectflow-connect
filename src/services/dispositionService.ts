@@ -120,7 +120,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
     const apiToken = settings.threecplus_api_token;
 
     if (!domain || !apiToken) {
-      logger.info("syncDispositionsTo3CPlus: no 3CPlus credentials, skipping");
+      logger.info("dispositionService", "syncDispositionsTo3CPlus", { message: "no 3CPlus credentials, skipping" });
       return null;
     }
 
@@ -138,7 +138,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
     });
 
     if (error) {
-      logger.error("syncDispositionsTo3CPlus edge function error", error);
+      logger.error("dispositionService", "syncDispositionsTo3CPlus", error);
       return null;
     }
 
@@ -157,10 +157,10 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
       .update({ settings: updatedSettings } as any)
       .eq("id", tenantId);
 
-    logger.info("syncDispositionsTo3CPlus: synced successfully", { count: Object.keys(dispositionMap).length });
+    logger.info("dispositionService", "syncDispositionsTo3CPlus", { count: Object.keys(dispositionMap).length });
     return dispositionMap;
   } catch (err) {
-    logger.error("syncDispositionsTo3CPlus error (non-blocking)", err);
+    logger.error("dispositionService", "syncDispositionsTo3CPlus", err);
     return null;
   }
 };
