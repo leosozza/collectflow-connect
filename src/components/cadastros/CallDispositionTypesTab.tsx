@@ -6,6 +6,7 @@ import {
   updateDispositionType,
   deleteDispositionType,
   seedDefaultDispositionTypes,
+  syncDispositionsTo3CPlus,
   DEFAULT_DISPOSITION_LIST,
   type DbDispositionType,
 } from "@/services/dispositionService";
