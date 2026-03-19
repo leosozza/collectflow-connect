@@ -100,12 +100,14 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, 'campaigns', authParam);
         method = 'POST';
-        reqBody = JSON.stringify({
+        const campaignPayload: Record<string, any> = {
           name: body.campaign_name,
           start_time: body.start_time || '08:00',
           end_time: body.end_time || '18:30',
-          qualification_list: body.qualification_list_id || null,
-        });
+        };
+        if (body.qualification_list_id) campaignPayload.qualification_list = body.qualification_list_id;
+        if (body.work_break_group_id) campaignPayload.work_break_group_id = body.work_break_group_id;
+        reqBody = JSON.stringify(campaignPayload);
         break;
       }
 
@@ -233,33 +235,71 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── NEW: Qualifications ──
-      case 'list_qualifications':
-        url = buildUrl(baseUrl, 'qualifications', authParam);
+      // ── Qualification Lists (global) ──
+      case 'list_qualification_lists':
+        url = buildUrl(baseUrl, 'qualification_lists', authParam);
         break;
 
-      case 'create_qualification': {
-        const err = requireField(body, 'qualification_data', corsHeaders);
+      case 'create_qualification_list': {
+        const err = requireField(body, 'name', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, 'qualifications', authParam);
+        url = buildUrl(baseUrl, 'qualification_lists', authParam);
         method = 'POST';
-        reqBody = JSON.stringify(body.qualification_data);
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'update_qualification': {
-        const err = requireField(body, 'qualification_id', corsHeaders);
+      case 'update_qualification_list': {
+        const err = requireField(body, 'list_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}`, authParam);
         method = 'PUT';
-        reqBody = JSON.stringify(body.qualification_data || {});
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'delete_qualification': {
-        const err = requireField(body, 'qualification_id', corsHeaders);
+      case 'delete_qualification_list': {
+        const err = requireField(body, 'list_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `qualifications/${body.qualification_id}`, authParam);
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── Qualifications inside a list ──
+      case 'list_qualification_list_items': {
+        const err = requireField(body, 'list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications`, authParam);
+        break;
+      }
+
+      case 'create_qualification_list_item': {
+        const err = requireField(body, 'list_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications`, authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ name: body.name, ...(body.item_data || {}) });
+        break;
+      }
+
+      case 'update_qualification_list_item': {
+        const err1 = requireField(body, 'list_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'item_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications/${body.item_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify({ name: body.name, ...(body.item_data || {}) });
+        break;
+      }
+
+      case 'delete_qualification_list_item': {
+        const err1 = requireField(body, 'list_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'item_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `qualification_lists/${body.list_id}/qualifications/${body.item_id}`, authParam);
         method = 'DELETE';
         break;
       }
@@ -473,18 +513,49 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── Work Break Intervals ──
-      case 'list_work_break_intervals': {
-        const err = requireField(body, 'campaign_id', corsHeaders);
+      // ── Work Break Groups (global) ──
+      case 'list_work_break_groups':
+        url = buildUrl(baseUrl, 'work_break_group', authParam);
+        break;
+
+      case 'create_work_break_group': {
+        const err = requireField(body, 'name', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        url = buildUrl(baseUrl, 'work_break_group', authParam);
+        method = 'POST';
+        reqBody = JSON.stringify({ name: body.name });
         break;
       }
 
-      case 'create_work_break_interval': {
-        const err = requireField(body, 'campaign_id', corsHeaders);
+      case 'update_work_break_group': {
+        const err = requireField(body, 'group_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}`, authParam);
+        method = 'PUT';
+        reqBody = JSON.stringify({ name: body.name });
+        break;
+      }
+
+      case 'delete_work_break_group': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}`, authParam);
+        method = 'DELETE';
+        break;
+      }
+
+      // ── Work Break Intervals inside a group ──
+      case 'list_work_break_group_intervals': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
+        break;
+      }
+
+      case 'create_work_break_group_interval': {
+        const err = requireField(body, 'group_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
         method = 'POST';
         const intervalBody: Record<string, any> = { name: body.name };
         if (body.max_time) intervalBody.max_time = body.max_time;
@@ -492,12 +563,12 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'update_work_break_interval': {
-        const err1 = requireField(body, 'campaign_id', corsHeaders);
+      case 'update_work_break_group_interval': {
+        const err1 = requireField(body, 'group_id', corsHeaders);
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals/${body.interval_id}`, authParam);
         method = 'PUT';
         const updateBody: Record<string, any> = {};
         if (body.name) updateBody.name = body.name;
@@ -506,12 +577,12 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'delete_work_break_interval': {
-        const err1 = requireField(body, 'campaign_id', corsHeaders);
+      case 'delete_work_break_group_interval': {
+        const err1 = requireField(body, 'group_id', corsHeaders);
         if (err1) return err1;
         const err2 = requireField(body, 'interval_id', corsHeaders);
         if (err2) return err2;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/intervals/${body.interval_id}`, authParam);
+        url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals/${body.interval_id}`, authParam);
         method = 'DELETE';
         break;
       }

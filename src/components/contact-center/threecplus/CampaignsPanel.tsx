@@ -1,14 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, Plus, List, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const CampaignsPanel = () => {
   const { tenant } = useTenant();
@@ -28,7 +30,36 @@ const CampaignsPanel = () => {
   const [newCampaignName, setNewCampaignName] = useState("");
   const [newStartTime, setNewStartTime] = useState("08:00");
   const [newEndTime, setNewEndTime] = useState("18:30");
+  const [selectedQualList, setSelectedQualList] = useState("");
+  const [selectedWorkBreakGroup, setSelectedWorkBreakGroup] = useState("");
   const [creating, setCreating] = useState(false);
+
+  const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
+    const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+      body: { action, domain, api_token: apiToken, ...extra },
+    });
+    if (error) throw error;
+    return data;
+  }, [domain, apiToken]);
+
+  // Fetch qualification lists and work break groups for campaign creation
+  const { data: qualLists = [] } = useQuery({
+    queryKey: ["3cp-qualification-lists", domain],
+    queryFn: async () => {
+      const data = await invoke("list_qualification_lists");
+      return Array.isArray(data) ? data : data?.data || [];
+    },
+    enabled: hasCredentials,
+  });
+
+  const { data: workBreakGroups = [] } = useQuery({
+    queryKey: ["3cp-work-break-groups", domain],
+    queryFn: async () => {
+      const data = await invoke("list_work_break_groups");
+      return Array.isArray(data) ? data : data?.data || [];
+    },
+    enabled: hasCredentials,
+  });
 
   const loadCampaigns = async () => {
     if (!hasCredentials) return;
@@ -81,11 +112,6 @@ const CampaignsPanel = () => {
     }
     setCreating(true);
     try {
-      // Get qualification_list_id from an existing campaign if available
-      const existingQualList = campaigns.find(
-        (c: any) => c.dialer_settings?.qualification_list_id
-      )?.dialer_settings?.qualification_list_id;
-
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
         body: {
           action: "create_campaign",
@@ -94,13 +120,16 @@ const CampaignsPanel = () => {
           campaign_name: newCampaignName.trim(),
           start_time: newStartTime,
           end_time: newEndTime,
-          qualification_list_id: existingQualList || undefined,
+          qualification_list_id: selectedQualList ? Number(selectedQualList) : undefined,
+          work_break_group_id: selectedWorkBreakGroup ? Number(selectedWorkBreakGroup) : undefined,
         },
       });
       if (error) throw error;
       toast.success("Campanha criada com sucesso!");
       setCreateOpen(false);
       setNewCampaignName("");
+      setSelectedQualList("");
+      setSelectedWorkBreakGroup("");
       loadCampaigns();
     } catch (err: any) {
       toast.error("Erro ao criar campanha: " + (err.message || ""));
@@ -234,6 +263,34 @@ const CampaignsPanel = () => {
                   value={newEndTime}
                   onChange={(e) => setNewEndTime(e.target.value)}
                 />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Lista de Qualificação</Label>
+                <Select value={selectedQualList} onValueChange={setSelectedQualList}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {qualLists.map((ql: any) => (
+                      <SelectItem key={ql.id} value={String(ql.id)}>{ql.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Grupo de Pausas</Label>
+                <Select value={selectedWorkBreakGroup} onValueChange={setSelectedWorkBreakGroup}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workBreakGroups.map((wbg: any) => (
+                      <SelectItem key={wbg.id} value={String(wbg.id)}>{wbg.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
