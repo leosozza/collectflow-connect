@@ -247,16 +247,30 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const fetchAll = useCallback(async () => {
     try {
-      const [agentsData, campaignsData, callsData] = await Promise.all([
+      const promises: Promise<any>[] = [
         invoke("agents_status").catch(() => []),
         invoke("list_campaigns").catch(() => []),
         invoke("company_calls").catch(() => null),
-      ]);
+      ];
+      // Fetch agent-specific campaigns if operator has an agent ID
+      if (operatorAgentId) {
+        promises.push(
+          invoke("agent_available_campaigns", { agent_id: operatorAgentId }).catch(() => [])
+        );
+      }
+
+      const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
       setAgents(agentList);
 
       const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+
+      // Set agent-specific campaigns
+      if (agentCampaignsData) {
+        const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+        setAgentCampaigns(agentCampList);
+      }
 
       const enriched = await Promise.all(
         campList
@@ -285,7 +299,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } finally {
       setLoading(false);
     }
-  }, [invoke]);
+  }, [invoke, operatorAgentId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
