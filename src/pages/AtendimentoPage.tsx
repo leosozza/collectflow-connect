@@ -250,23 +250,27 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
 
   const handleHangup = async () => {
     const callAgentId = effectiveAgentId;
-    if (!callAgentId) { toast.error("Seu perfil não possui um agente 3CPlus vinculado"); return; }
+    if (!callAgentId) { toast.error("Agente não vinculado"); return; }
     const domain = settings.threecplus_domain;
     const apiToken = settings.threecplus_api_token;
-    if (!domain || !apiToken) { toast.error("Telefonia 3CPlus não configurada"); return; }
+    if (!domain || !apiToken) { toast.error("3CPlus não configurada"); return; }
+    console.log("[Hangup] Desligando — agentId:", callAgentId, "domain:", domain);
     setHangingUp(true);
     try {
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
         body: { action: "hangup_call", domain, api_token: apiToken, agent_id: callAgentId },
       });
+      console.log("[Hangup] Response:", JSON.stringify(data), "error:", error);
       if (error) throw error;
       if (data?.status && data.status >= 400) {
-        toast.error(data.detail || "Erro ao desligar");
+        toast.error(data.detail || data.message || "Erro ao desligar");
       } else {
         toast.success("Ligação encerrada");
       }
-    } catch { toast.error("Erro ao desligar ligação"); }
-    finally { setHangingUp(false); }
+    } catch (e) {
+      console.error("[Hangup] Exception:", e);
+      toast.error("Erro ao desligar ligação");
+    } finally { setHangingUp(false); }
   };
 
   return (
