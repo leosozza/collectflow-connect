@@ -29,6 +29,14 @@ export const calculatePoints = (paymentsCount: number, totalReceived: number, br
 };
 
 export const fetchRanking = async (year: number, month: number): Promise<RankingEntry[]> => {
+  // Get enabled participants to filter ranking
+  const { data: participants } = await supabase
+    .from("gamification_participants")
+    .select("profile_id")
+    .eq("enabled", true);
+
+  const enabledIds = new Set((participants || []).map((p: any) => p.profile_id));
+
   const { data: points, error } = await supabase
     .from("operator_points")
     .select("*")
@@ -39,7 +47,14 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
   if (error) throw error;
   if (!points || points.length === 0) return [];
 
-  const operatorIds = [...new Set(points.map((p: any) => p.operator_id))];
+  // Filter only enabled participants (if any participants exist)
+  const filteredPoints = enabledIds.size > 0
+    ? (points as OperatorPoints[]).filter(p => enabledIds.has(p.operator_id))
+    : (points as OperatorPoints[]);
+
+  const operatorIds = [...new Set(filteredPoints.map(p => p.operator_id))];
+  if (operatorIds.length === 0) return [];
+
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id, full_name, avatar_url")
@@ -47,7 +62,7 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  return (points as OperatorPoints[]).map((entry, idx) => ({
+  return filteredPoints.map((entry, idx) => ({
     ...entry,
     profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
     position: idx + 1,

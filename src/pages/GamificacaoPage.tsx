@@ -217,6 +217,10 @@ const GamificacaoPage = () => {
               <TabsContent value="manage-shop" className="mt-4">
                 <ShopManagementTab />
               </TabsContent>
+
+              <TabsContent value="manage-participants" className="mt-4">
+                <ParticipantsManagementTab />
+              </TabsContent>
             </Tabs>
           </TabsContent>
         )}
