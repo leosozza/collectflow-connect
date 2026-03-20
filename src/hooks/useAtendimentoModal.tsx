@@ -199,6 +199,22 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
               >
                 <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
 
+                {/* Agent status indicator */}
+                {pauseControls && (
+                  <>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      pauseControls.agentStatus === 2 ? "bg-destructive" :
+                      pauseControls.isPaused ? "bg-amber-500" :
+                      "bg-emerald-500"
+                    }`} />
+                    <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                      {pauseControls.agentStatus === 2 ? "Em ligação" :
+                       pauseControls.isPaused ? "Em pausa" :
+                       "Aguardando"}
+                    </span>
+                  </>
+                )}
+
                 {/* Timer */}
                 <span className="text-sm font-mono tabular-nums font-semibold text-foreground">{formatTime(elapsed)}</span>
 
@@ -254,12 +270,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                 {/* Spacer */}
                 <div className="flex-1" />
 
-                {/* Expand — only when there's a client (active call) */}
-                {state.clientId && !state.waitingForCall && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
+                {/* Expand — always visible */}
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleExpand} onMouseDown={e => e.stopPropagation()}>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </Button>
 
                 {/* Close */}
                 <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive" onClick={closeAtendimento} onMouseDown={e => e.stopPropagation()}>

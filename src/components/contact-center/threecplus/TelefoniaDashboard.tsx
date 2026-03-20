@@ -591,11 +591,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         unpausing,
         onPause: handlePause,
         onUnpause: handleUnpause,
+        agentStatus: myAgent?.status,
+        agentName: myAgent?.name,
       });
     } else {
       setPauseControls(null);
     }
-  }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls]);
+  }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls, myAgent?.status, myAgent?.name]);
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
