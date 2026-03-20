@@ -521,6 +521,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+  const { openWaiting, setPauseControls, closeAtendimento } = useAtendimentoModal();
+
   const handleCampaignLogout = async () => {
     if (!operatorAgentId) return;
     setLoggingOutSelf(true);
@@ -531,6 +533,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
+        closeAtendimento();
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
       }
       fetchAll();
     } catch {
