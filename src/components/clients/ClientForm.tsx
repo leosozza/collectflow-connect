@@ -84,7 +84,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       cpf: cpf.trim(),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
-      external_id: externalId.trim() || undefined,
+      external_id: externalId.trim() || undefined, // auto-gerado pelo serviço se vazio
       endereco: endereco.trim() || undefined,
       cidade: cidade.trim() || undefined,
       uf: uf.trim() || undefined,

@@ -117,6 +117,8 @@ export const createClient = async (
   try {
     const validated = validateClientData(data);
     const totalParcelas = validated.total_parcelas || data.total_parcelas || 1;
+    const dataVenc = validated.data_vencimento || data.data_vencimento || new Date().toISOString().split("T")[0];
+    const extId = data.external_id || `MAN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     const records = generateInstallments({
       credor: validated.credor,
@@ -124,13 +126,13 @@ export const createClient = async (
       cpf: validated.cpf,
       phone: data.phone || null,
       email: data.email || null,
-      external_id: data.external_id || null,
+      external_id: extId,
       numero_parcela: validated.numero_parcela,
       total_parcelas: totalParcelas,
       valor_entrada: data.valor_entrada || 0,
       valor_parcela: validated.valor_parcela,
       valor_pago: validated.valor_pago,
-      data_vencimento: validated.data_vencimento!,
+      data_vencimento: dataVenc,
       status: validated.status,
       operator_id: operatorId,
     });

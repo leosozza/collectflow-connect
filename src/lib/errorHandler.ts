@@ -23,7 +23,7 @@ export function handleServiceError(error: unknown, module: string): never {
 
   if (error instanceof AppError) throw error;
 
-  const message = error instanceof Error ? error.message : "Erro desconhecido";
+  const message = error instanceof Error ? error.message : (typeof error === "object" ? JSON.stringify(error) : String(error));
   throw new AppError("INTERNAL", message);
 }
 
