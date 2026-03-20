@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
-  Mic, Keyboard, Phone, MessageSquare, UserX,
+  Mic, Keyboard, Phone, MessageSquare, UserX, FileCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
@@ -269,12 +269,25 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("call_dispositions")
-        .select("operator_id")
+        .select("operator_id, disposition_type")
         .gte("created_at", todayStart);
       if (error) throw error;
       return data || [];
     },
     refetchInterval: 60000,
+  });
+
+  const { data: cpcDispositionKeys = [] } = useQuery({
+    queryKey: ["cpc-disposition-keys"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("call_disposition_types")
+        .select("key")
+        .eq("is_cpc", true);
+      if (error) throw error;
+      return (data || []).map((d: any) => d.key);
+    },
+    staleTime: 300000,
   });
 
   const { data: todayAgreements = [] } = useQuery({
@@ -290,8 +303,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     refetchInterval: 60000,
   });
 
+  const cpcKeySet = useMemo(() => new Set(cpcDispositionKeys), [cpcDispositionKeys]);
+
   const agentMetrics = useMemo(() => {
-    const metrics: Record<number, { contacts: number; agreements: number }> = {};
+    const metrics: Record<number, { contacts: number; agreements: number; cpc: number }> = {};
     const profileIdToAgent = new Map<string, number>();
     const userIdToAgent = new Map<string, number>();
     for (const p of profileMappings) {
@@ -301,19 +316,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     for (const d of todayDispositions) {
       const agentId = profileIdToAgent.get(d.operator_id);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, cpc: 0 };
         metrics[agentId].contacts++;
+        if (cpcKeySet.has(d.disposition_type)) {
+          metrics[agentId].cpc++;
+        }
       }
     }
     for (const a of todayAgreements) {
       const agentId = userIdToAgent.get(a.created_by);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, cpc: 0 };
         metrics[agentId].agreements++;
       }
     }
     return metrics;
-  }, [profileMappings, todayDispositions, todayAgreements]);
+  }, [profileMappings, todayDispositions, todayAgreements, cpcKeySet]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -541,11 +559,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     if (!operatorAgentId) return;
     setPausingWith(intervalId);
     try {
-      await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
-      toast.success("Pausa ativada");
+      console.log("[Telefonia] handlePause — agentId:", operatorAgentId, "intervalId:", intervalId);
+      const result = await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
+      console.log("[Telefonia] handlePause result:", JSON.stringify(result));
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
+        toast.error(result.detail || result.message || "Erro ao pausar");
+      } else {
+        toast.success("Pausa ativada");
+      }
       fetchAll();
-    } catch {
-      toast.error("Erro ao pausar");
+    } catch (err: any) {
+      console.error("[Telefonia] handlePause error:", err);
+      toast.error(err?.message || "Erro ao pausar");
     } finally {
       setPausingWith(null);
     }
@@ -555,11 +581,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     if (!operatorAgentId) return;
     setUnpausing(true);
     try {
-      await invoke("unpause_agent", { agent_id: operatorAgentId });
-      toast.success("Pausa removida");
+      console.log("[Telefonia] handleUnpause — agentId:", operatorAgentId);
+      const result = await invoke("unpause_agent", { agent_id: operatorAgentId });
+      console.log("[Telefonia] handleUnpause result:", JSON.stringify(result));
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
+        toast.error(result.detail || result.message || "Erro ao retomar");
+      } else {
+        toast.success("Pausa removida");
+      }
       fetchAll();
-    } catch {
-      toast.error("Erro ao retomar");
+    } catch (err: any) {
+      console.error("[Telefonia] handleUnpause error:", err);
+      toast.error(err?.message || "Erro ao retomar");
     } finally {
       setUnpausing(false);
     }
@@ -791,26 +825,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
               </Popover>
             )}
 
-            {/* SIP Connection Indicator */}
-            <div className="flex items-center gap-1.5">
-              {isSipConnected ? (
-                <Badge variant="secondary" className="gap-1 h-7 text-xs bg-emerald-500/20 text-emerald-100 border-0">
-                  <Wifi className="w-3 h-3" />
-                  SIP
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="gap-1.5 h-7 text-xs bg-destructive/30 hover:bg-destructive/50 border-0 text-white"
-                  onClick={handleReconnectSip}
-                  disabled={reconnectingSip}
-                >
-                  <WifiOff className={`w-3 h-3 ${reconnectingSip ? "animate-spin" : ""}`} />
-                  {reconnectingSip ? "Conectando..." : "SIP Off"}
-                </Button>
-              )}
-            </div>
+            {/* SIP managed automatically by campaign login */}
           </div>
 
           {/* Status central */}
@@ -857,7 +872,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 </div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CPC</p>
               </div>
-              <p className="text-3xl font-bold text-foreground">{myMetrics?.agreements ?? 0}</p>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.cpc ?? 0}</p>
               <p className="text-xs text-muted-foreground mt-1">Contatos com pessoa certa</p>
             </CardContent>
           </Card>
@@ -876,16 +891,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </CardContent>
           </Card>
 
-          {/* Feedback */}
+          {/* Acordos */}
           <Card className="border-border/60">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <MessageSquare className="w-4 h-4 text-amber-600" />
+                  <FileCheck2 className="w-4 h-4 text-amber-600" />
                 </div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Feedback</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Acordos</p>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">Nenhuma avaliação ainda</p>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.agreements ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Formalizados hoje</p>
             </CardContent>
           </Card>
         </div>
