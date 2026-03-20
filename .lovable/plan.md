@@ -1,63 +1,51 @@
 
 
-# Plano: Reformular formulário de cadastro de cliente
+# Plano: Corrigir cadastro de cliente + auto-gerar ID Externo
 
-## Problemas identificados
+## Problema raiz
 
-1. **Dialog muito grande** — `max-w-lg` não comporta todos os campos sem scroll. Falta `overflow-y-auto` e `max-h` no conteúdo.
-2. **Ordem errada** — Dados da dívida (parcelas, valores) aparecem misturados com dados pessoais. Nome/CPF/endereço devem vir primeiro.
-3. **Campos de dívida complexos demais** — "Valor de Entrada", "Valor das Demais Parcelas", "Nº da Parcela" parecem linguagem de venda. Para cadastro de dívida existente, o ideal é: Valor da Dívida, Data de Vencimento, Status.
-4. **CEP não busca endereço** — Ao digitar o CEP, deveria consultar a API ViaCEP e preencher automaticamente endereço, bairro, cidade e UF.
+O console mostra `createClient` falhando com `[object Object]`. Analisando o fluxo:
 
-## Mudanças
+1. **`data_vencimento` é opcional no schema** mas `generateInstallments` exige uma data válida. Quando o usuário não preenche a data, `validated.data_vencimento` é `undefined`, causando `new Date("undefinedT00:00:00")` → data inválida → erro no insert.
 
-### `src/components/clients/ClientForm.tsx`
+2. **`external_id` vazio não é auto-gerado** — o formulário envia `undefined` e o service envia `null`. Se o campo for necessário para lógica de upsert, falta um fallback.
 
-**Reorganizar em seções visuais:**
+3. **Erro genérico sem detalhes** — o `handleServiceError` loga `[object Object]` sem stringify, e o `onError` mostra apenas "Erro ao cadastrar cliente" sem detalhes do que falhou.
 
-```text
-── Dados Pessoais ──
-  Nome Completo* | CPF*
-  Telefone | Email
+## Correções
 
-── Endereço ──
-  CEP (auto-busca) | UF
-  Endereço (logradouro + número)
-  Bairro | Cidade
+### 1. `src/services/clientService.ts` — createClient
 
-── Dados da Dívida ──
-  Credor* | Valor da Dívida (R$)*
-  Data de Vencimento* | Status
-  Nº Parcela | Total Parcelas
-  ID Externo (contrato)
+- Se `data_vencimento` estiver vazio/undefined, usar a data de hoje como default
+- Se `external_id` estiver vazio, gerar automaticamente um ID único (ex: `MAN-{timestamp}-{random}`)
+- Melhorar log de erro para incluir `JSON.stringify(error)` no catch
 
-── Observações ──
-  Textarea
+```typescript
+// Antes da chamada a generateInstallments:
+const dataVenc = validated.data_vencimento || new Date().toISOString().split("T")[0];
+const extId = data.external_id || `MAN-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 ```
 
-**Simplificar campos de dívida:**
-- Renomear "Valor de Entrada" → "Valor da Dívida" (campo principal)
-- Manter "Valor das Demais Parcelas" mas como opcional (colapsável ou secondary)
-- "Valor Pago" como opcional
-- Labels mais claros
+### 2. `src/lib/validations.ts` — clientSchema
 
-**Adicionar busca de CEP:**
-- `onBlur` no campo CEP: quando tiver 8 dígitos, chamar `https://viacep.com.br/ws/{cep}/json/`
-- Preencher automaticamente: `endereco` (logradouro), `bairro`, `cidade`, `uf`
-- Adicionar state `bairro` (atualmente não existe no form mas existe na tabela clients)
-- Mostrar loading spinner enquanto busca
+- Tornar `data_vencimento` realmente opcional com fallback (não quebrar se vazio)
+- O schema já aceita `optional().nullable()`, mas o `.regex()` falha com string vazia `""`. Adicionar `.or(z.literal(""))` ou tratar no transform.
 
-**Adicionar scroll ao dialog:**
+### 3. `src/components/clients/ClientForm.tsx`
 
-### `src/pages/CarteiraPage.tsx`
+- Remover campo "ID Externo" do formulário visível (será gerado automaticamente)
+- Ou mantê-lo como opcional com placeholder "Gerado automaticamente se vazio"
 
-- Mudar `max-w-lg` para `max-w-2xl`
-- Adicionar `max-h-[85vh] overflow-y-auto` ao conteúdo do dialog
+### 4. `src/lib/errorHandler.ts` — melhorar log
+
+- Logar `JSON.stringify(error)` em vez de `error` direto para evitar `[object Object]`
 
 ## Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/clients/ClientForm.tsx` | Reorganizar seções, simplificar dívida, busca CEP via ViaCEP |
-| `src/pages/CarteiraPage.tsx` | Dialog com scroll e largura adequada |
+| `src/services/clientService.ts` | Default para `data_vencimento` e auto-gerar `external_id` |
+| `src/lib/validations.ts` | Aceitar string vazia em `data_vencimento` (transformar para null/undefined) |
+| `src/components/clients/ClientForm.tsx` | Tornar ID Externo informativo ("gerado se vazio") |
+| `src/lib/errorHandler.ts` | Stringify error no log |
 
