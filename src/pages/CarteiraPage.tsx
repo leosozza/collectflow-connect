@@ -211,6 +211,7 @@ const CarteiraPage = () => {
       data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
+    enabled: hasActiveFilters,
   });
 
   // Fetch client IDs that have had contact (dispositions or conversations)
@@ -230,7 +231,7 @@ const CarteiraPage = () => {
       convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
     },
-    enabled: !!tenant?.id,
+    enabled: hasActiveFilters && !!tenant?.id,
   });
 
   const { data: tiposStatus = [] } = useQuery({
