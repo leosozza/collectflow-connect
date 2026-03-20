@@ -1,74 +1,51 @@
+# Plano: Corrigir funcionalidades da tela do operador em /contact-center/telefonia
 
+## Problemas identificados
 
-# Plano: Separar Super Admin da Gamificação + Controle de Participantes + Revisão do Dashboard
+### 1. Botões Retomar/Pausa não funcionam
 
-## Diagnóstico
+Os botões da **barra superior** (`TelefoniaDashboard.tsx` linhas 754-791) chamam `handleUnpause` e `handlePause` corretamente. Porém, o botão **Retomar** (linha 757) renderiza o ícone `Play` com classe `animate-spin` quando `unpausing` é true — mas `Play` não é um ícone rotacional. O problema real é que os botões do **widget minimizado** (`useAtendimentoModal.tsx` linhas 222-267) chamam `pauseControls.onPause/onUnpause` que apontam para as mesmas funções no Dashboard. **Preciso verificar se o `invoke` retorna erro silencioso.** Analisando o proxy: `pause_agent` chama `POST /agent/pause` com `work_break_interval_id` — isso está correto. `unpause_agent` chama `POST /agent/unpause` — também correto.
 
-### 1. Super Admin misturado com tenant
-O login `raul@temisconsultoria.com.br` (super_admin, `user_id: d591ef12`) está na mesma `tenant_id` da YBRASIL e aparece no dashboard, ranking, e filtros de operadores junto com os operadores reais. Da mesma forma, `raulsjunior579@gmail.com` (admin, `user_id: 0e5a460b`) é admin e não deveria aparecer na gamificação.
+O problema provável é que os botões na barra superior da tela principal (não o widget) chamam `handlePause(pi.id)` e `handleUnpause()`, mas quando o agente está com status 3 (paused), ele renderiza o botão "Retomar" que chama `handleUnpause`. **Isto parece correto no código.** Preciso adicionar logs e melhor tratamento de erro para diagnosticar.
 
-**Problema no código:**
-- `DashboardPage.tsx` (linha 77-80): busca TODOS os profiles do tenant, incluindo admins e super_admin
-- `GoalsManagementTab.tsx` (linha 29-33): lista TODOS os profiles do tenant para definir metas
-- `gamificationService.ts` `fetchRanking`: retorna TODOS os `operator_points` sem filtrar por role
-- Não existe conceito de "usuário habilitado para gamificação"
+**Ação:** Adicionar `console.log` nos handlers de pausa/retomar e mostrar mensagem de erro detalhada do proxy no toast. Atualmente o catch é genérico (`toast.error("Erro ao pausar")`), engolindo o detalhe.
 
-### 2. Dashboard — números
-Os números estão corretos para os dados atuais (só 1 acordo cancelado em março, sem parcelas no mês). Os zeros são legítimos. Porém, o problema de `entrada_date IS NULL` com `entrada_value > 0` pode causar parcelas "perdidas" no cálculo. Precisa de fallback.
+### 2. SIP Off — o que é?
+
+O botão "SIP Off" tenta reconectar o MicroSIP (softphone) via `handleReconnectSip` → `connect_agent`. Se o operador não usa MicroSIP (usa apenas discador automático), esse botão é confuso e inútil. Como o 3CPlus em modo discador não precisa de SIP manual, a verificação `isSipConnected` (linha 604) nunca retorna true porque a API não retorna `sip_connected`/`extension_status`/`sip_status` no `agents_status`.
+
+**Ação:** Remover o indicador SIP da visão do operador. O SIP é gerenciado automaticamente pelo login na campanha.   
+  
+Mas tomar cuidado pois utiliizamos o microsip sim na operação, se for atrapalhar os avanços de conexão com o SIP. nao precisa remover
+
+### 3. CPC não contabiliza
+
+O card "CPC" (linha 860) mostra `myMetrics?.agreements ?? 0` — ou seja, está mostrando **acordos** no lugar de CPC. CPC deveria contar as disposições do dia que têm `is_cpc = true` no `call_disposition_types`.
+
+**Ação:** Alterar a query de `todayDispositions` para incluir o `disposition_type`, fazer join com `call_disposition_types` para verificar `is_cpc`, e criar uma métrica separada para CPC.
+
+### 4. Card "Feedback" — desnecessário
+
+O card mostra "Nenhuma avaliação ainda" e não tem funcionalidade.
+
+**Ação:** Substituir por card de **Acordos** (quantos acordos fechou hoje), que é uma métrica mais útil.
 
 ## Mudanças
 
-### 1. Nova tabela `gamification_participants` — controlar quem participa
-Migration SQL para criar tabela que define quais usuários estão habilitados na gamificação:
+### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-```sql
-CREATE TABLE public.gamification_participants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
-  profile_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  enabled boolean DEFAULT true,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(tenant_id, profile_id)
-);
-ALTER TABLE gamification_participants ENABLE ROW LEVEL SECURITY;
--- RLS: tenant admins podem gerenciar
-```
-
-### 2. Nova aba "Participantes" em Gamificação > Gerenciar
-**Novo arquivo:** `src/components/gamificacao/ParticipantsManagementTab.tsx`
-
-- Lista todos os profiles do tenant com toggle (Switch) para habilitar/desabilitar
-- Mostra role do usuário como badge informativo
-- Por padrão, operadores são habilitados, admins e super_admin não
-- Botão "Habilitar todos os operadores" para facilitar setup inicial
-
-### 3. Filtrar operadores no Dashboard e Gamificação
-
-**`src/pages/DashboardPage.tsx`** (linha 77-80):
-- No filtro de operadores, excluir profiles com role `admin` ou cujo `user_id` é super_admin (via `tenant_users.role`)
-- Alternativa mais simples: filtrar `profiles.role IN ('operador', 'supervisor')` no select
-
-**`src/services/gamificationService.ts`** `fetchRanking`:
-- Após buscar `operator_points`, filtrar apenas quem está em `gamification_participants.enabled = true`
-
-**`src/components/gamificacao/GoalsManagementTab.tsx`** (linha 29-33):
-- Filtrar operators query para mostrar apenas participantes habilitados na gamificação
-
-### 4. Dashboard RPC — fix `entrada_date IS NULL`
-**Migration:** Atualizar `get_dashboard_stats` para usar `COALESCE(a.entrada_date, a.first_due_date)` em vez de `a.entrada_date IS NOT NULL`. Quando a entrada existe (`entrada_value > 0`) mas não tem data definida, usar `first_due_date` como fallback. Isso evita perder parcelas de entrada nos cálculos.
-
-### 5. Registrar na aba Gerenciar
-**`src/pages/GamificacaoPage.tsx`:**
-- Adicionar sub-tab "Participantes" dentro de "Gerenciar"
+1. **Query `todayDispositions**`: Incluir `disposition_type` no select
+2. **Nova query `cpcDispositionTypes**`: Buscar IDs dos `call_disposition_types` onde `is_cpc = true`
+3. `**agentMetrics**`: Adicionar campo `cpc` contando apenas disposições cujo tipo é CPC
+4. **Card CPC**: Usar `myMetrics?.cpc ?? 0` ao invés de `myMetrics?.agreements`
+5. **Card Feedback → Acordos**: Trocar por card de Acordos usando `myMetrics?.agreements ?? 0`
+6. **Remover SIP**: Remover bloco do botão SIP Off (linhas 794-813) da barra de status do operador
+7. **Melhorar handlers**: Adicionar log detalhado no `handlePause` e `handleUnpause`, e mostrar `result?.detail` no toast de erro quando disponível
+8. **handlePause/handleUnpause**: Verificar se o `invoke` retorna erro via `result.status >= 400` (como feito no login) em vez de depender apenas do catch
 
 ## Arquivos a editar
 
-| Arquivo | Mudança |
-|---|---|
-| Migration SQL | Criar `gamification_participants` + RLS + Fix RPC `get_dashboard_stats` (fallback entrada_date) |
-| `src/components/gamificacao/ParticipantsManagementTab.tsx` | **Novo** — toggle de participantes |
-| `src/pages/GamificacaoPage.tsx` | Adicionar sub-tab Participantes |
-| `src/pages/DashboardPage.tsx` | Filtrar operadores por role (excluir admin/super_admin) |
-| `src/components/gamificacao/GoalsManagementTab.tsx` | Filtrar apenas participantes habilitados |
-| `src/services/gamificationService.ts` | `fetchRanking` filtra por participantes habilitados |
 
+| Arquivo                                                           | Mudança                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix CPC query, remover SIP, Feedback→Acordos, melhorar error handling nos handlers de pausa |
