@@ -117,7 +117,11 @@ export const createClient = async (
   try {
     const validated = validateClientData(data);
     const totalParcelas = validated.total_parcelas || data.total_parcelas || 1;
-    const dataVenc = validated.data_vencimento || data.data_vencimento || new Date().toISOString().split("T")[0];
+    const dataVenc = (validated.data_vencimento && validated.data_vencimento.length > 0)
+      ? validated.data_vencimento
+      : (data.data_vencimento && data.data_vencimento.length > 0)
+        ? data.data_vencimento
+        : new Date().toISOString().split("T")[0];
     const extId = data.external_id || `MAN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     const records = generateInstallments({
