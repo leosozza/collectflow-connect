@@ -937,7 +937,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
         {/* ── Last calls table ── */}
         <div className="px-4">
-          <OperatorCallHistory />
+          <OperatorCallHistory onClickToCall={(phone) => {
+            if (operatorAgentId) {
+              invoke("click2call", { agent_id: operatorAgentId, phone }).then(() => {
+                toast.success(`Ligando para ${phone}...`);
+              }).catch(() => {
+                toast.error("Erro ao iniciar ligação");
+              });
+            }
+          }} />
         </div>
 
         {/* ── Exit campaign button ── */}
