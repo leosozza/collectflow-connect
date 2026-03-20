@@ -256,7 +256,9 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       let operator = "";
 
       // Resolve operator name
-      if (meta.created_by && profileMap[meta.created_by]) {
+      if (meta.operator_id && profileMap[meta.operator_id]) {
+        operator = profileMap[meta.operator_id];
+      } else if (meta.created_by && profileMap[meta.created_by]) {
         operator = profileMap[meta.created_by];
       } else if (meta.updated_by && profileMap[meta.updated_by]) {
         operator = profileMap[meta.updated_by];
