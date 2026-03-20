@@ -559,6 +559,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
     setPausingWith(intervalId);
+    // Save pause name for display
+    const intervalObj = pauseIntervals.find((pi: any) => pi.id === intervalId);
+    const pauseName = intervalObj?.name || intervalObj?.description || `Intervalo ${intervalId}`;
     try {
       console.log("[Telefonia] handlePause — agentId:", operatorAgentId, "intervalId:", intervalId);
       const result = await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
@@ -567,7 +570,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao pausar");
       } else {
-        toast.success("Pausa ativada");
+        setActivePauseName(pauseName);
+        sessionStorage.setItem("3cp_active_pause_name", pauseName);
+        toast.success(`Pausa ativada: ${pauseName}`);
       }
       fetchAll();
     } catch (err: any) {
