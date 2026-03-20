@@ -200,17 +200,6 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
             <Input type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} required />
           </div>
           <div className="space-y-1.5">
-            <Label>Status <span className="text-destructive">*</span></Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="pago">Pago</SelectItem>
-                <SelectItem value="quebrado">Quebrado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
             <Label>Nº Parcela</Label>
             <Input type="number" min={1} value={numeroParcela} onChange={(e) => setNumeroParcela(e.target.value)} />
           </div>
