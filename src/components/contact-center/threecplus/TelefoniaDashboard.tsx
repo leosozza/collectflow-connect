@@ -475,7 +475,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls } = useAtendimentoModal();
+  const { openWaiting, setPauseControls, closeAtendimento } = useAtendimentoModal();
 
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;
