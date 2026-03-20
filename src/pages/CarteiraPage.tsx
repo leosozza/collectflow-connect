@@ -815,7 +815,7 @@ const CarteiraPage = () => {
 
       {/* Create/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={handleCloseForm}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
           </DialogHeader>
