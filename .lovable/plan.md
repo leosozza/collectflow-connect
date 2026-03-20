@@ -1,51 +1,48 @@
-# Plano: Corrigir funcionalidades da tela do operador em /contact-center/telefonia
 
-## Problemas identificados
 
-### 1. Botões Retomar/Pausa não funcionam
+# Plano: Corrigir endpoints de Pausa/Retomar + Mostrar nome da pausa ativa
 
-Os botões da **barra superior** (`TelefoniaDashboard.tsx` linhas 754-791) chamam `handleUnpause` e `handlePause` corretamente. Porém, o botão **Retomar** (linha 757) renderiza o ícone `Play` com classe `animate-spin` quando `unpausing` é true — mas `Play` não é um ícone rotacional. O problema real é que os botões do **widget minimizado** (`useAtendimentoModal.tsx` linhas 222-267) chamam `pauseControls.onPause/onUnpause` que apontam para as mesmas funções no Dashboard. **Preciso verificar se o `invoke` retorna erro silencioso.** Analisando o proxy: `pause_agent` chama `POST /agent/pause` com `work_break_interval_id` — isso está correto. `unpause_agent` chama `POST /agent/unpause` — também correto.
+## Causa raiz
 
-O problema provável é que os botões na barra superior da tela principal (não o widget) chamam `handlePause(pi.id)` e `handleUnpause()`, mas quando o agente está com status 3 (paused), ele renderiza o botão "Retomar" que chama `handleUnpause`. **Isto parece correto no código.** Preciso adicionar logs e melhor tratamento de erro para diagnosticar.
+O proxy está chamando endpoints **incorretos** da API 3CPlus:
 
-**Ação:** Adicionar `console.log` nos handlers de pausa/retomar e mostrar mensagem de erro detalhada do proxy no toast. Atualmente o catch é genérico (`toast.error("Erro ao pausar")`), engolindo o detalhe.
+| Ação | Proxy chama (ERRADO) | API 3CPlus real (CORRETO) |
+|---|---|---|
+| Pausar | `POST /agent/pause` | `POST /agent/work_break/{work-break-id}/enter` |
+| Retomar | `POST /agent/unpause` | `POST /agent/work_break/exit` |
 
-### 2. SIP Off — o que é?
+O erro "O recurso requisitado não foi encontrado" (404) é a API 3CPlus respondendo que `/agent/unpause` não existe.
 
-O botão "SIP Off" tenta reconectar o MicroSIP (softphone) via `handleReconnectSip` → `connect_agent`. Se o operador não usa MicroSIP (usa apenas discador automático), esse botão é confuso e inútil. Como o 3CPlus em modo discador não precisa de SIP manual, a verificação `isSipConnected` (linha 604) nunca retorna true porque a API não retorna `sip_connected`/`extension_status`/`sip_status` no `agents_status`.
+## Correções
 
-**Ação:** Remover o indicador SIP da visão do operador. O SIP é gerenciado automaticamente pelo login na campanha.   
-  
-Mas tomar cuidado pois utiliizamos o microsip sim na operação, se for atrapalhar os avanços de conexão com o SIP. nao precisa remover
+### 1. `supabase/functions/threecplus-proxy/index.ts` — Fix endpoints
 
-### 3. CPC não contabiliza
+**`pause_agent` (linha 736-753):**
+- Mudar URL de `POST /agent/pause` para `POST /agent/work_break/{interval_id}/enter`
+- Remover o body `{ work_break_interval_id }` pois o ID vai na URL
 
-O card "CPC" (linha 860) mostra `myMetrics?.agreements ?? 0` — ou seja, está mostrando **acordos** no lugar de CPC. CPC deveria contar as disposições do dia que têm `is_cpc = true` no `call_disposition_types`.
+**`unpause_agent` (linha 755-769):**
+- Mudar URL de `POST /agent/unpause` para `POST /agent/work_break/exit`
 
-**Ação:** Alterar a query de `todayDispositions` para incluir o `disposition_type`, fazer join com `call_disposition_types` para verificar `is_cpc`, e criar uma métrica separada para CPC.
+### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — Mostrar pausa ativa
 
-### 4. Card "Feedback" — desnecessário
+Quando `myAgent?.status === 3` (paused), o sistema deve mostrar:
+- O **nome do intervalo de pausa** atual (ex: "Almoço", "Banheiro")
+- O **tempo decorrido** da pausa (já existe `timerSeconds` baseado em `status_start_time`)
 
-O card mostra "Nenhuma avaliação ainda" e não tem funcionalidade.
+A API `agents_status` retorna apenas `status` e `status_start_time`, sem o nome da pausa. Para resolver:
+- Guardar o nome do intervalo selecionado em estado local (`activePauseName`) quando `handlePause` é chamado
+- Persistir em `sessionStorage` para sobreviver a refresh
+- Exibir na barra de status: "Em pausa: Almoço (05:23)" ao invés de apenas "Em pausa"
 
-**Ação:** Substituir por card de **Acordos** (quantos acordos fechou hoje), que é uma métrica mais útil.
+### 3. Nova ação `get_agent_work_break_intervals` no proxy
 
-## Mudanças
-
-### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
-
-1. **Query `todayDispositions**`: Incluir `disposition_type` no select
-2. **Nova query `cpcDispositionTypes**`: Buscar IDs dos `call_disposition_types` onde `is_cpc = true`
-3. `**agentMetrics**`: Adicionar campo `cpc` contando apenas disposições cujo tipo é CPC
-4. **Card CPC**: Usar `myMetrics?.cpc ?? 0` ao invés de `myMetrics?.agreements`
-5. **Card Feedback → Acordos**: Trocar por card de Acordos usando `myMetrics?.agreements ?? 0`
-6. **Remover SIP**: Remover bloco do botão SIP Off (linhas 794-813) da barra de status do operador
-7. **Melhorar handlers**: Adicionar log detalhado no `handlePause` e `handleUnpause`, e mostrar `result?.detail` no toast de erro quando disponível
-8. **handlePause/handleUnpause**: Verificar se o `invoke` retorna erro via `result.status >= 400` (como feito no login) em vez de depender apenas do catch
+Adicionar suporte ao endpoint `GET /agent/work_break_intervals` que retorna os intervalos disponíveis para o agente logado na campanha. Isso complementa o carregamento atual via `list_work_break_group_intervals`.
 
 ## Arquivos a editar
 
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/threecplus-proxy/index.ts` | Fix URLs de pause/unpause para endpoints corretos da API 3CPlus |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Guardar e exibir nome da pausa ativa + tempo |
 
-| Arquivo                                                           | Mudança                                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix CPC query, remover SIP, Feedback→Acordos, melhorar error handling nos handlers de pausa |
