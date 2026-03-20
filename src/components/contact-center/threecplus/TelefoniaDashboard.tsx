@@ -441,24 +441,26 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
   const myCampaignId = myAgent?.campaign_id || myAgent?.campaign?.id;
 
+  // Extract primitive values to stabilize timer deps
+  const myAgentStartTime = myAgent?.status_start_time || myAgent?.status_time;
+  const myAgentStatus = myAgent?.status;
+
   useEffect(() => {
     if (!isOperatorView || !isAgentOnline) {
       setTimerSeconds(0);
       return;
     }
-    const raw = myAgent?.status_start_time || myAgent?.status_time;
-    const startMs = parseStartTime(raw);
+    const startMs = parseStartTime(myAgentStartTime);
     const calcSeconds = () => {
       if (!startMs) return 0;
       const diff = Math.floor((Date.now() - startMs) / 1000);
-      // Guard against nonsensical values (negative or > 24h)
       if (diff < 0 || diff > 86400) return 0;
       return diff;
     };
     setTimerSeconds(calcSeconds());
     const id = setInterval(() => setTimerSeconds(calcSeconds()), 1000);
     return () => clearInterval(id);
-  }, [isOperatorView, isAgentOnline, myAgent?.status_start_time, myAgent?.status_time, myAgent?.status]);
+  }, [isOperatorView, isAgentOnline, myAgentStartTime, myAgentStatus]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
