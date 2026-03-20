@@ -594,6 +594,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao retomar");
       } else {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
         toast.success("Pausa removida");
       }
       fetchAll();
