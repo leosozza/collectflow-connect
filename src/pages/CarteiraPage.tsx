@@ -95,6 +95,28 @@ const CarteiraPage = () => {
     higienizados: urlHigienizados,
   }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
 
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.search.trim() !== "" ||
+      filters.status !== "todos" ||
+      filters.credor !== "todos" ||
+      filters.dateFrom !== "" ||
+      filters.dateTo !== "" ||
+      filters.tipoDevedorId !== "" ||
+      filters.tipoDividaId !== "" ||
+      filters.statusCobrancaId !== "" ||
+      filters.semAcordo === true ||
+      filters.cadastroDe !== "" ||
+      filters.cadastroAte !== "" ||
+      filters.quitados === true ||
+      (filters.valorAbertoDe as number) > 0 ||
+      (filters.valorAbertoAte as number) > 0 ||
+      filters.semContato === true ||
+      filters.emDia === true ||
+      filters.higienizados === true
+    );
+  }, [filters]);
+
   const [, setSearchParamsRaw] = useSearchParams();
 
   const FILTER_DEFAULTS: Record<string, any> = useMemo(() => ({
