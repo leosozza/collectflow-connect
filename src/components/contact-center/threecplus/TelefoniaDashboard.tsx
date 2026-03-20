@@ -269,12 +269,25 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("call_dispositions")
-        .select("operator_id")
+        .select("operator_id, disposition_type")
         .gte("created_at", todayStart);
       if (error) throw error;
       return data || [];
     },
     refetchInterval: 60000,
+  });
+
+  const { data: cpcDispositionKeys = [] } = useQuery({
+    queryKey: ["cpc-disposition-keys"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("call_disposition_types")
+        .select("key")
+        .eq("is_cpc", true);
+      if (error) throw error;
+      return (data || []).map((d: any) => d.key);
+    },
+    staleTime: 300000,
   });
 
   const { data: todayAgreements = [] } = useQuery({
