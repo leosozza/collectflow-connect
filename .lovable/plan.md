@@ -1,38 +1,63 @@
 
 
-# Plano: Baixar boletos Negociarie na Gestão de Acordos
+# Plano: Reformular formulário de cadastro de cliente
 
-## Contexto
+## Problemas identificados
 
-Sim, ao formalizar o acordo com pagamento BOLETO, os boletos são gerados via API Negociarie e salvos na tabela `negociarie_cobrancas` com `agreement_id`, `link_boleto`, `linha_digitavel`, `pix_copia_cola`, etc.
-
-O problema é que o `AgreementInstallmentsPanel` usado na página `/acordos` **não consulta a `negociarie_cobrancas`** — ele gera parcelas virtuais e oferece "Gerar Boleto" via Asaas (gateway diferente). Já existe um componente correto: `AgreementInstallments` (em `client-detail/`) que **já consulta `negociarie_cobrancas`** por `agreement_id` e exibe botão "Baixar Boleto" quando `link_boleto` existe.
-
-## Solução
-
-Substituir o `AgreementInstallmentsPanel` (que gera boletos novos via Asaas) pelo `AgreementInstallments` (que busca boletos já gerados na Negociarie) na página de Acordos.
+1. **Dialog muito grande** — `max-w-lg` não comporta todos os campos sem scroll. Falta `overflow-y-auto` e `max-h` no conteúdo.
+2. **Ordem errada** — Dados da dívida (parcelas, valores) aparecem misturados com dados pessoais. Nome/CPF/endereço devem vir primeiro.
+3. **Campos de dívida complexos demais** — "Valor de Entrada", "Valor das Demais Parcelas", "Nº da Parcela" parecem linguagem de venda. Para cadastro de dívida existente, o ideal é: Valor da Dívida, Data de Vencimento, Status.
+4. **CEP não busca endereço** — Ao digitar o CEP, deveria consultar a API ViaCEP e preencher automaticamente endereço, bairro, cidade e UF.
 
 ## Mudanças
 
-### 1. `src/pages/AcordosPage.tsx`
+### `src/components/clients/ClientForm.tsx`
 
-- Trocar o import de `AgreementInstallmentsPanel` por `AgreementInstallments` (de `@/components/client-detail/AgreementInstallments`)
-- Atualizar a chamada na linha 295 para passar as props corretas: `agreementId={editingAgreement.id}`, `agreement={editingAgreement}`, `cpf={editingAgreement.client_cpf}`
+**Reorganizar em seções visuais:**
 
-### 2. `src/components/client-detail/AgreementInstallments.tsx`
+```text
+── Dados Pessoais ──
+  Nome Completo* | CPF*
+  Telefone | Email
 
-- Fix na query da linha 26: atualmente filtra por `client_id.eq.${agreementId}`, mas deveria filtrar por `agreement_id.eq.${agreementId}` (o campo correto na tabela)
-- Isso é o motivo pelo qual os boletos não aparecem mesmo existindo na base
+── Endereço ──
+  CEP (auto-busca) | UF
+  Endereço (logradouro + número)
+  Bairro | Cidade
 
-### 3. Remover ou deprecar `AgreementInstallmentsPanel.tsx`
+── Dados da Dívida ──
+  Credor* | Valor da Dívida (R$)*
+  Data de Vencimento* | Status
+  Nº Parcela | Total Parcelas
+  ID Externo (contrato)
 
-- O componente que gera boletos via Asaas pode ser removido, já que os boletos são gerados via Negociarie na formalização do acordo
+── Observações ──
+  Textarea
+```
 
-## Resumo
+**Simplificar campos de dívida:**
+- Renomear "Valor de Entrada" → "Valor da Dívida" (campo principal)
+- Manter "Valor das Demais Parcelas" mas como opcional (colapsável ou secondary)
+- "Valor Pago" como opcional
+- Labels mais claros
+
+**Adicionar busca de CEP:**
+- `onBlur` no campo CEP: quando tiver 8 dígitos, chamar `https://viacep.com.br/ws/{cep}/json/`
+- Preencher automaticamente: `endereco` (logradouro), `bairro`, `cidade`, `uf`
+- Adicionar state `bairro` (atualmente não existe no form mas existe na tabela clients)
+- Mostrar loading spinner enquanto busca
+
+**Adicionar scroll ao dialog:**
+
+### `src/pages/CarteiraPage.tsx`
+
+- Mudar `max-w-lg` para `max-w-2xl`
+- Adicionar `max-h-[85vh] overflow-y-auto` ao conteúdo do dialog
+
+## Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/AcordosPage.tsx` | Trocar `AgreementInstallmentsPanel` por `AgreementInstallments` com props corretas |
-| `src/components/client-detail/AgreementInstallments.tsx` | Fix: `client_id.eq.` → `agreement_id.eq.` na query |
-| `src/components/acordos/AgreementInstallmentsPanel.tsx` | Remover (não mais necessário) |
+| `src/components/clients/ClientForm.tsx` | Reorganizar seções, simplificar dívida, busca CEP via ViaCEP |
+| `src/pages/CarteiraPage.tsx` | Dialog com scroll e largura adequada |
 
