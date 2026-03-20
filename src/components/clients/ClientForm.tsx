@@ -84,7 +84,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       cpf: cpf.trim(),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
-      external_id: externalId.trim() || undefined,
+      external_id: externalId.trim() || undefined, // auto-gerado pelo serviço se vazio
       endereco: endereco.trim() || undefined,
       cidade: cidade.trim() || undefined,
       uf: uf.trim() || undefined,
@@ -220,7 +220,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
           </div>
           <div className="space-y-1.5">
             <Label>ID Externo (contrato)</Label>
-            <Input value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="Contrato, ID CRM, etc." maxLength={100} />
+            <Input value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="Gerado automaticamente se vazio" maxLength={100} />
           </div>
         </div>
 

@@ -14,7 +14,7 @@ export const clientSchema = z.object({
   valor_entrada: z.number().min(0, "Valor não pode ser negativo").max(99999999.99, "Valor muito alto").optional().default(0),
   valor_parcela: z.number().min(0, "Valor não pode ser negativo").max(99999999.99, "Valor muito alto").optional().default(0),
   valor_pago: z.number().min(0, "Valor não pode ser negativo").max(99999999.99, "Valor muito alto").optional().default(0),
-  data_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato: YYYY-MM-DD)").optional().nullable(),
+  data_vencimento: z.string().transform(v => v === "" ? null : v).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato: YYYY-MM-DD)").nullable()).optional().nullable(),
   status: z.enum(["pendente", "pago", "quebrado"], { message: "Status inválido" }).optional().default("pendente"),
   phone: z.string().trim().max(20).optional().nullable(),
   email: z.string().trim().email("Email inválido").max(255).optional().nullable(),
