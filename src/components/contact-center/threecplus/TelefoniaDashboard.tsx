@@ -504,9 +504,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // Load pause intervals from campaign's work_break_group_id
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      // Find the campaign to get its work_break_group_id
+      // First try from listing data
       const campaign = campaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
-      const groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
+      let groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
+      
+      // If not in listing, fetch individual campaign details
+      if (!groupId) {
+        console.log("[Telefonia] work_break_group_id não encontrado no listing, buscando detalhes da campanha", campaignId);
+        try {
+          const details = await invoke("campaign_details", { campaign_id: campaignId });
+          const campaignData = details?.data || details;
+          groupId = campaignData?.work_break_group_id || campaignData?.work_break_group?.id || campaignData?.dialer_settings?.work_break_group_id;
+          console.log("[Telefonia] campaign_details response — work_break_group_id:", groupId, "keys:", Object.keys(campaignData || {}));
+        } catch (e) {
+          console.warn("[Telefonia] Falha ao buscar detalhes da campanha:", e);
+        }
+      }
       
       if (!groupId) {
         console.log("[Telefonia] Campanha sem work_break_group_id, sem intervalos de pausa");
@@ -517,6 +530,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       console.log("[Telefonia] Carregando intervalos do grupo:", groupId);
       const data = await invoke("list_work_break_group_intervals", { group_id: groupId });
       const list = Array.isArray(data) ? data : data?.data || [];
+      console.log("[Telefonia] Intervalos de pausa carregados:", list.length, list);
       setPauseIntervals(list);
     } catch {
       setPauseIntervals([]);
