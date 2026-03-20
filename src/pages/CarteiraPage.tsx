@@ -693,7 +693,15 @@ const CarteiraPage = () => {
       ) : (
         /* Client table */
         <div className="bg-card rounded-xl border border-border overflow-hidden">
-          {isLoading ? (
+          {!hasActiveFilters ? (
+            <div className="p-12 text-center space-y-3">
+              <Search className="w-10 h-10 mx-auto text-muted-foreground/50" />
+              <h3 className="text-lg font-semibold text-foreground">Utilize os filtros para buscar clientes</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Para evitar lentidão, a carteira não carrega automaticamente. Aplique ao menos um filtro acima (busca, credor, status, datas, etc.) para visualizar os clientes.
+              </p>
+            </div>
+          ) : isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
           ) : displayClients.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum cliente encontrado</div>
