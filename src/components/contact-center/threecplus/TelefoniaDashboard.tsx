@@ -521,7 +521,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento } = useAtendimentoModal();
 
   const handleCampaignLogout = async () => {
     if (!operatorAgentId) return;
