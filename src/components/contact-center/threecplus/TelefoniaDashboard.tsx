@@ -243,6 +243,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [activePauseName, setActivePauseName] = useState<string>(() => sessionStorage.getItem("3cp_active_pause_name") || "");
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
 
