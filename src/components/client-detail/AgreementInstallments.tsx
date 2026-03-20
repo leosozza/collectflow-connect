@@ -23,7 +23,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
       const { data, error } = await supabase
         .from("negociarie_cobrancas" as any)
         .select("*")
-        .or(`client_id.eq.${agreementId}`)
+        .eq("agreement_id", agreementId)
         .order("data_vencimento", { ascending: true });
       if (error) return [];
       return (data as any[]) || [];

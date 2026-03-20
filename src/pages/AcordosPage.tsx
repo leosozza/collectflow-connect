@@ -8,7 +8,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, updateAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
-import AgreementInstallmentsPanel from "@/components/acordos/AgreementInstallmentsPanel";
+import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
 import StatCard from "@/components/StatCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -292,7 +292,7 @@ const AcordosPage = () => {
             </div>
 
             {/* Parcelas e Boletos */}
-            <AgreementInstallmentsPanel agreement={editingAgreement} />
+            <AgreementInstallments agreementId={editingAgreement.id} agreement={editingAgreement} cpf={editingAgreement.client_cpf} />
 
             <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? "Salvando..." : "Salvar Alterações"}
