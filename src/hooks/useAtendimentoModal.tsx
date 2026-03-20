@@ -13,6 +13,8 @@ interface PauseControls {
   unpausing: boolean;
   onPause: (intervalId: number) => void;
   onUnpause: () => void;
+  agentStatus?: number | string;
+  agentName?: string;
 }
 
 interface AtendimentoModalState {
