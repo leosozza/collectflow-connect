@@ -346,17 +346,23 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     try {
       const promises: Promise<any>[] = [
         invoke("agents_status").catch(() => []),
-        invoke("list_campaigns").catch(() => []),
         invoke("company_calls").catch(() => null),
       ];
-      // Fetch agent-specific campaigns if operator has an agent ID
+
+      // Operators only need agents_status, company_calls, and their own campaigns
+      if (!isOperatorView) {
+        promises.push(invoke("list_campaigns").catch(() => []));
+      }
+
       if (operatorAgentId) {
         promises.push(
           invoke("agent_available_campaigns", { agent_id: operatorAgentId }).catch(() => [])
         );
       }
 
-      const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
+      const results = await Promise.all(promises);
+      const agentsData = results[0];
+      const callsData = results[1];
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
       console.log("[3CPlus] agents_status response:", JSON.stringify(agentList));
@@ -369,33 +375,45 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         console.log("[3CPlus] operatorAgentId:", operatorAgentId, "myAgent found:", JSON.stringify(foundAgent));
       }
 
-      const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+      if (isOperatorView) {
+        // Operator: skip list_campaigns and campaign_statistics
+        const agentCampaignsData = operatorAgentId ? results[2] : null;
+        if (agentCampaignsData) {
+          const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+          setAgentCampaigns(agentCampList);
+        }
+      } else {
+        // Admin: full campaign data with statistics
+        const campaignsData = results[2];
+        const agentCampaignsData = operatorAgentId ? results[3] : null;
 
-      // Set agent-specific campaigns
-      if (agentCampaignsData) {
-        const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
-        setAgentCampaigns(agentCampList);
+        if (agentCampaignsData) {
+          const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+          setAgentCampaigns(agentCampList);
+        }
+
+        const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+
+        const enriched = await Promise.all(
+          campList
+            .filter((c: any) => {
+              const s = String(c.status ?? "").toLowerCase();
+              return s === "running" || s === "paused" || !c.paused;
+            })
+            .map(async (c: any) => {
+              try {
+                const stats = await invoke("campaign_statistics", { campaign_id: c.id });
+                return { ...c, statistics: stats };
+              } catch {
+                return c;
+              }
+            })
+        );
+
+        const activeIds = new Set(enriched.map((c: any) => c.id));
+        const rest = campList.filter((c: any) => !activeIds.has(c.id));
+        setCampaigns([...enriched, ...rest]);
       }
-
-      const enriched = await Promise.all(
-        campList
-          .filter((c: any) => {
-            const s = String(c.status ?? "").toLowerCase();
-            return s === "running" || s === "paused" || !c.paused;
-          })
-          .map(async (c: any) => {
-            try {
-              const stats = await invoke("campaign_statistics", { campaign_id: c.id });
-              return { ...c, statistics: stats };
-            } catch {
-              return c;
-            }
-          })
-      );
-
-      const activeIds = new Set(enriched.map((c: any) => c.id));
-      const rest = campList.filter((c: any) => !activeIds.has(c.id));
-      setCampaigns([...enriched, ...rest]);
 
       setCompanyCalls(callsData);
       setLastUpdate(new Date());
@@ -404,7 +422,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } finally {
       setLoading(false);
     }
-  }, [invoke, operatorAgentId]);
+  }, [invoke, operatorAgentId, isOperatorView]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
