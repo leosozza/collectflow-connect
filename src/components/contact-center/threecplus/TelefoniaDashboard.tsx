@@ -872,15 +872,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </span>
           </div>
 
-          {/* Right side placeholders */}
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
-              <Mic className="w-4 h-4" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
-              <Keyboard className="w-4 h-4" />
-            </Button>
-          </div>
+          {/* Right spacer */}
+          <div className="w-4" />
         </div>
 
         {/* ── 4 KPI Cards ── */}
