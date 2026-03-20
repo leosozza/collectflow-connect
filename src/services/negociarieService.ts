@@ -135,16 +135,17 @@ export const negociarieService = {
           await this.saveCobranca({
             tenant_id: agreement.tenant_id,
             agreement_id: agreement.id,
-            external_id: apiResult?.id_geral || apiResult?.id || null,
-            cpf: cleanCpf,
-            nome: clientData.nome_completo || agreement.client_name,
+            id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
+            data_vencimento: inst.dueDate,
             valor: inst.value,
-            vencimento: inst.dueDate,
             status: "pendente",
-            response_data: apiResult,
+            link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
+            linha_digitavel: apiResult?.linha_digitavel || null,
+            pix_copia_cola: apiResult?.pix_copia_cola || null,
+            callback_data: apiResult || null,
           });
         } catch (saveErr) {
-          logger.error(MODULE, "save_cobranca_local", saveErr);
+          logger.error(MODULE, "save_cobranca_local", saveErr, { agreement_id: agreement.id, installment: inst.number });
         }
 
         result.success++;
