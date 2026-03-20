@@ -825,26 +825,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
               </Popover>
             )}
 
-            {/* SIP Connection Indicator */}
-            <div className="flex items-center gap-1.5">
-              {isSipConnected ? (
-                <Badge variant="secondary" className="gap-1 h-7 text-xs bg-emerald-500/20 text-emerald-100 border-0">
-                  <Wifi className="w-3 h-3" />
-                  SIP
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="gap-1.5 h-7 text-xs bg-destructive/30 hover:bg-destructive/50 border-0 text-white"
-                  onClick={handleReconnectSip}
-                  disabled={reconnectingSip}
-                >
-                  <WifiOff className={`w-3 h-3 ${reconnectingSip ? "animate-spin" : ""}`} />
-                  {reconnectingSip ? "Conectando..." : "SIP Off"}
-                </Button>
-              )}
-            </div>
+            {/* SIP managed automatically by campaign login */}
           </div>
 
           {/* Status central */}
