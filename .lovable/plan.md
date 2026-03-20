@@ -1,72 +1,48 @@
 
 
-# Plano: Widget com status do operador, expandir sempre visível, e fix das pausas
+# Plano: Histórico unificado com `client_events` + nomes de operadores
 
-## Problemas identificados
+## Problema
 
-1. **Pausas não aparecem**: `loadPauseIntervals` procura `work_break_group_id` dentro do objeto da campanha retornado por `list_campaigns`, mas a API 3CPlus tipicamente retorna esse campo apenas nos detalhes da campanha individual (`GET /campaign/{id}`), não no listing. Precisa buscar detalhes da campanha para obter o `work_break_group_id`.
+A aba "Histórico" em `ClientDetailPage.tsx` (linha 344-404) usa apenas `agreements` e `audit_logs` como fontes. Ela ignora a tabela `client_events`, que já recebe automaticamente via triggers: disposições, ligações, mensagens de chat, acordos, assinaturas e mensagens de prevenção. Além disso, os acordos não mostram o nome do operador que os criou.
 
-2. **Botão expandir ausente**: No widget minimizado, o botão expandir só aparece quando `state.clientId && !state.waitingForCall`. Em modo "aguardando ligação", ele some. Precisa estar sempre visível.
+O mesmo histórico aparece em `/atendimento` via `ClientTimeline.tsx`, que também não usa `client_events`.
 
-3. **Status do operador não aparece no widget**: A barra minimizada mostra apenas timer + pausa + fechar. Falta mostrar o status atual do operador (Aguardando ligação, Em pausa, Em ligação) com indicador colorido.
+## Solução
+
+Substituir as fontes fragmentadas (agreements + audit_logs + dispositions) por uma única query à tabela `client_events`, que já centraliza tudo. Complementar com dados de `client_update_logs` (alterações de campo como telefone, higienização) e resolver nomes de operadores.
 
 ## Mudanças
 
-### 1. `src/hooks/useAtendimentoModal.tsx`
+### 1. `src/pages/ClientDetailPage.tsx` — Aba Histórico
 
-**Expandir contexto com status do agente:**
-```typescript
-interface PauseControls {
-  // ... existentes
-  agentStatus?: number | string;  // status numérico do agente (1=idle, 2=on_call, 3=paused)
-  agentName?: string;
-}
-```
+- Substituir a construção manual de `items` por uma query à `client_events` filtrada por `client_cpf`
+- Adicionar query a `client_update_logs` para incluir alterações de campos (telefone, higienização, etc.)
+- Para cada evento que tenha `metadata.created_by` ou `metadata.operator_id`, resolver o nome do operador via batch query a `profiles`
+- Renderizar todos os eventos em timeline unificada com ícones por `event_type`
+- Manter a aba "Atualizações" separada (já usa `ClientUpdateHistory`)
 
-**Novo layout da barra minimizada:**
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ [≡] ● Aguardando ligação  02:34  [☕ Pausa ▼]  [⬜] [✕]   │
-└──────────────────────────────────────────────────────────────┘
-```
+### 2. `src/components/atendimento/ClientTimeline.tsx` — Histórico no Atendimento
 
-- Indicador colorido (●) com cor baseada no status (verde=idle, vermelho=em ligação, amarelo=pausa)
-- Label do status: "Aguardando ligação" / "Em ligação" / "Em pausa"
-- Timer sempre visível
-- Pausa/Retomar sempre visível
-- **Expandir sempre visível** (remover condição `state.clientId`)
-- Fechar
+- Adicionar prop opcional `clientCpf` para buscar `client_events` quando disponível
+- Mesclar os eventos de `client_events` com as props existentes (dispositions, agreements, callLogs) removendo duplicatas por ID
+- Incluir novos tipos de evento: `enrichment`, `field_change`, `message_sent`, `signature`
+- Resolver nomes de operadores a partir de `metadata.created_by`
 
-### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+### 3. Triggers de banco — Incluir `created_by` nos metadados dos acordos
 
-**Fix `loadPauseIntervals`:** Quando `work_break_group_id` não estiver no objeto da campanha do listing, buscar detalhes da campanha via `campaign_details` (novo action) para obter o campo.
+- Criar migration para atualizar o trigger `trg_client_event_from_agreement` para incluir `NEW.created_by` no campo `metadata`
+- Isso garante que novos acordos já registrem quem criou
 
-**Passar status do agente para o widget:**
-```typescript
-setPauseControls({
-  ...existentes,
-  agentStatus: myAgent?.status,
-  agentName: myAgent?.name,
-});
-```
+### 4. Trigger para `client_update_logs` → `client_events`
 
-### 3. `supabase/functions/threecplus-proxy/index.ts`
+- Criar trigger que insere em `client_events` quando há insert em `client_update_logs`, com `event_type = 'field_update'`, `event_source = source`, e `metadata = changes`
 
-**Adicionar action `campaign_details`:**
-```typescript
-case 'campaign_details': {
-  url = buildUrl(baseUrl, `campaign/${body.campaign_id}`, authParam);
-  break;
-}
-```
-
-Isso permite buscar os detalhes da campanha individual incluindo `work_break_group_id`.
-
-## Arquivos a editar
+## Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/useAtendimentoModal.tsx` | Mostrar status do operador na barra, expandir sempre visível |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix loadPauseIntervals + passar agentStatus/agentName para widget |
-| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `campaign_details` |
+| `src/pages/ClientDetailPage.tsx` | Aba Histórico: query `client_events` + `client_update_logs` + resolver nomes de operadores |
+| `src/components/atendimento/ClientTimeline.tsx` | Aceitar `clientCpf`, buscar `client_events`, mesclar com props existentes |
+| Migration SQL | Trigger `client_update_logs` → `client_events`; atualizar trigger de agreements para incluir `created_by` |
 
