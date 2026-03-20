@@ -95,6 +95,28 @@ const CarteiraPage = () => {
     higienizados: urlHigienizados,
   }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
 
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.search.trim() !== "" ||
+      filters.status !== "todos" ||
+      filters.credor !== "todos" ||
+      filters.dateFrom !== "" ||
+      filters.dateTo !== "" ||
+      filters.tipoDevedorId !== "" ||
+      filters.tipoDividaId !== "" ||
+      filters.statusCobrancaId !== "" ||
+      filters.semAcordo === true ||
+      filters.cadastroDe !== "" ||
+      filters.cadastroAte !== "" ||
+      filters.quitados === true ||
+      (filters.valorAbertoDe as number) > 0 ||
+      (filters.valorAbertoAte as number) > 0 ||
+      filters.semContato === true ||
+      filters.emDia === true ||
+      filters.higienizados === true
+    );
+  }, [filters]);
+
   const [, setSearchParamsRaw] = useSearchParams();
 
   const FILTER_DEFAULTS: Record<string, any> = useMemo(() => ({
@@ -177,6 +199,7 @@ const CarteiraPage = () => {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filtersWithOperator],
     queryFn: () => fetchClients(filtersWithOperator),
+    enabled: hasActiveFilters,
   });
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
@@ -188,6 +211,7 @@ const CarteiraPage = () => {
       data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
+    enabled: hasActiveFilters,
   });
 
   // Fetch client IDs that have had contact (dispositions or conversations)
@@ -207,7 +231,7 @@ const CarteiraPage = () => {
       convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
     },
-    enabled: !!tenant?.id,
+    enabled: hasActiveFilters && !!tenant?.id,
   });
 
   const { data: tiposStatus = [] } = useQuery({
@@ -669,7 +693,15 @@ const CarteiraPage = () => {
       ) : (
         /* Client table */
         <div className="bg-card rounded-xl border border-border overflow-hidden">
-          {isLoading ? (
+          {!hasActiveFilters ? (
+            <div className="p-12 text-center space-y-3">
+              <Search className="w-10 h-10 mx-auto text-muted-foreground/50" />
+              <h3 className="text-lg font-semibold text-foreground">Utilize os filtros para buscar clientes</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Para evitar lentidão, a carteira não carrega automaticamente. Aplique ao menos um filtro acima (busca, credor, status, datas, etc.) para visualizar os clientes.
+              </p>
+            </div>
+          ) : isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
           ) : displayClients.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum cliente encontrado</div>

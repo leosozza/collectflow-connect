@@ -8,6 +8,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, updateAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
+import AgreementInstallmentsPanel from "@/components/acordos/AgreementInstallmentsPanel";
 import StatCard from "@/components/StatCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,7 @@ const AcordosPage = () => {
 
   const editDialog = (
     <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle>Editar Acordo</DialogTitle>
@@ -289,6 +290,9 @@ const AcordosPage = () => {
               <Label className="text-xs">Observações</Label>
               <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
             </div>
+
+            {/* Parcelas e Boletos */}
+            <AgreementInstallmentsPanel agreement={editingAgreement} />
 
             <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? "Salvando..." : "Salvar Alterações"}
