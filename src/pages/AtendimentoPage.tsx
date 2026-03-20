@@ -341,6 +341,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
             dispositions={dispositions}
             agreements={agreements}
             callLogs={callLogs}
+            clientCpf={client.cpf}
           />
         </div>
         <div>
