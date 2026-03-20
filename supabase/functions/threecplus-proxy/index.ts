@@ -745,10 +745,9 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        url = `${baseUrl}/agent/pause?api_token=${agentPause.api_token}`;
+        url = `${baseUrl}/agent/work_break/${body.interval_id}/enter?api_token=${agentPause.api_token}`;
         method = 'POST';
-        reqBody = JSON.stringify({ work_break_interval_id: body.interval_id });
-        console.log(`Pausing agent ${body.agent_id} with interval ${body.interval_id}`);
+        console.log(`Pausing agent ${body.agent_id} with interval ${body.interval_id} via /agent/work_break/${body.interval_id}/enter`);
         break;
       }
 
@@ -762,9 +761,9 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        url = `${baseUrl}/agent/unpause?api_token=${agentUnpause.api_token}`;
+        url = `${baseUrl}/agent/work_break/exit?api_token=${agentUnpause.api_token}`;
         method = 'POST';
-        console.log(`Unpausing agent ${body.agent_id}`);
+        console.log(`Unpausing agent ${body.agent_id} via /agent/work_break/exit`);
         break;
       }
 

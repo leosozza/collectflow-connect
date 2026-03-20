@@ -243,6 +243,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [activePauseName, setActivePauseName] = useState<string>(() => sessionStorage.getItem("3cp_active_pause_name") || "");
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
 
@@ -558,6 +559,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
     setPausingWith(intervalId);
+    // Save pause name for display
+    const intervalObj = pauseIntervals.find((pi: any) => pi.id === intervalId);
+    const pauseName = intervalObj?.name || intervalObj?.description || `Intervalo ${intervalId}`;
     try {
       console.log("[Telefonia] handlePause — agentId:", operatorAgentId, "intervalId:", intervalId);
       const result = await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
@@ -566,7 +570,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao pausar");
       } else {
-        toast.success("Pausa ativada");
+        setActivePauseName(pauseName);
+        sessionStorage.setItem("3cp_active_pause_name", pauseName);
+        toast.success(`Pausa ativada: ${pauseName}`);
       }
       fetchAll();
     } catch (err: any) {
@@ -588,6 +594,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       if (isError) {
         toast.error(result.detail || result.message || "Erro ao retomar");
       } else {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
         toast.success("Pausa removida");
       }
       fetchAll();
@@ -832,7 +840,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-300" : "bg-white"} ${isOnCall ? "animate-pulse" : ""}`} />
             <span className="font-semibold text-sm">
-              {statusLabel(myAgent?.status)} ({formatTimer(timerSeconds)})
+              {isPaused && activePauseName
+                ? `Em pausa: ${activePauseName} (${formatTimer(timerSeconds)})`
+                : `${statusLabel(myAgent?.status)} (${formatTimer(timerSeconds)})`
+              }
             </span>
           </div>
 
