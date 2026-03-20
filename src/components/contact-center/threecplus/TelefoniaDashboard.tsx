@@ -559,11 +559,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     if (!operatorAgentId) return;
     setPausingWith(intervalId);
     try {
-      await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
-      toast.success("Pausa ativada");
+      console.log("[Telefonia] handlePause — agentId:", operatorAgentId, "intervalId:", intervalId);
+      const result = await invoke("pause_agent", { agent_id: operatorAgentId, interval_id: intervalId });
+      console.log("[Telefonia] handlePause result:", JSON.stringify(result));
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
+        toast.error(result.detail || result.message || "Erro ao pausar");
+      } else {
+        toast.success("Pausa ativada");
+      }
       fetchAll();
-    } catch {
-      toast.error("Erro ao pausar");
+    } catch (err: any) {
+      console.error("[Telefonia] handlePause error:", err);
+      toast.error(err?.message || "Erro ao pausar");
     } finally {
       setPausingWith(null);
     }
@@ -573,11 +581,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     if (!operatorAgentId) return;
     setUnpausing(true);
     try {
-      await invoke("unpause_agent", { agent_id: operatorAgentId });
-      toast.success("Pausa removida");
+      console.log("[Telefonia] handleUnpause — agentId:", operatorAgentId);
+      const result = await invoke("unpause_agent", { agent_id: operatorAgentId });
+      console.log("[Telefonia] handleUnpause result:", JSON.stringify(result));
+      const isError = result?.status && result.status >= 400;
+      if (isError) {
+        toast.error(result.detail || result.message || "Erro ao retomar");
+      } else {
+        toast.success("Pausa removida");
+      }
       fetchAll();
-    } catch {
-      toast.error("Erro ao retomar");
+    } catch (err: any) {
+      console.error("[Telefonia] handleUnpause error:", err);
+      toast.error(err?.message || "Erro ao retomar");
     } finally {
       setUnpausing(false);
     }
