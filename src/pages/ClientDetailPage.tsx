@@ -342,65 +342,11 @@ const ClientDetailPage = () => {
         </TabsContent>
 
         <TabsContent value="historico">
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">Histórico</h3>
-              {(() => {
-                const items: { id: string; date: string; type: string; content: React.ReactNode }[] = [];
-                agreements.forEach((a) => {
-                  items.push({
-                    id: `a-${a.id}`,
-                    date: a.created_at,
-                    type: "acordo",
-                    content: (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={a.status === "approved" ? "default" : "secondary"} className="text-xs">
-                            Acordo {a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{a.credor}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Original: {formatCurrency(Number(a.original_total))} → Proposta: {formatCurrency(Number(a.proposed_total))}
-                          {a.discount_percent ? ` (${a.discount_percent}% desc.)` : ""} — {a.new_installments}x de {formatCurrency(Number(a.new_installment_value))}
-                        </p>
-                        {a.notes && <p className="text-xs text-muted-foreground italic">{a.notes}</p>}
-                      </div>
-                    ),
-                  });
-                });
-                auditLogs.forEach((log: any) => {
-                  items.push({
-                    id: `l-${log.id}`,
-                    date: log.created_at,
-                    type: "ocorrencia",
-                    content: (
-                      <div>
-                        <span className="text-sm font-medium">{log.user_name || "Sistema"}</span>
-                        <span className="text-sm text-muted-foreground"> — {log.action}</span>
-                      </div>
-                    ),
-                  });
-                });
-                items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                if (items.length === 0) {
-                  return <p className="text-sm text-muted-foreground">Nenhum registro encontrado</p>;
-                }
-                return (
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 border-b border-border pb-3 last:border-0">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap pt-0.5">
-                          {new Date(item.date).toLocaleString("pt-BR")}
-                        </span>
-                        <div className="flex-1">{item.content}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
+          <ClientTimeline
+            dispositions={[]}
+            agreements={agreements}
+            clientCpf={cpf}
+          />
         </TabsContent>
 
         <TabsContent value="atualizacoes">
