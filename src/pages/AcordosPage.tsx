@@ -291,6 +291,9 @@ const AcordosPage = () => {
               <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
             </div>
 
+            {/* Parcelas e Boletos */}
+            <AgreementInstallmentsPanel agreement={editingAgreement} />
+
             <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? "Salvando..." : "Salvar Alterações"}
             </Button>
