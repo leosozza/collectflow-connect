@@ -220,7 +220,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
           </div>
           <div className="space-y-1.5">
             <Label>ID Externo (contrato)</Label>
-            <Input value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="Contrato, ID CRM, etc." maxLength={100} />
+            <Input value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="Gerado automaticamente se vazio" maxLength={100} />
           </div>
         </div>
 
