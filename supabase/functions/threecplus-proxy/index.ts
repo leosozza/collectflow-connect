@@ -747,6 +747,7 @@ Deno.serve(async (req) => {
         }
         url = `${baseUrl}/agent/work_break/${body.interval_id}/enter?api_token=${agentPause.api_token}`;
         method = 'POST';
+        reqBody = JSON.stringify({});
         console.log(`Pausing agent ${body.agent_id} with interval ${body.interval_id} via /agent/work_break/${body.interval_id}/enter`);
         break;
       }
@@ -763,6 +764,7 @@ Deno.serve(async (req) => {
         }
         url = `${baseUrl}/agent/work_break/exit?api_token=${agentUnpause.api_token}`;
         method = 'POST';
+        reqBody = JSON.stringify({});
         console.log(`Unpausing agent ${body.agent_id} via /agent/work_break/exit`);
         break;
       }

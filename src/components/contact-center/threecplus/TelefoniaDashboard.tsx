@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
-  Mic, Keyboard, Phone, MessageSquare, UserX, FileCheck2,
+  Phone, MessageSquare, UserX, FileCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
@@ -346,17 +346,23 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     try {
       const promises: Promise<any>[] = [
         invoke("agents_status").catch(() => []),
-        invoke("list_campaigns").catch(() => []),
         invoke("company_calls").catch(() => null),
       ];
-      // Fetch agent-specific campaigns if operator has an agent ID
+
+      // Operators only need agents_status, company_calls, and their own campaigns
+      if (!isOperatorView) {
+        promises.push(invoke("list_campaigns").catch(() => []));
+      }
+
       if (operatorAgentId) {
         promises.push(
           invoke("agent_available_campaigns", { agent_id: operatorAgentId }).catch(() => [])
         );
       }
 
-      const [agentsData, campaignsData, callsData, agentCampaignsData] = await Promise.all(promises);
+      const results = await Promise.all(promises);
+      const agentsData = results[0];
+      const callsData = results[1];
 
       const agentList = Array.isArray(agentsData) ? agentsData : agentsData?.data || [];
       console.log("[3CPlus] agents_status response:", JSON.stringify(agentList));
@@ -369,33 +375,45 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         console.log("[3CPlus] operatorAgentId:", operatorAgentId, "myAgent found:", JSON.stringify(foundAgent));
       }
 
-      const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+      if (isOperatorView) {
+        // Operator: skip list_campaigns and campaign_statistics
+        const agentCampaignsData = operatorAgentId ? results[2] : null;
+        if (agentCampaignsData) {
+          const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+          setAgentCampaigns(agentCampList);
+        }
+      } else {
+        // Admin: full campaign data with statistics
+        const campaignsData = results[2];
+        const agentCampaignsData = operatorAgentId ? results[3] : null;
 
-      // Set agent-specific campaigns
-      if (agentCampaignsData) {
-        const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
-        setAgentCampaigns(agentCampList);
+        if (agentCampaignsData) {
+          const agentCampList = Array.isArray(agentCampaignsData) ? agentCampaignsData : agentCampaignsData?.data || [];
+          setAgentCampaigns(agentCampList);
+        }
+
+        const campList = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+
+        const enriched = await Promise.all(
+          campList
+            .filter((c: any) => {
+              const s = String(c.status ?? "").toLowerCase();
+              return s === "running" || s === "paused" || !c.paused;
+            })
+            .map(async (c: any) => {
+              try {
+                const stats = await invoke("campaign_statistics", { campaign_id: c.id });
+                return { ...c, statistics: stats };
+              } catch {
+                return c;
+              }
+            })
+        );
+
+        const activeIds = new Set(enriched.map((c: any) => c.id));
+        const rest = campList.filter((c: any) => !activeIds.has(c.id));
+        setCampaigns([...enriched, ...rest]);
       }
-
-      const enriched = await Promise.all(
-        campList
-          .filter((c: any) => {
-            const s = String(c.status ?? "").toLowerCase();
-            return s === "running" || s === "paused" || !c.paused;
-          })
-          .map(async (c: any) => {
-            try {
-              const stats = await invoke("campaign_statistics", { campaign_id: c.id });
-              return { ...c, statistics: stats };
-            } catch {
-              return c;
-            }
-          })
-      );
-
-      const activeIds = new Set(enriched.map((c: any) => c.id));
-      const rest = campList.filter((c: any) => !activeIds.has(c.id));
-      setCampaigns([...enriched, ...rest]);
 
       setCompanyCalls(callsData);
       setLastUpdate(new Date());
@@ -404,7 +422,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } finally {
       setLoading(false);
     }
-  }, [invoke, operatorAgentId]);
+  }, [invoke, operatorAgentId, isOperatorView]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -423,24 +441,26 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isAgentOnline = myAgent && myAgent.status !== 0 && myAgent.status !== "offline";
   const myCampaignId = myAgent?.campaign_id || myAgent?.campaign?.id;
 
+  // Extract primitive values to stabilize timer deps
+  const myAgentStartTime = myAgent?.status_start_time || myAgent?.status_time;
+  const myAgentStatus = myAgent?.status;
+
   useEffect(() => {
     if (!isOperatorView || !isAgentOnline) {
       setTimerSeconds(0);
       return;
     }
-    const raw = myAgent?.status_start_time || myAgent?.status_time;
-    const startMs = parseStartTime(raw);
+    const startMs = parseStartTime(myAgentStartTime);
     const calcSeconds = () => {
       if (!startMs) return 0;
       const diff = Math.floor((Date.now() - startMs) / 1000);
-      // Guard against nonsensical values (negative or > 24h)
       if (diff < 0 || diff > 86400) return 0;
       return diff;
     };
     setTimerSeconds(calcSeconds());
     const id = setInterval(() => setTimerSeconds(calcSeconds()), 1000);
     return () => clearInterval(id);
-  }, [isOperatorView, isAgentOnline, myAgent?.status_start_time, myAgent?.status_time, myAgent?.status]);
+  }, [isOperatorView, isAgentOnline, myAgentStartTime, myAgentStatus]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
@@ -455,7 +475,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls } = useAtendimentoModal();
+  const { openWaiting, setPauseControls, closeAtendimento } = useAtendimentoModal();
 
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;
@@ -501,6 +521,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
+
   const handleCampaignLogout = async () => {
     if (!operatorAgentId) return;
     setLoggingOutSelf(true);
@@ -511,6 +532,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
+        closeAtendimento();
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
       }
       fetchAll();
     } catch {
@@ -847,15 +871,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </span>
           </div>
 
-          {/* Right side placeholders */}
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
-              <Mic className="w-4 h-4" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-inherit hover:bg-white/20" disabled>
-              <Keyboard className="w-4 h-4" />
-            </Button>
-          </div>
+          {/* Right spacer */}
+          <div className="w-4" />
         </div>
 
         {/* ── 4 KPI Cards ── */}
@@ -919,7 +936,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
         {/* ── Last calls table ── */}
         <div className="px-4">
-          <OperatorCallHistory />
+          <OperatorCallHistory onClickToCall={(phone) => {
+            if (operatorAgentId) {
+              invoke("click2call", { agent_id: operatorAgentId, phone }).then(() => {
+                toast.success(`Ligando para ${phone}...`);
+              }).catch(() => {
+                toast.error("Erro ao iniciar ligação");
+              });
+            }
+          }} />
         </div>
 
         {/* ── Exit campaign button ── */}
