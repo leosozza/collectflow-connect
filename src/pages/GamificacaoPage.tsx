@@ -23,6 +23,7 @@ import AchievementsManagementTab from "@/components/gamificacao/AchievementsMana
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
 import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
 import RankingManagementTab from "@/components/gamificacao/RankingManagementTab";
+import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
 
@@ -192,6 +193,9 @@ const GamificacaoPage = () => {
                 <TabsTrigger value="manage-shop" className="gap-1.5">
                   <ShoppingBag className="w-3.5 h-3.5" /> Loja
                 </TabsTrigger>
+                <TabsTrigger value="manage-participants" className="gap-1.5">
+                  <Target className="w-3.5 h-3.5" /> Participantes
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="manage-campaigns" className="mt-4">
@@ -212,6 +216,10 @@ const GamificacaoPage = () => {
 
               <TabsContent value="manage-shop" className="mt-4">
                 <ShopManagementTab />
+              </TabsContent>
+
+              <TabsContent value="manage-participants" className="mt-4">
+                <ParticipantsManagementTab />
               </TabsContent>
             </Tabs>
           </TabsContent>

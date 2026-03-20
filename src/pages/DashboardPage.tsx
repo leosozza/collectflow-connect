@@ -75,8 +75,9 @@ const DashboardPage = () => {
     queryKey: ["dashboard-operators", profile?.tenant_id],
     queryFn: async () => {
       const { data } = await supabase.from("profiles")
-        .select("user_id, full_name")
-        .eq("tenant_id", profile!.tenant_id!);
+        .select("user_id, full_name, role")
+        .eq("tenant_id", profile!.tenant_id!)
+        .neq("role", "admin");
       return (data || []).map(p => ({ value: p.user_id, label: p.full_name || "Sem nome" }));
     },
     enabled: !!profile?.tenant_id && canViewAll,

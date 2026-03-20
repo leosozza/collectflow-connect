@@ -24,12 +24,22 @@ const GoalsManagementTab = () => {
   const [editedGoals, setEditedGoals] = useState<Record<string, number>>({});
 
   const { data: operators = [] } = useQuery({
-    queryKey: ["tenant-operators", tenant?.id],
+    queryKey: ["tenant-operators-gamification", tenant?.id],
     queryFn: async () => {
+      // Get enabled participants
+      const { data: participants } = await supabase
+        .from("gamification_participants")
+        .select("profile_id")
+        .eq("tenant_id", tenant!.id)
+        .eq("enabled", true);
+      
+      const enabledIds = (participants || []).map((p: any) => p.profile_id);
+      if (enabledIds.length === 0) return [];
+
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url")
-        .eq("tenant_id", tenant!.id)
+        .in("id", enabledIds)
         .order("full_name");
       return data || [];
     },
