@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card, CardContent } from "@/components/ui/card";
 import {
   RefreshCw, Users, PhoneCall, PhoneOff, Coffee, Headphones, Wifi, WifiOff, LogIn, LogOut, Pause, Play,
-  Mic, Keyboard, Phone, MessageSquare, UserX,
+  Mic, Keyboard, Phone, MessageSquare, UserX, FileCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
 import AgentStatusTable from "./AgentStatusTable";
