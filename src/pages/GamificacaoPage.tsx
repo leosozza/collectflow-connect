@@ -23,6 +23,7 @@ import AchievementsManagementTab from "@/components/gamificacao/AchievementsMana
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
 import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
 import RankingManagementTab from "@/components/gamificacao/RankingManagementTab";
+import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
 
