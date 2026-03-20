@@ -303,8 +303,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     refetchInterval: 60000,
   });
 
+  const cpcKeySet = useMemo(() => new Set(cpcDispositionKeys), [cpcDispositionKeys]);
+
   const agentMetrics = useMemo(() => {
-    const metrics: Record<number, { contacts: number; agreements: number }> = {};
+    const metrics: Record<number, { contacts: number; agreements: number; cpc: number }> = {};
     const profileIdToAgent = new Map<string, number>();
     const userIdToAgent = new Map<string, number>();
     for (const p of profileMappings) {
@@ -314,19 +316,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     for (const d of todayDispositions) {
       const agentId = profileIdToAgent.get(d.operator_id);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, cpc: 0 };
         metrics[agentId].contacts++;
+        if (cpcKeySet.has(d.disposition_type)) {
+          metrics[agentId].cpc++;
+        }
       }
     }
     for (const a of todayAgreements) {
       const agentId = userIdToAgent.get(a.created_by);
       if (agentId != null) {
-        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0 };
+        if (!metrics[agentId]) metrics[agentId] = { contacts: 0, agreements: 0, cpc: 0 };
         metrics[agentId].agreements++;
       }
     }
     return metrics;
-  }, [profileMappings, todayDispositions, todayAgreements]);
+  }, [profileMappings, todayDispositions, todayAgreements, cpcKeySet]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
