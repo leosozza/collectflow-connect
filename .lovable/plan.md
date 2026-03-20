@@ -1,81 +1,72 @@
 
 
-# Reformular Widget Flutuante: Pausa + Auto-expansão
+# Plano: Widget com status do operador, expandir sempre visível, e fix das pausas
 
-## O que muda
+## Problemas identificados
 
-### 1) Widget minimizado — nova barra de controles
-**Arquivo:** `src/hooks/useAtendimentoModal.tsx`
+1. **Pausas não aparecem**: `loadPauseIntervals` procura `work_break_group_id` dentro do objeto da campanha retornado por `list_campaigns`, mas a API 3CPlus tipicamente retorna esse campo apenas nos detalhes da campanha individual (`GET /campaign/{id}`), não no listing. Precisa buscar detalhes da campanha para obter o `work_break_group_id`.
 
-A barra minimizada atual mostra: `[grip] [icon] nome [timer] [expand] [close]`
+2. **Botão expandir ausente**: No widget minimizado, o botão expandir só aparece quando `state.clientId && !state.waitingForCall`. Em modo "aguardando ligação", ele some. Precisa estar sempre visível.
 
-Nova barra: `[grip] [timer] [Pausa ▼] [expand] [close]`
+3. **Status do operador não aparece no widget**: A barra minimizada mostra apenas timer + pausa + fechar. Falta mostrar o status atual do operador (Aguardando ligação, Em pausa, Em ligação) com indicador colorido.
 
-- **Timer**: cronômetro visível sempre
-- **Pausa**: botão que abre Popover com lista de intervalos vinculados à campanha (mesma lógica já existente no `TelefoniaDashboard`)
-- **Expandir**: abre o painel completo
-- **Fechar**: fecha o widget
+## Mudanças
 
-Para isso, o contexto do widget precisa receber dados adicionais:
-- `pauseIntervals: any[]` — lista de pausas disponíveis
-- `onPause: (intervalId: number) => void` — callback para pausar
-- `onUnpause: () => void` — callback para retomar
-- `isPaused: boolean` — estado atual do agente
+### 1. `src/hooks/useAtendimentoModal.tsx`
 
-O `TelefoniaDashboard` já possui toda essa lógica (`handlePause`, `handleUnpause`, `pauseIntervals`, `isPaused`). Vou expor esses dados via contexto do widget para que a barra flutuante os consuma.
-
-### 2) Auto-expansão quando ligação cai
-**Arquivo:** `src/hooks/useAtendimentoModal.tsx`
-
-Quando `updateAtendimento()` é chamado (ou seja, cliente identificado + chamada ativa), o widget deve:
-- Sair do modo minimizado automaticamente (`setIsMinimized(false)`)
-- Centralizar na tela
-
-Isso já acontece parcialmente no `updateAtendimento`, mas preciso garantir que force a expansão mesmo se `hasCustomPosition` estiver true.
-
-### 3) Passar dados de pausa para o widget
-**Arquivo:** `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
-
-Após rehydration/login, além de `openWaiting(agentId)`, vou chamar um novo método `setWidgetPauseControls(...)` que alimenta o contexto com as pausas e callbacks.
-
-## Detalhes técnicos
-
-### Contexto expandido (`useAtendimentoModal.tsx`)
-
+**Expandir contexto com status do agente:**
 ```typescript
-interface AtendimentoModalContextType {
-  // ... existentes
-  setPauseControls: (controls: PauseControls) => void;
-}
-
 interface PauseControls {
-  intervals: any[];
-  isPaused: boolean;
-  onPause: (intervalId: number) => void;
-  onUnpause: () => void;
+  // ... existentes
+  agentStatus?: number | string;  // status numérico do agente (1=idle, 2=on_call, 3=paused)
+  agentName?: string;
 }
 ```
 
-### Widget minimizado — novo layout
-
+**Novo layout da barra minimizada:**
 ```text
-┌───────────────────────────────────────────────┐
-│ [≡] 02:34  [☕ Pausa ▼]  [⬜ Expandir] [✕]  │
-└───────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ [≡] ● Aguardando ligação  02:34  [☕ Pausa ▼]  [⬜] [✕]   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Quando `isPaused === true`, o botão Pausa vira "Retomar" (ícone Play).
+- Indicador colorido (●) com cor baseada no status (verde=idle, vermelho=em ligação, amarelo=pausa)
+- Label do status: "Aguardando ligação" / "Em ligação" / "Em pausa"
+- Timer sempre visível
+- Pausa/Retomar sempre visível
+- **Expandir sempre visível** (remover condição `state.clientId`)
+- Fechar
 
-O Popover de pausas usa o mesmo markup já existente no TelefoniaDashboard (linhas 733-758).
+### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-### Auto-expansão no `updateAtendimento`
+**Fix `loadPauseIntervals`:** Quando `work_break_group_id` não estiver no objeto da campanha do listing, buscar detalhes da campanha via `campaign_details` (novo action) para obter o campo.
 
-Forçar `setIsMinimized(false)` e `centerPosition()` sempre que `clientId` é definido (ligação identificada).
+**Passar status do agente para o widget:**
+```typescript
+setPauseControls({
+  ...existentes,
+  agentStatus: myAgent?.status,
+  agentName: myAgent?.name,
+});
+```
+
+### 3. `supabase/functions/threecplus-proxy/index.ts`
+
+**Adicionar action `campaign_details`:**
+```typescript
+case 'campaign_details': {
+  url = buildUrl(baseUrl, `campaign/${body.campaign_id}`, authParam);
+  break;
+}
+```
+
+Isso permite buscar os detalhes da campanha individual incluindo `work_break_group_id`.
 
 ## Arquivos a editar
-1. `src/hooks/useAtendimentoModal.tsx` — novo contexto de pausa, layout da barra, auto-expand
-2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — alimentar controles de pausa no widget
 
-## Nota sobre o componente floating-nav
-O componente `floating-nav.tsx` compartilhado na mensagem serve apenas como inspiração visual. Ele usa `framer-motion` e um padrão de nav diferente. Vou aproveitar a ideia de barra flutuante compacta mas implementar com a arquitetura existente (sem adicionar `framer-motion` como dependência).
+| Arquivo | Mudança |
+|---|---|
+| `src/hooks/useAtendimentoModal.tsx` | Mostrar status do operador na barra, expandir sempre visível |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Fix loadPauseIntervals + passar agentStatus/agentName para widget |
+| `supabase/functions/threecplus-proxy/index.ts` | Adicionar action `campaign_details` |
 
