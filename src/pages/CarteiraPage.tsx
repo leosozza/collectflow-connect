@@ -199,6 +199,7 @@ const CarteiraPage = () => {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", filtersWithOperator],
     queryFn: () => fetchClients(filtersWithOperator),
+    enabled: hasActiveFilters,
   });
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
