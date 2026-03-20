@@ -872,7 +872,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 </div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CPC</p>
               </div>
-              <p className="text-3xl font-bold text-foreground">{myMetrics?.agreements ?? 0}</p>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.cpc ?? 0}</p>
               <p className="text-xs text-muted-foreground mt-1">Contatos com pessoa certa</p>
             </CardContent>
           </Card>
@@ -891,16 +891,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </CardContent>
           </Card>
 
-          {/* Feedback */}
+          {/* Acordos */}
           <Card className="border-border/60">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <MessageSquare className="w-4 h-4 text-amber-600" />
+                  <FileCheck2 className="w-4 h-4 text-amber-600" />
                 </div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Feedback</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Acordos</p>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">Nenhuma avaliação ainda</p>
+              <p className="text-3xl font-bold text-foreground">{myMetrics?.agreements ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Formalizados hoje</p>
             </CardContent>
           </Card>
         </div>
