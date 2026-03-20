@@ -761,9 +761,9 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        url = `${baseUrl}/agent/unpause?api_token=${agentUnpause.api_token}`;
+        url = `${baseUrl}/agent/work_break/exit?api_token=${agentUnpause.api_token}`;
         method = 'POST';
-        console.log(`Unpausing agent ${body.agent_id}`);
+        console.log(`Unpausing agent ${body.agent_id} via /agent/work_break/exit`);
         break;
       }
 
