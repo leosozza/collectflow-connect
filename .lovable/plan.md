@@ -1,48 +1,55 @@
 
 
-# Plano: Histórico unificado com `client_events` + nomes de operadores
+# Plano: Mostrar nome do operador e tipo específico nas disposições do histórico
 
-## Problema
+## Problemas
 
-A aba "Histórico" em `ClientDetailPage.tsx` (linha 344-404) usa apenas `agreements` e `audit_logs` como fontes. Ela ignora a tabela `client_events`, que já recebe automaticamente via triggers: disposições, ligações, mensagens de chat, acordos, assinaturas e mensagens de prevenção. Além disso, os acordos não mostram o nome do operador que os criou.
+1. **Título genérico**: A disposição aparece como "Disposição" ao invés de "Caixa Postal", "Não Atende", etc. Isso porque a linha 250 do `ClientTimeline.tsx` resolve `EVENT_TYPE_LABELS["disposition"]` primeiro, que retorna "Disposição". Deveria priorizar `DISPOSITION_TYPES[event_value]`.
 
-O mesmo histórico aparece em `/atendimento` via `ClientTimeline.tsx`, que também não usa `client_events`.
+2. **Nome do operador ausente**: O trigger `trg_client_event_from_disposition` não inclui `operator_id` no campo `metadata` do `client_events`. Sem o `operator_id`, o frontend não consegue resolver o nome.
 
-## Solução
+## Correções
 
-Substituir as fontes fragmentadas (agreements + audit_logs + dispositions) por uma única query à tabela `client_events`, que já centraliza tudo. Complementar com dados de `client_update_logs` (alterações de campo como telefone, higienização) e resolver nomes de operadores.
+### 1. Migration SQL — Incluir `operator_id` no trigger de disposição
 
-## Mudanças
+Atualizar `trg_client_event_from_disposition` para incluir `operator_id` no `metadata`:
 
-### 1. `src/pages/ClientDetailPage.tsx` — Aba Histórico
+```sql
+jsonb_build_object(
+  'notes', NEW.notes,
+  'scheduled_callback', NEW.scheduled_callback,
+  'operator_id', NEW.operator_id
+)
+```
 
-- Substituir a construção manual de `items` por uma query à `client_events` filtrada por `client_cpf`
-- Adicionar query a `client_update_logs` para incluir alterações de campos (telefone, higienização, etc.)
-- Para cada evento que tenha `metadata.created_by` ou `metadata.operator_id`, resolver o nome do operador via batch query a `profiles`
-- Renderizar todos os eventos em timeline unificada com ícones por `event_type`
-- Manter a aba "Atualizações" separada (já usa `ClientUpdateHistory`)
+### 2. `src/components/atendimento/ClientTimeline.tsx`
 
-### 2. `src/components/atendimento/ClientTimeline.tsx` — Histórico no Atendimento
+**Linha 250** — Para disposições, priorizar o label específico:
+```typescript
+// De:
+const label = EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value] || eventType;
+// Para:
+const label = eventType === "disposition"
+  ? (DISPOSITION_TYPES[e.event_value] || e.event_value || "Disposição")
+  : (EVENT_TYPE_LABELS[eventType] || e.event_value || eventType);
+```
 
-- Adicionar prop opcional `clientCpf` para buscar `client_events` quando disponível
-- Mesclar os eventos de `client_events` com as props existentes (dispositions, agreements, callLogs) removendo duplicatas por ID
-- Incluir novos tipos de evento: `enrichment`, `field_change`, `message_sent`, `signature`
-- Resolver nomes de operadores a partir de `metadata.created_by`
+**Linhas 210-218** — Incluir `meta.operator_id` na coleta de IDs para resolver nomes:
+```typescript
+if (meta?.operator_id) userIds.add(meta.operator_id);
+```
 
-### 3. Triggers de banco — Incluir `created_by` nos metadados dos acordos
-
-- Criar migration para atualizar o trigger `trg_client_event_from_agreement` para incluir `NEW.created_by` no campo `metadata`
-- Isso garante que novos acordos já registrem quem criou
-
-### 4. Trigger para `client_update_logs` → `client_events`
-
-- Criar trigger que insere em `client_events` quando há insert em `client_update_logs`, com `event_type = 'field_update'`, `event_source = source`, e `metadata = changes`
+**Linhas 256-262** — Adicionar fallback para `meta.operator_id`:
+```typescript
+if (meta.operator_id && profileMap[meta.operator_id]) {
+  operator = profileMap[meta.operator_id];
+}
+```
 
 ## Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/ClientDetailPage.tsx` | Aba Histórico: query `client_events` + `client_update_logs` + resolver nomes de operadores |
-| `src/components/atendimento/ClientTimeline.tsx` | Aceitar `clientCpf`, buscar `client_events`, mesclar com props existentes |
-| Migration SQL | Trigger `client_update_logs` → `client_events`; atualizar trigger de agreements para incluir `created_by` |
+| Migration SQL | Adicionar `operator_id` ao metadata do trigger de disposição |
+| `src/components/atendimento/ClientTimeline.tsx` | Priorizar label específico da disposição; resolver nome do operador via `operator_id` do metadata |
 
