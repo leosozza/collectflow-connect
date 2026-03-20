@@ -212,6 +212,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         const meta = e.metadata as any;
         if (meta?.created_by) userIds.add(meta.created_by);
         if (meta?.updated_by) userIds.add(meta.updated_by);
+        if (meta?.operator_id) userIds.add(meta.operator_id);
         if (meta?.agent_name) return; // already has name
       });
       // Also from props
