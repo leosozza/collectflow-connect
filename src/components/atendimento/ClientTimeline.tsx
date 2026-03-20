@@ -248,7 +248,9 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     clientEvents.forEach((e: any) => {
       const meta = (e.metadata || {}) as any;
       const eventType = e.event_type || "system";
-      const label = EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || eventType;
+      const label = eventType === "disposition"
+        ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || eventType);
       
       let detail = "";
       let operator = "";
