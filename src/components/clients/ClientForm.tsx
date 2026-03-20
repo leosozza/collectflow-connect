@@ -46,7 +46,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [credor, setCredor] = useState(defaultValues?.credor || "MAXFAMA");
   const [valorEntrada, setValorEntrada] = useState(defaultValues?.valor_entrada?.toString() || "");
   const [dataVencimento, setDataVencimento] = useState(defaultValues?.data_vencimento || "");
-  const [status, setStatus] = useState<"pendente" | "pago" | "quebrado">(defaultValues?.status || "pendente");
+  const status = "pendente" as const;
   const [numeroParcela, setNumeroParcela] = useState(defaultValues?.numero_parcela?.toString() || "1");
   const [totalParcelas, setTotalParcelas] = useState(defaultValues?.total_parcelas?.toString() || "1");
   const [externalId, setExternalId] = useState(defaultValues?.external_id || "");
@@ -198,17 +198,6 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
           <div className="space-y-1.5">
             <Label>Data de Vencimento <span className="text-destructive">*</span></Label>
             <Input type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} required />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Status <span className="text-destructive">*</span></Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="pago">Pago</SelectItem>
-                <SelectItem value="quebrado">Quebrado</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Nº Parcela</Label>

@@ -454,7 +454,7 @@ const CarteiraPage = () => {
       toast.success("Cliente cadastrado!");
       setFormOpen(false);
     },
-    onError: () => toast.error("Erro ao cadastrar cliente"),
+    onError: (err: any) => toast.error(err?.message || "Erro ao cadastrar cliente"),
   });
 
   const updateMutation = useMutation({

@@ -19,7 +19,7 @@ export const logger = {
         level: "error",
         module,
         action,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : (typeof error === 'object' ? JSON.stringify(error) : String(error)),
         stack: error instanceof Error ? error.stack : undefined,
         ...data,
         ts: new Date().toISOString(),

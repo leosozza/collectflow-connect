@@ -124,6 +124,16 @@ export const createClient = async (
         : new Date().toISOString().split("T")[0];
     const extId = data.external_id || `MAN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+    // Buscar tenant_id do operador para satisfazer RLS
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", operatorId)
+      .single();
+
+    const tenantId = profileData?.tenant_id;
+    if (!tenantId) throw new Error("Operador sem empresa vinculada. Faça login novamente.");
+
     const records = generateInstallments({
       credor: validated.credor,
       nome_completo: validated.nome_completo,
@@ -139,7 +149,7 @@ export const createClient = async (
       data_vencimento: dataVenc,
       status: validated.status,
       operator_id: operatorId,
-    });
+    }).map(r => ({ ...r, tenant_id: tenantId }));
 
     const { data: result, error } = await supabase
       .from("clients")
