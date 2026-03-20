@@ -1,55 +1,58 @@
 
 
-# Plano: Mostrar nome do operador e tipo específico nas disposições do histórico
+# Plano: Carteira começa vazia + Gestão de Acordos com boletos
 
-## Problemas
+## Parte 1 — Carteira começa zerada
 
-1. **Título genérico**: A disposição aparece como "Disposição" ao invés de "Caixa Postal", "Não Atende", etc. Isso porque a linha 250 do `ClientTimeline.tsx` resolve `EVENT_TYPE_LABELS["disposition"]` primeiro, que retorna "Disposição". Deveria priorizar `DISPOSITION_TYPES[event_value]`.
+### Problema
+A página `/carteira` executa `fetchClients(filters)` no mount, sem nenhum filtro ativo. Isso carrega todos os clientes do tenant, causando travamentos e consumo de memória.
 
-2. **Nome do operador ausente**: O trigger `trg_client_event_from_disposition` não inclui `operator_id` no campo `metadata` do `client_events`. Sem o `operator_id`, o frontend não consegue resolver o nome.
+### Solução
+Adicionar flag `hasActiveFilters` que verifica se pelo menos um filtro foi preenchido. Se nenhum filtro estiver ativo, não executar a query (`enabled: false` no useQuery) e mostrar mensagem orientando o usuário a usar os filtros.
 
-## Correções
+**Arquivo:** `src/pages/CarteiraPage.tsx`
 
-### 1. Migration SQL — Incluir `operator_id` no trigger de disposição
+- Criar `hasActiveFilters` que compara cada filtro com seu default (search não vazio, credor != "todos", datas preenchidas, checkboxes ativos, etc.)
+- Passar `enabled: hasActiveFilters && !!tenant?.id` no useQuery de clients
+- Quando `!hasActiveFilters`, renderizar um card informativo: "Utilize os filtros acima para buscar clientes"
+- O mesmo para queries auxiliares (agreement-cpfs, contacted-client-ids) — só rodar quando houver clientes carregados
 
-Atualizar `trg_client_event_from_disposition` para incluir `operator_id` no `metadata`:
+---
 
-```sql
-jsonb_build_object(
-  'notes', NEW.notes,
-  'scheduled_callback', NEW.scheduled_callback,
-  'operator_id', NEW.operator_id
-)
-```
+## Parte 2 — Gestão de Acordos: boletos e detalhes
 
-### 2. `src/components/atendimento/ClientTimeline.tsx`
+### Problema
+Ao acessar um acordo em `/acordos`, não há opção de gerar/baixar boletos nem visualizar as parcelas detalhadas.
 
-**Linha 250** — Para disposições, priorizar o label específico:
-```typescript
-// De:
-const label = EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value] || eventType;
-// Para:
-const label = eventType === "disposition"
-  ? (DISPOSITION_TYPES[e.event_value] || e.event_value || "Disposição")
-  : (EVENT_TYPE_LABELS[eventType] || e.event_value || eventType);
-```
+### Solução
+Expandir o diálogo de edição do acordo para incluir:
 
-**Linhas 210-218** — Incluir `meta.operator_id` na coleta de IDs para resolver nomes:
-```typescript
-if (meta?.operator_id) userIds.add(meta.operator_id);
-```
+1. **Tabela de parcelas virtuais** — gerar via `generate_series` lógica no frontend (entrada + N parcelas mensais a partir de `first_due_date`), mostrando número, valor, data de vencimento e status (pago/pendente/vencido)
+2. **Botão "Gerar Boleto"** por parcela — integrar com Asaas (já existe `asaas-proxy` edge function e `ASAAS_API_KEY_PRODUCTION` configurado) para criar cobrança e obter link do boleto
+3. **Botão "Baixar Boleto"** — link direto para o PDF do boleto gerado
 
-**Linhas 256-262** — Adicionar fallback para `meta.operator_id`:
-```typescript
-if (meta.operator_id && profileMap[meta.operator_id]) {
-  operator = profileMap[meta.operator_id];
-}
-```
-
-## Arquivos
+**Arquivos:**
 
 | Arquivo | Mudança |
 |---|---|
-| Migration SQL | Adicionar `operator_id` ao metadata do trigger de disposição |
-| `src/components/atendimento/ClientTimeline.tsx` | Priorizar label específico da disposição; resolver nome do operador via `operator_id` do metadata |
+| `src/pages/CarteiraPage.tsx` | Adicionar `hasActiveFilters`, desabilitar query quando vazio, mostrar empty state |
+| `src/pages/AcordosPage.tsx` | Expandir diálogo de edição com aba/seção de parcelas e botões de boleto |
+| `src/components/acordos/AgreementInstallmentsPanel.tsx` | Novo — tabela de parcelas virtuais com ações de boleto |
+| `src/services/agreementService.ts` | Adicionar função para gerar boleto via Asaas proxy |
+
+### Parcelas virtuais — lógica
+
+```text
+Parcela 0 (entrada): valor = entrada_value, vencimento = entrada_date
+Parcela 1..N: valor = new_installment_value, vencimento = first_due_date + (i-1) meses
+```
+
+Status de cada parcela calculado comparando `valor_pago` acumulado do client com soma das parcelas vencidas.
+
+### Boletos — integração Asaas
+
+Usar a edge function `asaas-proxy` existente para criar cobranças:
+- Enviar CPF, nome, valor, vencimento
+- Armazenar `bankSlipUrl` retornado
+- Oferecer download direto do PDF
 
