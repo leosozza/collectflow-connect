@@ -1,63 +1,74 @@
 
 
-# Plano: Corrigir falha na geração de boletos Negociarie
+# Plano: Separar Super Admin da Gamificação + Controle de Participantes + Revisão do Dashboard
 
-## Problema identificado
+## Diagnóstico
 
-O `saveCobranca` em `negociarieService.ts` (linha 135-145) envia colunas que **não existem** na tabela `negociarie_cobrancas`:
+### 1. Super Admin misturado com tenant
+O login `raul@temisconsultoria.com.br` (super_admin, `user_id: d591ef12`) está na mesma `tenant_id` da YBRASIL e aparece no dashboard, ranking, e filtros de operadores junto com os operadores reais. Da mesma forma, `raulsjunior579@gmail.com` (admin, `user_id: 0e5a460b`) é admin e não deveria aparecer na gamificação.
 
-| Código envia | Tabela espera |
-|---|---|
-| `external_id` | `id_geral` |
-| `vencimento` | `data_vencimento` |
-| `cpf` | ❌ não existe (usar `client_id`) |
-| `nome` | ❌ não existe |
-| `response_data` | `callback_data` (ou ignorar) |
+**Problema no código:**
+- `DashboardPage.tsx` (linha 77-80): busca TODOS os profiles do tenant, incluindo admins e super_admin
+- `GoalsManagementTab.tsx` (linha 29-33): lista TODOS os profiles do tenant para definir metas
+- `gamificationService.ts` `fetchRanking`: retorna TODOS os `operator_points` sem filtrar por role
+- Não existe conceito de "usuário habilitado para gamificação"
 
-A tabela `negociarie_cobrancas` requer: `id_geral` (string, NOT NULL), `data_vencimento` (string, NOT NULL), `tenant_id`, `valor`.
+### 2. Dashboard — números
+Os números estão corretos para os dados atuais (só 1 acordo cancelado em março, sem parcelas no mês). Os zeros são legítimos. Porém, o problema de `entrada_date IS NULL` com `entrada_value > 0` pode causar parcelas "perdidas" no cálculo. Precisa de fallback.
 
-Isso causa erro no insert do banco. Como o `saveCobranca` está dentro de um `try/catch` interno (linha 146), o erro é engolido silenciosamente. Mas se a API Negociarie também falhar (servidor indisponível, credenciais expiradas), o erro externo (linha 152) propaga para o `toast.error`.
+## Mudanças
 
-Possíveis cenários da falha:
-1. A API Negociarie respondeu com erro (servidor indisponível, dados incompletos do cliente como CEP vazio)
-2. O save local sempre falha silenciosamente por schema mismatch
+### 1. Nova tabela `gamification_participants` — controlar quem participa
+Migration SQL para criar tabela que define quais usuários estão habilitados na gamificação:
 
-## Correção
-
-### `src/services/negociarieService.ts` — Corrigir `saveCobranca` call (linhas 135-145)
-
-Mapear os campos corretamente para o schema da tabela:
-
-```typescript
-await this.saveCobranca({
-  tenant_id: agreement.tenant_id,
-  agreement_id: agreement.id,
-  id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
-  data_vencimento: inst.dueDate,
-  valor: inst.value,
-  status: "pendente",
-  link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
-  linha_digitavel: apiResult?.linha_digitavel || null,
-  pix_copia_cola: apiResult?.pix_copia_cola || null,
-  callback_data: apiResult || null,
-});
+```sql
+CREATE TABLE public.gamification_participants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+  profile_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  enabled boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(tenant_id, profile_id)
+);
+ALTER TABLE gamification_participants ENABLE ROW LEVEL SECURITY;
+-- RLS: tenant admins podem gerenciar
 ```
 
-### `src/services/negociarieService.ts` — Melhorar log de erro da API
+### 2. Nova aba "Participantes" em Gamificação > Gerenciar
+**Novo arquivo:** `src/components/gamificacao/ParticipantsManagementTab.tsx`
 
-Adicionar log detalhado no catch externo para que possamos ver exatamente o que a API Negociarie retornou (endpoint indisponível, campo obrigatório faltando, etc.).
+- Lista todos os profiles do tenant com toggle (Switch) para habilitar/desabilitar
+- Mostra role do usuário como badge informativo
+- Por padrão, operadores são habilitados, admins e super_admin não
+- Botão "Habilitar todos os operadores" para facilitar setup inicial
 
-### Observação sobre a API
+### 3. Filtrar operadores no Dashboard e Gamificação
 
-Se o erro foi na chamada à API Negociarie (não no save local), pode ser que:
-- O endereço do cliente está incompleto (CEP vazio causa rejeição)
-- O servidor Negociarie estava temporariamente indisponível
+**`src/pages/DashboardPage.tsx`** (linha 77-80):
+- No filtro de operadores, excluir profiles com role `admin` ou cujo `user_id` é super_admin (via `tenant_users.role`)
+- Alternativa mais simples: filtrar `profiles.role IN ('operador', 'supervisor')` no select
 
-A correção do schema é essencial independentemente, pois os boletos gerados com sucesso nunca estavam sendo salvos corretamente no banco.
+**`src/services/gamificationService.ts`** `fetchRanking`:
+- Após buscar `operator_points`, filtrar apenas quem está em `gamification_participants.enabled = true`
 
-## Arquivo a editar
+**`src/components/gamificacao/GoalsManagementTab.tsx`** (linha 29-33):
+- Filtrar operators query para mostrar apenas participantes habilitados na gamificação
+
+### 4. Dashboard RPC — fix `entrada_date IS NULL`
+**Migration:** Atualizar `get_dashboard_stats` para usar `COALESCE(a.entrada_date, a.first_due_date)` em vez de `a.entrada_date IS NOT NULL`. Quando a entrada existe (`entrada_value > 0`) mas não tem data definida, usar `first_due_date` como fallback. Isso evita perder parcelas de entrada nos cálculos.
+
+### 5. Registrar na aba Gerenciar
+**`src/pages/GamificacaoPage.tsx`:**
+- Adicionar sub-tab "Participantes" dentro de "Gerenciar"
+
+## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | Corrigir mapeamento de campos no `saveCobranca` para o schema real da tabela `negociarie_cobrancas` |
+| Migration SQL | Criar `gamification_participants` + RLS + Fix RPC `get_dashboard_stats` (fallback entrada_date) |
+| `src/components/gamificacao/ParticipantsManagementTab.tsx` | **Novo** — toggle de participantes |
+| `src/pages/GamificacaoPage.tsx` | Adicionar sub-tab Participantes |
+| `src/pages/DashboardPage.tsx` | Filtrar operadores por role (excluir admin/super_admin) |
+| `src/components/gamificacao/GoalsManagementTab.tsx` | Filtrar apenas participantes habilitados |
+| `src/services/gamificationService.ts` | `fetchRanking` filtra por participantes habilitados |
 
