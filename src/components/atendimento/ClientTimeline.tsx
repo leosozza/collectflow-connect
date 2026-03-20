@@ -212,6 +212,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         const meta = e.metadata as any;
         if (meta?.created_by) userIds.add(meta.created_by);
         if (meta?.updated_by) userIds.add(meta.updated_by);
+        if (meta?.operator_id) userIds.add(meta.operator_id);
         if (meta?.agent_name) return; // already has name
       });
       // Also from props
@@ -247,13 +248,17 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     clientEvents.forEach((e: any) => {
       const meta = (e.metadata || {}) as any;
       const eventType = e.event_type || "system";
-      const label = EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || eventType;
+      const label = eventType === "disposition"
+        ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || eventType);
       
       let detail = "";
       let operator = "";
 
       // Resolve operator name
-      if (meta.created_by && profileMap[meta.created_by]) {
+      if (meta.operator_id && profileMap[meta.operator_id]) {
+        operator = profileMap[meta.operator_id];
+      } else if (meta.created_by && profileMap[meta.created_by]) {
         operator = profileMap[meta.created_by];
       } else if (meta.updated_by && profileMap[meta.updated_by]) {
         operator = profileMap[meta.updated_by];
