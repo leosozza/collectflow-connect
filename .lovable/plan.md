@@ -1,62 +1,63 @@
 
 
-# Plano: Corrigir erro no cadastro de cliente + Status adequado para dívida externa
+# Plano: Corrigir falha na geração de boletos Negociarie
 
-## Resultado do teste
+## Problema identificado
 
-- **CEP auto-fill**: Funcionando corretamente (preencheu Praça da Sé, Sé, São Paulo, SP)
-- **Layout do formulário**: OK, com scroll funcionando
-- **Erro ao salvar**: Persiste
+O `saveCobranca` em `negociarieService.ts` (linha 135-145) envia colunas que **não existem** na tabela `negociarie_cobrancas`:
 
-## Causa raiz do erro de salvamento
+| Código envia | Tabela espera |
+|---|---|
+| `external_id` | `id_geral` |
+| `vencimento` | `data_vencimento` |
+| `cpf` | ❌ não existe (usar `client_id`) |
+| `nome` | ❌ não existe |
+| `response_data` | `callback_data` (ou ignorar) |
 
-A tabela `clients` tem uma política RLS de INSERT que exige `tenant_id = get_my_tenant_id()`. Porém:
-1. O campo `tenant_id` **não tem valor default** no banco
-2. Não existe trigger para auto-preenchê-lo
-3. A função `createClient` **nunca inclui `tenant_id`** nos registros gerados por `generateInstallments`
+A tabela `negociarie_cobrancas` requer: `id_geral` (string, NOT NULL), `data_vencimento` (string, NOT NULL), `tenant_id`, `valor`.
 
-Resultado: o insert envia `tenant_id = null`, a RLS rejeita, e o erro aparece como `[object Object]` porque o logger não sabe stringify erros do banco.
+Isso causa erro no insert do banco. Como o `saveCobranca` está dentro de um `try/catch` interno (linha 146), o erro é engolido silenciosamente. Mas se a API Negociarie também falhar (servidor indisponível, credenciais expiradas), o erro externo (linha 152) propaga para o `toast.error`.
 
-## Correções
+Possíveis cenários da falha:
+1. A API Negociarie respondeu com erro (servidor indisponível, dados incompletos do cliente como CEP vazio)
+2. O save local sempre falha silenciosamente por schema mismatch
 
-### 1. `src/services/clientService.ts` — Incluir `tenant_id` no insert
+## Correção
 
-Na função `createClient`, após gerar os registros via `generateInstallments`, adicionar o `tenant_id` do operador logado. Como o serviço não recebe o tenant_id, vou buscá-lo via `get_my_tenant_id()` ou passá-lo como parâmetro.
+### `src/services/negociarieService.ts` — Corrigir `saveCobranca` call (linhas 135-145)
 
-Abordagem mais simples: buscar o `tenant_id` do profile do operador antes do insert e adicioná-lo a cada record.
+Mapear os campos corretamente para o schema da tabela:
 
 ```typescript
-// Buscar tenant_id do operador
-const { data: profileData } = await supabase
-  .from("profiles")
-  .select("tenant_id")
-  .eq("id", operatorId)
-  .single();
-
-const records = generateInstallments({...}).map(r => ({
-  ...r,
-  tenant_id: profileData?.tenant_id
-}));
+await this.saveCobranca({
+  tenant_id: agreement.tenant_id,
+  agreement_id: agreement.id,
+  id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
+  data_vencimento: inst.dueDate,
+  valor: inst.value,
+  status: "pendente",
+  link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
+  linha_digitavel: apiResult?.linha_digitavel || null,
+  pix_copia_cola: apiResult?.pix_copia_cola || null,
+  callback_data: apiResult || null,
+});
 ```
 
-### 2. `src/lib/logger.ts` — Corrigir log de objetos não-Error
+### `src/services/negociarieService.ts` — Melhorar log de erro da API
 
-Linha 22: trocar `String(error)` por `JSON.stringify(error)` para objetos, evitando `[object Object]`.
+Adicionar log detalhado no catch externo para que possamos ver exatamente o que a API Negociarie retornou (endpoint indisponível, campo obrigatório faltando, etc.).
 
-### 3. `src/components/clients/ClientForm.tsx` — Status adequado para dívida externa
+### Observação sobre a API
 
-Remover as opções "Pago", "Pendente", "Quebrado" (que são de acordos). Para cadastro manual de dívida externa, o status deve ser simplesmente "pendente" (fixo/automático). Remover o campo Status do formulário e definir `status: "pendente"` fixo no `handleSubmit`.
+Se o erro foi na chamada à API Negociarie (não no save local), pode ser que:
+- O endereço do cliente está incompleto (CEP vazio causa rejeição)
+- O servidor Negociarie estava temporariamente indisponível
 
-### 4. `src/pages/CarteiraPage.tsx` — Melhorar mensagem de erro
+A correção do schema é essencial independentemente, pois os boletos gerados com sucesso nunca estavam sendo salvos corretamente no banco.
 
-No `onError` da mutation, mostrar detalhes do erro em vez de mensagem genérica.
-
-## Arquivos a editar
+## Arquivo a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/clientService.ts` | Incluir `tenant_id` nos records antes do insert |
-| `src/lib/logger.ts` | Stringify objetos não-Error no log |
-| `src/components/clients/ClientForm.tsx` | Remover campo Status (fixar como "pendente") |
-| `src/pages/CarteiraPage.tsx` | Melhorar mensagem de erro no `onError` |
+| `src/services/negociarieService.ts` | Corrigir mapeamento de campos no `saveCobranca` para o schema real da tabela `negociarie_cobrancas` |
 
