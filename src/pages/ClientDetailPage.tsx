@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import ClientAttachments from "@/components/clients/ClientAttachments";
 import ClientDetailHeader from "@/components/client-detail/ClientDetailHeader";
 import ClientUpdateHistory from "@/components/client-detail/ClientUpdateHistory";
+import ClientTimeline from "@/components/atendimento/ClientTimeline";
 import AgreementCalculator from "@/components/client-detail/AgreementCalculator";
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
