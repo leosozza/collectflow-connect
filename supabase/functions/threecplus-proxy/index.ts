@@ -87,6 +87,12 @@ Deno.serve(async (req) => {
       case 'list_campaigns':
         url = buildUrl(baseUrl, 'campaigns', authParam);
         break;
+      case 'campaign_details': {
+        const campErr = requireField(body, 'campaign_id', corsHeaders);
+        if (campErr) return campErr;
+        url = buildUrl(baseUrl, `campaign/${body.campaign_id}`, authParam);
+        break;
+      }
 
       case 'get_campaign_lists': {
         const err = requireField(body, 'campaign_id', corsHeaders);
