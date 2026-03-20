@@ -1,58 +1,38 @@
 
 
-# Plano: Carteira começa vazia + Gestão de Acordos com boletos
+# Plano: Baixar boletos Negociarie na Gestão de Acordos
 
-## Parte 1 — Carteira começa zerada
+## Contexto
 
-### Problema
-A página `/carteira` executa `fetchClients(filters)` no mount, sem nenhum filtro ativo. Isso carrega todos os clientes do tenant, causando travamentos e consumo de memória.
+Sim, ao formalizar o acordo com pagamento BOLETO, os boletos são gerados via API Negociarie e salvos na tabela `negociarie_cobrancas` com `agreement_id`, `link_boleto`, `linha_digitavel`, `pix_copia_cola`, etc.
 
-### Solução
-Adicionar flag `hasActiveFilters` que verifica se pelo menos um filtro foi preenchido. Se nenhum filtro estiver ativo, não executar a query (`enabled: false` no useQuery) e mostrar mensagem orientando o usuário a usar os filtros.
+O problema é que o `AgreementInstallmentsPanel` usado na página `/acordos` **não consulta a `negociarie_cobrancas`** — ele gera parcelas virtuais e oferece "Gerar Boleto" via Asaas (gateway diferente). Já existe um componente correto: `AgreementInstallments` (em `client-detail/`) que **já consulta `negociarie_cobrancas`** por `agreement_id` e exibe botão "Baixar Boleto" quando `link_boleto` existe.
 
-**Arquivo:** `src/pages/CarteiraPage.tsx`
+## Solução
 
-- Criar `hasActiveFilters` que compara cada filtro com seu default (search não vazio, credor != "todos", datas preenchidas, checkboxes ativos, etc.)
-- Passar `enabled: hasActiveFilters && !!tenant?.id` no useQuery de clients
-- Quando `!hasActiveFilters`, renderizar um card informativo: "Utilize os filtros acima para buscar clientes"
-- O mesmo para queries auxiliares (agreement-cpfs, contacted-client-ids) — só rodar quando houver clientes carregados
+Substituir o `AgreementInstallmentsPanel` (que gera boletos novos via Asaas) pelo `AgreementInstallments` (que busca boletos já gerados na Negociarie) na página de Acordos.
 
----
+## Mudanças
 
-## Parte 2 — Gestão de Acordos: boletos e detalhes
+### 1. `src/pages/AcordosPage.tsx`
 
-### Problema
-Ao acessar um acordo em `/acordos`, não há opção de gerar/baixar boletos nem visualizar as parcelas detalhadas.
+- Trocar o import de `AgreementInstallmentsPanel` por `AgreementInstallments` (de `@/components/client-detail/AgreementInstallments`)
+- Atualizar a chamada na linha 295 para passar as props corretas: `agreementId={editingAgreement.id}`, `agreement={editingAgreement}`, `cpf={editingAgreement.client_cpf}`
 
-### Solução
-Expandir o diálogo de edição do acordo para incluir:
+### 2. `src/components/client-detail/AgreementInstallments.tsx`
 
-1. **Tabela de parcelas virtuais** — gerar via `generate_series` lógica no frontend (entrada + N parcelas mensais a partir de `first_due_date`), mostrando número, valor, data de vencimento e status (pago/pendente/vencido)
-2. **Botão "Gerar Boleto"** por parcela — integrar com Asaas (já existe `asaas-proxy` edge function e `ASAAS_API_KEY_PRODUCTION` configurado) para criar cobrança e obter link do boleto
-3. **Botão "Baixar Boleto"** — link direto para o PDF do boleto gerado
+- Fix na query da linha 26: atualmente filtra por `client_id.eq.${agreementId}`, mas deveria filtrar por `agreement_id.eq.${agreementId}` (o campo correto na tabela)
+- Isso é o motivo pelo qual os boletos não aparecem mesmo existindo na base
 
-**Arquivos:**
+### 3. Remover ou deprecar `AgreementInstallmentsPanel.tsx`
+
+- O componente que gera boletos via Asaas pode ser removido, já que os boletos são gerados via Negociarie na formalização do acordo
+
+## Resumo
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/CarteiraPage.tsx` | Adicionar `hasActiveFilters`, desabilitar query quando vazio, mostrar empty state |
-| `src/pages/AcordosPage.tsx` | Expandir diálogo de edição com aba/seção de parcelas e botões de boleto |
-| `src/components/acordos/AgreementInstallmentsPanel.tsx` | Novo — tabela de parcelas virtuais com ações de boleto |
-| `src/services/agreementService.ts` | Adicionar função para gerar boleto via Asaas proxy |
-
-### Parcelas virtuais — lógica
-
-```text
-Parcela 0 (entrada): valor = entrada_value, vencimento = entrada_date
-Parcela 1..N: valor = new_installment_value, vencimento = first_due_date + (i-1) meses
-```
-
-Status de cada parcela calculado comparando `valor_pago` acumulado do client com soma das parcelas vencidas.
-
-### Boletos — integração Asaas
-
-Usar a edge function `asaas-proxy` existente para criar cobranças:
-- Enviar CPF, nome, valor, vencimento
-- Armazenar `bankSlipUrl` retornado
-- Oferecer download direto do PDF
+| `src/pages/AcordosPage.tsx` | Trocar `AgreementInstallmentsPanel` por `AgreementInstallments` com props corretas |
+| `src/components/client-detail/AgreementInstallments.tsx` | Fix: `client_id.eq.` → `agreement_id.eq.` na query |
+| `src/components/acordos/AgreementInstallmentsPanel.tsx` | Remover (não mais necessário) |
 
