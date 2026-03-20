@@ -764,6 +764,7 @@ Deno.serve(async (req) => {
         }
         url = `${baseUrl}/agent/work_break/exit?api_token=${agentUnpause.api_token}`;
         method = 'POST';
+        reqBody = JSON.stringify({});
         console.log(`Unpausing agent ${body.agent_id} via /agent/work_break/exit`);
         break;
       }
