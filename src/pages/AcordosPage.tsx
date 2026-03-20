@@ -192,7 +192,7 @@ const AcordosPage = () => {
 
   const editDialog = (
     <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle>Editar Acordo</DialogTitle>
