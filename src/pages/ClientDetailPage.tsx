@@ -83,23 +83,7 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
-  const { data: auditLogs = [] } = useQuery({
-    queryKey: ["client-audit", cpf],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .eq("entity_type", "client")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return (data || []).filter((log: any) => {
-        const details = log.details as any;
-        return details?.cpf === cpf || details?.cpf === formatCPF(cpf || "");
-      });
-    },
-    enabled: !!cpf,
-  });
+
 
   if (isLoading) {
     return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
