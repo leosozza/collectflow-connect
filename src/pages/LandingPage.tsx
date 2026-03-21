@@ -209,7 +209,7 @@ export default function LandingPage() {
                 </Button>
               </a>
               <Link to="/auth">
-                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 text-white hover:bg-white/10">
+                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 !text-white hover:bg-white/10">
                   Teste Grátis 14 Dias
                 </Button>
               </Link>
