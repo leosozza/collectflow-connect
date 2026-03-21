@@ -326,6 +326,7 @@ const App = () => (
               }
             />
             <Route path="/api-docs-public" element={<ApiDocsPublicPage />} />
+            <Route path="/site" element={<LandingPage />} />
             <Route path="/portal" element={<PortalPage />} />
             {/* Super Admin area with isolated layout */}
             <Route

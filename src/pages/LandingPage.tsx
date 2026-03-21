@@ -52,7 +52,7 @@ const features = [
   { icon: MessageSquare, title: "Contact Center Omnichannel", desc: "WhatsApp, telefonia e SMS integrados em uma única plataforma com filas inteligentes." },
   { icon: Globe, title: "Portal do Devedor", desc: "Portal personalizado por credor onde o devedor consulta dívidas e faz acordos 24/7." },
   { icon: Trophy, title: "Gamificação de Equipe", desc: "Rankings, conquistas e campanhas que motivam sua equipe a bater metas diariamente." },
-  { icon: BarChart3, title: "Relatórios em Tempo Real", desc: "Dashboards com métricas de recuperação, aging, performance de operadores e muito mais." },
+  { icon: BarChart3, title: "Analytics e Dashboard", desc: "Painéis analíticos com métricas de recuperação, aging, performance de operadores e muito mais." },
   { icon: Plug, title: "Integrações Prontas", desc: "3CPlus, Gupshup, CobCloud, Serasa, Protesto e APIs abertas para seu ERP." },
 ];
 
@@ -83,14 +83,14 @@ const testimonials = [
 
 const plans = [
   {
-    name: "Starter", price: "Grátis", period: "para começar",
-    features: ["Até 500 devedores", "1 operador", "Régua básica", "Portal do devedor", "Relatórios essenciais"],
-    cta: "Comece Grátis", highlight: false,
+    name: "Essencial", price: "R$ 499,99", period: "/mês",
+    features: ["Até 2.000 devedores", "5 operadores", "Régua de cobrança", "Portal do devedor", "Relatórios essenciais", "Suporte por e-mail"],
+    cta: "Contratar", highlight: false,
   },
   {
-    name: "Pro", price: "R$ 497", period: "/mês",
-    features: ["Até 10.000 devedores", "10 operadores", "Automação avançada", "WhatsApp + Telefonia", "Gamificação completa", "Integrações premium", "Suporte prioritário"],
-    cta: "Começar Agora", highlight: true,
+    name: "Pro", price: "R$ 999,99", period: "/mês",
+    features: ["Até 20.000 devedores", "Operadores ilimitados", "Automação avançada", "WhatsApp + Telefonia", "Gamificação completa", "Integrações premium", "Suporte prioritário"],
+    cta: "Contratar", highlight: true,
   },
   {
     name: "Enterprise", price: "Sob medida", period: "",
@@ -98,6 +98,44 @@ const plans = [
     cta: "Falar com Vendas", highlight: false,
   },
 ];
+
+/* ───────── floating shapes ───────── */
+const FloatingShapes = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    {[
+      { size: 120, x: "10%", y: "20%", duration: 18, delay: 0 },
+      { size: 80, x: "85%", y: "15%", duration: 22, delay: 2 },
+      { size: 60, x: "70%", y: "70%", duration: 20, delay: 4 },
+      { size: 100, x: "20%", y: "75%", duration: 25, delay: 1 },
+      { size: 50, x: "50%", y: "40%", duration: 16, delay: 3 },
+    ].map((s, i) => (
+      <motion.div
+        key={i}
+        className="absolute rounded-full border border-primary/[0.07]"
+        style={{ width: s.size, height: s.size, left: s.x, top: s.y }}
+        animate={{
+          y: [0, -20, 0, 15, 0],
+          x: [0, 10, 0, -10, 0],
+          rotate: [0, 90, 180, 270, 360],
+        }}
+        transition={{ duration: s.duration, repeat: Infinity, delay: s.delay, ease: "linear" }}
+      />
+    ))}
+    {[
+      { w: 150, x: "30%", y: "30%", duration: 24, delay: 1 },
+      { w: 100, x: "75%", y: "50%", duration: 20, delay: 3 },
+      { w: 80, x: "15%", y: "55%", duration: 28, delay: 0 },
+    ].map((s, i) => (
+      <motion.div
+        key={`diamond-${i}`}
+        className="absolute border border-primary/[0.05] rotate-45"
+        style={{ width: s.w, height: s.w, left: s.x, top: s.y }}
+        animate={{ y: [0, 15, 0, -15, 0], opacity: [0.04, 0.08, 0.04] }}
+        transition={{ duration: s.duration, repeat: Infinity, delay: s.delay, ease: "easeInOut" }}
+      />
+    ))}
+  </div>
+);
 
 /* ═══════════════════════════════════════ */
 export default function LandingPage() {
@@ -128,7 +166,7 @@ export default function LandingPage() {
               <Button variant="ghost" className="text-secondary-foreground hidden sm:inline-flex">Entrar</Button>
             </Link>
             <Link to="/auth">
-              <Button className="font-semibold">Comece Grátis</Button>
+              <Button className="font-semibold">Teste Grátis 14 Dias</Button>
             </Link>
           </div>
         </div>
@@ -138,6 +176,7 @@ export default function LandingPage() {
       <section className="relative pt-32 pb-24 sm:pt-44 sm:pb-32 overflow-hidden">
         <div className="absolute inset-0 gradient-dark opacity-95" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(30_100%_50%/0.18),transparent)]" />
+        <FloatingShapes />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 text-center">
@@ -170,7 +209,7 @@ export default function LandingPage() {
                 </Button>
               </a>
               <Link to="/auth">
-                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 text-white hover:bg-white/10">
+                <Button size="lg" variant="outline" className="text-base px-8 py-6 border-white/20 !text-white hover:bg-white/10">
                   Teste Grátis 14 Dias
                 </Button>
               </Link>
@@ -274,25 +313,6 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ── RESULTADOS ── */}
-      <Section className="py-20 sm:py-28">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
-            <span className="text-sm font-semibold text-primary uppercase tracking-wide">Resultados Comprovados</span>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-bold text-foreground">Números que falam por si</h2>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            {metrics.map((m) => (
-              <div key={m.label} className="p-8 rounded-xl gradient-dark text-center shadow-lg">
-                <p className="text-4xl sm:text-5xl font-extrabold text-primary">
-                  <AnimatedCounter target={m.value} suffix={m.suffix} prefix={m.prefix} />
-                </p>
-                <p className="mt-3 text-sm text-white/70">{m.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
 
       {/* ── DEPOIMENTOS ── */}
       <Section className="py-20 sm:py-28 bg-muted/30">
@@ -381,7 +401,7 @@ export default function LandingPage() {
               <div className="mt-8">
                 <Link to="/auth">
                   <Button size="lg" className="text-base px-10 py-6 font-bold shadow-lg shadow-primary/30">
-                    Comece agora gratuitamente <ArrowRight className="ml-2 h-5 w-5" />
+                    Contratar agora <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
               </div>
