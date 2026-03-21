@@ -313,25 +313,6 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ── RESULTADOS ── */}
-      <Section className="py-20 sm:py-28">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
-            <span className="text-sm font-semibold text-primary uppercase tracking-wide">Resultados Comprovados</span>
-            <h2 className="mt-2 text-3xl sm:text-4xl font-bold text-foreground">Números que falam por si</h2>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            {metrics.map((m) => (
-              <div key={m.label} className="p-8 rounded-xl gradient-dark text-center shadow-lg">
-                <p className="text-4xl sm:text-5xl font-extrabold text-primary">
-                  <AnimatedCounter target={m.value} suffix={m.suffix} prefix={m.prefix} />
-                </p>
-                <p className="mt-3 text-sm text-white/70">{m.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
 
       {/* ── DEPOIMENTOS ── */}
       <Section className="py-20 sm:py-28 bg-muted/30">
