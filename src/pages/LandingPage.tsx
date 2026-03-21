@@ -99,6 +99,44 @@ const plans = [
   },
 ];
 
+/* ───────── floating shapes ───────── */
+const FloatingShapes = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    {[
+      { size: 120, x: "10%", y: "20%", duration: 18, delay: 0 },
+      { size: 80, x: "85%", y: "15%", duration: 22, delay: 2 },
+      { size: 60, x: "70%", y: "70%", duration: 20, delay: 4 },
+      { size: 100, x: "20%", y: "75%", duration: 25, delay: 1 },
+      { size: 50, x: "50%", y: "40%", duration: 16, delay: 3 },
+    ].map((s, i) => (
+      <motion.div
+        key={i}
+        className="absolute rounded-full border border-primary/[0.07]"
+        style={{ width: s.size, height: s.size, left: s.x, top: s.y }}
+        animate={{
+          y: [0, -20, 0, 15, 0],
+          x: [0, 10, 0, -10, 0],
+          rotate: [0, 90, 180, 270, 360],
+        }}
+        transition={{ duration: s.duration, repeat: Infinity, delay: s.delay, ease: "linear" }}
+      />
+    ))}
+    {[
+      { w: 150, x: "30%", y: "30%", duration: 24, delay: 1 },
+      { w: 100, x: "75%", y: "50%", duration: 20, delay: 3 },
+      { w: 80, x: "15%", y: "55%", duration: 28, delay: 0 },
+    ].map((s, i) => (
+      <motion.div
+        key={`diamond-${i}`}
+        className="absolute border border-primary/[0.05] rotate-45"
+        style={{ width: s.w, height: s.w, left: s.x, top: s.y }}
+        animate={{ y: [0, 15, 0, -15, 0], opacity: [0.04, 0.08, 0.04] }}
+        transition={{ duration: s.duration, repeat: Infinity, delay: s.delay, ease: "easeInOut" }}
+      />
+    ))}
+  </div>
+);
+
 /* ═══════════════════════════════════════ */
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
@@ -128,7 +166,7 @@ export default function LandingPage() {
               <Button variant="ghost" className="text-secondary-foreground hidden sm:inline-flex">Entrar</Button>
             </Link>
             <Link to="/auth">
-              <Button className="font-semibold">Comece Grátis</Button>
+              <Button className="font-semibold">Teste Grátis 14 Dias</Button>
             </Link>
           </div>
         </div>
@@ -138,6 +176,7 @@ export default function LandingPage() {
       <section className="relative pt-32 pb-24 sm:pt-44 sm:pb-32 overflow-hidden">
         <div className="absolute inset-0 gradient-dark opacity-95" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(30_100%_50%/0.18),transparent)]" />
+        <FloatingShapes />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 text-center">
