@@ -401,7 +401,7 @@ export default function LandingPage() {
               <div className="mt-8">
                 <Link to="/auth">
                   <Button size="lg" className="text-base px-10 py-6 font-bold shadow-lg shadow-primary/30">
-                    Comece agora gratuitamente <ArrowRight className="ml-2 h-5 w-5" />
+                    Contratar agora <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
               </div>
