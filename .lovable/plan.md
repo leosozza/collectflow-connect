@@ -1,36 +1,36 @@
 
 
-# Plano: Melhorias na Landing Page
+# Plano: Landing Page — Remover seções, fix botão, animações criativas
 
-## 1. Rota dedicada `/site`
-A landing page só aparece em `/` quando o usuário não está logado. Adicionar rota `/site` no `App.tsx` que sempre mostra a `LandingPage`, independente de estar logado ou não.
+## Mudanças
 
-## 2. Animações sutis de fundo
-Adicionar partículas/formas geométricas flutuantes atrás do hero e das seções, usando `framer-motion`. Círculos e linhas com movimento lento, baixa opacidade (~5-10%), sem chamar atenção mas dando vida à página.
+### 1. Remover seções do hero
+- **Remover métricas animadas** (linhas 234-249): os cards R$120M+, 500+, 45%, 70% no hero
+- **Remover Social Proof** (linhas 253-263): seção "Empresas que confiam no RIVO Connect" com FinCred, RecuperaBR, etc.
+- Remover `AnimatedCounter` component e `metrics` array (não mais usados)
 
-## 3. Botão "Teste Grátis 14 Dias" — texto invisível
-O botão usa `variant="outline"` com `text-white` sobre fundo escuro, mas na área hero o `border-white/20` funciona. O problema é que o `Button` outline tem cor de texto padrão que conflita. Corrigir forçando `text-white` e garantindo contraste.
+### 2. Fix botão "Teste Grátis 14 Dias"
+O botão outline com `!text-white` não funciona em produção (purge do Tailwind pode remover `!important`). Trocar para classe inline style ou usar `className="text-white bg-transparent border-white/20 hover:bg-white/10"` sem variant outline.
 
-## 4. Trocar "Relatórios em Tempo Real"
-No array `features`, substituir título e descrição:
-- De: "Relatórios em Tempo Real" / "Dashboards com métricas..."
-- Para: "Analytics e Dashboard" / "Painéis analíticos com métricas de recuperação, aging, performance de operadores e muito mais."
+### 3. Animações de fundo — gráficos subindo
+Criar componente `AnimatedBars` que renderiza barras verticais estilo gráfico de barras subindo e descendo lentamente no fundo com opacidade muito baixa (~5-8%). Posicionar atrás das seções de features e como funciona.
 
-## 5. Remover seção "Resultados Comprovados"
-Remover o bloco inteiro das linhas 277-295 (seção com métricas duplicadas que já aparecem no hero).
+### 4. Efeitos hover interativos
+- **Títulos das seções**: `whileHover={{ scale: 1.03 }}` com `transition`
+- **Feature cards**: já tem `whileHover={{ y: -4 }}`, adicionar `scale: 1.02`
+- **Pricing cards**: adicionar hover scale
+- **Steps**: hover grow nos títulos
+- **Nav links**: scale on hover
+- **Testimonials**: hover lift
 
-## 6. Preços reais — sem plano grátis
-Atualizar o array `plans`:
-- **Plano 1**: "Essencial" — R$ 499,99/mês (substituir o "Starter Grátis")
-- **Plano 2**: "Pro" — R$ 999,99/mês (substituir R$ 497)
-- **Plano 3**: "Enterprise" — Sob medida (manter)
-- Atualizar features de cada plano adequadamente
-- Trocar CTAs: remover "Comece Grátis", usar "Contratar" / "Falar com Vendas"
+### 5. Mais vida geral
+- Adicionar `FloatingShapes` também nas seções de features e pricing (com opacidade ainda menor)
+- Adicionar efeito de parallax sutil nos títulos das seções usando `useScroll` do framer-motion
+- Staggered animation nos feature cards (aparecem um por um)
 
-## Arquivos
+## Arquivo a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/App.tsx` | Adicionar rota `/site` apontando para `LandingPage` |
-| `src/pages/LandingPage.tsx` | Animações de fundo, fix botão, trocar texto features, remover seção Resultados, atualizar preços |
+| `src/pages/LandingPage.tsx` | Remover metrics+social proof, fix botão, animações de barras no fundo, hover effects em todos os elementos interativos |
 
