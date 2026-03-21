@@ -52,7 +52,7 @@ const features = [
   { icon: MessageSquare, title: "Contact Center Omnichannel", desc: "WhatsApp, telefonia e SMS integrados em uma única plataforma com filas inteligentes." },
   { icon: Globe, title: "Portal do Devedor", desc: "Portal personalizado por credor onde o devedor consulta dívidas e faz acordos 24/7." },
   { icon: Trophy, title: "Gamificação de Equipe", desc: "Rankings, conquistas e campanhas que motivam sua equipe a bater metas diariamente." },
-  { icon: BarChart3, title: "Relatórios em Tempo Real", desc: "Dashboards com métricas de recuperação, aging, performance de operadores e muito mais." },
+  { icon: BarChart3, title: "Analytics e Dashboard", desc: "Painéis analíticos com métricas de recuperação, aging, performance de operadores e muito mais." },
   { icon: Plug, title: "Integrações Prontas", desc: "3CPlus, Gupshup, CobCloud, Serasa, Protesto e APIs abertas para seu ERP." },
 ];
 
@@ -83,14 +83,14 @@ const testimonials = [
 
 const plans = [
   {
-    name: "Starter", price: "Grátis", period: "para começar",
-    features: ["Até 500 devedores", "1 operador", "Régua básica", "Portal do devedor", "Relatórios essenciais"],
-    cta: "Comece Grátis", highlight: false,
+    name: "Essencial", price: "R$ 499,99", period: "/mês",
+    features: ["Até 2.000 devedores", "5 operadores", "Régua de cobrança", "Portal do devedor", "Relatórios essenciais", "Suporte por e-mail"],
+    cta: "Contratar", highlight: false,
   },
   {
-    name: "Pro", price: "R$ 497", period: "/mês",
-    features: ["Até 10.000 devedores", "10 operadores", "Automação avançada", "WhatsApp + Telefonia", "Gamificação completa", "Integrações premium", "Suporte prioritário"],
-    cta: "Começar Agora", highlight: true,
+    name: "Pro", price: "R$ 999,99", period: "/mês",
+    features: ["Até 20.000 devedores", "Operadores ilimitados", "Automação avançada", "WhatsApp + Telefonia", "Gamificação completa", "Integrações premium", "Suporte prioritário"],
+    cta: "Contratar", highlight: true,
   },
   {
     name: "Enterprise", price: "Sob medida", period: "",
