@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle } from "lucide-react";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
@@ -72,6 +73,9 @@ const CampaignsPanel = () => {
   const [linkAgentIds, setLinkAgentIds] = useState<number[]>([]);
   const [linkAgentSearch, setLinkAgentSearch] = useState("");
   const [linkingAgents, setLinkingAgents] = useState(false);
+
+  // Webhook state
+  const [webhookStatus, setWebhookStatus] = useState<Record<string, { active: boolean; id?: string; loading: boolean }>>({});
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -145,8 +149,10 @@ const CampaignsPanel = () => {
       const agents = Array.isArray(agentsRes) ? agentsRes : agentsRes?.data || [];
       setCampaignAgents(prev => ({ ...prev, [campaignId]: agents }));
 
-      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+    if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
 
+      // Check webhook status in background
+      checkWebhookStatus(campaignId);
       const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
 
@@ -264,6 +270,44 @@ const CampaignsPanel = () => {
       toast.error("Erro ao vincular agentes: " + (err.message || ""));
     } finally {
       setLinkingAgents(false);
+    }
+  };
+
+  // ── Webhook Management ──
+  const checkWebhookStatus = async (campaignId: string) => {
+    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], loading: true, active: prev[campaignId]?.active || false } }));
+    try {
+      const data = await invoke("list_webhooks", { campaign_id: campaignId });
+      const webhooks = Array.isArray(data) ? data : data?.data || [];
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+      const rivoWebhook = webhooks.find((w: any) => w.url?.includes("threecplus-webhook") || w.url?.includes(supabaseUrl));
+      setWebhookStatus(prev => ({
+        ...prev,
+        [campaignId]: { active: !!rivoWebhook, id: rivoWebhook?.id ? String(rivoWebhook.id) : undefined, loading: false },
+      }));
+    } catch {
+      setWebhookStatus(prev => ({ ...prev, [campaignId]: { active: false, loading: false } }));
+    }
+  };
+
+  const handleToggleWebhook = async (campaignId: string, enable: boolean) => {
+    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: true } }));
+    try {
+      if (enable) {
+        await invoke("register_webhook", { campaign_id: campaignId });
+        toast.success("Webhook ativado! Eventos serão recebidos em tempo real.");
+      } else {
+        const wh = webhookStatus[campaignId];
+        if (wh?.id) {
+          await invoke("delete_webhook", { campaign_id: campaignId, webhook_id: wh.id });
+        }
+        toast.success("Webhook desativado.");
+      }
+      // Re-check status
+      await checkWebhookStatus(campaignId);
+    } catch (err: any) {
+      toast.error("Erro ao gerenciar webhook: " + (err.message || ""));
+      setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: false } }));
     }
   };
 
@@ -429,6 +473,28 @@ const CampaignsPanel = () => {
                           <Button size="sm" variant="outline" disabled={savingAggr === cid} onClick={() => handleSaveAggressiveness(cid)} className="shrink-0">
                             {savingAggr === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
                           </Button>
+                        </div>
+
+                        {/* Webhook Toggle */}
+                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
+                          <Webhook className="w-5 h-5 text-primary shrink-0" />
+                          <div className="flex-1">
+                            <Label className="text-xs font-medium">Webhook Bidirecional</Label>
+                            <p className="text-xs text-muted-foreground">Receba eventos de chamada em tempo real</p>
+                          </div>
+                          {webhookStatus[cid]?.loading ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {webhookStatus[cid]?.active && (
+                                <Badge variant="outline" className="text-xs border-green-500 text-green-600">Ativo</Badge>
+                              )}
+                              <Switch
+                                checked={webhookStatus[cid]?.active || false}
+                                onCheckedChange={(checked) => handleToggleWebhook(cid, checked)}
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Sub-tabs */}

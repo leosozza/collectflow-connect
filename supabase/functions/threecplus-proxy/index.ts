@@ -1040,6 +1040,43 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ── Webhook Management ──
+      case 'register_webhook': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/webhooks`, authParam);
+        method = 'POST';
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const webhookUrl = body.webhook_url || `${supabaseUrl}/functions/v1/threecplus-webhook`;
+        const webhookPayload: Record<string, any> = {
+          url: webhookUrl,
+          events: body.events || ['call.started', 'call.answered', 'call.finished', 'call.qualified'],
+        };
+        if (body.secret) webhookPayload.secret = body.secret;
+        reqBody = JSON.stringify(webhookPayload);
+        console.log(`Registering webhook for campaign ${body.campaign_id}: ${webhookUrl}`);
+        break;
+      }
+
+      case 'list_webhooks': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/webhooks`, authParam);
+        console.log(`Listing webhooks for campaign ${body.campaign_id}`);
+        break;
+      }
+
+      case 'delete_webhook': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'webhook_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/webhooks/${body.webhook_id}`, authParam);
+        method = 'DELETE';
+        console.log(`Deleting webhook ${body.webhook_id} from campaign ${body.campaign_id}`);
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ status: 400, detail: `Unknown action: ${action}` }),
