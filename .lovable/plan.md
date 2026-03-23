@@ -1,86 +1,52 @@
 
 
-# Plano: Corrigir tabulação, pausa e intervalos do operador
+# Plano: Mapear status 4 (TPA/ACW) da 3CPlus corretamente no RIVO
 
-## Problemas identificados
+## Diagnóstico
 
-### 1. Tabulações não carregam — action inexistente
-O dashboard chama `invoke("campaign_qualifications", { campaign_id })` mas **essa action não existe no proxy**. Resultado: as qualificações retornam erro 400 silenciosamente e a lista fica vazia. O proxy tem `list_qualification_list_items` que aceita `list_id`, não `campaign_id`.
+A 3CPlus usa **status 4 = ACW (TPA - Tempo Pós-Atendimento)** quando a chamada termina. O RIVO trata ACW como status 3 (paused), mas na verdade são estados distintos:
 
-### 2. Sistema fica em pausa após tabular na ficha
-O `qualifyOn3CPlus` usa `callId` que vem como prop do componente. Se o `callId` é `undefined`, o fallback usa `"current"` (linha 334 do dispositionService). A API 3CPlus não aceita `"current"` como call_id — a qualificação falha silenciosamente. Mas o `sessionStorage` recebe `3cp_qualified_from_disposition`, suprimindo a tela ACW fallback. Resultado: agente fica preso em pausa sem opção de sair.
+- **Status 1** = Idle (aguardando)
+- **Status 2** = Em ligação
+- **Status 3** = Pausa manual (work break)
+- **Status 4** = ACW / TPA (pós-atendimento)
+- **Status 5** = Manual
 
-### 3. Intervalos não aparecem para o operador
-`loadPauseIntervals` busca o `work_break_group_id` primeiro em `campaigns.find()`, mas para operadores o `campaigns` array está **vazio** (a `list_campaigns` global não é chamada). O fallback `campaign_details` funciona, mas depende de encontrar a chave certa na resposta. Alternativamente, os dados da campanha já existem em `agentCampaigns`.
+O `AgentStatusTable` já mapeia `4: "acw"` corretamente, mas o `TelefoniaDashboard` **ignora status 4 completamente** — só verifica `status === 2` (on_call) e `status === 3` (paused). Resultado: quando a 3CPlus entra em TPA (status 4), o RIVO não reconhece e mostra a tela errada.
 
 ## Correções
 
-### 1. `supabase/functions/threecplus-proxy/index.ts` — Adicionar action `campaign_qualifications`
+### 1. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-Novo case que busca detalhes da campanha para obter `qualification_list`, depois busca os itens dessa lista:
+**Adicionar detecção de status 4 (ACW/TPA):**
 
-```
-case 'campaign_qualifications':
-  // GET /campaign/{id} → pega qualification_list id
-  // GET /qualification_lists/{list_id}/qualifications → retorna itens
-```
+- Novo check: `const isACWStatus = myAgent?.status === 4 || s === "acw"`
+- Incluir status 4 na condição de `effectiveACW`: `const effectiveACW = isACW || isACWStatus || isACWFallback`
+- Remover dependência da transição 2→3 como requisito principal — status 4 é ACW direto
 
-### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+**Atualizar `statusLabel`:**
+- Adicionar: `if (status === 4 || s === "acw") return "TPA — Pós-atendimento"`
 
-**Corrigir intervalos** — No `loadPauseIntervals`, usar `agentCampaigns` como fonte além de `campaigns`:
+**Atualizar `statusColor` e `statusBgClass`:**
+- Status 4 usa cor amber (mesma de pausa) para consistência visual
 
-```typescript
-const allCampaigns = [...campaigns, ...agentCampaigns];
-const campaign = allCampaigns.find(c => c.id === campaignId || String(c.id) === String(campaignId));
-```
+**Corrigir transições de status no useEffect:**
+- Transição 2→4 = ACW direto (chamada terminou)
+- Transição 4→1 = ACW encerrado (qualificação feita)
+- Manter transição 2→3 como fallback
 
-**Corrigir callId para qualify** — Passar o `lastCallId` (do sessionStorage ou state) como callId ao `AtendimentoPage` embedded, em vez de depender do `activeCall` que já foi limpo quando a chamada terminou.
+**Ajustar `isPaused` check na renderização:**
+- A tela de ACW deve renderizar tanto com `isPaused` (status 3) quanto com `isACWStatus` (status 4)
 
-**Corrigir flag de qualified** — Se `qualifyOn3CPlus` falhar (catch), NÃO setar `3cp_qualified_from_disposition`. Mover o `sessionStorage.setItem` para dentro do `.then()` somente se o qualify realmente teve sucesso (checar resposta).
+### 2. `src/components/contact-center/threecplus/AgentStatusTable.tsx`
 
-### 3. `src/pages/AtendimentoPage.tsx`
+Atualizar label do status 4:
+- De `"ACW"` para `"TPA"` para consistência com terminologia 3CPlus
 
-Verificar se `qualifyOn3CPlus` retornou sucesso antes de setar a flag. Adicionar verificação do resultado:
-
-```typescript
-qualifyOn3CPlus({...})
-  .then((result) => {
-    // Só marcar como qualificado se realmente funcionou
-    if (result !== false) {
-      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
-    }
-  })
-```
-
-### 4. `src/services/dispositionService.ts`
-
-Modificar `qualifyOn3CPlus` para retornar `boolean` indicando sucesso/falha, em vez de swallow silencioso.
-
-## Fluxo corrigido
-
-```text
-Operador loga na campanha
-  → Salva campaign_id no sessionStorage ✓
-  → loadPauseIntervals busca em agentCampaigns (não vazio) ✓
-  → Intervalos aparecem ✓
-
-Ligação cai → ficha do cliente abre
-  → lastCallId salvo no state e sessionStorage ✓
-  → callId passado corretamente ao AtendimentoPage ✓
-
-Operador tabula na ficha
-  → qualifyOn3CPlus usa callId real (não "current") ✓
-  → Se qualify sucesso → flag setada → ACW screen suprimida ✓
-  → Se qualify falha → flag NÃO setada → ACW fallback aparece ✓
-  → Agente retorna ao idle automaticamente ✓
-```
-
-## Arquivos a editar
+## Arquivo a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Nova action `campaign_qualifications` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `agentCampaigns` nos intervalos; passar `lastCallId` correto |
-| `src/pages/AtendimentoPage.tsx` | Verificar sucesso do qualify antes de setar flag |
-| `src/services/dispositionService.ts` | Retornar boolean de sucesso em `qualifyOn3CPlus` |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Reconhecer status 4 como ACW/TPA, atualizar labels e transições |
+| `src/components/contact-center/threecplus/AgentStatusTable.tsx` | Renomear label ACW → TPA |
 
