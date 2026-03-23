@@ -67,6 +67,12 @@ const CampaignsPanel = () => {
   const [creating, setCreating] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
 
+  // Link agents to existing campaign
+  const [linkAgentCampaignId, setLinkAgentCampaignId] = useState<string | null>(null);
+  const [linkAgentIds, setLinkAgentIds] = useState<number[]>([]);
+  const [linkAgentSearch, setLinkAgentSearch] = useState("");
+  const [linkingAgents, setLinkingAgents] = useState(false);
+
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
       body: { action, domain, api_token: apiToken, ...extra },
