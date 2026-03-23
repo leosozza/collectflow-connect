@@ -600,7 +600,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // Load pause intervals from campaign's work_break_group_id
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      const campaign = campaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
+      // Search in both campaigns (admin) and agentCampaigns (operator)
+      const allCampaigns = [...campaigns, ...agentCampaigns];
+      const campaign = allCampaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
       let groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
       
       if (!groupId) {
@@ -629,7 +631,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } catch {
       setPauseIntervals([]);
     }
-  }, [invoke, campaigns]);
+  }, [invoke, campaigns, agentCampaigns]);
 
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
