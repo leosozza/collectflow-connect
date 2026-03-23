@@ -514,7 +514,9 @@ const ThreeCPlusTab = () => {
           {qualifications.length === 0 && !loadingQuals && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Teste a conexão acima para carregar as qualificações do 3CPlus.
+                {domain && apiToken
+                  ? "Clique para carregar as qualificações do 3CPlus."
+                  : "Salve as credenciais acima para carregar as qualificações do 3CPlus."}
               </p>
               <Button variant="outline" size="sm" onClick={loadQualifications} disabled={!domain || !apiToken || loadingQuals}>
                 {loadingQuals ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
