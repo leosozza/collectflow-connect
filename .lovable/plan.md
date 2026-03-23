@@ -1,40 +1,41 @@
 
 
-# Plano: Corrigir campos da API de criacao de intervalos 3CPlus
+# Plano: Vincular grupo de intervalos a campanhas existentes
 
-## Problema
+## O que existe hoje
 
-O erro 422 da 3CPlus mostra exatamente os campos incorretos:
+- Na **criação** de campanha já é possível selecionar um grupo de intervalos (`work_break_group_id`)
+- O proxy já tem `update_campaign` que aceita qualquer campo via PATCH, incluindo `work_break_group_id`
+- Os grupos de intervalos já são carregados via `list_work_break_groups`
+- Porém **não existe UI** para alterar o grupo de intervalos de uma campanha já criada
 
+## Correção
+
+### `src/components/contact-center/threecplus/CampaignsPanel.tsx`
+
+Adicionar na área expandida da campanha (junto ao slider de agressividade) um seletor de **Grupo de Intervalos**:
+
+- Select com a lista de `workBreakGroups` já carregada
+- Valor inicial: `campaign.work_break_group_id` (do objeto da campanha)
+- Botão "Salvar" que chama `update_campaign` com `{ campaign_id, work_break_group_id }`
+- Toast de sucesso/erro
+- Reload da campanha após salvar
+
+A UI ficará como um card similar ao da agressividade, logo abaixo dele:
+
+```text
+[ícone Coffee] Grupo de Intervalos
+[Select: Grupo atual ▾]  [Salvar]
 ```
-limit: O campo limit é obrigatório.
-type: O campo Tipo é obrigatório.
-return_type: O campo Tipo de retorno deverá conter um número inteiro.
-```
 
-O proxy envia `minutes` mas a API espera `limit`. O campo `type` (classificacao) nunca e enviado. O `return_type` e enviado como string ("flexible") mas a API espera inteiro.
+### Detalhes técnicos
 
-## Correcoes
+- O `update_campaign` no proxy já faz `PATCH /campaigns/{id}` com qualquer campo — basta enviar `work_break_group_id` no body
+- O `loadCampaigns` já traz os dados da campanha incluindo `work_break_group_id`, usado para pré-selecionar o valor
 
-### `supabase/functions/threecplus-proxy/index.ts`
+## Arquivo a editar
 
-Nos cases `create_work_break_group_interval` e `update_work_break_group_interval`:
-
-- Trocar `minutes` por `limit` (campo obrigatorio)
-- Trocar `classification` por `type` com mapeamento para inteiro: `productive=1, unproductive=2, nr17=3`
-- Converter `return_type` de string para inteiro: `flexible=1, automatic=2, request=3`
-- Trocar `daily_limit` por `maximum_daily_time` (nome provavel da API)
-
-### `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx`
-
-- Tornar `classificacao` obrigatoria no formulario (validacao antes de salvar)
-- Tornar `return_type` obrigatorio (validacao antes de salvar)
-- Ajustar leitura dos dados ao abrir edicao: mapear inteiros de volta para strings (type 1→"productive", return_type 1→"flexible")
-
-## Arquivos a editar
-
-| Arquivo | Mudanca |
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Corrigir nomes dos campos e converter para inteiros |
-| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Validar campos obrigatorios, mapear inteiros na leitura |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Adicionar seletor de grupo de intervalos na view expandida da campanha |
 
