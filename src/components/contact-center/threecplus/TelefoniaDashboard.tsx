@@ -765,8 +765,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
   // Extract active call for this agent from company_calls data
-  const activeCall = useMemo(() => {
-    if (!operatorAgentId || !companyCalls) return null;
+  const { activeCall, lastFinishedCall } = useMemo(() => {
+    if (!operatorAgentId || !companyCalls) return { activeCall: null, lastFinishedCall: null };
     const callsData = companyCalls?.data || companyCalls;
     const agentIdStr = String(operatorAgentId);
     let allCalls: any[] = [];
@@ -778,30 +778,47 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         if (Array.isArray(group)) allCalls.push(...group);
       }
     }
-    return allCalls.find((c: any) => String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr) || null;
+    const myCalls = allCalls.filter((c: any) => String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr);
+    const live = myCalls.find((c: any) => !c.hangup_time && String(c.status) !== "4") || null;
+    const finished = myCalls.find((c: any) => !!c.hangup_time || String(c.status) === "4") || null;
+    return { activeCall: live, lastFinishedCall: finished };
   }, [companyCalls, operatorAgentId]);
 
   // Track active call id for ACW qualification
   useEffect(() => {
-    if (activeCall) {
-      const callId = activeCall.call_id || activeCall.id;
+    const call = activeCall || lastFinishedCall;
+    if (call) {
+      const callId = call.call_id || call.id;
       if (callId) {
         setLastCallId(callId);
         sessionStorage.setItem("3cp_last_call_id", String(callId));
       }
-      const phone = activeCall.phone || "";
+      const phone = call.phone || "";
       if (phone) setLastCallPhone(phone);
     }
-  }, [activeCall]);
+  }, [activeCall, lastFinishedCall]);
 
   // Get mailing fields from active call
   const mailingCpf = activeCall?.identifier || activeCall?.mailing_identifier || "";
   const mailingClientId = activeCall?.Extra3 || activeCall?.extra3 || activeCall?.mailing_extra3 || "";
   const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
 
+  // ACW fallback: agent is paused (status 3) with no manual pause name and a finished call exists
+  const isACWFallback = isPaused && !activePauseName && !isACW && (
+    !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
+  );
+  const effectiveACW = isACW || isACWFallback;
+
+  // Auto-load qualifications when ACW fallback is detected
+  useEffect(() => {
+    if (effectiveACW && campaignQualifications.length === 0 && myCampaignId) {
+      loadCampaignQualifications(Number(myCampaignId));
+    }
+  }, [effectiveACW, campaignQualifications.length, myCampaignId, loadCampaignQualifications]);
+
   if (isOperatorView && myAgent) {
-    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone);
-    console.log("[3CPlus] activeCall from company_calls:", JSON.stringify(activeCall));
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
+    console.log("[3CPlus] activeCall (live):", JSON.stringify(activeCall), "lastFinished:", JSON.stringify(lastFinishedCall));
     console.log("[3CPlus] resolved mailing — CPF:", mailingCpf, "clientDbId:", mailingClientId, "phone:", activeCallPhone);
   }
 
@@ -917,7 +934,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen
-    if (isACW && isPaused) {
+    if (effectiveACW && isPaused) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
