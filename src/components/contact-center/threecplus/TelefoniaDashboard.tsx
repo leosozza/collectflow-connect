@@ -954,7 +954,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 <div className="text-center space-y-1">
                   <h3 className="text-lg font-bold text-foreground">Tabular Chamada</h3>
                   <p className="text-sm text-muted-foreground">
-                    Selecione a qualificação para registrar o resultado da ligação
+                    Você não tabulou durante o atendimento. Selecione a qualificação abaixo para retornar à campanha.
                     {lastCallPhone && <span className="block text-xs mt-1">Telefone: {lastCallPhone}</span>}
                   </p>
                 </div>
