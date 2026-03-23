@@ -616,7 +616,7 @@ Deno.serve(async (req) => {
         url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
         method = 'POST';
         const intervalBody: Record<string, any> = { name: body.name };
-        if (body.max_time) intervalBody.max_time = body.max_time;
+        if (body.max_time != null && body.max_time !== '') intervalBody.maximum_time = Number(body.max_time) * 60;
         reqBody = JSON.stringify(intervalBody);
         break;
       }
