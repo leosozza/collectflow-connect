@@ -1,34 +1,48 @@
 
-# Plano: Corrigir exibição do tempo nos intervalos de pausa
 
-## Diagnóstico
+# Plano: Corrigir vinculação de agentes e melhorar gestão de campanhas
 
-Testei a API 3CPlus diretamente e confirmei que o campo retornado é `minutes` (em minutos), **não** `maximum_time` nem `max_time`. Exemplo da resposta real:
+## Problemas identificados
 
-```json
-{ "id": 33098, "name": "Almoço", "minutes": 60, "limit": 60, "type": "NR17", "color": "#c62828" }
-```
+### 1. Aggressividade não salva — campo errado no proxy
+O `CampaignsPanel` chama `invoke("update_campaign", { campaign_id, aggressiveness: X })` mas o proxy monta o body como `JSON.stringify(body.campaign_data || {})`. Como `campaign_data` não é enviado, o PATCH vai com `{}` — nada é atualizado.
 
-O código atual verifica `interval.maximum_time || interval.max_time` — ambos inexistentes, por isso tudo mostra "Sem limite".
+### 2. Agentes não vinculam — possível formato incorreto
+O proxy envia `{ users: body.agent_ids }`. A API 3CPlus pode esperar `{ users: [id1, id2] }` (array de IDs numéricos) — isso parece correto, mas precisamos verificar se os IDs estão sendo enviados como números. Além disso, não há feedback de erro visível — o `catch` mostra apenas um `toast.warning` genérico.
 
-Além disso, o proxy envia `maximum_time` em segundos no create/update, mas a API espera `minutes` em minutos.
+### 3. Sem opção de vincular/desvincular agentes em campanha existente
+A aba "Agentes" da campanha expandida só lista — não tem botões para adicionar ou remover agentes.
 
 ## Correções
 
-### 1. `supabase/functions/threecplus-proxy/index.ts`
+### 1. `supabase/functions/threecplus-proxy/index.ts` — Fix `update_campaign`
+Mudar a construção do body para capturar campos individuais como `aggressiveness`, `name`, `start_time`, `end_time` além de `campaign_data`:
 
-- **create_work_break_group_interval**: trocar `intervalBody.maximum_time = Number(body.max_time) * 60` por `intervalBody.minutes = Number(body.max_time)` (o valor já vem em minutos do UI)
-- **update_work_break_group_interval**: trocar `updateBody.maximum_time = Number(body.max_time) * 60` por `updateBody.minutes = Number(body.max_time)`
+```typescript
+case 'update_campaign': {
+  const { campaign_id, campaign_data, ...rest } = body;
+  // Merge campaign_data with individual fields
+  const updatePayload = { ...(campaign_data || {}), ...rest };
+  delete updatePayload.action; delete updatePayload.domain; delete updatePayload.api_token;
+  reqBody = JSON.stringify(updatePayload);
+}
+```
 
-### 2. `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx`
+### 2. `src/components/contact-center/threecplus/CampaignsPanel.tsx` — Adicionar gestão de agentes na campanha expandida
 
-- **Exibição (linha 217)**: trocar `(interval.maximum_time || interval.max_time)` por `interval.minutes`, sem divisão por 60 (já está em minutos)
-- **Edição (linha 220)**: preencher campo com `interval.minutes` direto
-- Manter fallback para `interval.maximum_time` e `interval.limit` por segurança
+Na aba "Agentes":
+- Botão "Vincular Agentes" que abre dialog com multi-select (reutilizando a mesma UI do create)
+- Botão de remover (X) ao lado de cada agente vinculado, chamando `remove_campaign_agent`
+- Melhorar logs de erro no `add_agents_to_campaign` para mostrar a resposta real da API
 
-## Arquivos
+### 3. Melhorar feedback de erros
+- Nos catches, mostrar `err.message` ou resposta da API em vez de mensagens genéricas
+- No `add_agents_to_campaign`, logar a resposta para debug
+
+## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Trocar `maximum_time` → `minutes`, remover conversão ×60 |
-| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Ler campo `minutes` da resposta da API |
+| `supabase/functions/threecplus-proxy/index.ts` | Fix `update_campaign` para passar campos individuais (aggressiveness etc.) |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Adicionar botões vincular/desvincular agentes na aba Agentes da campanha expandida; melhorar feedback de erros |
+
