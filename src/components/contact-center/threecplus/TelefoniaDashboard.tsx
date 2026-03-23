@@ -476,15 +476,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
     if (prevStatus !== null && prevStatus !== currentStatus) {
       console.log("[Telefonia] Status transition:", prevStatus, "→", currentStatus);
-      // Transition from on_call (2) to paused (3) = ACW
-      if (prevStatus === 2 && currentStatus === 3) {
-        console.log("[Telefonia] ACW detected — showing disposition screen");
+      // Transition from on_call (2) to paused (3) or ACW/TPA (4) = ACW
+      if (prevStatus === 2 && (currentStatus === 3 || currentStatus === 4)) {
+        console.log("[Telefonia] ACW/TPA detected — showing disposition screen");
         setIsACW(true);
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
       }
-      // Transition from paused (3) to idle (1) = ACW ended or unpause
-      if (prevStatus === 3 && currentStatus === 1) {
+      // Transition from paused/ACW (3 or 4) to idle (1) = ACW ended or unpause
+      if ((prevStatus === 3 || prevStatus === 4) && currentStatus === 1) {
         setIsACW(false);
         setSelectedQualification("");
         setQualifyNotes("");
