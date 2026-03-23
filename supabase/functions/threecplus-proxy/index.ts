@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
         if (err2) return err2;
         url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents`, authParam);
         method = 'POST';
-        reqBody = JSON.stringify({ users: body.agent_ids });
+        reqBody = JSON.stringify({ agents: body.agent_ids });
         break;
       }
 
