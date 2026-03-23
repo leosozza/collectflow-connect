@@ -74,8 +74,7 @@ const CampaignsPanel = () => {
   const [linkAgentSearch, setLinkAgentSearch] = useState("");
   const [linkingAgents, setLinkingAgents] = useState(false);
 
-  // Webhook state
-  const [webhookStatus, setWebhookStatus] = useState<Record<string, { active: boolean; id?: string; loading: boolean }>>({});
+  // Webhook status is manual — no state needed
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
