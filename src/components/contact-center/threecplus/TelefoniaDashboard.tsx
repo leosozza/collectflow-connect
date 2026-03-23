@@ -159,6 +159,7 @@ const statusLabel = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 1 || ["idle", "available"].includes(s)) return "Aguardando ligação";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em ligação";
+  if (status === 4 || s === "acw") return "TPA — Pós-atendimento";
   if (status === 3 || s === "paused") return "Em pausa";
   return String(status ?? "Desconhecido");
 };
@@ -167,6 +168,7 @@ const statusColor = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 1 || ["idle", "available"].includes(s)) return "bg-emerald-500";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive";
+  if (status === 4 || s === "acw") return "bg-amber-500";
   if (status === 3 || s === "paused") return "bg-amber-500";
   return "bg-muted-foreground";
 };
@@ -174,6 +176,7 @@ const statusColor = (status: any): string => {
 const statusBgClass = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive text-destructive-foreground";
+  if (status === 4 || s === "acw") return "bg-amber-500 text-white";
   if (status === 3 || s === "paused") return "bg-amber-500 text-white";
   return "bg-primary text-primary-foreground";
 };
@@ -473,15 +476,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
     if (prevStatus !== null && prevStatus !== currentStatus) {
       console.log("[Telefonia] Status transition:", prevStatus, "→", currentStatus);
-      // Transition from on_call (2) to paused (3) = ACW
-      if (prevStatus === 2 && currentStatus === 3) {
-        console.log("[Telefonia] ACW detected — showing disposition screen");
+      // Transition from on_call (2) to paused (3) or ACW/TPA (4) = ACW
+      if (prevStatus === 2 && (currentStatus === 3 || currentStatus === 4)) {
+        console.log("[Telefonia] ACW/TPA detected — showing disposition screen");
         setIsACW(true);
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
       }
-      // Transition from paused (3) to idle (1) = ACW ended or unpause
-      if (prevStatus === 3 && currentStatus === 1) {
+      // Transition from paused/ACW (3 or 4) to idle (1) = ACW ended or unpause
+      if ((prevStatus === 3 || prevStatus === 4) && currentStatus === 1) {
         setIsACW(false);
         setSelectedQualification("");
         setQualifyNotes("");
@@ -746,7 +749,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
   // Feed pause controls into the floating widget
-  const isPausedStatus = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
   useEffect(() => {
     if (isOperatorView && isAgentOnline) {
       setPauseControls({
@@ -766,6 +769,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  const isTPAStatus = myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
   // Extract active call for this agent from company_calls data
@@ -807,13 +811,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const mailingClientId = activeCall?.Extra3 || activeCall?.extra3 || activeCall?.mailing_extra3 || "";
   const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
 
-  // ACW fallback: agent is paused (status 3) with no manual pause name and a finished call exists
+  // ACW fallback: agent is paused (status 3) or TPA (status 4) with no manual pause name and a finished call exists
   // Skip if qualify was already done from the disposition panel during the call
   const qualifiedFromDisposition = !!sessionStorage.getItem("3cp_qualified_from_disposition");
-  const isACWFallback = isPaused && !activePauseName && !isACW && !qualifiedFromDisposition && (
+  const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = (isACW || isACWFallback) && !qualifiedFromDisposition;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
@@ -823,7 +827,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [effectiveACW, campaignQualifications.length, myCampaignId, loadCampaignQualifications]);
 
   if (isOperatorView && myAgent) {
-    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isTPAStatus:", isTPAStatus, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
     console.log("[3CPlus] activeCall (live):", JSON.stringify(activeCall), "lastFinished:", JSON.stringify(lastFinishedCall));
     console.log("[3CPlus] resolved mailing — CPF:", mailingCpf, "clientDbId:", mailingClientId, "phone:", activeCallPhone);
   }
@@ -940,7 +944,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen
-    if (effectiveACW && isPaused) {
+    if (effectiveACW && (isPaused || isTPAStatus)) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
