@@ -475,6 +475,28 @@ const CampaignsPanel = () => {
                           </Button>
                         </div>
 
+                        {/* Webhook Toggle */}
+                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
+                          <Webhook className="w-5 h-5 text-primary shrink-0" />
+                          <div className="flex-1">
+                            <Label className="text-xs font-medium">Webhook Bidirecional</Label>
+                            <p className="text-xs text-muted-foreground">Receba eventos de chamada em tempo real</p>
+                          </div>
+                          {webhookStatus[cid]?.loading ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {webhookStatus[cid]?.active && (
+                                <Badge variant="outline" className="text-xs border-green-500 text-green-600">Ativo</Badge>
+                              )}
+                              <Switch
+                                checked={webhookStatus[cid]?.active || false}
+                                onCheckedChange={(checked) => handleToggleWebhook(cid, checked)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
                         {/* Sub-tabs */}
                         <Tabs value={activeTab[cid] || "overview"} onValueChange={(v) => setActiveTab(prev => ({ ...prev, [cid]: v }))}>
                           <TabsList className="grid grid-cols-4 w-full">
