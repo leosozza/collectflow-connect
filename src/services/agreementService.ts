@@ -376,6 +376,34 @@ export const cancelAgreement = async (id: string): Promise<void> => {
   }
 };
 
+export const updateInstallmentDate = async (
+  agreementId: string,
+  installmentNumber: number,
+  newDate: string
+): Promise<void> => {
+  try {
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("custom_installment_dates")
+      .eq("id", agreementId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const current = (agreement as any)?.custom_installment_dates || {};
+    const updated = { ...current, [String(installmentNumber)]: newDate };
+
+    const { error } = await supabase
+      .from("agreements")
+      .update({ custom_installment_dates: updated } as any)
+      .eq("id", agreementId);
+    if (error) throw error;
+
+    logger.info(MODULE, "updateInstallmentDate", { agreementId, installmentNumber, newDate });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,

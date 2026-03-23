@@ -32,11 +32,13 @@ import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
 import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
+import { useTenant } from "@/hooks/useTenant";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { tenant } = useTenant();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -316,7 +318,7 @@ const ClientDetailPage = () => {
                       )}
                       {/* Boleto/Parcelas section for approved agreements */}
                       {agreement.status === "approved" && (
-                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} />
+                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} tenantId={tenant?.id} />
                       )}
                     </div>
                   ))}

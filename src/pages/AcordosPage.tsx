@@ -292,7 +292,7 @@ const AcordosPage = () => {
             </div>
 
             {/* Parcelas e Boletos */}
-            <AgreementInstallments agreementId={editingAgreement.id} agreement={editingAgreement} cpf={editingAgreement.client_cpf} />
+            <AgreementInstallments agreementId={editingAgreement.id} agreement={editingAgreement} cpf={editingAgreement.client_cpf} tenantId={tenant?.id} onRefresh={load} />
 
             <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? "Salvando..." : "Salvar Alterações"}

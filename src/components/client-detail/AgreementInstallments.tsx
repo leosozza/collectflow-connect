@@ -1,23 +1,43 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate } from "@/lib/formatters";
-import { addMonths } from "date-fns";
+import { addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { negociarieService } from "@/services/negociarieService";
+import { updateInstallmentDate } from "@/services/agreementService";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import {
+  Download, FileText, Copy, CalendarIcon, MoreHorizontal,
+  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt,
+} from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AgreementInstallmentsProps {
   agreementId: string;
   agreement: any;
   cpf: string;
+  tenantId?: string;
+  onRefresh?: () => void;
 }
 
-const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstallmentsProps) => {
-  // Check for linked negociarie cobrancas
-  const { data: cobrancas = [] } = useQuery({
+const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefresh }: AgreementInstallmentsProps) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
+  const [editingDateIdx, setEditingDateIdx] = useState<number | null>(null);
+
+  const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -31,7 +51,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
     enabled: !!agreementId,
   });
 
-  // Fetch clients em_acordo for this CPF to detect manual payments
   const { data: clientRecords = [] } = useQuery({
     queryKey: ["agreement-client-payments", cpf, agreementId],
     queryFn: async () => {
@@ -47,140 +66,252 @@ const AgreementInstallments = ({ agreementId, agreement, cpf }: AgreementInstall
     enabled: !!cpf,
   });
 
-  // Calculate total paid from client records linked to this agreement
   const totalPaidFromClients = clientRecords.reduce((sum: number, c: any) => sum + Number(c.valor_pago || 0), 0);
 
-  // Generate virtual installments from agreement data
-  const hasEntrada = agreement.entrada_value > 0;
-  const installments = [];
+  // Custom dates from agreement
+  const customDates: Record<string, string> = agreement.custom_installment_dates || {};
 
-  // Add entrada as first installment if applicable
+  // Generate installments
+  const hasEntrada = agreement.entrada_value > 0;
+  const installments: any[] = [];
+
   if (hasEntrada) {
-    const entradaDueDate = agreement.entrada_date
+    const defaultDate = agreement.entrada_date
       ? new Date(agreement.entrada_date + "T00:00:00")
       : new Date(agreement.first_due_date + "T00:00:00");
-    const cobranca = cobrancas.find((c: any) => {
-      const cDate = new Date(c.data_vencimento);
-      return cDate.getMonth() === entradaDueDate.getMonth() && cDate.getFullYear() === entradaDueDate.getFullYear();
-    });
-    installments.push({
-      number: 1,
-      dueDate: entradaDueDate,
-      value: agreement.entrada_value,
-      cobranca,
-      isEntrada: true,
-    });
-  }
-
-  // Add regular installments
-  for (let i = 0; i < agreement.new_installments; i++) {
-    const dueDate = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
+    const customKey = "entrada";
+    const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     const cobranca = cobrancas.find((c: any) => {
       const cDate = new Date(c.data_vencimento);
       return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
     });
     installments.push({
-      number: (hasEntrada ? 1 : 0) + i + 1,
+      number: 0,
+      displayNumber: 1,
+      dueDate,
+      value: agreement.entrada_value,
+      cobranca,
+      isEntrada: true,
+      customKey,
+    });
+  }
+
+  for (let i = 0; i < agreement.new_installments; i++) {
+    const defaultDate = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
+    const instNum = (hasEntrada ? 1 : 0) + i + 1;
+    const customKey = String(instNum);
+    const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
+    const cobranca = cobrancas.find((c: any) => {
+      const cDate = new Date(c.data_vencimento);
+      return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
+    });
+    installments.push({
+      number: instNum,
+      displayNumber: instNum,
       dueDate,
       value: agreement.new_installment_value,
       cobranca,
       isEntrada: false,
+      customKey,
     });
   }
 
   const totalInstallments = installments.length;
 
-  const handleDownloadBoleto = (url: string) => {
-    window.open(url, "_blank");
+  // Calculate paid count
+  let remainingPaid = totalPaidFromClients;
+  const installmentsWithStatus = installments.map((inst) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
+    const isOverdue = dueDay < today;
+    const instValue = Number(inst.value);
+    let isPaidManually = false;
+    if (remainingPaid >= instValue) {
+      isPaidManually = true;
+      remainingPaid -= instValue;
+    } else {
+      remainingPaid = 0;
+    }
+    const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+    return { ...inst, status, isOverdue };
+  });
+
+  const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
+  const progressPercent = totalInstallments > 0 ? Math.round((paidCount / totalInstallments) * 100) : 0;
+
+  const handleGenerateBoleto = async (inst: any, idx: number) => {
+    if (!tenantId) {
+      toast({ title: "Erro", description: "Tenant não identificado.", variant: "destructive" });
+      return;
+    }
+    setGeneratingIdx(idx);
+    try {
+      await negociarieService.generateSingleBoleto(
+        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
+        { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0] }
+      );
+      toast({ title: "Boleto gerado com sucesso!" });
+      refetchCobrancas();
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar boleto", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingIdx(null);
+    }
   };
 
-  const handleCopyPix = (pix: string) => {
-    navigator.clipboard.writeText(pix);
+  const handleEditDate = async (inst: any, newDate: Date | undefined) => {
+    if (!newDate) return;
+    const dateStr = format(newDate, "yyyy-MM-dd");
+    try {
+      await updateInstallmentDate(agreementId, inst.isEntrada ? 0 : inst.number, dateStr);
+      toast({ title: "Data atualizada!" });
+      setEditingDateIdx(null);
+      onRefresh?.();
+      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+    } catch (err: any) {
+      toast({ title: "Erro ao atualizar data", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${label} copiado!` });
+  };
+
+  const statusIcon = (status: string) => {
+    if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
+    if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
+    return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
   return (
-    <div className="pt-3 border-t border-border">
-      <p className="text-xs text-muted-foreground uppercase font-medium mb-2 flex items-center gap-1">
-        <FileText className="w-3 h-3" /> Parcelas do Acordo
-      </p>
+    <div className="pt-3 border-t border-border space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
+          <FileText className="w-3 h-3" /> Parcelas do Acordo
+        </p>
+        <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+      </div>
+
+      <Progress value={progressPercent} className="h-2" />
+
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
-            <TableHead>Parcela</TableHead>
+            <TableHead className="w-[80px]">Parcela</TableHead>
             <TableHead>Vencimento</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-center">Status</TableHead>
-            <TableHead className="text-center">Boleto</TableHead>
+            <TableHead className="text-center w-[60px]">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {(() => {
-            // Track cumulative paid to determine which installments are covered
-            let remainingPaid = totalPaidFromClients;
-            return installments.map((inst) => {
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
-            const isOverdue = dueDay < today;
+          {installmentsWithStatus.map((inst, idx) => {
             const hasBoleto = inst.cobranca?.link_boleto;
+            const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
             const hasPix = inst.cobranca?.pix_copia_cola;
-            
-            // Determine paid status: cobranca status OR manual payment from clients
-            const instValue = Number(inst.value);
-            let isPaidManually = false;
-            if (remainingPaid >= instValue) {
-              isPaidManually = true;
-              remainingPaid -= instValue;
-            } else {
-              remainingPaid = 0;
-            }
-            const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+            const isPaid = inst.status === "pago";
 
             return (
-              <TableRow key={inst.number}>
-                <TableCell>
-                  {inst.isEntrada ? "Entrada" : `${inst.number}/${totalInstallments}`}
+              <TableRow key={idx}>
+                <TableCell className="font-medium text-xs">
+                  {inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
                 </TableCell>
-                <TableCell>{formatDate(inst.dueDate.toISOString().split("T")[0])}</TableCell>
-                <TableCell className="text-right">{formatCurrency(Number(inst.value))}</TableCell>
+                <TableCell className="text-xs">
+                  {editingDateIdx === idx ? (
+                    <Popover open onOpenChange={(open) => !open && setEditingDateIdx(null)}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                          <CalendarIcon className="w-3 h-3" />
+                          {formatDate(inst.dueDate.toISOString().split("T")[0])}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={inst.dueDate}
+                          onSelect={(d) => handleEditDate(inst, d)}
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    formatDate(inst.dueDate.toISOString().split("T")[0])
+                  )}
+                </TableCell>
+                <TableCell className="text-right text-xs">{formatCurrency(Number(inst.value))}</TableCell>
                 <TableCell className="text-center">
-                  <Badge variant="outline" className={
-                    status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
-                    isOverdue ? "bg-destructive/10 text-destructive border-destructive/30" :
+                  <Badge variant="outline" className={cn(
+                    "gap-1 text-[10px]",
+                    inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
+                    inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
                     "bg-warning/10 text-warning border-warning/30"
-                  }>
-                    {status === "pago" ? "Pago" : isOverdue ? "Vencido" : "Em Aberto"}
+                  )}>
+                    {statusIcon(inst.status)}
+                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : "Em Aberto"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    {hasBoleto ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1 text-xs"
-                        onClick={() => handleDownloadBoleto(inst.cobranca.link_boleto)}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Boleto
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                        <MoreHorizontal className="w-4 h-4" />
                       </Button>
-                    ) : hasPix ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1 text-xs"
-                        onClick={() => handleCopyPix(inst.cobranca.pix_copia_cola)}
-                      >
-                        Copiar PIX
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      {/* Generate boleto */}
+                      {!hasBoleto && !isPaid && (
+                        <DropdownMenuItem
+                          onClick={() => handleGenerateBoleto(inst, idx)}
+                          disabled={generatingIdx === idx}
+                        >
+                          {generatingIdx === idx ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Receipt className="w-4 h-4 mr-2" />
+                          )}
+                          Gerar Boleto
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Download boleto / 2ª via */}
+                      {hasBoleto && (
+                        <DropdownMenuItem onClick={() => window.open(inst.cobranca.link_boleto, "_blank")}>
+                          <Download className="w-4 h-4 mr-2" />
+                          {isPaid ? "2ª Via Boleto" : "Baixar Boleto"}
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Copy linha digitavel */}
+                      {hasLinhaDigitavel && (
+                        <DropdownMenuItem onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copiar Linha Digitável
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Copy PIX */}
+                      {hasPix && (
+                        <DropdownMenuItem onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copiar PIX
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Edit date */}
+                      {!isPaid && (
+                        <DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                          Editar Data
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             );
-          });
-          })()}
+          })}
         </TableBody>
       </Table>
     </div>

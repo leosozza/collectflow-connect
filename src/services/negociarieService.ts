@@ -62,6 +62,65 @@ export const negociarieService = {
   inadimplenciaBaixaParcela: (data: Record<string, unknown>) => callProxy("inadimplencia-baixa-parcela", { data }),
   inadimplenciaDevolucao: (data: Record<string, unknown>) => callProxy("inadimplencia-devolucao", { data }),
 
+  /**
+   * Generate a single boleto for one installment of an agreement.
+   */
+  async generateSingleBoleto(
+    agreement: { id: string; client_cpf: string; credor: string; tenant_id: string; client_name: string },
+    installment: { number: number; value: number; dueDate: string }
+  ) {
+    // Fetch client address data
+    let clientData: any = {};
+    try {
+      const { data } = await supabase
+        .from("clients")
+        .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
+        .eq("cpf", agreement.client_cpf)
+        .eq("credor", agreement.credor)
+        .limit(1)
+        .maybeSingle();
+      if (data) clientData = data;
+    } catch (e) {
+      logger.error(MODULE, "fetch_client_for_single_boleto", e);
+    }
+
+    const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
+
+    const payload: Record<string, unknown> = {
+      documento: cleanCpf,
+      nome: clientData.nome_completo || agreement.client_name,
+      cep: clientData.cep || "",
+      endereco: clientData.endereco || "",
+      bairro: clientData.bairro || "",
+      cidade: clientData.cidade || "",
+      uf: clientData.uf || "",
+      email: clientData.email || "",
+      telefone: (clientData.phone || "").replace(/\D/g, ""),
+      valor: installment.value,
+      vencimento: installment.dueDate,
+      descricao: `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`,
+    };
+
+    const apiResult = await this.novaCobranca(payload);
+
+    // Save to local DB
+    const cobranca = await this.saveCobranca({
+      tenant_id: agreement.tenant_id,
+      agreement_id: agreement.id,
+      id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
+      data_vencimento: installment.dueDate,
+      valor: installment.value,
+      status: "pendente",
+      link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
+      linha_digitavel: apiResult?.linha_digitavel || null,
+      pix_copia_cola: apiResult?.pix_copia_cola || null,
+      callback_data: apiResult || null,
+    });
+
+    logger.info(MODULE, "single_boleto_generated", { agreement_id: agreement.id, installment: installment.number });
+    return cobranca;
+  },
+
   // Local DB
   async getCobrancas(tenantId: string) {
     const { data, error } = await supabase
