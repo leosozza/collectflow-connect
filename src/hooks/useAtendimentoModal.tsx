@@ -31,6 +31,10 @@ interface AtendimentoModalContextType {
   updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
   closeAtendimento: () => void;
   setPauseControls: (controls: PauseControls | null) => void;
+  setAgentStatus: (status: number | string | undefined) => void;
+  setOnFinishDisposition: (fn: (() => Promise<void>) | null) => void;
+  agentStatus: number | string | undefined;
+  onFinishDisposition: (() => Promise<void>) | null;
   isOpen: boolean;
 }
 
@@ -53,6 +57,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const [elapsed, setElapsed] = useState(0);
   const openedAt = useRef<number>(0);
   const [pauseControls, setPauseControlsState] = useState<PauseControls | null>(null);
+  const [agentStatusState, setAgentStatusState] = useState<number | string | undefined>(undefined);
+  const onFinishDispositionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!state.isOpen) { setElapsed(0); return; }
@@ -129,6 +135,14 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setPauseControlsState(controls);
   }, []);
 
+  const setAgentStatus = useCallback((status: number | string | undefined) => {
+    setAgentStatusState(status);
+  }, []);
+
+  const setOnFinishDisposition = useCallback((fn: (() => Promise<void>) | null) => {
+    onFinishDispositionRef.current = fn;
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
@@ -169,7 +183,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const clientName = clientData?.nome_completo || "Cliente";
 
   return (
-    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, setPauseControls, isOpen: state.isOpen }}>
+    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, setPauseControls, setAgentStatus, setOnFinishDisposition, agentStatus: agentStatusState, onFinishDisposition: onFinishDispositionRef.current, isOpen: state.isOpen }}>
       {children}
 
       {state.isOpen && (

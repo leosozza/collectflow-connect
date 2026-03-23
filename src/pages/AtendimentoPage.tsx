@@ -5,11 +5,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { useAtendimentoModal } from "@/hooks/useAtendimentoModal";
 import { formatCPF } from "@/lib/formatters";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
-import { ArrowLeft, Home } from "lucide-react";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -35,10 +36,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const { trackAction } = useActivityTracker();
+  const { agentStatus, onFinishDisposition, closeAtendimento } = useAtendimentoModal();
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [callingPhone, setCallingPhone] = useState(false);
   const [hangingUp, setHangingUp] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [finishingDisposition, setFinishingDisposition] = useState(false);
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   // Fetch client
@@ -286,8 +289,42 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     } finally { setHangingUp(false); }
   };
 
+  const getStatusConfig = () => {
+    const s = Number(agentStatus);
+    if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
+    if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 3) return { label: "Em Pausa", icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 1) return { label: "Ocioso — Aguardando", icon: CheckCircle2, bgClass: "bg-muted text-muted-foreground", pulse: false };
+    return null;
+  };
+
+  const statusConfig = embedded && agentId ? getStatusConfig() : null;
+  const showFinishButton = embedded && onFinishDisposition && (Number(agentStatus) === 3 || Number(agentStatus) === 4);
+
+  const handleFinishDisposition = async () => {
+    setFinishingDisposition(true);
+    try {
+      if (onFinishDisposition) await onFinishDisposition();
+      closeAtendimento();
+      toast.success("Tabulação finalizada — retornando à fila");
+    } catch (e) {
+      console.error("[Atendimento] Erro ao finalizar tabulação:", e);
+      toast.error("Erro ao finalizar. Tente novamente.");
+    } finally {
+      setFinishingDisposition(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* 3CPlus Status Banner */}
+      {statusConfig && (
+        <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>
+          <statusConfig.icon className="w-4 h-4" />
+          {statusConfig.label}
+        </div>
+      )}
+
       {/* Breadcrumb */}
       {!embedded && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -363,6 +400,25 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
           />
         </div>
       </div>
+
+      {/* Finalizar Tabulação button */}
+      {showFinishButton && (
+        <div className="flex justify-center pt-2 pb-4">
+          <Button
+            onClick={handleFinishDisposition}
+            disabled={finishingDisposition}
+            size="lg"
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8"
+          >
+            {finishingDisposition ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            {finishingDisposition ? "Finalizando..." : "Finalizar Tabulação e Voltar à Fila"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
