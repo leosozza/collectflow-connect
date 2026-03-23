@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { useAtendimentoModal } from "@/hooks/useAtendimentoModal";
+import { useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
 import { formatCPF } from "@/lib/formatters";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
@@ -36,7 +36,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const { trackAction } = useActivityTracker();
-  const { agentStatus, onFinishDisposition, closeAtendimento } = useAtendimentoModal();
+  const { agentStatus, onFinishDisposition, closeAtendimento } = useAtendimentoModalSafe();
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [callingPhone, setCallingPhone] = useState(false);
   const [hangingUp, setHangingUp] = useState(false);

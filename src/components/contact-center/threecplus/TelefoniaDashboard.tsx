@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAtendimentoModal } from "@/hooks/useAtendimentoModal";
+import { useAtendimentoModal, useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +45,7 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModal();
+  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModalSafe();
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
@@ -509,7 +509,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition } = useAtendimentoModal();
+  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
 
   // Load campaign qualifications
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {

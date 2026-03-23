@@ -46,6 +46,29 @@ export const useAtendimentoModal = () => {
   return ctx;
 };
 
+const noopAsync = async () => {};
+const noop = () => {};
+
+/** Safe version that returns no-op defaults when used outside the provider */
+export const useAtendimentoModalSafe = (): AtendimentoModalContextType => {
+  const ctx = useContext(AtendimentoModalContext);
+  if (!ctx) {
+    return {
+      openAtendimento: noop as any,
+      openWaiting: noop as any,
+      updateAtendimento: noop as any,
+      closeAtendimento: noop,
+      setPauseControls: noop,
+      setAgentStatus: noop,
+      setOnFinishDisposition: noop,
+      agentStatus: undefined,
+      onFinishDisposition: null,
+      isOpen: false,
+    };
+  }
+  return ctx;
+};
+
 export const AtendimentoModalProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<AtendimentoModalState>({ isOpen: false, clientId: null });
   const [isMinimized, setIsMinimized] = useState(false);
