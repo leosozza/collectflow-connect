@@ -32,6 +32,7 @@ import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
 import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
+import { useTenant } from "@/hooks/useTenant";
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
