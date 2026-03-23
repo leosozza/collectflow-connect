@@ -509,7 +509,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
+  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
 
   // Load campaign qualifications
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
@@ -753,8 +753,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
-  // Feed pause controls into the floating widget
+  // Derived telephony state: distinguish TPA from manual pause
+  const isManualPause = (myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused") && !!activePauseName;
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
+
+  // Feed pause controls into the floating widget
   useEffect(() => {
     if (isOperatorView && isAgentOnline) {
       setPauseControls({
@@ -782,27 +785,75 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [isOperatorView, isAgentOnline, myAgent?.status, setAgentStatus]);
 
   // Provide a finish disposition callback to the modal
+  // For TPA (status 4): use qualify_call, NOT unpause_agent
+  // For manual pause (status 3 with pause name): use unpause_agent
   useEffect(() => {
     if (isOperatorView && isAgentOnline && operatorAgentId) {
       const finishFn = async () => {
-        const callIdToQualify = lastCallId || sessionStorage.getItem("3cp_last_call_id");
-        // Try unpause to exit TPA/ACW
-        try {
-          await invoke("unpause_agent", { agent_id: operatorAgentId });
-          console.log("[Telefonia] unpause_agent success after finish disposition");
-        } catch (e) {
-          console.warn("[Telefonia] unpause_agent failed (may already be idle):", e);
+        const currentStatus = myAgent?.status;
+        const isTPA = currentStatus === 4 || (currentStatus === 3 && !activePauseName);
+
+        if (isTPA) {
+          // TPA: try qualify_call first (correct 3CPlus flow)
+          const callIdToQualify = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+          if (callIdToQualify) {
+            // Check if already qualified from disposition panel
+            const alreadyQualified = !!sessionStorage.getItem("3cp_qualified_from_disposition");
+            if (!alreadyQualified) {
+              // Try to qualify with a generic qualification if available
+              try {
+                const qualId = campaignQualifications.length > 0 ? campaignQualifications[0].id : null;
+                if (qualId) {
+                  const result = await invoke("qualify_call", {
+                    call_id: callIdToQualify,
+                    qualification_id: Number(qualId),
+                  });
+                  console.log("[Telefonia] qualify_call from finishDisposition result:", JSON.stringify(result));
+                } else {
+                  console.warn("[Telefonia] No qualifications available for qualify_call, trying unpause fallback");
+                  await invoke("unpause_agent", { agent_id: operatorAgentId });
+                }
+              } catch (e) {
+                console.warn("[Telefonia] qualify_call failed, trying unpause fallback:", e);
+                try {
+                  await invoke("unpause_agent", { agent_id: operatorAgentId });
+                } catch (e2) {
+                  console.warn("[Telefonia] unpause fallback also failed:", e2);
+                }
+              }
+            } else {
+              console.log("[Telefonia] Already qualified from disposition panel, just cleaning up");
+            }
+          } else {
+            // No call ID, try unpause as last resort
+            try {
+              await invoke("unpause_agent", { agent_id: operatorAgentId });
+            } catch (e) {
+              console.warn("[Telefonia] unpause fallback failed (no callId):", e);
+            }
+          }
+        } else {
+          // Manual pause: use unpause_agent (correct for work_break/exit)
+          try {
+            await invoke("unpause_agent", { agent_id: operatorAgentId });
+            console.log("[Telefonia] unpause_agent success (manual pause)");
+          } catch (e) {
+            console.warn("[Telefonia] unpause_agent failed:", e);
+          }
         }
+
         setIsACW(false);
+        setActivePauseName("");
         sessionStorage.removeItem("3cp_last_call_id");
         sessionStorage.removeItem("3cp_qualified_from_disposition");
+        sessionStorage.removeItem("3cp_active_pause_name");
         fetchAll();
       };
       setOnFinishDisposition(finishFn);
     } else {
       setOnFinishDisposition(null);
     }
-  }, [isOperatorView, isAgentOnline, operatorAgentId, lastCallId, setOnFinishDisposition]);
+  }, [isOperatorView, isAgentOnline, operatorAgentId, lastCallId, myAgent?.status, activePauseName, campaignQualifications, setOnFinishDisposition]);
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
@@ -982,7 +1033,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen
-    if (effectiveACW && (isPaused || isTPAStatus)) {
+    // But ONLY if the ficha (modal) is NOT already open — the ficha handles TPA directly
+    if (effectiveACW && (isPaused || isTPAStatus) && !modalIsOpen) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
@@ -1101,8 +1153,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         {/* ── Top Status Bar ── */}
         <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl ${statusBgClass(myAgent?.status)}`}>
           <div className="flex items-center gap-3">
-            {/* Interval dropdown */}
-            {isPaused ? (
+            {/* Interval dropdown — only show "Retomar" for MANUAL pause, not TPA */}
+            {isManualPause ? (
               <Button
                 size="sm"
                 onClick={handleUnpause}
