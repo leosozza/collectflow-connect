@@ -135,6 +135,14 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setPauseControlsState(controls);
   }, []);
 
+  const setAgentStatus = useCallback((status: number | string | undefined) => {
+    setAgentStatusState(status);
+  }, []);
+
+  const setOnFinishDisposition = useCallback((fn: (() => Promise<void>) | null) => {
+    onFinishDispositionRef.current = fn;
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
