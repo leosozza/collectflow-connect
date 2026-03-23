@@ -601,20 +601,25 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   };
 
   // Load pause intervals from campaign's work_break_group_id
+  // Always fetches campaign_details directly to avoid race condition with state arrays
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      // Search in both campaigns (admin) and agentCampaigns (operator)
+      // First try local state
       const allCampaigns = [...campaigns, ...agentCampaigns];
       const campaign = allCampaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
       let groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
       
+      // Always fetch campaign_details as primary source (state may not be populated yet)
       if (!groupId) {
-        console.log("[Telefonia] work_break_group_id não encontrado no listing, buscando detalhes da campanha", campaignId);
+        console.log("[Telefonia] Buscando detalhes da campanha para intervalos:", campaignId);
         try {
           const details = await invoke("campaign_details", { campaign_id: campaignId });
           const campaignData = details?.data || details;
-          groupId = campaignData?.work_break_group_id || campaignData?.work_break_group?.id || campaignData?.dialer_settings?.work_break_group_id;
-          console.log("[Telefonia] campaign_details response — work_break_group_id:", groupId, "keys:", Object.keys(campaignData || {}));
+          groupId = campaignData?.work_break_group_id 
+            || campaignData?.work_break_group?.id 
+            || campaignData?.dialer_settings?.work_break_group_id
+            || campaignData?.dialer?.work_break_group_id;
+          console.log("[Telefonia] campaign_details — work_break_group_id:", groupId);
         } catch (e) {
           console.warn("[Telefonia] Falha ao buscar detalhes da campanha:", e);
         }

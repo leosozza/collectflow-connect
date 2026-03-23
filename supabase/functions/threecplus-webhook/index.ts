@@ -233,18 +233,18 @@ Deno.serve(async (req) => {
             .limit(1);
 
           if (dispTypes && dispTypes.length > 0) {
-            // Find the operator's profile_id
+            // Find the operator's profile_id via threecplus_agent_id
             let operatorId: string | null = null;
             if (agentId) {
-              // Try to find a profile with threecplus_agent_id in metadata or by name
-              const { data: profiles } = await supabase
+              const { data: matchedProfiles } = await supabase
                 .from("profiles")
                 .select("id")
                 .eq("tenant_id", tenantId)
-                .limit(100);
-
-              // For now, we don't have a reliable mapping; skip operator_id
-              // In the future, store threecplus_agent_id in profiles
+                .eq("threecplus_agent_id", String(agentId))
+                .limit(1);
+              if (matchedProfiles && matchedProfiles.length > 0) {
+                operatorId = matchedProfiles[0].id;
+              }
             }
 
             const { error: dispError } = await supabase

@@ -1111,10 +1111,10 @@ Deno.serve(async (req) => {
     const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
 
-    // Always return 200 from proxy, include upstream status in response body
+    // Always return 200 from proxy, include upstream status and success flag in response body
     const responseBody = typeof data === 'object' && data !== null
-      ? { ...data, status: response.status }
-      : { data, status: response.status };
+      ? { ...data, status: response.status, success: response.ok }
+      : { data, status: response.status, success: response.ok };
 
     return new Response(
       JSON.stringify(responseBody),
