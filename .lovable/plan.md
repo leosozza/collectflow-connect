@@ -1,71 +1,86 @@
 
 
-# Plano: Unificar tabulação — eliminar dupla tabulação
+# Plano: Corrigir tabulação, pausa e intervalos do operador
 
-## O que está acontecendo hoje (por que está confuso)
+## Problemas identificados
 
-O operador tabula **duas vezes**:
+### 1. Tabulações não carregam — action inexistente
+O dashboard chama `invoke("campaign_qualifications", { campaign_id })` mas **essa action não existe no proxy**. Resultado: as qualificações retornam erro 400 silenciosamente e a lista fica vazia. O proxy tem `list_qualification_list_items` que aceita `list_id`, não `campaign_id`.
 
-1. **Durante a ligação** — O sistema abre a ficha do cliente (AtendimentoPage) que tem o `DispositionPanel`. O operador seleciona a tabulação RIVO e salva no banco de dados (`call_dispositions`)
-2. **Após a ligação** — A 3CPlus coloca o agente em ACW (pausa automática). O dashboard mostra uma **segunda** tela de tabulação que envia a qualificação para a API 3CPlus via `qualify_call` para liberar o agente
+### 2. Sistema fica em pausa após tabular na ficha
+O `qualifyOn3CPlus` usa `callId` que vem como prop do componente. Se o `callId` é `undefined`, o fallback usa `"current"` (linha 334 do dispositionService). A API 3CPlus não aceita `"current"` como call_id — a qualificação falha silenciosamente. Mas o `sessionStorage` recebe `3cp_qualified_from_disposition`, suprimindo a tela ACW fallback. Resultado: agente fica preso em pausa sem opção de sair.
 
-Resultado: o operador faz o mesmo trabalho duas vezes em telas diferentes.
+### 3. Intervalos não aparecem para o operador
+`loadPauseIntervals` busca o `work_break_group_id` primeiro em `campaigns.find()`, mas para operadores o `campaigns` array está **vazio** (a `list_campaigns` global não é chamada). O fallback `campaign_details` funciona, mas depende de encontrar a chave certa na resposta. Alternativamente, os dados da campanha já existem em `agentCampaigns`.
 
-## Solução: Unificar em um único passo
+## Correções
 
-Quando o operador tabular na ficha do cliente (DispositionPanel), o sistema deve **automaticamente**:
-1. Salvar a tabulação no RIVO (já faz)
-2. Enviar a qualificação correspondente para a 3CPlus via `qualify_call` (usando o mapeamento `threecplus_disposition_map` que já existe no tenant settings)
-3. Liberar o agente do ACW automaticamente
+### 1. `supabase/functions/threecplus-proxy/index.ts` — Adicionar action `campaign_qualifications`
 
-A tela separada de tabulação ACW só aparecerá como **fallback** — se o operador fechou a ficha sem tabular.
+Novo case que busca detalhes da campanha para obter `qualification_list`, depois busca os itens dessa lista:
 
-## Mudanças
+```
+case 'campaign_qualifications':
+  // GET /campaign/{id} → pega qualification_list id
+  // GET /qualification_lists/{list_id}/qualifications → retorna itens
+```
 
-### 1. `src/components/atendimento/DispositionPanel.tsx`
+### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-Após salvar a tabulação no RIVO (`onDisposition`), verificar se existe um `callId` ativo (vindo do contexto de telefonia) e um mapeamento 3CPlus para a tabulação selecionada. Se sim, chamar `qualify_call` automaticamente via `threecplus-proxy`.
+**Corrigir intervalos** — No `loadPauseIntervals`, usar `agentCampaigns` como fonte além de `campaigns`:
 
-- Receber novas props opcionais: `callId`, `agentId` (do contexto de telefonia)
-- Após `onDisposition` concluir com sucesso, buscar o mapeamento `threecplus_disposition_map` do tenant settings
-- Se a tabulação selecionada tem correspondência no mapeamento, chamar `qualify_call`
-- Toast informando que a qualificação foi enviada automaticamente
+```typescript
+const allCampaigns = [...campaigns, ...agentCampaigns];
+const campaign = allCampaigns.find(c => c.id === campaignId || String(c.id) === String(campaignId));
+```
 
-### 2. `src/hooks/useAtendimentoModal.tsx`
+**Corrigir callId para qualify** — Passar o `lastCallId` (do sessionStorage ou state) como callId ao `AtendimentoPage` embedded, em vez de depender do `activeCall` que já foi limpo quando a chamada terminou.
 
-Passar `callId` e `agentId` como parte do contexto do modal para que o `DispositionPanel` tenha acesso.
+**Corrigir flag de qualified** — Se `qualifyOn3CPlus` falhar (catch), NÃO setar `3cp_qualified_from_disposition`. Mover o `sessionStorage.setItem` para dentro do `.then()` somente se o qualify realmente teve sucesso (checar resposta).
 
-### 3. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+### 3. `src/pages/AtendimentoPage.tsx`
 
-Na tela de ACW (fallback), adicionar texto explicativo: "Você não tabulou durante o atendimento. Selecione a qualificação para retornar à campanha."
+Verificar se `qualifyOn3CPlus` retornou sucesso antes de setar a flag. Adicionar verificação do resultado:
 
-Quando a tabulação no `DispositionPanel` já fez o `qualify_call`, o agente sai do ACW automaticamente — a tela de fallback nem aparece.
+```typescript
+qualifyOn3CPlus({...})
+  .then((result) => {
+    // Só marcar como qualificado se realmente funcionou
+    if (result !== false) {
+      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
+    }
+  })
+```
 
-## Fluxo unificado
+### 4. `src/services/dispositionService.ts`
+
+Modificar `qualifyOn3CPlus` para retornar `boolean` indicando sucesso/falha, em vez de swallow silencioso.
+
+## Fluxo corrigido
 
 ```text
-Ligação ativa (status 2)
-  → Abre ficha do cliente (AtendimentoPage)
-  → Operador usa DispositionPanel para tabular
+Operador loga na campanha
+  → Salva campaign_id no sessionStorage ✓
+  → loadPauseIntervals busca em agentCampaigns (não vazio) ✓
+  → Intervalos aparecem ✓
 
-Operador clica "Tabular"
-  → Salva call_disposition no RIVO ✓
-  → Busca mapeamento 3CPlus ✓
-  → Chama qualify_call automaticamente ✓
-  → Agente volta ao idle (status 1) ✓
-  → Tela de ACW NÃO aparece
+Ligação cai → ficha do cliente abre
+  → lastCallId salvo no state e sessionStorage ✓
+  → callId passado corretamente ao AtendimentoPage ✓
 
-Se operador NÃO tabulou durante a ligação
-  → Ligação termina → ACW (status 3)
-  → Tela de tabulação fallback aparece
-  → Operador seleciona qualificação manualmente
+Operador tabula na ficha
+  → qualifyOn3CPlus usa callId real (não "current") ✓
+  → Se qualify sucesso → flag setada → ACW screen suprimida ✓
+  → Se qualify falha → flag NÃO setada → ACW fallback aparece ✓
+  → Agente retorna ao idle automaticamente ✓
 ```
 
 ## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/atendimento/DispositionPanel.tsx` | Após tabular, chamar `qualify_call` automaticamente se em contexto de telefonia |
-| `src/hooks/useAtendimentoModal.tsx` | Expor `callId` e `agentId` no contexto |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Texto de fallback na tela ACW |
+| `supabase/functions/threecplus-proxy/index.ts` | Nova action `campaign_qualifications` |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `agentCampaigns` nos intervalos; passar `lastCallId` correto |
+| `src/pages/AtendimentoPage.tsx` | Verificar sucesso do qualify antes de setar flag |
+| `src/services/dispositionService.ts` | Retornar boolean de sucesso em `qualifyOn3CPlus` |
 
