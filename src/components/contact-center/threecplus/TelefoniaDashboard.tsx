@@ -168,6 +168,7 @@ const statusColor = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 1 || ["idle", "available"].includes(s)) return "bg-emerald-500";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive";
+  if (status === 4 || s === "acw") return "bg-amber-500";
   if (status === 3 || s === "paused") return "bg-amber-500";
   return "bg-muted-foreground";
 };
