@@ -159,6 +159,7 @@ const statusLabel = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 1 || ["idle", "available"].includes(s)) return "Aguardando ligação";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em ligação";
+  if (status === 4 || s === "acw") return "TPA — Pós-atendimento";
   if (status === 3 || s === "paused") return "Em pausa";
   return String(status ?? "Desconhecido");
 };
