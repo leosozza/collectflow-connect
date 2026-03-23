@@ -786,16 +786,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   // Track active call id for ACW qualification
   useEffect(() => {
-    if (activeCall) {
-      const callId = activeCall.call_id || activeCall.id;
+    const call = activeCall || lastFinishedCall;
+    if (call) {
+      const callId = call.call_id || call.id;
       if (callId) {
         setLastCallId(callId);
         sessionStorage.setItem("3cp_last_call_id", String(callId));
       }
-      const phone = activeCall.phone || "";
+      const phone = call.phone || "";
       if (phone) setLastCallPhone(phone);
     }
-  }, [activeCall]);
+  }, [activeCall, lastFinishedCall]);
 
   // Get mailing fields from active call
   const mailingCpf = activeCall?.identifier || activeCall?.mailing_identifier || "";
