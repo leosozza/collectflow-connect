@@ -485,6 +485,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         setIsACW(false);
         setSelectedQualification("");
         setQualifyNotes("");
+        sessionStorage.removeItem("3cp_qualified_from_disposition");
+        sessionStorage.removeItem("3cp_last_call_id");
       }
     }
 
