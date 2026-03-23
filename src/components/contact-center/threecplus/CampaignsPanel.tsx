@@ -151,8 +151,7 @@ const CampaignsPanel = () => {
 
     if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
 
-      // Check webhook status in background
-      checkWebhookStatus(campaignId);
+      // Webhook status is now manual — no automatic check needed
       const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
 
