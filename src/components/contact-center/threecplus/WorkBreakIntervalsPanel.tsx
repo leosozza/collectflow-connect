@@ -179,6 +179,8 @@ const WorkBreakIntervalsPanel = () => {
   const handleSaveInterval = async () => {
     if (!intervalName.trim() || !intervalGroupId) { toast.error("Nome é obrigatório"); return; }
     if (!intervalMaxTime || Number(intervalMaxTime) <= 0) { toast.error("Tempo máximo (minutos) é obrigatório"); return; }
+    if (!intervalClassification) { toast.error("Classificação é obrigatória"); return; }
+    if (!intervalReturnType) { toast.error("Tipo de retorno é obrigatório"); return; }
     setSavingInterval(true);
     try {
       const payload: Record<string, any> = {
