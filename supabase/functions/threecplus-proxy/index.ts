@@ -646,8 +646,8 @@ Deno.serve(async (req) => {
         if (body.max_time != null && body.max_time !== '') updateBody.limit = Number(body.max_time);
         if (body.daily_limit != null && body.daily_limit !== '') updateBody.maximum_daily_time = Number(body.daily_limit);
         if (body.color) updateBody.color = body.color;
-        if (body.classification) updateBody.type = uTypeMap[body.classification] ?? Number(body.classification) || 1;
-        if (body.return_type) updateBody.return_type = uReturnMap[body.return_type] ?? Number(body.return_type) || 1;
+        if (body.classification) updateBody.type = (uTypeMap[body.classification] ?? Number(body.classification)) || 1;
+        if (body.return_type) updateBody.return_type = (uReturnMap[body.return_type] ?? Number(body.return_type)) || 1;
         if (body.auto_start != null) updateBody.auto_start = Boolean(body.auto_start);
         reqBody = JSON.stringify(updateBody);
         break;
