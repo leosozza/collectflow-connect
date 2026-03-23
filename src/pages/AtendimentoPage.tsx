@@ -327,6 +327,22 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>
           <statusConfig.icon className="w-4 h-4" />
           {statusConfig.label}
+          {showFinishButton && (
+            <Button
+              onClick={handleFinishDisposition}
+              disabled={finishingDisposition}
+              size="sm"
+              variant="secondary"
+              className="ml-4 gap-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
+            >
+              {finishingDisposition ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              )}
+              {finishingDisposition ? "Finalizando..." : "Finalizar Tabulação"}
+            </Button>
+          )}
         </div>
       )}
 
@@ -406,24 +422,6 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         </div>
       </div>
 
-      {/* Finalizar Tabulação button */}
-      {showFinishButton && (
-        <div className="flex justify-center pt-2 pb-4">
-          <Button
-            onClick={handleFinishDisposition}
-            disabled={finishingDisposition}
-            size="lg"
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8"
-          >
-            {finishingDisposition ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4" />
-            )}
-            {finishingDisposition ? "Finalizando..." : "Finalizar Tabulação e Voltar à Fila"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

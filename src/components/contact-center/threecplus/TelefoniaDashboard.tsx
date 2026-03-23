@@ -511,10 +511,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
 
-  // Load campaign qualifications
+  // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
     try {
-      const data = await invoke("campaign_qualifications", { campaign_id: campaignId });
+      // Use qualification_list_id from tenant settings if available (set by sync_dispositions)
+      const listId = (tenant?.settings as any)?.threecplus_qualification_list_id;
+      const params: any = { campaign_id: campaignId };
+      if (listId) {
+        params.list_id = listId;
+        console.log("[Telefonia] Using qualification_list_id from tenant settings:", listId);
+      }
+      const data = await invoke("campaign_qualifications", params);
       const list = Array.isArray(data) ? data : data?.data || [];
       console.log("[Telefonia] Campaign qualifications loaded:", list.length, list);
       setCampaignQualifications(list);
@@ -522,7 +529,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       console.warn("[Telefonia] Failed to load campaign qualifications:", err);
       setCampaignQualifications([]);
     }
-  }, [invoke]);
+  }, [invoke, tenant?.settings]);
 
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;
@@ -600,30 +607,36 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  // Load pause intervals from campaign's work_break_group_id
-  // Always fetches campaign_details directly to avoid race condition with state arrays
+  // Load pause intervals — primary: agent_work_break_intervals (uses agent token directly)
+  // Fallback: campaign_details + list_work_break_group_intervals
   const loadPauseIntervals = useCallback(async (campaignId: number) => {
     try {
-      // First try local state
-      const allCampaigns = [...campaigns, ...agentCampaigns];
-      const campaign = allCampaigns.find((c: any) => c.id === campaignId || String(c.id) === String(campaignId));
-      let groupId = campaign?.work_break_group_id || campaign?.work_break_group?.id;
-      
-      // Always fetch campaign_details as primary source (state may not be populated yet)
-      if (!groupId) {
-        console.log("[Telefonia] Buscando detalhes da campanha para intervalos:", campaignId);
+      // Primary: use agent endpoint that returns intervals directly
+      if (operatorAgentId) {
+        console.log("[Telefonia] Buscando intervalos via agent_work_break_intervals, agentId:", operatorAgentId);
         try {
-          const details = await invoke("campaign_details", { campaign_id: campaignId });
-          const campaignData = details?.data || details;
-          groupId = campaignData?.work_break_group_id 
-            || campaignData?.work_break_group?.id 
-            || campaignData?.dialer_settings?.work_break_group_id
-            || campaignData?.dialer?.work_break_group_id;
-          console.log("[Telefonia] campaign_details — work_break_group_id:", groupId);
+          const data = await invoke("agent_work_break_intervals", { agent_id: operatorAgentId });
+          const list = Array.isArray(data) ? data : data?.data || [];
+          if (list.length > 0) {
+            console.log("[Telefonia] Intervalos carregados via agente:", list.length, list);
+            setPauseIntervals(list);
+            return;
+          }
+          console.log("[Telefonia] agent_work_break_intervals retornou vazio, tentando fallback");
         } catch (e) {
-          console.warn("[Telefonia] Falha ao buscar detalhes da campanha:", e);
+          console.warn("[Telefonia] agent_work_break_intervals falhou, tentando fallback:", e);
         }
       }
+
+      // Fallback: campaign_details + group intervals
+      console.log("[Telefonia] Buscando detalhes da campanha para intervalos:", campaignId);
+      const details = await invoke("campaign_details", { campaign_id: campaignId });
+      const campaignData = details?.data || details;
+      const groupId = campaignData?.work_break_group_id 
+        || campaignData?.work_break_group?.id 
+        || campaignData?.dialer_settings?.work_break_group_id
+        || campaignData?.dialer?.work_break_group_id;
+      console.log("[Telefonia] campaign_details — work_break_group_id:", groupId);
       
       if (!groupId) {
         console.log("[Telefonia] Campanha sem work_break_group_id, sem intervalos de pausa");
@@ -631,15 +644,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         return;
       }
 
-      console.log("[Telefonia] Carregando intervalos do grupo:", groupId);
       const data = await invoke("list_work_break_group_intervals", { group_id: groupId });
       const list = Array.isArray(data) ? data : data?.data || [];
-      console.log("[Telefonia] Intervalos de pausa carregados:", list.length, list);
+      console.log("[Telefonia] Intervalos carregados via grupo:", list.length, list);
       setPauseIntervals(list);
     } catch {
       setPauseIntervals([]);
     }
-  }, [invoke, campaigns, agentCampaigns]);
+  }, [invoke, operatorAgentId]);
 
   const handlePause = async (intervalId: number) => {
     if (!operatorAgentId) return;
