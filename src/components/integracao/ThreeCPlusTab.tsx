@@ -10,9 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send } from "lucide-react";
 import { toast } from "sonner";
-import { DISPOSITION_TYPES } from "@/services/dispositionService";
 
 type TestLog = { time: string; status: "success" | "error" | "info"; message: string };
+
+// System qualifications built into 3CPlus (negative IDs)
+const SYSTEM_QUALIFICATIONS = [
+  { id: -2, name: "Não qualificada" },
+  { id: -3, name: "Caixa Postal" },
+  { id: -4, name: "Mudo" },
+  { id: -5, name: "Limite de tempo excedido" },
+];
 
 const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; domain: string; apiToken: string }) => {
   const [selectedCampaign, setSelectedCampaign] = useState("");
@@ -219,6 +226,34 @@ const ThreeCPlusTab = () => {
     settings.threecplus_disposition_map || {}
   );
   const [savingMap, setSavingMap] = useState(false);
+  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string }[]>([]);
+
+  // Load tenant dispositions from DB
+  useEffect(() => {
+    if (!tenant?.id) return;
+    supabase
+      .from("call_disposition_types")
+      .select("key, label")
+      .eq("tenant_id", tenant.id)
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setTenantDispositions(data);
+        }
+      });
+  }, [tenant?.id]);
+
+  // Auto-load qualifications if credentials exist
+  useEffect(() => {
+    const d = settings.threecplus_domain;
+    const t = settings.threecplus_api_token;
+    if (d && t && qualifications.length === 0 && !loadingQuals) {
+      setDomain(d);
+      setApiToken(t);
+      loadQualificationsWithCredentials(d, t);
+    }
+  }, [settings.threecplus_domain, settings.threecplus_api_token]);
 
   const handleSave = async () => {
     if (!tenant?.id) return;
@@ -274,57 +309,59 @@ const ThreeCPlusTab = () => {
     }
   };
 
-  const loadQualifications = async () => {
-    if (!domain || !apiToken) return;
+  const loadQualificationsWithCredentials = async (d?: string, t?: string) => {
+    const useDomain = (d || domain || "").trim();
+    const useToken = (t || apiToken || "").trim();
+    if (!useDomain || !useToken) return;
     setLoadingQuals(true);
     try {
-      // Find the qualification_list_id from campaigns
-      const qualListId = campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id;
-      
+      // List all qualification lists, prioritize "RIVO Tabulações" / "RIVO - Tabulações"
+      const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
+        body: {
+          action: "list_qualification_lists",
+          domain: useDomain,
+          api_token: useToken,
+        },
+      });
+      if (listsError) throw listsError;
+      const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
+
+      // Find RIVO list first, then fallback to campaign list, then first available
+      const rivoList = lists.find((l: any) =>
+        l.name?.toLowerCase().includes("rivo")
+      );
+      const qualListId = rivoList?.id
+        || campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id
+        || (lists.length > 0 ? lists[0].id : null);
+
+      let items: any[] = [];
       if (qualListId) {
-        // Fetch items from the specific qualification list
         const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
           body: {
             action: "list_qualification_list_items",
-            domain: domain.trim(),
-            api_token: apiToken.trim(),
+            domain: useDomain,
+            api_token: useToken,
             list_id: qualListId,
           },
         });
         if (error) throw error;
-        const list = Array.isArray(data) ? data : data?.data || [];
-        setQualifications(list);
-      } else {
-        // Fallback: list all qualification lists, then fetch items from the first one
-        const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
-          body: {
-            action: "list_qualification_lists",
-            domain: domain.trim(),
-            api_token: apiToken.trim(),
-          },
-        });
-        if (listsError) throw listsError;
-        const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-        if (lists.length > 0) {
-          const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-            body: {
-              action: "list_qualification_list_items",
-              domain: domain.trim(),
-              api_token: apiToken.trim(),
-              list_id: lists[0].id,
-            },
-          });
-          if (error) throw error;
-          const list = Array.isArray(data) ? data : data?.data || [];
-          setQualifications(list);
-        }
+        items = Array.isArray(data) ? data : data?.data || [];
       }
+
+      // Merge with system qualifications (negative IDs)
+      const allQuals = [
+        ...SYSTEM_QUALIFICATIONS,
+        ...items.filter((q: any) => !SYSTEM_QUALIFICATIONS.some(sq => sq.id === q.id)),
+      ];
+      setQualifications(allQuals);
     } catch {
       toast.error("Erro ao carregar qualificações do 3CPlus");
     } finally {
       setLoadingQuals(false);
     }
   };
+
+  const loadQualifications = () => loadQualificationsWithCredentials();
 
   // Load qualifications when connection is tested
   useEffect(() => {
@@ -477,7 +514,9 @@ const ThreeCPlusTab = () => {
           {qualifications.length === 0 && !loadingQuals && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Teste a conexão acima para carregar as qualificações do 3CPlus.
+                {domain && apiToken
+                  ? "Clique para carregar as qualificações do 3CPlus."
+                  : "Salve as credenciais acima para carregar as qualificações do 3CPlus."}
               </p>
               <Button variant="outline" size="sm" onClick={loadQualifications} disabled={!domain || !apiToken || loadingQuals}>
                 {loadingQuals ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
@@ -488,10 +527,10 @@ const ThreeCPlusTab = () => {
 
           {loadingQuals && <p className="text-sm text-muted-foreground">Carregando qualificações...</p>}
 
-          {qualifications.length > 0 && (
+          {(qualifications.length > 0 || tenantDispositions.length > 0) && (
             <>
               <div className="space-y-3">
-                {Object.entries(DISPOSITION_TYPES).map(([key, label]) => (
+                {tenantDispositions.map(({ key, label }) => (
                   <div key={key} className="flex items-center gap-3">
                     <div className="w-40 shrink-0">
                       <p className="text-sm font-medium">{label}</p>
