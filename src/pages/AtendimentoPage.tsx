@@ -422,24 +422,6 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         </div>
       </div>
 
-      {/* Finalizar Tabulação button */}
-      {showFinishButton && (
-        <div className="flex justify-center pt-2 pb-4">
-          <Button
-            onClick={handleFinishDisposition}
-            disabled={finishingDisposition}
-            size="lg"
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8"
-          >
-            {finishingDisposition ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4" />
-            )}
-            {finishingDisposition ? "Finalizando..." : "Finalizar Tabulação e Voltar à Fila"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 };
