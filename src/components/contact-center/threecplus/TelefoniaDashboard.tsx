@@ -811,13 +811,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const mailingClientId = activeCall?.Extra3 || activeCall?.extra3 || activeCall?.mailing_extra3 || "";
   const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
 
-  // ACW fallback: agent is paused (status 3) with no manual pause name and a finished call exists
+  // ACW fallback: agent is paused (status 3) or TPA (status 4) with no manual pause name and a finished call exists
   // Skip if qualify was already done from the disposition panel during the call
   const qualifiedFromDisposition = !!sessionStorage.getItem("3cp_qualified_from_disposition");
-  const isACWFallback = isPaused && !activePauseName && !isACW && !qualifiedFromDisposition && (
+  const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = (isACW || isACWFallback) && !qualifiedFromDisposition;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
