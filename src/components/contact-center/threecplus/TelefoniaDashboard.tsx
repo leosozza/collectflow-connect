@@ -349,6 +349,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       body: { action, domain, api_token: apiToken, ...extra },
     });
     if (error) throw error;
+    // CORRECTION 7: Check success flag from proxy to detect masked 3CPlus errors
+    if (data && data.success === false) {
+      throw new Error(data.detail || data.title || `Erro da 3CPlus (${data.status})`);
+    }
     return data;
   }, [domain, apiToken]);
 

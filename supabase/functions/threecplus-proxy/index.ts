@@ -1097,10 +1097,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 4. Remove items that are no longer active
+        // 4. Remove items that are no longer active — match by ID first, then name
+        const activeIds = new Set(dispositions.filter(d => d.active).map(d => d.threecplus_qualification_id).filter(Boolean));
         const activeLabels = new Set(dispositions.filter(d => d.active).map(d => d.label));
         for (const item of existingItems) {
-          if (!activeLabels.has(item.name)) {
+          if (!activeIds.has(item.id) && !activeLabels.has(item.name)) {
+            console.log(`Removing qualification "${item.name}" (id: ${item.id}) — no longer active`);
             await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications/${item.id}`, authParam), {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },

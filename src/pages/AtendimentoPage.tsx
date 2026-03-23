@@ -185,7 +185,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         .then(() => {
           queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
           if (effectiveAgentId && settings.threecplus_domain) {
-            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
+            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id });
           }
         });
     }

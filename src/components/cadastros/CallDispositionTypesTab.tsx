@@ -240,10 +240,17 @@ const CallDispositionTypesTab = () => {
 
   const deleteMut = useMutation({
     mutationFn: deleteDispositionType,
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Tabulação removida");
-      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
+      if (has3CPlus && tenantId) {
+        try {
+          const result = await syncDispositionsTo3CPlus(tenantId);
+          if (result) toast.success(`Sincronizado com 3CPlus (${result.campaignsUpdated} campanha(s))`);
+        } catch (e: any) {
+          toast.error(`Erro ao sincronizar com 3CPlus: ${e.message || "falha desconhecida"}`);
+        }
+      }
     },
     onError: () => toast.error("Erro ao remover"),
   });
