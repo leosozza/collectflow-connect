@@ -309,57 +309,59 @@ const ThreeCPlusTab = () => {
     }
   };
 
-  const loadQualifications = async () => {
-    if (!domain || !apiToken) return;
+  const loadQualificationsWithCredentials = async (d?: string, t?: string) => {
+    const useDomain = (d || domain || "").trim();
+    const useToken = (t || apiToken || "").trim();
+    if (!useDomain || !useToken) return;
     setLoadingQuals(true);
     try {
-      // Find the qualification_list_id from campaigns
-      const qualListId = campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id;
-      
+      // List all qualification lists, prioritize "RIVO Tabulações" / "RIVO - Tabulações"
+      const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
+        body: {
+          action: "list_qualification_lists",
+          domain: useDomain,
+          api_token: useToken,
+        },
+      });
+      if (listsError) throw listsError;
+      const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
+
+      // Find RIVO list first, then fallback to campaign list, then first available
+      const rivoList = lists.find((l: any) =>
+        l.name?.toLowerCase().includes("rivo")
+      );
+      const qualListId = rivoList?.id
+        || campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id
+        || (lists.length > 0 ? lists[0].id : null);
+
+      let items: any[] = [];
       if (qualListId) {
-        // Fetch items from the specific qualification list
         const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
           body: {
             action: "list_qualification_list_items",
-            domain: domain.trim(),
-            api_token: apiToken.trim(),
+            domain: useDomain,
+            api_token: useToken,
             list_id: qualListId,
           },
         });
         if (error) throw error;
-        const list = Array.isArray(data) ? data : data?.data || [];
-        setQualifications(list);
-      } else {
-        // Fallback: list all qualification lists, then fetch items from the first one
-        const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
-          body: {
-            action: "list_qualification_lists",
-            domain: domain.trim(),
-            api_token: apiToken.trim(),
-          },
-        });
-        if (listsError) throw listsError;
-        const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-        if (lists.length > 0) {
-          const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-            body: {
-              action: "list_qualification_list_items",
-              domain: domain.trim(),
-              api_token: apiToken.trim(),
-              list_id: lists[0].id,
-            },
-          });
-          if (error) throw error;
-          const list = Array.isArray(data) ? data : data?.data || [];
-          setQualifications(list);
-        }
+        items = Array.isArray(data) ? data : data?.data || [];
       }
+
+      // Merge with system qualifications (negative IDs)
+      const allQuals = [
+        ...SYSTEM_QUALIFICATIONS,
+        ...items.filter((q: any) => !SYSTEM_QUALIFICATIONS.some(sq => sq.id === q.id)),
+      ];
+      setQualifications(allQuals);
     } catch {
       toast.error("Erro ao carregar qualificações do 3CPlus");
     } finally {
       setLoadingQuals(false);
     }
   };
+
+  const loadQualifications = () => loadQualificationsWithCredentials();
 
   // Load qualifications when connection is tested
   useEffect(() => {
