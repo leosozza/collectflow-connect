@@ -9,9 +9,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, RefreshCw, Plus, List, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+
+/* ─── Sub-components ─── */
+
+const MetricCard = ({ label, value, sub }: { label: string; value: string | number; sub?: string }) => (
+  <div className="rounded-lg border bg-card p-4 space-y-1">
+    <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
+    <p className="text-2xl font-bold text-foreground">{value}</p>
+    {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+  </div>
+);
 
 const CampaignsPanel = () => {
   const { tenant } = useTenant();
@@ -25,7 +37,24 @@ const CampaignsPanel = () => {
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [campaignLists, setCampaignLists] = useState<Record<string, any[]>>({});
   const [campaignAgents, setCampaignAgents] = useState<Record<string, any[]>>({});
+  const [campaignMetrics, setCampaignMetrics] = useState<Record<string, any>>({});
+  const [campaignListsMetrics, setCampaignListsMetrics] = useState<Record<string, any[]>>({});
+  const [campaignAgentsMetrics, setCampaignAgentsMetrics] = useState<Record<string, any[]>>({});
+  const [campaignQualifications, setCampaignQualifications] = useState<Record<string, any[]>>({});
   const [loadingLists, setLoadingLists] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Record<string, string>>({});
+
+  // Aggressiveness
+  const [aggressiveness, setAggressiveness] = useState<Record<string, number>>({});
+  const [savingAggr, setSavingAggr] = useState<string | null>(null);
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // Pause/resume
+  const [togglingStatus, setTogglingStatus] = useState<string | null>(null);
 
   // Create campaign dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -46,7 +75,6 @@ const CampaignsPanel = () => {
     return data;
   }, [domain, apiToken]);
 
-  // Fetch agents list
   const { data: agentsList = [] } = useQuery({
     queryKey: ["3cp-users-list", domain],
     queryFn: async () => {
@@ -79,12 +107,13 @@ const CampaignsPanel = () => {
     if (!hasCredentials) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "list_campaigns", domain, api_token: apiToken },
-      });
-      if (error) throw error;
+      const data = await invoke("list_campaigns");
       const list = Array.isArray(data) ? data : data?.data || [];
       setCampaigns(list);
+      // Set initial aggressiveness
+      const aggrMap: Record<string, number> = {};
+      list.forEach((c: any) => { aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1; });
+      setAggressiveness(prev => ({ ...prev, ...aggrMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
     } finally {
@@ -92,21 +121,34 @@ const CampaignsPanel = () => {
     }
   };
 
-  const loadListsAndAgents = async (campaignId: string) => {
+  const loadCampaignDetails = async (campaignId: string) => {
     setLoadingLists(campaignId);
     try {
-      const [listsRes, agentsRes] = await Promise.all([
-        supabase.functions.invoke("threecplus-proxy", {
-          body: { action: "get_campaign_lists", domain, api_token: apiToken, campaign_id: campaignId },
-        }),
-        supabase.functions.invoke("threecplus-proxy", {
-          body: { action: "list_campaign_agents", domain, api_token: apiToken, campaign_id: campaignId },
-        }),
+      const [listsRes, agentsRes, totalMetrics, listsMetrics, agentsMetricsRes, qualsRes] = await Promise.all([
+        invoke("get_campaign_lists", { campaign_id: campaignId }),
+        invoke("list_campaign_agents", { campaign_id: campaignId }),
+        invoke("campaign_lists_total_metrics", { campaign_id: campaignId }).catch(() => null),
+        invoke("campaign_lists_metrics", { campaign_id: campaignId }).catch(() => null),
+        invoke("campaign_agents_metrics", { campaign_id: campaignId }).catch(() => null),
+        invoke("campaign_qualifications", { campaign_id: campaignId }).catch(() => null),
       ]);
-      const lists = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data?.data || [];
-      setCampaignLists((prev) => ({ ...prev, [campaignId]: lists }));
-      const agents = Array.isArray(agentsRes.data) ? agentsRes.data : agentsRes.data?.data || [];
-      setCampaignAgents((prev) => ({ ...prev, [campaignId]: agents }));
+
+      const lists = Array.isArray(listsRes) ? listsRes : listsRes?.data || [];
+      setCampaignLists(prev => ({ ...prev, [campaignId]: lists }));
+
+      const agents = Array.isArray(agentsRes) ? agentsRes : agentsRes?.data || [];
+      setCampaignAgents(prev => ({ ...prev, [campaignId]: agents }));
+
+      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+
+      const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
+      setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
+
+      const am = agentsMetricsRes ? (Array.isArray(agentsMetricsRes) ? agentsMetricsRes : agentsMetricsRes?.data || []) : [];
+      setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: am }));
+
+      const qs = qualsRes ? (Array.isArray(qualsRes) ? qualsRes : qualsRes?.data || []) : [];
+      setCampaignQualifications(prev => ({ ...prev, [campaignId]: qs }));
     } catch {
       toast.error("Erro ao carregar detalhes da campanha");
     } finally {
@@ -119,24 +161,85 @@ const CampaignsPanel = () => {
       setExpandedCampaign(null);
     } else {
       setExpandedCampaign(campaignId);
-      if (!campaignLists[campaignId]) {
-        loadListsAndAgents(campaignId);
-      }
+      setActiveTab(prev => ({ ...prev, [campaignId]: "overview" }));
+      loadCampaignDetails(campaignId);
     }
   };
 
+  /* ─── Campaign Actions ─── */
+
+  const handlePauseResume = async (campaign: any) => {
+    const id = String(campaign.id);
+    const isPaused = campaign.status === "paused" || campaign.status === "stopped";
+    setTogglingStatus(id);
+    try {
+      await invoke(isPaused ? "resume_campaign" : "pause_campaign", { campaign_id: id });
+      toast.success(isPaused ? "Campanha retomada!" : "Campanha pausada!");
+      loadCampaigns();
+    } catch {
+      toast.error("Erro ao alterar status da campanha");
+    } finally {
+      setTogglingStatus(null);
+    }
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (!deleteTarget || deleteConfirmText !== deleteTarget.name) return;
+    setDeleting(true);
+    try {
+      await invoke("delete_campaign", { campaign_id: String(deleteTarget.id) });
+      toast.success("Campanha excluída!");
+      setDeleteTarget(null);
+      setDeleteConfirmText("");
+      if (expandedCampaign === String(deleteTarget.id)) setExpandedCampaign(null);
+      loadCampaigns();
+    } catch {
+      toast.error("Erro ao excluir campanha");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSaveAggressiveness = async (campaignId: string) => {
+    setSavingAggr(campaignId);
+    try {
+      await invoke("update_campaign", { campaign_id: campaignId, aggressiveness: aggressiveness[campaignId] ?? 1 });
+      toast.success("Agressividade atualizada!");
+    } catch {
+      toast.error("Erro ao atualizar agressividade");
+    } finally {
+      setSavingAggr(null);
+    }
+  };
+
+  const handleDeleteList = async (campaignId: string, listId: string) => {
+    try {
+      await invoke("delete_campaign_list", { campaign_id: campaignId, list_id: listId });
+      toast.success("Lista removida!");
+      loadCampaignDetails(campaignId);
+    } catch {
+      toast.error("Erro ao remover lista");
+    }
+  };
+
+  const handleDeleteAllLists = async (campaignId: string) => {
+    try {
+      await invoke("delete_all_campaign_lists", { campaign_id: campaignId });
+      toast.success("Todas as listas removidas!");
+      loadCampaignDetails(campaignId);
+    } catch {
+      toast.error("Erro ao limpar listas");
+    }
+  };
+
+  /* ─── Create Campaign ─── */
+
   const toggleAgent = (agentId: number) => {
-    setSelectedAgentIds((prev) =>
-      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
-    );
+    setSelectedAgentIds(prev => prev.includes(agentId) ? prev.filter(id => id !== agentId) : [...prev, agentId]);
   };
 
   const selectAllAgents = () => {
-    if (selectedAgentIds.length === agentsList.length) {
-      setSelectedAgentIds([]);
-    } else {
-      setSelectedAgentIds(agentsList.map((a: any) => a.id));
-    }
+    setSelectedAgentIds(prev => prev.length === agentsList.length ? [] : agentsList.map((a: any) => a.id));
   };
 
   const filteredAgents = agentSearch.trim()
@@ -144,53 +247,25 @@ const CampaignsPanel = () => {
     : agentsList;
 
   const handleCreateCampaign = async () => {
-    if (!newCampaignName.trim()) {
-      toast.error("Informe o nome da campanha");
-      return;
-    }
+    if (!newCampaignName.trim()) { toast.error("Informe o nome da campanha"); return; }
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "create_campaign",
-          domain,
-          api_token: apiToken,
-          campaign_name: newCampaignName.trim(),
-          start_time: newStartTime,
-          end_time: newEndTime,
-          qualification_list_id: selectedQualList ? Number(selectedQualList) : undefined,
-          work_break_group_id: selectedWorkBreakGroup ? Number(selectedWorkBreakGroup) : undefined,
-        },
+      const data = await invoke("create_campaign", {
+        campaign_name: newCampaignName.trim(),
+        start_time: newStartTime,
+        end_time: newEndTime,
+        qualification_list_id: selectedQualList ? Number(selectedQualList) : undefined,
+        work_break_group_id: selectedWorkBreakGroup ? Number(selectedWorkBreakGroup) : undefined,
       });
-      if (error) throw error;
-
       const newCampaignId = data?.data?.id || data?.id;
       let agentsLinked = 0;
-
       if (newCampaignId && selectedAgentIds.length > 0) {
         try {
-          await supabase.functions.invoke("threecplus-proxy", {
-            body: {
-              action: "add_agents_to_campaign",
-              domain,
-              api_token: apiToken,
-              campaign_id: newCampaignId,
-              agent_ids: selectedAgentIds,
-            },
-          });
+          await invoke("add_agents_to_campaign", { campaign_id: newCampaignId, agent_ids: selectedAgentIds });
           agentsLinked = selectedAgentIds.length;
-        } catch (agentErr: any) {
-          console.error("Erro ao vincular agentes:", agentErr);
-          toast.warning("Campanha criada, mas falha ao vincular agentes");
-        }
+        } catch { toast.warning("Campanha criada, mas falha ao vincular agentes"); }
       }
-
-      if (agentsLinked > 0) {
-        toast.success(`Campanha criada com ${agentsLinked} agente(s) vinculado(s)!`);
-      } else {
-        toast.success("Campanha criada com sucesso!");
-      }
-
+      toast.success(agentsLinked > 0 ? `Campanha criada com ${agentsLinked} agente(s)!` : "Campanha criada!");
       setCreateOpen(false);
       setNewCampaignName("");
       setSelectedQualList("");
@@ -205,24 +280,39 @@ const CampaignsPanel = () => {
     }
   };
 
-  useEffect(() => {
-    if (hasCredentials) loadCampaigns();
-  }, [domain, apiToken]);
+  useEffect(() => { if (hasCredentials) loadCampaigns(); }, [domain, apiToken]);
+
+  /* ─── Helpers ─── */
+
+  const getStatusBadge = (status: string) => {
+    if (status === "running" || status === "active") return <Badge className="bg-green-600 text-white">Ativa</Badge>;
+    if (status === "paused" || status === "stopped") return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Pausada</Badge>;
+    return <Badge variant="outline">{status || "—"}</Badge>;
+  };
+
+  const fmt = (v: any) => v != null ? Number(v).toLocaleString("pt-BR") : "—";
+  const fmtPct = (v: any) => v != null ? `${Number(v).toFixed(1)}%` : "—";
+  const fmtTime = (seconds: any) => {
+    if (!seconds) return "—";
+    const s = Number(seconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
 
   if (!hasCredentials) {
     return (
       <div className="mt-4">
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Configure as credenciais na aba <strong>Configuração</strong> primeiro.
-          </CardContent>
-        </Card>
+        <Card><CardContent className="py-8 text-center text-muted-foreground">
+          Configure as credenciais na aba <strong>Configuração</strong> primeiro.
+        </CardContent></Card>
       </div>
     );
   }
 
   return (
     <div className="mt-4 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Campanhas 3CPlus</h3>
         <div className="flex gap-2">
@@ -231,99 +321,230 @@ const CampaignsPanel = () => {
             Atualizar
           </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Nova Campanha
+            <Plus className="w-4 h-4" /> Nova Campanha
           </Button>
         </div>
       </div>
 
+      {/* Campaigns List */}
       {loading && campaigns.length === 0 ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
+        <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : campaigns.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            Nenhuma campanha encontrada
-          </CardContent>
-        </Card>
+        <Card><CardContent className="py-8 text-center text-muted-foreground">Nenhuma campanha encontrada</CardContent></Card>
       ) : (
         <div className="space-y-2">
-          {campaigns.map((c: any) => (
-            <Card key={c.id}>
-              <div
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
-                onClick={() => toggleExpand(String(c.id))}
-              >
-                <div className="flex items-center gap-3">
-                  <List className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">ID: {c.id}</p>
+          {campaigns.map((c: any) => {
+            const cid = String(c.id);
+            const isExpanded = expandedCampaign === cid;
+            const isPaused = c.status === "paused" || c.status === "stopped";
+            return (
+              <Card key={c.id} className="overflow-hidden">
+                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => toggleExpand(cid)}>
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">ID: {c.id}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Pause/Resume */}
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8"
+                      disabled={togglingStatus === cid}
+                      onClick={(e) => { e.stopPropagation(); handlePauseResume(c); }}
+                      title={isPaused ? "Retomar" : "Pausar"}
+                    >
+                      {togglingStatus === cid ? <Loader2 className="w-4 h-4 animate-spin" /> : isPaused ? <Play className="w-4 h-4 text-green-600" /> : <Pause className="w-4 h-4 text-yellow-600" />}
+                    </Button>
+                    {/* Delete */}
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); setDeleteConfirmText(""); }}
+                      title="Excluir campanha"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                    {getStatusBadge(c.status)}
+                    {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={c.status === "running" ? "default" : "secondary"}>
-                    {c.status || "—"}
-                  </Badge>
-                  {expandedCampaign === String(c.id) ? (
-                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  )}
-                </div>
-              </div>
 
-              {expandedCampaign === String(c.id) && (
-                <CardContent className="border-t pt-4 space-y-4">
-                  {loadingLists === String(c.id) ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Carregando detalhes...
-                    </div>
-                  ) : (
-                    <>
-                      {/* Agents section */}
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" /> Agentes
-                        </p>
-                        {(campaignAgents[String(c.id)] || []).length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Nenhum agente vinculado</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {(campaignAgents[String(c.id)] || []).map((agent: any) => (
-                              <Badge key={agent.id} variant="outline" className="text-xs">
-                                {agent.name || `Agent ${agent.id}`}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                {isExpanded && (
+                  <CardContent className="border-t pt-4 space-y-4">
+                    {loadingLists === cid ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Carregando detalhes...
                       </div>
-
-                      {/* Lists section */}
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Listas de Mailing</p>
-                        {(campaignLists[String(c.id)] || []).length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Nenhuma lista encontrada</p>
-                        ) : (
-                          (campaignLists[String(c.id)] || []).map((list: any) => (
-                            <div key={list.id} className="flex items-center justify-between p-2 rounded bg-muted/40 text-sm">
-                              <span>{list.name || `Lista ${list.id}`}</span>
-                              <span className="text-xs text-muted-foreground">ID: {list.id}</span>
+                    ) : (
+                      <>
+                        {/* Aggressiveness Slider */}
+                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
+                          <Gauge className="w-5 h-5 text-primary shrink-0" />
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-medium">Agressividade</Label>
+                              <span className="text-xs font-bold text-primary">{aggressiveness[cid] ?? 1}</span>
                             </div>
-                          ))
-                        )}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          ))}
+                            <Slider
+                              min={1} max={10} step={1}
+                              value={[aggressiveness[cid] ?? 1]}
+                              onValueChange={([v]) => setAggressiveness(prev => ({ ...prev, [cid]: v }))}
+                            />
+                          </div>
+                          <Button size="sm" variant="outline" disabled={savingAggr === cid} onClick={() => handleSaveAggressiveness(cid)} className="shrink-0">
+                            {savingAggr === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
+                          </Button>
+                        </div>
+
+                        {/* Sub-tabs */}
+                        <Tabs value={activeTab[cid] || "overview"} onValueChange={(v) => setActiveTab(prev => ({ ...prev, [cid]: v }))}>
+                          <TabsList className="grid grid-cols-4 w-full">
+                            <TabsTrigger value="overview" className="gap-1 text-xs"><BarChart3 className="w-3.5 h-3.5" /> Visão Geral</TabsTrigger>
+                            <TabsTrigger value="lists" className="gap-1 text-xs"><ListChecks className="w-3.5 h-3.5" /> Mailing</TabsTrigger>
+                            <TabsTrigger value="agents" className="gap-1 text-xs"><Users className="w-3.5 h-3.5" /> Agentes</TabsTrigger>
+                            <TabsTrigger value="qualifications" className="gap-1 text-xs"><Phone className="w-3.5 h-3.5" /> Qualificações</TabsTrigger>
+                          </TabsList>
+
+                          {/* Overview */}
+                          <TabsContent value="overview" className="mt-3">
+                            {(() => {
+                              const m = campaignMetrics[cid] || {};
+                              return (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                  <MetricCard label="Total Discado" value={fmt(m.total_dialed || m.dialed)} />
+                                  <MetricCard label="Atendidas" value={fmt(m.answered)} sub={m.total_dialed ? fmtPct((m.answered / m.total_dialed) * 100) : undefined} />
+                                  <MetricCard label="Abandonadas" value={fmt(m.abandoned || m.dropped)} />
+                                  <MetricCard label="ASR" value={fmtPct(m.asr)} />
+                                  <MetricCard label="Tempo Médio" value={fmtTime(m.average_talk_time || m.avg_talk_time)} />
+                                  <MetricCard label="Na Fila" value={fmt(m.in_queue || m.pending)} />
+                                  <MetricCard label="Completados" value={fmt(m.completed)} />
+                                  <MetricCard label="Sem Atender" value={fmt(m.no_answer)} />
+                                </div>
+                              );
+                            })()}
+                          </TabsContent>
+
+                          {/* Mailing Lists */}
+                          <TabsContent value="lists" className="mt-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-foreground">Listas de Mailing</p>
+                              {(campaignLists[cid] || []).length > 0 && (
+                                <Button variant="destructive" size="sm" className="gap-1 text-xs" onClick={() => handleDeleteAllLists(cid)}>
+                                  <Trash2 className="w-3 h-3" /> Limpar Todas
+                                </Button>
+                              )}
+                            </div>
+                            {(campaignLists[cid] || []).length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma lista encontrada</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {(campaignLists[cid] || []).map((list: any) => {
+                                  const metric = (campaignListsMetrics[cid] || []).find((m: any) => String(m.id) === String(list.id) || String(m.list_id) === String(list.id));
+                                  return (
+                                    <div key={list.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 text-sm">
+                                      <div>
+                                        <p className="font-medium">{list.name || `Lista ${list.id}`}</p>
+                                        {metric && (
+                                          <p className="text-xs text-muted-foreground">
+                                            Total: {fmt(metric.total)} · Discado: {fmtPct(metric.dialed_percent || metric.dialed_percentage)} · Completado: {fmtPct(metric.completed_percent || metric.completed_percentage)}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteList(cid, String(list.id))} title="Remover lista">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </TabsContent>
+
+                          {/* Agents */}
+                          <TabsContent value="agents" className="mt-3 space-y-3">
+                            <p className="text-sm font-medium text-foreground">Agentes Vinculados</p>
+                            {(campaignAgents[cid] || []).length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">Nenhum agente vinculado</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {(campaignAgents[cid] || []).map((agent: any) => {
+                                  const metric = (campaignAgentsMetrics[cid] || []).find((m: any) => String(m.id) === String(agent.id) || String(m.user_id) === String(agent.id));
+                                  return (
+                                    <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 text-sm">
+                                      <div>
+                                        <p className="font-medium">{agent.name || `Agent ${agent.id}`}</p>
+                                        <p className="text-xs text-muted-foreground">#{agent.extension || agent.id}</p>
+                                      </div>
+                                      {metric && (
+                                        <div className="text-xs text-muted-foreground text-right space-y-0.5">
+                                          <p>Chamadas: {fmt(metric.total_calls || metric.calls)}</p>
+                                          <p>Online: {fmtTime(metric.online_time)} · Pausa: {fmtTime(metric.break_time || metric.pause_time)}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </TabsContent>
+
+                          {/* Qualifications */}
+                          <TabsContent value="qualifications" className="mt-3 space-y-3">
+                            <p className="text-sm font-medium text-foreground">Distribuição de Qualificações</p>
+                            {(campaignQualifications[cid] || []).length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação registrada</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {(campaignQualifications[cid] || []).map((q: any, i: number) => {
+                                  const total = (campaignQualifications[cid] || []).reduce((sum: number, x: any) => sum + (Number(x.count || x.total) || 0), 0);
+                                  const count = Number(q.count || q.total) || 0;
+                                  const pct = total > 0 ? (count / total * 100) : 0;
+                                  return (
+                                    <div key={q.id || i} className="space-y-1">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span>{q.name || q.qualification_name || `#${q.id}`}</span>
+                                        <span className="text-xs text-muted-foreground">{count} ({pct.toFixed(1)}%)</span>
+                                      </div>
+                                      <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </TabsContent>
+                        </Tabs>
+                      </>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
 
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setDeleteConfirmText(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="w-5 h-5" /> Excluir Campanha</DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível. Para confirmar, digite o nome da campanha: <strong>{deleteTarget?.name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <Input placeholder="Nome da campanha" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+            <Button variant="destructive" disabled={deleting || deleteConfirmText !== deleteTarget?.name} onClick={handleDeleteCampaign} className="gap-2">
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Campaign Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -333,101 +554,66 @@ const CampaignsPanel = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Nome da campanha</Label>
-              <Input
-                placeholder="Ex: Cobrança Janeiro 2026"
-                value={newCampaignName}
-                onChange={(e) => setNewCampaignName(e.target.value)}
-              />
+              <Input placeholder="Ex: Cobrança Janeiro 2026" value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Horário de início</Label>
-                <Input type="time" value={newStartTime} onChange={(e) => setNewStartTime(e.target.value)} />
+                <Input type="time" value={newStartTime} onChange={e => setNewStartTime(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Horário de término</Label>
-                <Input type="time" value={newEndTime} onChange={(e) => setNewEndTime(e.target.value)} />
+                <Input type="time" value={newEndTime} onChange={e => setNewEndTime(e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Lista de Qualificação</Label>
                 <Select value={selectedQualList} onValueChange={setSelectedQualList}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione (opcional)" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                   <SelectContent>
-                    {qualLists.map((ql: any) => (
-                      <SelectItem key={ql.id} value={String(ql.id)}>{ql.name}</SelectItem>
-                    ))}
+                    {qualLists.map((ql: any) => <SelectItem key={ql.id} value={String(ql.id)}>{ql.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Grupo de Pausas</Label>
                 <Select value={selectedWorkBreakGroup} onValueChange={setSelectedWorkBreakGroup}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione (opcional)" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                   <SelectContent>
-                    {workBreakGroups.map((wbg: any) => (
-                      <SelectItem key={wbg.id} value={String(wbg.id)}>{wbg.name}</SelectItem>
-                    ))}
+                    {workBreakGroups.map((wbg: any) => <SelectItem key={wbg.id} value={String(wbg.id)}>{wbg.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
-            {/* Agent selection */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Users className="w-4 h-4" />
                 Agentes ({selectedAgentIds.length} selecionado{selectedAgentIds.length !== 1 ? "s" : ""})
               </Label>
-              <Input
-                placeholder="Buscar agente..."
-                value={agentSearch}
-                onChange={(e) => setAgentSearch(e.target.value)}
-                className="h-8 text-xs"
-              />
+              <Input placeholder="Buscar agente..." value={agentSearch} onChange={e => setAgentSearch(e.target.value)} className="h-8 text-xs" />
               <div className="border rounded-md max-h-[200px] overflow-y-auto">
                 {agentsList.length > 0 && (
-                  <div
-                    className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 cursor-pointer hover:bg-muted/50"
-                    onClick={selectAllAgents}
-                  >
-                    <Checkbox
-                      checked={selectedAgentIds.length === agentsList.length && agentsList.length > 0}
-                      onCheckedChange={selectAllAgents}
-                    />
+                  <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 cursor-pointer hover:bg-muted/50" onClick={selectAllAgents}>
+                    <Checkbox checked={selectedAgentIds.length === agentsList.length && agentsList.length > 0} onCheckedChange={selectAllAgents} />
                     <span className="text-xs font-medium">Selecionar todos</span>
                   </div>
                 )}
                 {filteredAgents.map((agent: any) => (
-                  <div
-                    key={agent.id}
-                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30"
-                    onClick={() => toggleAgent(agent.id)}
-                  >
-                    <Checkbox
-                      checked={selectedAgentIds.includes(agent.id)}
-                      onCheckedChange={() => toggleAgent(agent.id)}
-                    />
+                  <div key={agent.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30" onClick={() => toggleAgent(agent.id)}>
+                    <Checkbox checked={selectedAgentIds.includes(agent.id)} onCheckedChange={() => toggleAgent(agent.id)} />
                     <span className="text-xs">{agent.name}</span>
                     <span className="text-xs text-muted-foreground ml-auto">#{agent.extension || agent.id}</span>
                   </div>
                 ))}
-                {filteredAgents.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-3">Nenhum agente encontrado</p>
-                )}
+                {filteredAgents.length === 0 && <p className="text-xs text-muted-foreground text-center py-3">Nenhum agente encontrado</p>}
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateCampaign} disabled={creating} className="gap-2">
-              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Criar
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Criar
             </Button>
           </DialogFooter>
         </DialogContent>

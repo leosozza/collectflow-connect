@@ -850,6 +850,74 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Delete Campaign ──
+      case 'delete_campaign': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
+        method = 'DELETE';
+        console.log(`Deleting campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Delete Campaign List ──
+      case 'delete_campaign_list': {
+        const err1 = requireField(body, 'campaign_id', corsHeaders);
+        if (err1) return err1;
+        const err2 = requireField(body, 'list_id', corsHeaders);
+        if (err2) return err2;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/${body.list_id}`, authParam);
+        method = 'DELETE';
+        console.log(`Deleting list ${body.list_id} from campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Delete All Campaign Lists ──
+      case 'delete_all_campaign_lists': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists`, authParam);
+        method = 'DELETE';
+        console.log(`Deleting all lists from campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Campaign Lists Metrics ──
+      case 'campaign_lists_metrics': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/metrics`, authParam);
+        console.log(`Fetching lists metrics for campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Campaign Lists Total Metrics ──
+      case 'campaign_lists_total_metrics': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/total_metrics`, authParam);
+        console.log(`Fetching total metrics for campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Campaign Agents Metrics ──
+      case 'campaign_agents_metrics': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents/metrics/total`, authParam);
+        console.log(`Fetching agents metrics for campaign ${body.campaign_id}`);
+        break;
+      }
+
+      // ── Campaign Qualifications ──
+      case 'campaign_qualifications': {
+        const err = requireField(body, 'campaign_id', corsHeaders);
+        if (err) return err;
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/qualifications`, authParam);
+        console.log(`Fetching qualifications for campaign ${body.campaign_id}`);
+        break;
+      }
+
       // ── Sync Dispositions (bulk create/update qualifications in a list) ──
       case 'sync_dispositions': {
         const err = requireField(body, 'dispositions', corsHeaders);
