@@ -31,6 +31,10 @@ interface AtendimentoModalContextType {
   updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
   closeAtendimento: () => void;
   setPauseControls: (controls: PauseControls | null) => void;
+  setAgentStatus: (status: number | string | undefined) => void;
+  setOnFinishDisposition: (fn: (() => Promise<void>) | null) => void;
+  agentStatus: number | string | undefined;
+  onFinishDisposition: (() => Promise<void>) | null;
   isOpen: boolean;
 }
 
