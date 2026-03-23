@@ -663,7 +663,35 @@ const CampaignsPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* Link Agents Dialog */}
+      <Dialog open={!!linkAgentCampaignId} onOpenChange={(open) => { if (!open) { setLinkAgentCampaignId(null); setLinkAgentIds([]); setLinkAgentSearch(""); } }}>
+        <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vincular Agentes à Campanha</DialogTitle>
+            <DialogDescription>Selecione os agentes para vincular</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Buscar agente..." value={linkAgentSearch} onChange={e => setLinkAgentSearch(e.target.value)} className="h-8 text-xs" />
+            <div className="border rounded-md max-h-[250px] overflow-y-auto">
+              {agentsList.filter((a: any) => !linkAgentSearch.trim() || a.name?.toLowerCase().includes(linkAgentSearch.toLowerCase())).map((agent: any) => (
+                <div key={agent.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30" onClick={() => setLinkAgentIds(prev => prev.includes(agent.id) ? prev.filter(id => id !== agent.id) : [...prev, agent.id])}>
+                  <Checkbox checked={linkAgentIds.includes(agent.id)} onCheckedChange={() => setLinkAgentIds(prev => prev.includes(agent.id) ? prev.filter(id => id !== agent.id) : [...prev, agent.id])} />
+                  <span className="text-xs">{agent.name}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">#{agent.extension_number || (typeof agent.extension === 'object' ? agent.extension?.extension_number : agent.extension) || agent.id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkAgentCampaignId(null)}>Cancelar</Button>
+            <Button onClick={handleLinkAgents} disabled={linkingAgents || linkAgentIds.length === 0} className="gap-2">
+              {linkingAgents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+              Vincular ({linkAgentIds.length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
   );
 };
 
