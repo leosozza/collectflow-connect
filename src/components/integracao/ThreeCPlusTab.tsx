@@ -10,9 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send } from "lucide-react";
 import { toast } from "sonner";
-import { DISPOSITION_TYPES } from "@/services/dispositionService";
 
 type TestLog = { time: string; status: "success" | "error" | "info"; message: string };
+
+// System qualifications built into 3CPlus (negative IDs)
+const SYSTEM_QUALIFICATIONS = [
+  { id: -2, name: "Não qualificada" },
+  { id: -3, name: "Caixa Postal" },
+  { id: -4, name: "Mudo" },
+  { id: -5, name: "Limite de tempo excedido" },
+];
 
 const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; domain: string; apiToken: string }) => {
   const [selectedCampaign, setSelectedCampaign] = useState("");
