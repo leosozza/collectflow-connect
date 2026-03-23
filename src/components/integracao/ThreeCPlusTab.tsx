@@ -527,10 +527,10 @@ const ThreeCPlusTab = () => {
 
           {loadingQuals && <p className="text-sm text-muted-foreground">Carregando qualificações...</p>}
 
-          {qualifications.length > 0 && (
+          {(qualifications.length > 0 || tenantDispositions.length > 0) && (
             <>
               <div className="space-y-3">
-                {Object.entries(DISPOSITION_TYPES).map(([key, label]) => (
+                {tenantDispositions.map(({ key, label }) => (
                   <div key={key} className="flex items-center gap-3">
                     <div className="w-40 shrink-0">
                       <p className="text-sm font-medium">{label}</p>
