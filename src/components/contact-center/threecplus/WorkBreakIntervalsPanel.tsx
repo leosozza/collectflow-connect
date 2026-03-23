@@ -214,10 +214,10 @@ const WorkBreakIntervalsPanel = () => {
                       <div key={interval.id} className="flex items-center justify-between p-2 rounded bg-muted/40 text-sm">
                         <div>
                           <span className="font-medium">{interval.name || interval.description || `Intervalo ${interval.id}`}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">{interval.max_time ? `${interval.max_time} min` : "Sem limite"}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{(interval.maximum_time || interval.max_time) ? `${Math.round((interval.maximum_time || interval.max_time) / 60)} min` : "Sem limite"}</span>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingInterval(interval); setIntervalGroupId(g.id); setIntervalName(interval.name || interval.description || ""); setIntervalMaxTime(String(interval.max_time || "")); setIntervalDialogOpen(true); }}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingInterval(interval); setIntervalGroupId(g.id); setIntervalName(interval.name || interval.description || ""); setIntervalMaxTime(String((interval.maximum_time || interval.max_time) ? Math.round((interval.maximum_time || interval.max_time) / 60) : "")); setIntervalDialogOpen(true); }}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteInterval(g.id, interval.id)} disabled={deletingInterval === interval.id}>

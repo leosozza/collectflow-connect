@@ -630,7 +630,7 @@ Deno.serve(async (req) => {
         method = 'PUT';
         const updateBody: Record<string, any> = {};
         if (body.name) updateBody.name = body.name;
-        if (body.max_time !== undefined) updateBody.max_time = body.max_time;
+        if (body.max_time != null && body.max_time !== '') updateBody.maximum_time = Number(body.max_time) * 60;
         reqBody = JSON.stringify(updateBody);
         break;
       }
