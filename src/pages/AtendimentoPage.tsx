@@ -299,7 +299,10 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   };
 
   const statusConfig = embedded && agentId ? getStatusConfig() : null;
-  const showFinishButton = embedded && onFinishDisposition && (Number(agentStatus) === 3 || Number(agentStatus) === 4);
+  // Show "Finalizar Tabulação" only for TPA (status 4) or status 3 without manual pause name (ACW)
+  // NOT for manual pause (status 3 with pause name)
+  const isTPA = Number(agentStatus) === 4 || (Number(agentStatus) === 3 && !sessionStorage.getItem("3cp_active_pause_name"));
+  const showFinishButton = embedded && onFinishDisposition && isTPA;
 
   const handleFinishDisposition = async () => {
     setFinishingDisposition(true);
