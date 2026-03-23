@@ -765,8 +765,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
   // Extract active call for this agent from company_calls data
-  const activeCall = useMemo(() => {
-    if (!operatorAgentId || !companyCalls) return null;
+  const { activeCall, lastFinishedCall } = useMemo(() => {
+    if (!operatorAgentId || !companyCalls) return { activeCall: null, lastFinishedCall: null };
     const callsData = companyCalls?.data || companyCalls;
     const agentIdStr = String(operatorAgentId);
     let allCalls: any[] = [];
@@ -778,7 +778,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         if (Array.isArray(group)) allCalls.push(...group);
       }
     }
-    return allCalls.find((c: any) => String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr) || null;
+    const myCalls = allCalls.filter((c: any) => String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr);
+    const live = myCalls.find((c: any) => !c.hangup_time && String(c.status) !== "4") || null;
+    const finished = myCalls.find((c: any) => !!c.hangup_time || String(c.status) === "4") || null;
+    return { activeCall: live, lastFinishedCall: finished };
   }, [companyCalls, operatorAgentId]);
 
   // Track active call id for ACW qualification
