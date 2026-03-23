@@ -1,102 +1,49 @@
 
 
-# Plano: Integração Bidirecional com 3CPlus
+# Plano: Corrigir integração bidirecional — Socket.IO em vez de webhooks REST
 
-## Situação atual
+## Diagnóstico
 
-A integração é **unidirecional** — RIVO envia comandos para 3CPlus (login, pause, qualify, campaigns) mas nunca recebe callbacks. O sistema usa polling a cada 5 segundos para detectar mudanças de status. Não há registro automático de chamadas — `call_logs` só é preenchido manualmente via `saveCallLog` (busca retroativa).
+A API 3CPlus **não possui** endpoint `/campaigns/{id}/webhooks`. Confirmei na documentação oficial (Swagger) que não existe nenhum endpoint de webhooks REST para campanhas.
 
-## O que a bidirecionalidade resolve
+A 3CPlus usa **Socket.IO** para eventos em tempo real. Os eventos disponíveis incluem:
+- `call-was-created`, `call-was-answered`, `call-was-connected`
+- `call-was-ended`, `call-was-finished`, `call-was-abandoned`
+- `agent-is-idle`, `agent-in-acw`, `agent-entered-work-break`
+- `call-history-was-created` (contém dados completos da chamada)
 
-- Registro automático de chamadas (início, fim, duração, gravação)
-- Atualização instantânea de status do agente (sem delay de polling)
-- Captura de qualificações feitas diretamente na 3CPlus
-- Dados mais confiáveis para relatórios e timeline do cliente
+A conexão socket usa: `io("SOCKET_SERVER_ADDR", { transports: ['websocket'], query: { token: "api_token" } })`
 
-## Mudanças
+## Abordagem corrigida
 
-### 1. Nova Edge Function: `threecplus-webhook/index.ts`
+Como Edge Functions do Deno não suportam conexões WebSocket persistentes (socket.io client), a integração bidirecional precisa funcionar de duas formas:
 
-Endpoint público que recebe POST da 3CPlus com eventos de campanha.
+### Opção A: Webhook manual (já implementado, funciona)
+O arquivo `threecplus-webhook/index.ts` já está pronto para receber POSTs. O webhook precisa ser configurado **manualmente no painel da 3CPlus** (não via API). A URL já foi fornecida ao usuário.
 
-**Eventos tratados:**
-- `call.started` — registra início da chamada
-- `call.answered` — atualiza status para "em andamento"
-- `call.finished` — insere registro completo em `call_logs` (duração, gravação, qualificação)
-- `call.qualified` — atualiza `call_logs` com qualificação e cria `call_dispositions` se mapeável
-- `agent.status_changed` — atualiza cache de status do agente (opcional)
+### Opção B: Polling otimizado + registro automático de chamadas
+Usar o endpoint `GET /calls` com filtros de data para buscar chamadas finalizadas e registrar automaticamente em `call_logs`.
 
-**Lógica principal:**
-- Recebe payload JSON da 3CPlus
-- Identifica o tenant pelo `domain` (busca em `tenants.settings` onde `threecplus_domain` = domain do webhook)
-- Identifica o cliente pelo telefone (busca em `clients` por phone match)
-- Insere/atualiza `call_logs` automaticamente
-- Cria `client_events` via o trigger existente `trg_client_event_from_call_log`
-- Loga payload completo para debug
+## Mudanças propostas
 
-**Segurança:** Validação por token secreto no header (configurável por tenant).
+### 1. `src/components/contact-center/threecplus/CampaignsPanel.tsx`
+- **Remover** o toggle de "Webhook Bidirecional" que tenta chamar `register_webhook` (endpoint inexistente)
+- **Substituir** por um card informativo com a URL do webhook para configuração manual no painel 3CPlus, com botão de copiar
+- Adicionar badge de status que verifica se o webhook está recebendo dados (checa `call_logs` recentes com `source = 'webhook'`)
 
-### 2. `supabase/config.toml` — Desabilitar JWT para webhook
+### 2. `supabase/functions/threecplus-proxy/index.ts`
+- **Remover** as ações `register_webhook`, `list_webhooks`, `delete_webhook` (endpoints inexistentes na API 3CPlus)
+- Manter tudo mais intacto
 
-```toml
-[functions.threecplus-webhook]
-verify_jwt = false
-```
+### 3. `src/components/admin/integrations/ThreeCPlusTab.tsx`
+- Remover a verificação de webhooks via API (que falha)
+- Verificar status bidirecional checando se existem `call_logs` recentes com source webhook
 
-### 3. `supabase/functions/threecplus-proxy/index.ts` — Ação para registrar webhook
-
-Novo action `register_webhook` que chama `POST /campaigns/{id}/webhooks` na API 3CPlus para cadastrar a URL do webhook do RIVO:
-```
-https://{SUPABASE_URL}/functions/v1/threecplus-webhook
-```
-
-Novo action `list_webhooks` para verificar webhooks já cadastrados.
-
-### 4. `src/components/contact-center/threecplus/CampaignsPanel.tsx` — Botão de ativar webhook
-
-Na aba expandida da campanha, adicionar toggle "Webhook ativo" que:
-- Verifica se já existe webhook cadastrado para a campanha
-- Se não, registra automaticamente via `register_webhook`
-- Mostra status (ativo/inativo)
-
-### 5. `src/components/admin/integrations/ThreeCPlusTab.tsx` — Status bidirecional
-
-Adicionar indicador visual mostrando se a integração é unidirecional ou bidirecional (baseado na presença de webhooks ativos).
-
-### 6. Secret para validação
-
-Adicionar secret `THREECPLUS_WEBHOOK_SECRET` para validar que as requisições vêm realmente da 3CPlus.
-
-## Fluxo bidirecional completo
-
-```text
-3CPlus dispara chamada
-  → call.started → webhook RIVO
-    → insere call_logs (status: ringing)
-    → trigger cria client_event
-
-Operador atende
-  → call.answered → webhook RIVO
-    → atualiza call_logs (status: in_progress)
-
-Chamada termina
-  → call.finished → webhook RIVO
-    → atualiza call_logs (duração, recording_url, status: completed)
-
-Operador qualifica na 3CPlus
-  → call.qualified → webhook RIVO
-    → atualiza call_logs (qualification)
-    → mapeia para call_disposition_types do tenant
-    → cria call_dispositions se mapeável
-    → trigger cria client_event
-```
-
-## Arquivos a criar/editar
+## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-webhook/index.ts` | **Novo** — endpoint receptor de webhooks |
-| `supabase/config.toml` | Adicionar `[functions.threecplus-webhook] verify_jwt = false` |
-| `supabase/functions/threecplus-proxy/index.ts` | Novos actions: `register_webhook`, `list_webhooks`, `delete_webhook` |
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Toggle de webhook por campanha |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Trocar toggle por card informativo com URL do webhook + botão copiar |
+| `supabase/functions/threecplus-proxy/index.ts` | Remover 3 ações de webhook inexistentes |
+| `src/components/admin/integrations/ThreeCPlusTab.tsx` | Ajustar verificação de status bidirecional |
 
