@@ -621,6 +621,11 @@ Deno.serve(async (req) => {
         method = 'POST';
         const intervalBody: Record<string, any> = { name: body.name };
         if (body.max_time != null && body.max_time !== '') intervalBody.minutes = Number(body.max_time);
+        if (body.daily_limit != null && body.daily_limit !== '') intervalBody.daily_limit = Number(body.daily_limit);
+        if (body.color) intervalBody.color = body.color;
+        if (body.classification) intervalBody.classification = body.classification;
+        if (body.return_type) intervalBody.return_type = body.return_type;
+        if (body.auto_start != null) intervalBody.auto_start = Boolean(body.auto_start);
         reqBody = JSON.stringify(intervalBody);
         break;
       }
@@ -635,6 +640,11 @@ Deno.serve(async (req) => {
         const updateBody: Record<string, any> = {};
         if (body.name) updateBody.name = body.name;
         if (body.max_time != null && body.max_time !== '') updateBody.minutes = Number(body.max_time);
+        if (body.daily_limit != null && body.daily_limit !== '') updateBody.daily_limit = Number(body.daily_limit);
+        if (body.color) updateBody.color = body.color;
+        if (body.classification) updateBody.classification = body.classification;
+        if (body.return_type) updateBody.return_type = body.return_type;
+        if (body.auto_start != null) updateBody.auto_start = Boolean(body.auto_start);
         reqBody = JSON.stringify(updateBody);
         break;
       }
