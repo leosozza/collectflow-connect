@@ -566,6 +566,55 @@ const CampaignsPanel = () => {
 
                           {/* Qualifications */}
                           <TabsContent value="qualifications" className="mt-3 space-y-3">
+                            {/* Sync status */}
+                            {(() => {
+                              const rivoListId = settings.threecplus_qualification_list_id;
+                              const campaignQualList = c.qualification_list || c.qualification_list_id || c.dialer_settings?.qualification_list_id;
+                              const isSynced = rivoListId && campaignQualList && String(campaignQualList) === String(rivoListId);
+                              return (
+                                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                                  <div className="flex items-center gap-2">
+                                    <ListChecks className="w-4 h-4 text-primary" />
+                                    <div>
+                                      <p className="text-xs font-medium">Lista de Qualificações</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {isSynced
+                                          ? "RIVO Tabulações vinculada"
+                                          : campaignQualList
+                                            ? `Lista #${campaignQualList} (não é RIVO)`
+                                            : "Nenhuma lista vinculada"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {isSynced ? (
+                                      <Badge className="bg-green-600 text-white text-xs">✅ Sincronizada</Badge>
+                                    ) : (
+                                      <Button
+                                        size="sm" variant="outline" className="text-xs h-7"
+                                        disabled={!rivoListId}
+                                        onClick={async () => {
+                                          try {
+                                            await invoke("update_campaign", {
+                                              campaign_id: cid,
+                                              qualification_list: rivoListId,
+                                            });
+                                            toast.success("Tabulações RIVO vinculadas à campanha!");
+                                            loadCampaigns();
+                                            loadCampaignDetails(cid);
+                                          } catch {
+                                            toast.error("Erro ao vincular tabulações");
+                                          }
+                                        }}
+                                      >
+                                        Vincular Tabulações RIVO
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             <p className="text-sm font-medium text-foreground">Distribuição de Qualificações</p>
                             {(campaignQualifications[cid] || []).length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação registrada</p>
