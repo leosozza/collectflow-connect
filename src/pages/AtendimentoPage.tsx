@@ -149,7 +149,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         }).catch(console.error);
       }
       if (effectiveAgentId && settings.threecplus_domain) {
-        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId });
+        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId })
+          .then(() => {
+            // Signal that qualify was already done from disposition panel — prevents ACW fallback screen
+            sessionStorage.setItem("3cp_qualified_from_disposition", "true");
+            sessionStorage.removeItem("3cp_last_call_id");
+          })
+          .catch(console.error);
       }
     },
   });

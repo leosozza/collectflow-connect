@@ -485,6 +485,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         setIsACW(false);
         setSelectedQualification("");
         setQualifyNotes("");
+        sessionStorage.removeItem("3cp_qualified_from_disposition");
+        sessionStorage.removeItem("3cp_last_call_id");
       }
     }
 
@@ -804,10 +806,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
 
   // ACW fallback: agent is paused (status 3) with no manual pause name and a finished call exists
-  const isACWFallback = isPaused && !activePauseName && !isACW && (
+  // Skip if qualify was already done from the disposition panel during the call
+  const qualifiedFromDisposition = !!sessionStorage.getItem("3cp_qualified_from_disposition");
+  const isACWFallback = isPaused && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = isACW || isACWFallback;
+  const effectiveACW = (isACW || isACWFallback) && !qualifiedFromDisposition;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
@@ -952,7 +956,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 <div className="text-center space-y-1">
                   <h3 className="text-lg font-bold text-foreground">Tabular Chamada</h3>
                   <p className="text-sm text-muted-foreground">
-                    Selecione a qualificação para registrar o resultado da ligação
+                    Você não tabulou durante o atendimento. Selecione a qualificação abaixo para retornar à campanha.
                     {lastCallPhone && <span className="block text-xs mt-1">Telefone: {lastCallPhone}</span>}
                   </p>
                 </div>
