@@ -4296,33 +4296,39 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string | null
+          depends_on: string[] | null
           description: string | null
           icon: string | null
           id: string
           is_core: boolean | null
           name: string
+          parent_slug: string | null
           slug: string
           sort_order: number | null
         }
         Insert: {
           category?: string | null
           created_at?: string | null
+          depends_on?: string[] | null
           description?: string | null
           icon?: string | null
           id?: string
           is_core?: boolean | null
           name: string
+          parent_slug?: string | null
           slug: string
           sort_order?: number | null
         }
         Update: {
           category?: string | null
           created_at?: string | null
+          depends_on?: string[] | null
           description?: string | null
           icon?: string | null
           id?: string
           is_core?: boolean | null
           name?: string
+          parent_slug?: string | null
           slug?: string
           sort_order?: number | null
         }
