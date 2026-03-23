@@ -619,12 +619,14 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, `work_break_group/${body.group_id}/intervals`, authParam);
         method = 'POST';
+        const typeMap: Record<string, number> = { productive: 1, unproductive: 2, nr17: 3 };
+        const returnMap: Record<string, number> = { flexible: 1, automatic: 2, request: 3 };
         const intervalBody: Record<string, any> = { name: body.name };
-        if (body.max_time != null && body.max_time !== '') intervalBody.minutes = Number(body.max_time);
-        if (body.daily_limit != null && body.daily_limit !== '') intervalBody.daily_limit = Number(body.daily_limit);
+        if (body.max_time != null && body.max_time !== '') intervalBody.limit = Number(body.max_time);
+        if (body.daily_limit != null && body.daily_limit !== '') intervalBody.maximum_daily_time = Number(body.daily_limit);
         if (body.color) intervalBody.color = body.color;
-        if (body.classification) intervalBody.classification = body.classification;
-        if (body.return_type) intervalBody.return_type = body.return_type;
+        if (body.classification) intervalBody.type = typeMap[body.classification] ?? Number(body.classification) || 1;
+        if (body.return_type) intervalBody.return_type = returnMap[body.return_type] ?? Number(body.return_type) || 1;
         if (body.auto_start != null) intervalBody.auto_start = Boolean(body.auto_start);
         reqBody = JSON.stringify(intervalBody);
         break;
