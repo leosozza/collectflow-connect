@@ -749,7 +749,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
   // Feed pause controls into the floating widget
-  const isPausedStatus = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
   useEffect(() => {
     if (isOperatorView && isAgentOnline) {
       setPauseControls({

@@ -41,7 +41,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   on_call: { label: "Em Ligação", variant: "destructive" },
   ringing: { label: "Tocando", variant: "destructive" },
   paused: { label: "Em Pausa", variant: "secondary" },
-  acw: { label: "ACW", variant: "secondary" },
+  acw: { label: "TPA", variant: "secondary" },
   manual: { label: "Manual", variant: "secondary" },
   offline: { label: "Offline", variant: "outline" },
 };
