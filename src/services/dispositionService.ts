@@ -320,20 +320,30 @@ export const qualifyOn3CPlus = async (params: {
   tenantSettings: Record<string, any>;
   agentId: number;
   callId?: string | number;
-}): Promise<void> => {
+}): Promise<boolean> => {
   try {
     const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
-    if (!map) return;
+    if (!map) {
+      console.warn("qualifyOn3CPlus: no disposition map configured");
+      return false;
+    }
     const qualificationId = map[params.dispositionType];
-    if (!qualificationId) return;
+    if (!qualificationId) {
+      console.warn("qualifyOn3CPlus: no mapping for disposition type:", params.dispositionType);
+      return false;
+    }
 
     const domain = params.tenantSettings.threecplus_domain;
     const apiToken = params.tenantSettings.threecplus_api_token;
-    if (!domain || !apiToken) return;
+    if (!domain || !apiToken) return false;
 
-    const callId = params.callId || "current";
+    const callId = params.callId || sessionStorage.getItem("3cp_last_call_id");
+    if (!callId) {
+      console.warn("qualifyOn3CPlus: no callId available");
+      return false;
+    }
 
-    await supabase.functions.invoke("threecplus-proxy", {
+    const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
       body: {
         action: "qualify_call",
         domain,
@@ -343,8 +353,23 @@ export const qualifyOn3CPlus = async (params: {
         qualification_id: qualificationId,
       },
     });
+
+    if (error) {
+      console.error("qualifyOn3CPlus invoke error:", error);
+      return false;
+    }
+
+    // Check if 3CPlus returned an error status
+    if (data?.status && data.status >= 400) {
+      console.error("qualifyOn3CPlus 3CPlus error:", data.detail || data.message);
+      return false;
+    }
+
+    console.log("qualifyOn3CPlus success for disposition:", params.dispositionType);
+    return true;
   } catch (err) {
     console.error("qualifyOn3CPlus error (non-blocking):", err);
+    return false;
   }
 };
 

@@ -150,10 +150,15 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       }
       if (effectiveAgentId && settings.threecplus_domain) {
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId })
-          .then(() => {
-            // Signal that qualify was already done from disposition panel — prevents ACW fallback screen
-            sessionStorage.setItem("3cp_qualified_from_disposition", "true");
-            sessionStorage.removeItem("3cp_last_call_id");
+          .then((success) => {
+            if (success) {
+              // Signal that qualify was already done from disposition panel — prevents ACW fallback screen
+              sessionStorage.setItem("3cp_qualified_from_disposition", "true");
+              sessionStorage.removeItem("3cp_last_call_id");
+              toast.success("Qualificação enviada automaticamente para a 3CPlus");
+            } else {
+              console.warn("[Atendimento] qualifyOn3CPlus retornou false — ACW fallback será exibido");
+            }
           })
           .catch(console.error);
       }
