@@ -692,6 +692,7 @@ const CampaignsPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
   );
 };
 
