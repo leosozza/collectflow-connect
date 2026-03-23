@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook } from "lucide-react";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
@@ -48,6 +48,10 @@ const CampaignsPanel = () => {
   // Aggressiveness
   const [aggressiveness, setAggressiveness] = useState<Record<string, number>>({});
   const [savingAggr, setSavingAggr] = useState<string | null>(null);
+
+  // Work break group per campaign
+  const [campaignWBG, setCampaignWBG] = useState<Record<string, string>>({});
+  const [savingWBG, setSavingWBG] = useState<string | null>(null);
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -119,10 +123,15 @@ const CampaignsPanel = () => {
       const data = await invoke("list_campaigns");
       const list = Array.isArray(data) ? data : data?.data || [];
       setCampaigns(list);
-      // Set initial aggressiveness
+      // Set initial aggressiveness and work break group
       const aggrMap: Record<string, number> = {};
-      list.forEach((c: any) => { aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1; });
+      const wbgMap: Record<string, string> = {};
+      list.forEach((c: any) => {
+        aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1;
+        if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
+      });
       setAggressiveness(prev => ({ ...prev, ...aggrMap }));
+      setCampaignWBG(prev => ({ ...prev, ...wbgMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
     } finally {
@@ -219,6 +228,23 @@ const CampaignsPanel = () => {
       toast.error("Erro ao atualizar agressividade");
     } finally {
       setSavingAggr(null);
+    }
+  };
+
+  const handleSaveWorkBreakGroup = async (campaignId: string) => {
+    setSavingWBG(campaignId);
+    try {
+      const wbgId = campaignWBG[campaignId];
+      await invoke("update_campaign", {
+        campaign_id: campaignId,
+        work_break_group_id: wbgId ? Number(wbgId) : null,
+      });
+      toast.success("Grupo de intervalos atualizado!");
+      loadCampaigns();
+    } catch {
+      toast.error("Erro ao atualizar grupo de intervalos");
+    } finally {
+      setSavingWBG(null);
     }
   };
 
@@ -443,7 +469,29 @@ const CampaignsPanel = () => {
                           </Button>
                         </div>
 
-                        {/* Webhook Info Card */}
+                        {/* Work Break Group Selector */}
+                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
+                          <Coffee className="w-5 h-5 text-primary shrink-0" />
+                          <div className="flex-1">
+                            <Label className="text-xs font-medium mb-1 block">Grupo de Intervalos</Label>
+                            <Select
+                              value={campaignWBG[cid] || ""}
+                              onValueChange={(v) => setCampaignWBG(prev => ({ ...prev, [cid]: v }))}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Nenhum grupo selecionado" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {workBreakGroups.map((g: any) => (
+                                  <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button size="sm" variant="outline" disabled={savingWBG === cid} onClick={() => handleSaveWorkBreakGroup(cid)} className="shrink-0">
+                            {savingWBG === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
+                          </Button>
+                        </div>
                         <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
                           <div className="flex items-center gap-2">
                             <Webhook className="w-4 h-4 text-primary shrink-0" />
