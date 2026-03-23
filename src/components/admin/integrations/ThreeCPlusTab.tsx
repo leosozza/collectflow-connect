@@ -8,36 +8,18 @@ const ThreeCPlusTab = () => {
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null);
 
   useEffect(() => {
-    checkWebhookStatus();
+    checkBidirectionalStatus();
   }, []);
 
-  const checkWebhookStatus = async () => {
+  const checkBidirectionalStatus = async () => {
     try {
-      // Check if any campaign has a registered webhook by testing the webhook endpoint existence
-      const { data } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "list_campaigns" },
-      });
-      const campaigns = Array.isArray(data) ? data : data?.data || data?.results || [];
-      
-      if (campaigns.length === 0) {
-        setWebhookActive(false);
-        return;
-      }
-
-      // Check first campaign for webhooks
-      for (const camp of campaigns.slice(0, 3)) {
-        try {
-          const whData = await supabase.functions.invoke("threecplus-proxy", {
-            body: { action: "list_webhooks", campaign_id: camp.id },
-          }).then(r => r.data);
-          const webhooks = Array.isArray(whData) ? whData : whData?.data || [];
-          if (webhooks.length > 0) {
-            setWebhookActive(true);
-            return;
-          }
-        } catch { /* skip */ }
-      }
-      setWebhookActive(false);
+      // Check if we have recent call_logs from webhook source (last 7 days)
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { count } = await supabase
+        .from("call_logs")
+        .select("id", { count: "exact", head: true })
+        .gte("called_at", since);
+      setWebhookActive((count ?? 0) > 0);
     } catch {
       setWebhookActive(false);
     }

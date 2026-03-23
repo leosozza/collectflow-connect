@@ -445,26 +445,23 @@ const CampaignsPanel = () => {
                           </Button>
                         </div>
 
-                        {/* Webhook Toggle */}
-                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-                          <Webhook className="w-5 h-5 text-primary shrink-0" />
-                          <div className="flex-1">
+                        {/* Webhook Info Card */}
+                        <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Webhook className="w-4 h-4 text-primary shrink-0" />
                             <Label className="text-xs font-medium">Webhook Bidirecional</Label>
-                            <p className="text-xs text-muted-foreground">Receba eventos de chamada em tempo real</p>
                           </div>
-                          {webhookStatus[cid]?.loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              {webhookStatus[cid]?.active && (
-                                <Badge variant="outline" className="text-xs border-green-500 text-green-600">Ativo</Badge>
-                              )}
-                              <Switch
-                                checked={webhookStatus[cid]?.active || false}
-                                onCheckedChange={(checked) => handleToggleWebhook(cid, checked)}
-                              />
-                            </div>
-                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Configure esta URL no painel da 3CPlus para receber eventos de chamada em tempo real:
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <code className="text-[10px] bg-background border rounded px-2 py-1 flex-1 truncate select-all">
+                              {webhookUrl}
+                            </code>
+                            <Button size="sm" variant="outline" className="shrink-0 text-xs h-7" onClick={copyWebhookUrl}>
+                              Copiar
+                            </Button>
+                          </div>
                         </div>
 
                         {/* Sub-tabs */}
