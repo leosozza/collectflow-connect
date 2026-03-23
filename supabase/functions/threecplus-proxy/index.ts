@@ -987,7 +987,9 @@ Deno.serve(async (req) => {
         // 3. Create or update items
         for (const disp of dispositions) {
           if (!disp.active) continue;
-          const existing = existingItems.find((item: any) => item.name === disp.label);
+          // Match by persisted 3CPlus ID first, then fallback to name
+          const existing = (disp.threecplus_qualification_id && existingItems.find((item: any) => item.id === disp.threecplus_qualification_id))
+            || existingItems.find((item: any) => item.name === disp.label);
           if (existing) {
             // Update existing item with full payload
             const updatePayload = buildQualPayload(disp);
