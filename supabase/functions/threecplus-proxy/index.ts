@@ -1170,6 +1170,9 @@ Deno.serve(async (req) => {
 
     const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
+    if (response.status >= 400) {
+      console.log(`3CPlus error body: ${JSON.stringify(data).substring(0, 500)}`);
+    }
 
     // Always return 200 from proxy, include upstream status and success flag in response body
     const responseBody = typeof data === 'object' && data !== null

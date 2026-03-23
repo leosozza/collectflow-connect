@@ -75,6 +75,12 @@ const WorkBreakIntervalsPanel = () => {
       body: { action, domain, api_token: apiToken, ...extra },
     });
     if (error) throw error;
+    if (data && data.success === false) {
+      const errDetail = data.errors
+        ? Object.entries(data.errors).map(([k, v]: [string, any]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join("; ")
+        : data.detail || data.title || `Erro da 3CPlus (${data.status})`;
+      throw new Error(errDetail);
+    }
     return data;
   }, [domain, apiToken]);
 
@@ -172,12 +178,13 @@ const WorkBreakIntervalsPanel = () => {
   // Interval CRUD
   const handleSaveInterval = async () => {
     if (!intervalName.trim() || !intervalGroupId) { toast.error("Nome é obrigatório"); return; }
+    if (!intervalMaxTime || Number(intervalMaxTime) <= 0) { toast.error("Tempo máximo (minutos) é obrigatório"); return; }
     setSavingInterval(true);
     try {
       const payload: Record<string, any> = {
         group_id: intervalGroupId,
         name: intervalName.trim(),
-        max_time: intervalMaxTime ? Number(intervalMaxTime) : null,
+        max_time: Number(intervalMaxTime),
         daily_limit: intervalDailyLimit ? Number(intervalDailyLimit) : null,
         color: intervalColor,
         classification: intervalClassification || null,
@@ -194,8 +201,8 @@ const WorkBreakIntervalsPanel = () => {
       }
       setIntervalDialogOpen(false);
       fetchIntervals(intervalGroupId);
-    } catch {
-      toast.error("Erro ao salvar intervalo");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar intervalo");
     } finally {
       setSavingInterval(false);
     }
