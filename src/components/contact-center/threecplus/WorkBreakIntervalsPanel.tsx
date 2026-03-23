@@ -75,6 +75,12 @@ const WorkBreakIntervalsPanel = () => {
       body: { action, domain, api_token: apiToken, ...extra },
     });
     if (error) throw error;
+    if (data && data.success === false) {
+      const errDetail = data.errors
+        ? Object.entries(data.errors).map(([k, v]: [string, any]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join("; ")
+        : data.detail || data.title || `Erro da 3CPlus (${data.status})`;
+      throw new Error(errDetail);
+    }
     return data;
   }, [domain, apiToken]);
 
