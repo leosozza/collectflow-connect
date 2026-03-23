@@ -1033,7 +1033,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen
-    if (effectiveACW && (isPaused || isTPAStatus)) {
+    // But ONLY if the ficha (modal) is NOT already open — the ficha handles TPA directly
+    if (effectiveACW && (isPaused || isTPAStatus) && !modalIsOpen) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
