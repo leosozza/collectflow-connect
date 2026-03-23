@@ -123,10 +123,15 @@ const CampaignsPanel = () => {
       const data = await invoke("list_campaigns");
       const list = Array.isArray(data) ? data : data?.data || [];
       setCampaigns(list);
-      // Set initial aggressiveness
+      // Set initial aggressiveness and work break group
       const aggrMap: Record<string, number> = {};
-      list.forEach((c: any) => { aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1; });
+      const wbgMap: Record<string, string> = {};
+      list.forEach((c: any) => {
+        aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1;
+        if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
+      });
       setAggressiveness(prev => ({ ...prev, ...aggrMap }));
+      setCampaignWBG(prev => ({ ...prev, ...wbgMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
     } finally {
