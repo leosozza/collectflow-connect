@@ -74,8 +74,7 @@ const CampaignsPanel = () => {
   const [linkAgentSearch, setLinkAgentSearch] = useState("");
   const [linkingAgents, setLinkingAgents] = useState(false);
 
-  // Webhook state
-  const [webhookStatus, setWebhookStatus] = useState<Record<string, { active: boolean; id?: string; loading: boolean }>>({});
+  // Webhook status is manual — no state needed
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -151,8 +150,7 @@ const CampaignsPanel = () => {
 
     if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
 
-      // Check webhook status in background
-      checkWebhookStatus(campaignId);
+      // Webhook status is now manual — no automatic check needed
       const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
 
@@ -273,42 +271,12 @@ const CampaignsPanel = () => {
     }
   };
 
-  // ── Webhook Management ──
-  const checkWebhookStatus = async (campaignId: string) => {
-    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], loading: true, active: prev[campaignId]?.active || false } }));
-    try {
-      const data = await invoke("list_webhooks", { campaign_id: campaignId });
-      const webhooks = Array.isArray(data) ? data : data?.data || [];
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-      const rivoWebhook = webhooks.find((w: any) => w.url?.includes("threecplus-webhook") || w.url?.includes(supabaseUrl));
-      setWebhookStatus(prev => ({
-        ...prev,
-        [campaignId]: { active: !!rivoWebhook, id: rivoWebhook?.id ? String(rivoWebhook.id) : undefined, loading: false },
-      }));
-    } catch {
-      setWebhookStatus(prev => ({ ...prev, [campaignId]: { active: false, loading: false } }));
-    }
-  };
+  // ── Webhook Info (manual config — 3CPlus has no REST webhook API) ──
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || ""}/functions/v1/threecplus-webhook`;
 
-  const handleToggleWebhook = async (campaignId: string, enable: boolean) => {
-    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: true } }));
-    try {
-      if (enable) {
-        await invoke("register_webhook", { campaign_id: campaignId });
-        toast.success("Webhook ativado! Eventos serão recebidos em tempo real.");
-      } else {
-        const wh = webhookStatus[campaignId];
-        if (wh?.id) {
-          await invoke("delete_webhook", { campaign_id: campaignId, webhook_id: wh.id });
-        }
-        toast.success("Webhook desativado.");
-      }
-      // Re-check status
-      await checkWebhookStatus(campaignId);
-    } catch (err: any) {
-      toast.error("Erro ao gerenciar webhook: " + (err.message || ""));
-      setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: false } }));
-    }
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    toast.success("URL copiada!");
   };
 
   /* ─── Create Campaign ─── */
@@ -475,26 +443,23 @@ const CampaignsPanel = () => {
                           </Button>
                         </div>
 
-                        {/* Webhook Toggle */}
-                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-                          <Webhook className="w-5 h-5 text-primary shrink-0" />
-                          <div className="flex-1">
+                        {/* Webhook Info Card */}
+                        <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Webhook className="w-4 h-4 text-primary shrink-0" />
                             <Label className="text-xs font-medium">Webhook Bidirecional</Label>
-                            <p className="text-xs text-muted-foreground">Receba eventos de chamada em tempo real</p>
                           </div>
-                          {webhookStatus[cid]?.loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              {webhookStatus[cid]?.active && (
-                                <Badge variant="outline" className="text-xs border-green-500 text-green-600">Ativo</Badge>
-                              )}
-                              <Switch
-                                checked={webhookStatus[cid]?.active || false}
-                                onCheckedChange={(checked) => handleToggleWebhook(cid, checked)}
-                              />
-                            </div>
-                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Configure esta URL no painel da 3CPlus para receber eventos de chamada em tempo real:
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <code className="text-[10px] bg-background border rounded px-2 py-1 flex-1 truncate select-all">
+                              {webhookUrl}
+                            </code>
+                            <Button size="sm" variant="outline" className="shrink-0 text-xs h-7" onClick={copyWebhookUrl}>
+                              Copiar
+                            </Button>
+                          </div>
                         </div>
 
                         {/* Sub-tabs */}
