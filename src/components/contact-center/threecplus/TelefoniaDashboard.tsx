@@ -509,7 +509,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
+  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
 
   // Load campaign qualifications
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
