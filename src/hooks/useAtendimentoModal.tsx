@@ -57,6 +57,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const [elapsed, setElapsed] = useState(0);
   const openedAt = useRef<number>(0);
   const [pauseControls, setPauseControlsState] = useState<PauseControls | null>(null);
+  const [agentStatusState, setAgentStatusState] = useState<number | string | undefined>(undefined);
+  const onFinishDispositionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!state.isOpen) { setElapsed(0); return; }
