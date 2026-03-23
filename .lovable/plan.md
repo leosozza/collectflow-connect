@@ -1,92 +1,102 @@
 
 
-# Plano: Corrigir tela do operador — Retomar, Tabulação e Intervalos
+# Plano: Integração Bidirecional com 3CPlus
 
-## Problemas identificados
+## Situação atual
 
-### 1. Intervalos não aparecem para o operador
-A resposta do `agents_status` da 3CPlus retorna apenas `{id, extension, name, status, status_start_time}` — **sem campo `campaign_id`**. O código depende de `myCampaignId` (linha 442: `myAgent?.campaign_id`) para disparar `loadPauseIntervals` (linha 636), mas esse valor é sempre `null`. Portanto os intervalos nunca são carregados.
+A integração é **unidirecional** — RIVO envia comandos para 3CPlus (login, pause, qualify, campaigns) mas nunca recebe callbacks. O sistema usa polling a cada 5 segundos para detectar mudanças de status. Não há registro automático de chamadas — `call_logs` só é preenchido manualmente via `saveCallLog` (busca retroativa).
 
-**Correção**: Quando o operador faz login na campanha, salvar o `campaign_id` selecionado em `sessionStorage`. Usar esse valor como fallback quando `myAgent?.campaign_id` não estiver disponível. Isso garante que `loadPauseIntervals` seja chamado ao recarregar a página.
+## O que a bidirecionalidade resolve
 
-### 2. Botão "Retomar" não funciona após ligação
-Quando uma chamada termina na 3CPlus, o agente entra automaticamente em "ACW" (After Call Work / pós-atendimento), que aparece como status 3 (paused). Nesse estado, o agente precisa **qualificar a chamada** antes de poder retomar. O endpoint `POST /agent/work_break/exit` só funciona para pausas manuais, não para ACW.
-
-A 3CPlus exige que o agente chame `POST /agent/call/{call_id}/qualify` com uma `qualification_id` para sair do ACW. Somente após a qualificação o agente volta ao status 1 (idle).
-
-**Correção**: Detectar quando o status 3 é pós-chamada (ACW) vs pausa manual:
-- Se acabou de sair de status 2 (on_call) para 3, é ACW → mostrar tela de tabulação
-- Se entrou em pausa via botão de intervalo, é pausa manual → mostrar botão Retomar
-
-### 3. Sem tela de tabulação após chamada
-Atualmente, quando a chamada termina e o agente entra em ACW (status 3), o dashboard mostra a mesma tela de "Aguardando" com botão Retomar. Deveria mostrar uma tela de tabulação com as qualificações da campanha.
-
-**Correção**: Adicionar estado `isACW` que é setado quando o status transiciona de 2→3. Nesse estado, renderizar uma tela de tabulação com as qualificações disponíveis. Ao selecionar uma qualificação, chamar `qualify_call` no proxy, e o agente volta automaticamente ao idle.
+- Registro automático de chamadas (início, fim, duração, gravação)
+- Atualização instantânea de status do agente (sem delay de polling)
+- Captura de qualificações feitas diretamente na 3CPlus
+- Dados mais confiáveis para relatórios e timeline do cliente
 
 ## Mudanças
 
-### 1. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+### 1. Nova Edge Function: `threecplus-webhook/index.ts`
 
-**Persistir campaign_id no login** (handleCampaignLogin):
-- Salvar `selectedCampaign` em `sessionStorage` como `3cp_campaign_id`
+Endpoint público que recebe POST da 3CPlus com eventos de campanha.
 
-**Corrigir myCampaignId** (linha 442):
-- Fallback: `myAgent?.campaign_id || sessionStorage.getItem("3cp_campaign_id")`
+**Eventos tratados:**
+- `call.started` — registra início da chamada
+- `call.answered` — atualiza status para "em andamento"
+- `call.finished` — insere registro completo em `call_logs` (duração, gravação, qualificação)
+- `call.qualified` — atualiza `call_logs` com qualificação e cria `call_dispositions` se mapeável
+- `agent.status_changed` — atualiza cache de status do agente (opcional)
 
-**Detectar ACW vs pausa manual**:
-- Novo state: `previousStatus` para rastrear transição de status
-- `isACW = isPaused && previousStatus === 2` (veio de ligação)
-- `isManualPause = isPaused && previousStatus !== 2`
+**Lógica principal:**
+- Recebe payload JSON da 3CPlus
+- Identifica o tenant pelo `domain` (busca em `tenants.settings` onde `threecplus_domain` = domain do webhook)
+- Identifica o cliente pelo telefone (busca em `clients` por phone match)
+- Insere/atualiza `call_logs` automaticamente
+- Cria `client_events` via o trigger existente `trg_client_event_from_call_log`
+- Loga payload completo para debug
 
-**Rastrear última chamada para tabulação**:
-- Salvar `lastCallId` e `lastCallPhone` quando `activeCall` existe (status 2)
-- Usar na tela de tabulação
+**Segurança:** Validação por token secreto no header (configurável por tenant).
 
-**Nova tela de tabulação (ACW)**:
-- Renderizar quando `isACW === true` com:
-  - Lista de qualificações da campanha (já disponíveis via `campaign_qualifications`)
-  - Campo de observação opcional
-  - Ao selecionar qualificação → chamar `qualify_call` no proxy
-  - Após qualificar → agente volta ao idle automaticamente
+### 2. `supabase/config.toml` — Desabilitar JWT para webhook
 
-**Carregar qualificações da campanha**:
-- Ao logar na campanha, buscar qualificações via `campaign_qualifications`
-- Armazenar em state `campaignQualifications`
-
-### 2. `supabase/functions/threecplus-proxy/index.ts`
-
-Verificar que `qualify_call` já existe (sim, linha 777-795) — nenhuma mudança necessária no proxy.
-
-## Fluxo corrigido
-
-```text
-Operador loga na campanha
-  → salva campaign_id em sessionStorage
-  → carrega intervalos de pausa ✓
-  → carrega qualificações da campanha
-
-Aguardando (status 1)
-  → mostra KPIs, histórico, botão Intervalo ✓
-
-Em ligação (status 2)
-  → salva call_id para uso posterior
-  → mostra tela de atendimento
-
-Pós-chamada / ACW (status 2→3)
-  → detecta transição 2→3 = ACW
-  → mostra tela de TABULAÇÃO
-  → operador seleciona qualificação
-  → chama qualify_call
-  → agente volta ao status 1
-
-Pausa manual (status 1→3 via intervalo)
-  → mostra botão Retomar ✓
-  → chama unpause_agent (work_break/exit)
+```toml
+[functions.threecplus-webhook]
+verify_jwt = false
 ```
 
-## Arquivos a editar
+### 3. `supabase/functions/threecplus-proxy/index.ts` — Ação para registrar webhook
+
+Novo action `register_webhook` que chama `POST /campaigns/{id}/webhooks` na API 3CPlus para cadastrar a URL do webhook do RIVO:
+```
+https://{SUPABASE_URL}/functions/v1/threecplus-webhook
+```
+
+Novo action `list_webhooks` para verificar webhooks já cadastrados.
+
+### 4. `src/components/contact-center/threecplus/CampaignsPanel.tsx` — Botão de ativar webhook
+
+Na aba expandida da campanha, adicionar toggle "Webhook ativo" que:
+- Verifica se já existe webhook cadastrado para a campanha
+- Se não, registra automaticamente via `register_webhook`
+- Mostra status (ativo/inativo)
+
+### 5. `src/components/admin/integrations/ThreeCPlusTab.tsx` — Status bidirecional
+
+Adicionar indicador visual mostrando se a integração é unidirecional ou bidirecional (baseado na presença de webhooks ativos).
+
+### 6. Secret para validação
+
+Adicionar secret `THREECPLUS_WEBHOOK_SECRET` para validar que as requisições vêm realmente da 3CPlus.
+
+## Fluxo bidirecional completo
+
+```text
+3CPlus dispara chamada
+  → call.started → webhook RIVO
+    → insere call_logs (status: ringing)
+    → trigger cria client_event
+
+Operador atende
+  → call.answered → webhook RIVO
+    → atualiza call_logs (status: in_progress)
+
+Chamada termina
+  → call.finished → webhook RIVO
+    → atualiza call_logs (duração, recording_url, status: completed)
+
+Operador qualifica na 3CPlus
+  → call.qualified → webhook RIVO
+    → atualiza call_logs (qualification)
+    → mapeia para call_disposition_types do tenant
+    → cria call_dispositions se mapeável
+    → trigger cria client_event
+```
+
+## Arquivos a criar/editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Persistir campaign_id, detectar ACW, tela de tabulação, carregar qualificações |
+| `supabase/functions/threecplus-webhook/index.ts` | **Novo** — endpoint receptor de webhooks |
+| `supabase/config.toml` | Adicionar `[functions.threecplus-webhook] verify_jwt = false` |
+| `supabase/functions/threecplus-proxy/index.ts` | Novos actions: `register_webhook`, `list_webhooks`, `delete_webhook` |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Toggle de webhook por campanha |
 
