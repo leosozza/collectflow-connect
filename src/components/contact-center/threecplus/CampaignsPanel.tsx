@@ -273,42 +273,12 @@ const CampaignsPanel = () => {
     }
   };
 
-  // ── Webhook Management ──
-  const checkWebhookStatus = async (campaignId: string) => {
-    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], loading: true, active: prev[campaignId]?.active || false } }));
-    try {
-      const data = await invoke("list_webhooks", { campaign_id: campaignId });
-      const webhooks = Array.isArray(data) ? data : data?.data || [];
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-      const rivoWebhook = webhooks.find((w: any) => w.url?.includes("threecplus-webhook") || w.url?.includes(supabaseUrl));
-      setWebhookStatus(prev => ({
-        ...prev,
-        [campaignId]: { active: !!rivoWebhook, id: rivoWebhook?.id ? String(rivoWebhook.id) : undefined, loading: false },
-      }));
-    } catch {
-      setWebhookStatus(prev => ({ ...prev, [campaignId]: { active: false, loading: false } }));
-    }
-  };
+  // ── Webhook Info (manual config — 3CPlus has no REST webhook API) ──
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || ""}/functions/v1/threecplus-webhook`;
 
-  const handleToggleWebhook = async (campaignId: string, enable: boolean) => {
-    setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: true } }));
-    try {
-      if (enable) {
-        await invoke("register_webhook", { campaign_id: campaignId });
-        toast.success("Webhook ativado! Eventos serão recebidos em tempo real.");
-      } else {
-        const wh = webhookStatus[campaignId];
-        if (wh?.id) {
-          await invoke("delete_webhook", { campaign_id: campaignId, webhook_id: wh.id });
-        }
-        toast.success("Webhook desativado.");
-      }
-      // Re-check status
-      await checkWebhookStatus(campaignId);
-    } catch (err: any) {
-      toast.error("Erro ao gerenciar webhook: " + (err.message || ""));
-      setWebhookStatus(prev => ({ ...prev, [campaignId]: { ...prev[campaignId], active: prev[campaignId]?.active || false, loading: false } }));
-    }
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    toast.success("URL copiada!");
   };
 
   /* ─── Create Campaign ─── */
