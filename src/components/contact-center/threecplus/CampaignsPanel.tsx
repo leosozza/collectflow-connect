@@ -149,8 +149,10 @@ const CampaignsPanel = () => {
       const agents = Array.isArray(agentsRes) ? agentsRes : agentsRes?.data || [];
       setCampaignAgents(prev => ({ ...prev, [campaignId]: agents }));
 
-      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+    if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
 
+      // Check webhook status in background
+      checkWebhookStatus(campaignId);
       const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
 
