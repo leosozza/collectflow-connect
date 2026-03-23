@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       case 'campaign_details': {
         const campErr = requireField(body, 'campaign_id', corsHeaders);
         if (campErr) return campErr;
-        url = buildUrl(baseUrl, `campaign/${body.campaign_id}`, authParam);
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
         break;
       }
 
