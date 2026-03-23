@@ -208,7 +208,7 @@ const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; do
 };
 
 const ThreeCPlusTab = () => {
-  const { tenant } = useTenant();
+  const { tenant, refetch } = useTenant();
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   const [domain, setDomain] = useState(settings.threecplus_domain || "");
