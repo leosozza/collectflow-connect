@@ -1,47 +1,62 @@
 
 
-# Plano: Corrigir intervalos de pausa, botão de tabulação e endpoints 3CPlus
+# Plano: Edição bidirecional completa de intervalos (RIVO ↔ 3CPlus)
 
-## Problemas encontrados
+## Situacao atual
 
-### 1. Intervalos de pausa nunca aparecem
-O `loadPauseIntervals` depende de `campaign_details` que usa o endpoint `campaign/{id}` (singular). A 3CPlus API exige `campaigns/{id}` (plural). Resultado: **404 em toda chamada de `campaign_details`**, `work_break_group_id` nunca é encontrado, e o array `pauseIntervals` fica vazio.
+O `WorkBreakIntervalsPanel` atualmente envia apenas `name` e `max_time` (como `minutes`) ao criar/editar intervalos na 3CPlus. A 3CPlus suporta campos adicionais que o RIVO nao envia:
 
-Solucao alternativa mais confiavel: a API 3CPlus tem `GET /agent/work_break_intervals` que retorna os intervalos diretamente da campanha logada, usando o token do agente. Isso elimina a necessidade de buscar `campaign_details` + `work_break_group_id` + `list_work_break_group_intervals`.
+- **Cor** (`color`) — hex string
+- **Tempo maximo diario** (`daily_limit` ou `maximum_daily_time`)
+- **Classificacao do intervalo** (`classification`) — "productive", "unproductive", "nr17"
+- **Retorno do intervalo** (`return_type`) — "flexible", "automatic", "request"
+- **Intervalo automatico** (`auto_start`) — boolean
 
-### 2. Qualificacoes de campanha retornam 422
-O endpoint `campaigns/{id}/qualifications` e um endpoint de **estatisticas** que exige `start_date` e `end_date`. Nao e o endpoint correto para listar as qualificacoes disponiveis. O correto e: buscar detalhes da campanha → obter `qualification_list` → chamar `list_qualification_list_items`.
+O dialog de edicao no RIVO so tem Nome e Tempo Maximo, faltam todos os outros campos que a 3CPlus oferece (conforme o screenshot).
 
-Solucao: usar `GET /campaigns/{id}` (endpoint correto, plural) para obter o `qualification_list` id, depois `list_qualification_list_items` com esse id. Ou usar os dados do tenant settings que ja tem o `qualification_list_id`.
-
-### 3. Botao "Finalizar Tabulacao" no fundo da pagina
-O usuario espera o botao no topo, junto ao banner de status. Esta no fim do componente (apos todo o conteudo).
+Alem disso, a edicao no RIVO ja chama a API 3CPlus (`update_work_break_group_interval`), entao **RIVO → 3CPlus ja funciona** para os campos que envia. O problema e que:
+1. Faltam campos no formulario do RIVO
+2. O proxy so envia `name` e `minutes`, ignorando os demais campos
+3. A leitura dos intervalos da 3CPlus nao carrega esses campos extras na UI
 
 ## Correcoes
 
-### 1. `supabase/functions/threecplus-proxy/index.ts`
+### 1. `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` — Redesign do dialog de intervalo
 
-**Corrigir `campaign_details`**: trocar `campaign/${id}` por `campaigns/${id}` (linha 93).
+Expandir o dialog de edicao para incluir todos os campos da 3CPlus:
 
-**Nova action `agent_work_break_intervals`**: usar `GET /agent/work_break_intervals` com token do agente (resolve via `resolveAgentToken`). Retorna os intervalos diretamente, sem precisar buscar grupo.
+- **Nome** (ja existe)
+- **Cor** — color picker com paleta de cores (dots clicaveis, como na 3CPlus)
+- **Tempo maximo do intervalo** (minutos) (ja existe)
+- **Tempo maximo em intervalo diario** (minutos) — novo campo
+- **Classificacao do intervalo** — Select com opcoes: Produtivo, Improdutivo, NR 17
+- **Retorno do intervalo** — Select com opcoes: Retorno flexivel, Retorno automatico, Solicitar retorno
+- **Intervalo automatico** — Switch toggle
 
-**Corrigir `campaign_qualifications`**: em vez de chamar o endpoint de stats, buscar detalhes da campanha (`GET /campaigns/{id}`) para obter o `qualification_list`, depois chamar `GET /qualification_lists/{list_id}/qualifications`.
+Ao salvar, enviar todos os campos para o proxy. Ao abrir para edicao, carregar todos os campos do intervalo existente.
 
-### 2. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+### 2. `supabase/functions/threecplus-proxy/index.ts` — Enviar campos extras
 
-**`loadPauseIntervals`**: trocar para usar `agent_work_break_intervals` (com `agent_id`) como fonte primaria. Fallback para o fluxo existente (campaign_details + group_id).
+No `create_work_break_group_interval` e `update_work_break_group_interval`, adicionar os campos extras ao body enviado para a 3CPlus:
 
-**`loadCampaignQualifications`**: usar o `qualification_list_id` do tenant settings como fonte primaria. Se nao tiver, usar a nova action `campaign_qualifications` corrigida.
+```
+const intervalBody = { name: body.name };
+if (body.max_time != null) intervalBody.minutes = Number(body.max_time);
+if (body.daily_limit != null) intervalBody.daily_limit = Number(body.daily_limit);
+if (body.color) intervalBody.color = body.color;
+if (body.classification) intervalBody.classification = body.classification;
+if (body.return_type) intervalBody.return_type = body.return_type;
+if (body.auto_start != null) intervalBody.auto_start = body.auto_start;
+```
 
-### 3. `src/pages/AtendimentoPage.tsx`
+### 3. Exibicao dos campos na lista de intervalos
 
-**Mover botao "Finalizar Tabulacao"**: colocar logo abaixo do banner de status no topo, nao no fundo da pagina.
+Mostrar a cor como dot colorido ao lado do nome e o tempo diario na linha do intervalo.
 
 ## Arquivos a editar
 
 | Arquivo | Mudanca |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Corrigir URL `campaign_details`; nova action `agent_work_break_intervals`; corrigir `campaign_qualifications` |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `agent_work_break_intervals` para intervalos; usar `qualification_list_id` do tenant para qualificacoes |
-| `src/pages/AtendimentoPage.tsx` | Mover botao "Finalizar Tabulacao" para o topo |
+| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Redesign do dialog com todos os campos (cor, tempo diario, classificacao, retorno, auto) |
+| `supabase/functions/threecplus-proxy/index.ts` | Enviar campos extras no create/update de intervalos |
 
