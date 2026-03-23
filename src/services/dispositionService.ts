@@ -175,6 +175,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
           schedule_days_limit: t.schedule_days_limit,
           blocklist_mode: t.blocklist_mode,
           blocklist_days: t.blocklist_days,
+          threecplus_qualification_id: (t as any).threecplus_qualification_id || null,
         })),
       },
     });
@@ -200,6 +201,17 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
       .update({ settings: updatedSettings } as any)
       .eq("id", tenantId);
 
+    // Persist threecplus_qualification_id back to each disposition type
+    const types2 = await fetchTenantDispositionTypes(tenantId);
+    for (const t of types2) {
+      const qId = dispositionMap[t.key];
+      if (qId && (t as any).threecplus_qualification_id !== qId) {
+        await supabase
+          .from("call_disposition_types")
+          .update({ threecplus_qualification_id: qId } as any)
+          .eq("id", t.id);
+      }
+    }
     // Auto-link qualification list to all campaigns
     let campaignsUpdated = 0;
     if (listId) {

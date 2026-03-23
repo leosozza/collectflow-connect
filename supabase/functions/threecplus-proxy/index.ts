@@ -987,7 +987,9 @@ Deno.serve(async (req) => {
         // 3. Create or update items
         for (const disp of dispositions) {
           if (!disp.active) continue;
-          const existing = existingItems.find((item: any) => item.name === disp.label);
+          // Match by persisted 3CPlus ID first, then fallback to name
+          const existing = (disp.threecplus_qualification_id && existingItems.find((item: any) => item.id === disp.threecplus_qualification_id))
+            || existingItems.find((item: any) => item.name === disp.label);
           if (existing) {
             // Update existing item with full payload
             const updatePayload = buildQualPayload(disp);
@@ -1015,8 +1017,10 @@ Deno.serve(async (req) => {
               continue;
             }
             const newItem = await createItemRes.json();
-            if (newItem?.id) {
-              resultMap[disp.key] = newItem.id;
+            console.log(`Created qualification "${disp.label}" response:`, JSON.stringify(newItem));
+            const newId = newItem?.id || newItem?.data?.id;
+            if (newId) {
+              resultMap[disp.key] = newId;
             } else {
               console.error(`Created qualification "${disp.label}" but got no id:`, JSON.stringify(newItem));
             }
@@ -1109,10 +1113,10 @@ Deno.serve(async (req) => {
     const data = await response.json();
     console.log(`3CPlus response: ${response.status}`);
 
-    // Always return 200 from proxy, include upstream status in response body
+    // Always return 200 from proxy, include upstream status and success flag in response body
     const responseBody = typeof data === 'object' && data !== null
-      ? { ...data, status: response.status }
-      : { data, status: response.status };
+      ? { ...data, status: response.status, success: response.ok }
+      : { data, status: response.status, success: response.ok };
 
     return new Response(
       JSON.stringify(responseBody),

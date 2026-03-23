@@ -1,0 +1,1 @@
+ALTER TABLE public.call_disposition_types ADD COLUMN IF NOT EXISTS threecplus_qualification_id integer DEFAULT NULL;
