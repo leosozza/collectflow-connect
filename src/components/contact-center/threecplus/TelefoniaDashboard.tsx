@@ -827,7 +827,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [effectiveACW, campaignQualifications.length, myCampaignId, loadCampaignQualifications]);
 
   if (isOperatorView && myAgent) {
-    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isTPAStatus:", isTPAStatus, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
     console.log("[3CPlus] activeCall (live):", JSON.stringify(activeCall), "lastFinished:", JSON.stringify(lastFinishedCall));
     console.log("[3CPlus] resolved mailing — CPF:", mailingCpf, "clientDbId:", mailingClientId, "phone:", activeCallPhone);
   }
