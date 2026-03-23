@@ -1,35 +1,51 @@
 
 
-# Plano: Corrigir mapeamento de tabulações na aba de integração
+# Plano: Corrigir persistência do mapeamento de tabulações
 
-## Problemas identificados
+## Problema
 
-### 1. Mapeamento usa lista hardcoded em vez das tabulações reais do tenant
-A seção "Mapeamento de Tabulações" em `ThreeCPlusTab.tsx` (linha 494) usa `DISPOSITION_TYPES` — um objeto hardcoded com apenas 5 itens genéricos. O tenant tem 10 tabulações configuradas na tabela `call_disposition_types`, mas nenhuma delas aparece no mapeamento.
+O `handleSaveMap` usa `...settings` do contexto do tenant para construir o objeto de settings atualizado. Porém o contexto **nunca é recarregado** após qualquer save — nem após salvar credenciais, nem após salvar o mapeamento.
 
-### 2. Qualificações só carregam após "Testar Conexão"
-O `loadQualifications` só roda quando `connected === true` (após clicar "Testar Conexão"). Se o usuário já tem credenciais salvas e abre a aba, as qualificações não aparecem.
+Isso causa dois bugs:
 
-### 3. A sincronização cria qualificações na 3CPlus mas o mapeamento manual não as mostra
-O `syncDispositionsTo3CPlus` cria a lista "RIVO Tabulações" na 3CPlus e gera o `disposition_map` automaticamente. Mas o mapeamento manual na aba de integração busca qualificações de outra fonte (primeira lista encontrada ou `qualification_list_id` de uma campanha), que pode não ser a lista "RIVO Tabulações".
+1. **Sobrescrita de dados**: Se o usuário salva credenciais e depois salva o mapeamento, o `settings` usado no spread ainda é o antigo (sem as credenciais). O mapeamento é salvo mas as credenciais são apagadas da coluna `settings`.
 
-## Correções
+2. **Dados não aparecem ao recarregar**: Mesmo que o save funcione, ao navegar para outra página e voltar, o `tenant` do contexto pode estar desatualizado.
+
+O mesmo problema afeta `handleSave` (credenciais): se o mapeamento já foi salvo, salvar credenciais sobrescreve o mapeamento.
+
+## Correção
 
 ### `src/components/integracao/ThreeCPlusTab.tsx`
 
-1. **Trocar `DISPOSITION_TYPES` pelas tabulações reais do tenant** — Buscar da tabela `call_disposition_types` via query (mesmo padrão do `CallDispositionTypesTab`)
+1. Importar `refetch` do `useTenant()`
+2. Em `handleSave` (credenciais): após o update bem-sucedido, chamar `await refetch()`
+3. Em `handleSaveMap` (mapeamento): 
+   - Antes de salvar, buscar o `settings` mais recente do banco (em vez de usar o do contexto)
+   - Após o update, chamar `await refetch()`
 
-2. **Carregar qualificações automaticamente** — Se o tenant já tem `threecplus_domain` e `threecplus_api_token` salvos, carregar qualificações ao montar o componente (sem exigir "Testar Conexão")
+A busca fresca garante que não sobrescreva dados salvos por outra operação:
 
-3. **Priorizar a lista "RIVO Tabulações"** — No `loadQualifications`, buscar todas as listas e priorizar a que tem nome "RIVO Tabulações". Incluir também as qualificações padrão do sistema (IDs negativos: -2, -3, -4, -5) como opções de mapeamento
+```typescript
+const handleSaveMap = async () => {
+  // Buscar settings frescos do banco
+  const { data: freshTenant } = await supabase
+    .from("tenants").select("settings").eq("id", tenant.id).single();
+  const freshSettings = (freshTenant?.settings as Record<string,any>) || {};
+  
+  await supabase.from("tenants").update({
+    settings: { ...freshSettings, threecplus_disposition_map: dispositionMap }
+  }).eq("id", tenant.id);
+  
+  await refetch();
+};
+```
 
-4. **Mostrar o mapeamento automático existente** — Se o tenant já tem `threecplus_disposition_map` no settings, mostrar o mapeamento atual mesmo sem carregar qualificações da API (exibir os IDs mapeados)
-
-5. **Incluir qualificações padrão do sistema** — As qualificações com ID negativo (-2 Não qualificada, -3 Caixa Postal, -4 Mudo, -5 Limite de tempo excedido) são nativas da 3CPlus e devem aparecer como opções de mapeamento. Adicioná-las à lista de qualificações disponíveis
+Aplicar o mesmo padrão no `handleSave` de credenciais.
 
 ## Arquivo a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/integracao/ThreeCPlusTab.tsx` | Buscar tabulações do banco, carregar qualificações automaticamente, priorizar lista RIVO, incluir qualificações padrão do sistema |
+| `src/components/integracao/ThreeCPlusTab.tsx` | Buscar settings frescos antes de salvar; chamar `refetch()` após cada save |
 
