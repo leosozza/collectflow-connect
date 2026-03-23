@@ -796,10 +796,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   useEffect(() => {
     const call = activeCall || lastFinishedCall;
     if (call) {
-      const callId = call.call_id || call.id;
-      if (callId) {
-        setLastCallId(callId);
-        sessionStorage.setItem("3cp_last_call_id", String(callId));
+      // Prefer telephony_id for qualify API, fallback to call_id/id
+      const telephonyId = call.telephony_id || call.call_id || call.id;
+      if (telephonyId) {
+        setLastCallId(telephonyId);
+        sessionStorage.setItem("3cp_last_call_id", String(telephonyId));
       }
       const phone = call.phone || "";
       if (phone) setLastCallPhone(phone);
