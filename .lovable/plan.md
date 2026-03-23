@@ -1,33 +1,66 @@
 
-# Resultado da Analise
 
-## Tela de Telefonia (Operador)
+# Plano: Melhorar aba Campanhas em /contact-center/telefonia
 
-### Login na Campanha
-- **Funcionando**: O login na campanha foi executado com sucesso. O sistema chamou `login_agent_to_campaign` e `connect_agent`, exibiu o toast "Conectado! Atenda o MicroSIP para iniciar." e abriu o widget flutuante com cronometro.
-- **Limitacao do teste**: O agente permanece com `status: 0` (offline) na API 3CPlus porque o MicroSIP nao esta rodando neste ambiente de teste. O dashboard mostra a tela de selecao de campanha ao inves da tela de operacao porque `isAgentOnline` depende do status ser diferente de 0. Isso e comportamento correto — o operador precisa atender a chamada do MicroSIP para ficar online.
+## Situacao atual
 
-### Pausa/Retomar
-- **Codigo correto**: Os endpoints no proxy estao apontando para as URLs corretas da API 3CPlus:
-  - Pausar: `POST /agent/work_break/{interval_id}/enter` com body vazio
-  - Retomar: `POST /agent/work_break/exit` com body vazio
-- **Nao foi possivel testar em tempo real** porque o agente precisa estar online (status != 0) para os botoes de pausa aparecerem. Sem MicroSIP conectado, nao ha como atingir esse estado.
+O `CampaignsPanel.tsx` lista campanhas com opcoes basicas: criar, expandir para ver listas/agentes. Faltam acoes essenciais e analise.
 
-### Intervalos de Pausa
-- O carregamento de intervalos (`loadPauseIntervals`) busca o `work_break_group_id` da campanha e carrega os intervalos do grupo. A logica esta correta.
-- O nome da pausa ativa e persistido em `sessionStorage` para sobreviver refreshes.
+## Endpoints 3CPlus disponiveis (confirmados na API oficial)
 
-## Landing Page (Visual)
-- **Animacoes de fundo**: Componente `AnimatedBars` implementado com barras verticais animadas usando framer-motion com opacidade 6%.
-- **Parallax**: Componente `Section` com efeito de parallax via `useScroll`/`useTransform`.
-- **Hover effects**: Presentes no codigo.
-- **Nao foi possivel visualizar** a landing page porque o usuario esta logado e `/` redireciona para o dashboard. A landing page e acessivel em `/site` ou quando deslogado.
+| Acao | Endpoint | Status no proxy |
+|---|---|---|
+| Excluir campanha | `DELETE /campaigns/{id}` | Falta adicionar |
+| Pausar campanha | `PUT /campaigns/{id}/pause` | Ja existe |
+| Retomar campanha | `PUT /campaigns/{id}/resume` | Ja existe |
+| Excluir lista de mailing | `DELETE /campaigns/{id}/lists/{list-id}` | Falta adicionar |
+| Excluir todas as listas | `DELETE /campaigns/{id}/lists` | Falta adicionar |
+| Metricas por lista | `GET /campaigns/{id}/lists/metrics` | Falta adicionar |
+| Metricas totais | `GET /campaigns/{id}/lists/total_metrics` | Falta adicionar |
+| Metricas agentes | `GET /campaigns/{id}/agents/metrics/total` | Falta adicionar |
+| Stats qualificacoes | `GET /campaigns/{id}/qualifications` | Falta adicionar |
+| Agressividade | `PATCH /campaigns/{id}` | Ja existe (`update_campaign`) |
 
-## Conclusao
-O codigo esta tecnicamente correto. Para testar pausa/retomar de verdade, e necessario:
-1. Ter o MicroSIP instalado e configurado na maquina do operador
-2. Fazer login na campanha
-3. Atender a chamada do MicroSIP (o agente fica online, status muda de 0 para 1)
-4. Ai sim os botoes de Intervalo e Retomar aparecem e podem ser testados
+**Reciclar mailing**: A API 3CPlus nao expoe endpoint de reciclagem via REST. A reciclagem e feita internamente pela plataforma. O campo `recycle_filters` aparece nos dados da lista mas nao existe endpoint para disparar reciclagem via API. Vou implementar exclusao de mailing + reenvio como alternativa funcional.
 
-Para verificar a landing page, acesse `https://rivoconnect.com/site` em uma aba anonima ou deslogada.
+## Mudancas
+
+### 1. `supabase/functions/threecplus-proxy/index.ts` — Novos actions
+
+- `delete_campaign`: `DELETE /campaigns/{campaign_id}`
+- `delete_campaign_list`: `DELETE /campaigns/{campaign_id}/lists/{list_id}`
+- `delete_all_campaign_lists`: `DELETE /campaigns/{campaign_id}/lists`
+- `campaign_lists_metrics`: `GET /campaigns/{campaign_id}/lists/metrics`
+- `campaign_lists_total_metrics`: `GET /campaigns/{campaign_id}/lists/total_metrics`
+- `campaign_agents_metrics`: `GET /campaigns/{campaign_id}/agents/metrics/total`
+- `campaign_qualifications`: `GET /campaigns/{campaign_id}/qualifications`
+
+### 2. `src/components/contact-center/threecplus/CampaignsPanel.tsx` — Redesenho completo
+
+**Cabecalho de cada campanha** (na row expandida):
+- Badge de status (Ativa/Pausada/Inativa) com cor
+- Botoes de acao: Pausar/Retomar, Excluir (com confirmacao), Slider de agressividade
+
+**Secao expandida com sub-tabs**:
+1. **Visao Geral**: Cards com metricas (total discado, atendidas, abandonadas, ASR, tempo medio)
+2. **Listas de Mailing**: Tabela com nome, total, discado %, completado %, com botao de excluir lista individual e botao "Limpar todas as listas"
+3. **Agentes**: Lista de agentes vinculados com metricas individuais (chamadas, tempo online, tempo pausa)
+4. **Qualificacoes**: Distribuicao de qualificacoes da campanha
+
+**Slider de agressividade**: Ja funcional via `update_campaign` (PATCH). Manter e melhorar visual.
+
+**Excluir campanha**: Dialog de confirmacao com nome da campanha para digitar.
+
+**Pausar/Retomar**: Botoes na linha da campanha (ja tem no `CampaignOverview`, trazer para o `CampaignsPanel`).
+
+### 3. `src/components/contact-center/threecplus/CampaignOverview.tsx`
+
+Manter como componente do Dashboard (visao resumida). O `CampaignsPanel` tera a versao completa.
+
+## Arquivos a editar
+
+| Arquivo | Mudanca |
+|---|---|
+| `supabase/functions/threecplus-proxy/index.ts` | 7 novos actions para campanha |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Redesenho com acoes (pausar, excluir, agressividade), sub-tabs de analise (metricas, listas, agentes, qualificacoes) |
+
