@@ -1,54 +1,122 @@
 
+# Plano: corrigir TPA x pausa e manter a ficha aberta até finalizar a tabulação
 
-# Plano: Status 3CPlus no topo da ficha + Botão "Fechar Tabulação" + Fluxo TPA correto
+## Diagnóstico do que está errado hoje
 
-## Problema atual
+1. O dashboard mistura **TPA** com **pausa manual**:
+   - em `TelefoniaDashboard.tsx`, `isPausedStatus` inclui `status === 4`
+   - o callback `onFinishDisposition` chama `unpause_agent`
+   - o botão **Retomar** acaba sendo exibido/acionado também em contexto de TPA
 
-1. **Sem status 3CPlus visível na ficha** — O operador não sabe em qual estado está na 3CPlus enquanto atende o cliente
-2. **Sem botão "Fechar Tabulação"** — Após tabular na ficha, o operador fecha o modal mas o sistema continua em pausa porque o `qualifyOn3CPlus` falha silenciosamente (mapa vazio ou callId errado)
-3. **Fluxo pós-ligação incorreto** — Ao desligar, a 3CPlus entra em TPA (status 4), mas o RIVO trata como "pausa" genérica. Fechar a ficha não encerra o TPA
+2. A mensagem “**O agente não está em intervalo ou não pode ser removido**” faz sentido com o código atual:
+   - `unpause_agent` usa `/agent/work_break/exit`
+   - isso serve para **intervalo manual**
+   - em **TPA**, o fluxo correto é **qualificar/finalizar a chamada**, não sair de intervalo
 
-## Solução
+3. A ficha não está sendo tratada como a tela principal do pós-chamada:
+   - quando a ligação cai, o dashboard passa para a tela de ACW/TPA
+   - mas o desejado é: **a ficha continuar aberta** até o operador encerrar o TPA nela
 
-### 1. `src/pages/AtendimentoPage.tsx` — Banner de status 3CPlus no topo
+## O que vou corrigir
 
-Adicionar uma barra de status no topo da ficha (antes do ClientHeader) quando `embedded` é true e existe `agentId`:
+### 1. Separar estado real de UI: pausa manual vs TPA
+Criar uma derivação única no `TelefoniaDashboard`:
 
-- Mostra o status atual do agente: **"Em Ligação"**, **"TPA — Pós-atendimento"**, **"Em Pausa"**, **"Ocioso"**
-- Cor contextual (verde=ligação, amber=TPA/pausa, cinza=idle)
-- Centralizado no topo
+- `manualPause`: status 3 com `pause_name`/`activePauseName`
+- `tpa`: status 4, ou status 3 sem pausa manual e com chamada recém-finalizada
+- `onCall`
+- `idle`
 
-Receber nova prop `agentStatus` do `TelefoniaDashboard` via `useAtendimentoModal`.
+Isso passa a controlar:
+- texto do topo
+- cor/status badge
+- botão da barra superior
+- estado enviado ao modal de atendimento
 
-### 2. `src/pages/AtendimentoPage.tsx` — Botão "Fechar Tabulação"
+Resultado esperado:
+- TPA nunca mais aparece como “Em pausa”
+- “Retomar” só aparece para pausa manual
+- TPA aparece como “TPA — Pós-atendimento”
 
-Adicionar botão proeminente **"Finalizar Tabulação"** que:
-- Aparece quando o agente está em TPA/pausa (status 3 ou 4)
-- Ao clicar: chama `qualifyOn3CPlus` (se não qualificou ainda) e depois fecha o modal via `closeAtendimento()`
-- Se `qualifyOn3CPlus` falha, tenta `unpause_agent` como fallback e fecha
-- Após fechar, o agente volta para OCIOSO (status 1)
+### 2. Parar de usar `unpause_agent` para encerrar TPA
+Trocar a lógica do `onFinishDisposition`:
 
-### 3. `src/hooks/useAtendimentoModal.tsx` — Expor status do agente
+- se a chamada já foi qualificada pela ficha (`3cp_qualified_from_disposition`), apenas:
+  - atualizar status
+  - aguardar retorno para ocioso
+  - limpar flags e fechar a ficha
+- se ainda não foi qualificada:
+  - tentar `qualify_call` usando o `callId` correto
+  - só fechar a ficha se a qualificação der certo
+- `unpause_agent` fica restrito a pausa manual
 
-Adicionar `agentStatus` ao contexto do modal para que o `AtendimentoPage` possa ler o status atual do agente 3CPlus.
+Resultado esperado:
+- some o erro de “não está em intervalo”
+- finalizar TPA usa o fluxo correto da 3CPlus
 
-### 4. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` — Passar status ao modal
+### 3. Manter a ficha aberta após a queda da ligação
+Ajustar o `TelefoniaDashboard` para que, quando a ligação cair:
 
-No `setPauseControls` e no `updateAtendimento`, incluir o status atual do agente.
+- se a ficha/modal já estiver aberta, **não trocar para a tela fallback de ACW**
+- a ficha continua aberta com o banner de status em TPA
+- o operador finaliza por dentro da própria ficha
 
-### 5. `src/pages/AtendimentoPage.tsx` — Nova prop + lógica de fechamento
+A tela fallback de ACW continua existindo apenas se:
+- a ficha não estiver aberta
+- ou o operador não tabulou durante o atendimento
 
-Nova prop `onCloseDisposition?: () => void` que o `TelefoniaDashboard` passa via modal context. Quando chamada:
-1. Tenta qualify na 3CPlus
-2. Se falha, tenta unpause
-3. Fecha o modal
-4. Limpa flags do sessionStorage
+### 4. Ajustar a ação “Finalizar Tabulação” dentro da ficha
+Em `AtendimentoPage.tsx`:
 
-## Arquivos a editar
+- manter o banner central com status da 3CPlus
+- alterar o botão para obedecer o fluxo:
+  - em **TPA**: finalizar qualificação/encerramento do pós-atendimento
+  - em **pausa manual**: não usar o mesmo fluxo de TPA
+- impedir fechamento “silencioso” da ficha enquanto o operador ainda estiver em TPA sem finalizar corretamente
 
-| Arquivo | Mudança |
+### 5. Garantir consistência do callId e do estado de tabulação
+Aproveitar o fluxo já existente para reforçar:
+
+- priorizar `telephony_id` / `3cp_last_call_id`
+- não limpar flags cedo demais
+- só limpar:
+  - `3cp_last_call_id`
+  - `3cp_qualified_from_disposition`
+  - `3cp_active_pause_name`
+  quando o estado realmente tiver sido concluído
+
+## Arquivos a ajustar
+
+| Arquivo | Ajuste |
 |---|---|
-| `src/hooks/useAtendimentoModal.tsx` | Adicionar `agentStatus` ao state/context + callback `onFinishDisposition` |
-| `src/pages/AtendimentoPage.tsx` | Banner de status no topo + botão "Finalizar Tabulação" |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Passar `agentStatus` ao modal context |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | separar TPA de pausa, corrigir botão Retomar, manter ficha aberta no pós-chamada, corrigir callback de finalização |
+| `src/pages/AtendimentoPage.tsx` | finalizar TPA corretamente na ficha, fechar só após sucesso, reforçar banner/status |
+| `src/hooks/useAtendimentoModal.tsx` | expor/usar `isOpen` e contexto do modal para priorizar a ficha durante o TPA |
+| `src/services/dispositionService.ts` | reutilizar `qualifyOn3CPlus` como caminho oficial de encerramento do TPA |
 
+## Resultado esperado após a correção
+
+```text
+Ligação ativa
+  → ficha abre
+  → cliente desliga
+  → 3CPlus entra em TPA
+  → ficha permanece aberta
+  → topo mostra "TPA — Pós-atendimento"
+  → operador finaliza a tabulação na ficha
+  → sistema qualifica a chamada corretamente
+  → operador volta para "Ocioso"
+
+Pausa manual
+  → topo mostra "Em pausa"
+  → botão "Retomar" usa unpause_agent
+```
+
+## Observação técnica importante
+
+Hoje o bug não é só visual. Ele é de fluxo:
+- o frontend está tratando TPA como se fosse intervalo
+- por isso chama a ação errada no proxy
+- e por isso o operador fica preso no estado incorreto
+
+A correção precisa centralizar a lógica em um **estado derivado único de telefonia**, para evitar que cada trecho da UI interprete o status de um jeito diferente.
