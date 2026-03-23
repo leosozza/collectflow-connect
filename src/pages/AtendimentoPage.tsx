@@ -289,8 +289,42 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
     } finally { setHangingUp(false); }
   };
 
+  const getStatusConfig = () => {
+    const s = Number(agentStatus);
+    if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
+    if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 3) return { label: "Em Pausa", icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 1) return { label: "Ocioso — Aguardando", icon: CheckCircle2, bgClass: "bg-muted text-muted-foreground", pulse: false };
+    return null;
+  };
+
+  const statusConfig = embedded && agentId ? getStatusConfig() : null;
+  const showFinishButton = embedded && onFinishDisposition && (Number(agentStatus) === 3 || Number(agentStatus) === 4);
+
+  const handleFinishDisposition = async () => {
+    setFinishingDisposition(true);
+    try {
+      if (onFinishDisposition) await onFinishDisposition();
+      closeAtendimento();
+      toast.success("Tabulação finalizada — retornando à fila");
+    } catch (e) {
+      console.error("[Atendimento] Erro ao finalizar tabulação:", e);
+      toast.error("Erro ao finalizar. Tente novamente.");
+    } finally {
+      setFinishingDisposition(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* 3CPlus Status Banner */}
+      {statusConfig && (
+        <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>
+          <statusConfig.icon className="w-4 h-4" />
+          {statusConfig.label}
+        </div>
+      )}
+
       {/* Breadcrumb */}
       {!embedded && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
