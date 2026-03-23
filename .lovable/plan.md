@@ -1,49 +1,62 @@
 
 
-# Plano: Corrigir integração bidirecional — Socket.IO em vez de webhooks REST
+# Plano: Melhorar página de Acordos — Boletos, Edição de Parcelas e Segunda Via
 
-## Diagnóstico
+## Problemas identificados
 
-A API 3CPlus **não possui** endpoint `/campaigns/{id}/webhooks`. Confirmei na documentação oficial (Swagger) que não existe nenhum endpoint de webhooks REST para campanhas.
+1. **Sem botão para gerar boleto** — O `AgreementInstallments` mostra boletos existentes (download/PIX) mas não tem botão para **gerar** boleto via Negociarie quando não existe um
+2. **Sem opção de editar data da parcela** — As parcelas são virtuais (calculadas a partir de `first_due_date` + `addMonths`), não há como alterar data individual
+3. **Erro na geração automática** — O `negociarieService.generateAgreementBoletos` já existe mas não é chamado de nenhum lugar na UI
 
-A 3CPlus usa **Socket.IO** para eventos em tempo real. Os eventos disponíveis incluem:
-- `call-was-created`, `call-was-answered`, `call-was-connected`
-- `call-was-ended`, `call-was-finished`, `call-was-abandoned`
-- `agent-is-idle`, `agent-in-acw`, `agent-entered-work-break`
-- `call-history-was-created` (contém dados completos da chamada)
+## Correções
 
-A conexão socket usa: `io("SOCKET_SERVER_ADDR", { transports: ['websocket'], query: { token: "api_token" } })`
+### 1. `src/components/client-detail/AgreementInstallments.tsx` — Adicionar ações por parcela
 
-## Abordagem corrigida
+Transformar de componente de visualização para componente interativo:
 
-Como Edge Functions do Deno não suportam conexões WebSocket persistentes (socket.io client), a integração bidirecional precisa funcionar de duas formas:
+- **Botão "Gerar Boleto"** em cada parcela sem boleto vinculado — chama `negociarieService.novaCobranca` para aquela parcela específica e salva em `negociarie_cobrancas`
+- **Botão "2ª Via"** quando já existe boleto — abre link do boleto existente (já funciona como "Boleto")
+- **Botão "Editar Data"** — permite alterar a data de vencimento de uma parcela individual. Como as parcelas são virtuais, salvar datas customizadas em `negociarie_cobrancas` ou criar um campo `custom_installment_dates` (JSONB) no agreement
+- **Copiar Linha Digitável** — botão adicional quando existe `linha_digitavel`
+- Status mais claro com ícones
 
-### Opção A: Webhook manual (já implementado, funciona)
-O arquivo `threecplus-webhook/index.ts` já está pronto para receber POSTs. O webhook precisa ser configurado **manualmente no painel da 3CPlus** (não via API). A URL já foi fornecida ao usuário.
+### 2. Persistência de datas customizadas
 
-### Opção B: Polling otimizado + registro automático de chamadas
-Usar o endpoint `GET /calls` com filtros de data para buscar chamadas finalizadas e registrar automaticamente em `call_logs`.
+Adicionar coluna `custom_installment_dates` (JSONB) na tabela `agreements` via migration. Formato: `{ "1": "2026-04-15", "3": "2026-06-20" }` — mapeia número da parcela para data customizada. O `AgreementInstallments` lê esse campo e usa a data customizada em vez da calculada.
 
-## Mudanças propostas
+### 3. `src/components/client-detail/AgreementInstallments.tsx` — Redesign completo
 
-### 1. `src/components/contact-center/threecplus/CampaignsPanel.tsx`
-- **Remover** o toggle de "Webhook Bidirecional" que tenta chamar `register_webhook` (endpoint inexistente)
-- **Substituir** por um card informativo com a URL do webhook para configuração manual no painel 3CPlus, com botão de copiar
-- Adicionar badge de status que verifica se o webhook está recebendo dados (checa `call_logs` recentes com `source = 'webhook'`)
+**Props adicionais**: `onRefresh` callback, `tenantId`
 
-### 2. `supabase/functions/threecplus-proxy/index.ts`
-- **Remover** as ações `register_webhook`, `list_webhooks`, `delete_webhook` (endpoints inexistentes na API 3CPlus)
-- Manter tudo mais intacto
+**Novas funcionalidades por parcela**:
+- Gerar boleto individual (chama Negociarie)
+- Editar data de vencimento (dialog inline com datepicker)
+- Download 2ª via do boleto
+- Copiar linha digitável / PIX
+- Registrar pagamento manual (baixa)
 
-### 3. `src/components/admin/integrations/ThreeCPlusTab.tsx`
-- Remover a verificação de webhooks via API (que falha)
-- Verificar status bidirecional checando se existem `call_logs` recentes com source webhook
+**Layout melhorado**:
+- Coluna de ações com dropdown menu em vez de botões soltos
+- Indicador visual mais claro (ícones de check, clock, alert)
+- Progress bar mostrando % de parcelas pagas
 
-## Arquivos a editar
+### 4. `src/services/negociarieService.ts` — Método para gerar boleto individual
+
+Extrair lógica de `generateAgreementBoletos` em método `generateSingleBoleto` reutilizável.
+
+## Migration SQL
+
+```sql
+ALTER TABLE agreements ADD COLUMN IF NOT EXISTS custom_installment_dates jsonb DEFAULT '{}';
+```
+
+## Arquivos a criar/editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Trocar toggle por card informativo com URL do webhook + botão copiar |
-| `supabase/functions/threecplus-proxy/index.ts` | Remover 3 ações de webhook inexistentes |
-| `src/components/admin/integrations/ThreeCPlusTab.tsx` | Ajustar verificação de status bidirecional |
+| `src/components/client-detail/AgreementInstallments.tsx` | Redesign com botões: gerar boleto, 2ª via, editar data, baixa manual |
+| `src/services/negociarieService.ts` | Novo método `generateSingleBoleto` |
+| `src/pages/AcordosPage.tsx` | Passar `tenantId` e `onRefresh` ao `AgreementInstallments` |
+| `src/services/agreementService.ts` | Novo método `updateInstallmentDate` para salvar datas customizadas |
+| Migration | Adicionar coluna `custom_installment_dates` em `agreements` |
 
