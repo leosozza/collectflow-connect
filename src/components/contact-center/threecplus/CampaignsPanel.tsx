@@ -67,6 +67,12 @@ const CampaignsPanel = () => {
   const [creating, setCreating] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
 
+  // Link agents to existing campaign
+  const [linkAgentCampaignId, setLinkAgentCampaignId] = useState<string | null>(null);
+  const [linkAgentIds, setLinkAgentIds] = useState<number[]>([]);
+  const [linkAgentSearch, setLinkAgentSearch] = useState("");
+  const [linkingAgents, setLinkingAgents] = useState(false);
+
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
       body: { action, domain, api_token: apiToken, ...extra },
@@ -229,6 +235,35 @@ const CampaignsPanel = () => {
       loadCampaignDetails(campaignId);
     } catch {
       toast.error("Erro ao limpar listas");
+    }
+  };
+
+  const handleRemoveAgent = async (campaignId: string, agentId: string) => {
+    try {
+      await invoke("remove_campaign_agent", { campaign_id: campaignId, agent_id: Number(agentId) });
+      toast.success("Agente desvinculado!");
+      loadCampaignDetails(campaignId);
+    } catch (err: any) {
+      toast.error("Erro ao desvincular agente: " + (err.message || ""));
+    }
+  };
+
+  const handleLinkAgents = async () => {
+    if (!linkAgentCampaignId || linkAgentIds.length === 0) return;
+    setLinkingAgents(true);
+    try {
+      const res = await invoke("add_agents_to_campaign", { campaign_id: linkAgentCampaignId, agent_ids: linkAgentIds.map(Number) });
+      console.log("add_agents_to_campaign response:", JSON.stringify(res));
+      toast.success(`${linkAgentIds.length} agente(s) vinculado(s)!`);
+      setLinkAgentCampaignId(null);
+      setLinkAgentIds([]);
+      setLinkAgentSearch("");
+      loadCampaignDetails(linkAgentCampaignId);
+    } catch (err: any) {
+      console.error("add_agents error:", err);
+      toast.error("Erro ao vincular agentes: " + (err.message || ""));
+    } finally {
+      setLinkingAgents(false);
     }
   };
 
@@ -462,7 +497,12 @@ const CampaignsPanel = () => {
 
                           {/* Agents */}
                           <TabsContent value="agents" className="mt-3 space-y-3">
-                            <p className="text-sm font-medium text-foreground">Agentes Vinculados</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-foreground">Agentes Vinculados</p>
+                              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => setLinkAgentCampaignId(cid)}>
+                                <Plus className="w-3 h-3" /> Vincular Agentes
+                              </Button>
+                            </div>
                             {(campaignAgents[cid] || []).length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">Nenhum agente vinculado</p>
                             ) : (
@@ -473,14 +513,19 @@ const CampaignsPanel = () => {
                                     <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 text-sm">
                                       <div>
                                         <p className="font-medium">{agent.name || `Agent ${agent.id}`}</p>
-                                        <p className="text-xs text-muted-foreground">#{agent.extension_number || agent.extension?.extension_number || agent.id}</p>
+                                        <p className="text-xs text-muted-foreground">#{agent.extension_number || (typeof agent.extension === 'object' ? agent.extension?.extension_number : agent.extension) || agent.id}</p>
                                       </div>
-                                      {metric && (
-                                        <div className="text-xs text-muted-foreground text-right space-y-0.5">
-                                          <p>Chamadas: {fmt(metric.total_calls || metric.calls)}</p>
-                                          <p>Online: {fmtTime(metric.online_time)} · Pausa: {fmtTime(metric.break_time || metric.pause_time)}</p>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-2">
+                                        {metric && (
+                                          <div className="text-xs text-muted-foreground text-right space-y-0.5">
+                                            <p>Chamadas: {fmt(metric.total_calls || metric.calls)}</p>
+                                            <p>Online: {fmtTime(metric.online_time)} · Pausa: {fmtTime(metric.break_time || metric.pause_time)}</p>
+                                          </div>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveAgent(cid, String(agent.id))} title="Desvincular agente">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -614,6 +659,35 @@ const CampaignsPanel = () => {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateCampaign} disabled={creating} className="gap-2">
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Criar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link Agents Dialog */}
+      <Dialog open={!!linkAgentCampaignId} onOpenChange={(open) => { if (!open) { setLinkAgentCampaignId(null); setLinkAgentIds([]); setLinkAgentSearch(""); } }}>
+        <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vincular Agentes à Campanha</DialogTitle>
+            <DialogDescription>Selecione os agentes para vincular</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Buscar agente..." value={linkAgentSearch} onChange={e => setLinkAgentSearch(e.target.value)} className="h-8 text-xs" />
+            <div className="border rounded-md max-h-[250px] overflow-y-auto">
+              {agentsList.filter((a: any) => !linkAgentSearch.trim() || a.name?.toLowerCase().includes(linkAgentSearch.toLowerCase())).map((agent: any) => (
+                <div key={agent.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30" onClick={() => setLinkAgentIds(prev => prev.includes(agent.id) ? prev.filter(id => id !== agent.id) : [...prev, agent.id])}>
+                  <Checkbox checked={linkAgentIds.includes(agent.id)} onCheckedChange={() => setLinkAgentIds(prev => prev.includes(agent.id) ? prev.filter(id => id !== agent.id) : [...prev, agent.id])} />
+                  <span className="text-xs">{agent.name}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">#{agent.extension_number || (typeof agent.extension === 'object' ? agent.extension?.extension_number : agent.extension) || agent.id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkAgentCampaignId(null)}>Cancelar</Button>
+            <Button onClick={handleLinkAgents} disabled={linkingAgents || linkAgentIds.length === 0} className="gap-2">
+              {linkingAgents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+              Vincular ({linkAgentIds.length})
             </Button>
           </DialogFooter>
         </DialogContent>
