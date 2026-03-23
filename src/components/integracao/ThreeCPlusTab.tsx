@@ -208,7 +208,7 @@ const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; do
 };
 
 const ThreeCPlusTab = () => {
-  const { tenant } = useTenant();
+  const { tenant, refetch } = useTenant();
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   const [domain, setDomain] = useState(settings.threecplus_domain || "");
@@ -259,8 +259,13 @@ const ThreeCPlusTab = () => {
     if (!tenant?.id) return;
     setSaving(true);
     try {
+      // Fetch fresh settings to avoid overwriting other fields
+      const { data: freshTenant } = await supabase
+        .from("tenants").select("settings").eq("id", tenant.id).single();
+      const freshSettings = (freshTenant?.settings as Record<string, any>) || {};
+
       const newSettings = {
-        ...settings,
+        ...freshSettings,
         threecplus_domain: domain.trim(),
         threecplus_api_token: apiToken.trim(),
       };
@@ -269,6 +274,7 @@ const ThreeCPlusTab = () => {
         .update({ settings: newSettings })
         .eq("id", tenant.id);
       if (error) throw error;
+      await refetch();
       toast.success("Credenciais 3CPlus salvas!");
     } catch {
       toast.error("Erro ao salvar credenciais");
@@ -374,8 +380,13 @@ const ThreeCPlusTab = () => {
     if (!tenant?.id) return;
     setSavingMap(true);
     try {
+      // Fetch fresh settings to avoid overwriting credentials or other fields
+      const { data: freshTenant } = await supabase
+        .from("tenants").select("settings").eq("id", tenant.id).single();
+      const freshSettings = (freshTenant?.settings as Record<string, any>) || {};
+
       const newSettings = {
-        ...settings,
+        ...freshSettings,
         threecplus_disposition_map: dispositionMap,
       };
       const { error } = await supabase
@@ -383,6 +394,7 @@ const ThreeCPlusTab = () => {
         .update({ settings: newSettings })
         .eq("id", tenant.id);
       if (error) throw error;
+      await refetch();
       toast.success("Mapeamento de tabulações salvo!");
     } catch {
       toast.error("Erro ao salvar mapeamento");
