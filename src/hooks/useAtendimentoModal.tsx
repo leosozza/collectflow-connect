@@ -183,7 +183,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const clientName = clientData?.nome_completo || "Cliente";
 
   return (
-    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, setPauseControls, isOpen: state.isOpen }}>
+    <AtendimentoModalContext.Provider value={{ openAtendimento, openWaiting, updateAtendimento, closeAtendimento, setPauseControls, setAgentStatus, setOnFinishDisposition, agentStatus: agentStatusState, onFinishDisposition: onFinishDispositionRef.current, isOpen: state.isOpen }}>
       {children}
 
       {state.isOpen && (
