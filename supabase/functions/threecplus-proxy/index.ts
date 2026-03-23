@@ -1015,8 +1015,10 @@ Deno.serve(async (req) => {
               continue;
             }
             const newItem = await createItemRes.json();
-            if (newItem?.id) {
-              resultMap[disp.key] = newItem.id;
+            console.log(`Created qualification "${disp.label}" response:`, JSON.stringify(newItem));
+            const newId = newItem?.id || newItem?.data?.id;
+            if (newId) {
+              resultMap[disp.key] = newId;
             } else {
               console.error(`Created qualification "${disp.label}" but got no id:`, JSON.stringify(newItem));
             }
