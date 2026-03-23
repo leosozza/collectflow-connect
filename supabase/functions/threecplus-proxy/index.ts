@@ -832,8 +832,11 @@ Deno.serve(async (req) => {
         }
         
         if (!extension) {
-          console.log(`Agent ${agentIdNum} extension not found, using agent_id as fallback`);
-          extension = agentIdNum;
+          console.error(`Agent ${agentIdNum} extension not found — cannot proceed with click2call`);
+          return new Response(
+            JSON.stringify({ status: 422, success: false, detail: `Extension SIP não encontrada para o agente ${agentIdNum}. Configure a extension no 3CPlus.` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         // Normalize phone: remove non-digits and ensure Brazil DDI prefix
