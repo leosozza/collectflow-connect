@@ -1,41 +1,55 @@
 
 
-# Plano: Sincronizar tabulações RIVO com qualificações nas campanhas 3CPlus
+# Plano: Corrigir tabulação pós-chamada e detecção de ACW
 
-## Situação atual
+## Diagnóstico
 
-O sistema já cria uma lista de qualificações "RIVO Tabulações" na 3CPlus via `sync_dispositions` e salva o `qualification_list_id` no tenant settings. Porém, **essa lista não é automaticamente vinculada às campanhas existentes**. Ao criar uma campanha nova, o campo `qualification_list` é enviado opcionalmente, mas campanhas já criadas ficam sem a lista RIVO.
+Analisando os logs do console, identifiquei dois problemas principais:
 
-## O que fazer
+### Problema 1: ACW não é detectado de forma confiável
+A detecção de ACW depende de capturar a **transição** de status 2→3 (`previousStatusRef`). Se o polling não capturar o agente em status 2 (a ligação pode ser curta), ou se a página recarrega quando o agente já está em status 3, o `isACW` nunca é setado para `true`. Resultado: a tela de tabulação não aparece.
 
-Após sincronizar as tabulações, automaticamente vincular a lista "RIVO Tabulações" a **todas as campanhas do tenant** via `update_campaign` (PATCH com `qualification_list: listId`).
+### Problema 2: Chamada finalizada permanece no `activeCall`
+A API `company_calls` retorna chamadas com `status: "4"` (finalizada, com `hangup_time`). O `useMemo` que calcula `activeCall` não filtra por status — encontra qualquer chamada do agente, inclusive finalizadas. Isso não causa bug visual (o `isOnCall` é false), mas polui os logs e desperdiça ciclos.
 
-## Mudanças
+### Problema 3: `unpause_agent` retorna 422 em ACW
+Os logs mostram `3CPlus response: 422` ao tentar `unpause_agent` via `work_break/exit`. Isso é esperado — em ACW, o agente só sai da pausa via `qualify_call`. Mas o botão "Retomar" não mostra erro claro.
 
-### 1. `src/services/dispositionService.ts` — `syncDispositionsTo3CPlus`
+## Correções
 
-Após salvar o `disposition_map` e `qualification_list_id` no tenant settings, fazer um loop pelas campanhas do tenant e vincular a lista:
+### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
 
-- Chamar `threecplus-proxy` com action `list_campaigns` para obter todas as campanhas
-- Para cada campanha, chamar `update_campaign` com `qualification_list: listId`
-- Logar resultado
+**1. Detecção robusta de ACW** — Adicionar fallback: se o agente está em status 3, **não** está em pausa manual (`activePauseName` vazio), e existe uma chamada recente finalizada (`activeCall` com `hangup_time` ou status "4"), considerar como ACW.
 
-### 2. `src/components/contact-center/threecplus/CampaignsPanel.tsx`
+```
+const isACWFallback = isPaused 
+  && !activePauseName 
+  && !isACW 
+  && (activeCall?.hangup_time || activeCall?.status === "4" || sessionStorage.getItem("3cp_last_call_id"));
+const effectiveACW = isACW || isACWFallback;
+```
 
-Na aba "Qualificações" da campanha expandida:
-- Mostrar qual lista de qualificações está vinculada à campanha (campo `qualification_list` ou `dialer_settings.qualification_list_id` da resposta)
-- Botão "Vincular Tabulações RIVO" que faz o PATCH da campanha com o `qualification_list_id` salvo no tenant settings
-- Se já vinculada, mostrar badge "✅ Sincronizada"
+Usar `effectiveACW` no lugar de `isACW` na condição de renderização (linha 920).
 
-### 3. `src/components/cadastros/CallDispositionTypesTab.tsx`
+**2. Filtrar chamadas finalizadas do `activeCall`** — No `useMemo` que calcula `activeCall` (linha ~770-781), excluir chamadas com `hangup_time` definido ou `status === "4"`:
 
-No botão "Sincronizar 3CPlus", após a sync, mostrar toast informando quantas campanhas foram atualizadas.
+```
+return allCalls.find((c) => 
+  (String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr) 
+  && !c.hangup_time 
+  && String(c.status) !== "4"
+) || null;
+```
 
-## Arquivos a editar
+**Mas** manter uma referência separada `lastFinishedCall` para preencher `lastCallId` e dados de mailing quando em ACW.
+
+**3. Carregar qualificações no fallback de ACW** — Quando `effectiveACW` é true e `campaignQualifications` está vazio, disparar `loadCampaignQualifications` usando o `myCampaignId` do sessionStorage.
+
+**4. Inicializar `previousStatusRef` corretamente** — No primeiro render, se o agente já está em status 3 e `activePauseName` está vazio, iniciar em modo ACW diretamente.
+
+## Arquivo a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/dispositionService.ts` | Após sync, vincular lista a todas as campanhas |
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Mostrar status de qualificações vinculadas + botão manual |
-| `src/components/cadastros/CallDispositionTypesTab.tsx` | Toast com info de campanhas atualizadas |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Detecção robusta de ACW com fallback, filtrar chamadas finalizadas, carregar qualificações automaticamente |
 
