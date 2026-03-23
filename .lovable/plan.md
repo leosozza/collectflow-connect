@@ -1,51 +1,33 @@
 
 
-# Plano: Corrigir persistência do mapeamento de tabulações
+# Plano: Separar qualificacoes padrao do sistema das tabulacoes gerenciaveis
 
-## Problema
+## Contexto
 
-O `handleSaveMap` usa `...settings` do contexto do tenant para construir o objeto de settings atualizado. Porém o contexto **nunca é recarregado** após qualquer save — nem após salvar credenciais, nem após salvar o mapeamento.
+As qualificacoes com IDs negativos (-2 a -5: Nao qualificada, Caixa Postal, Mudo, Limite de tempo excedido) sao **nativas do sistema 3CPlus** — nao podem ser criadas, editadas ou excluidas pelo RIVO. O RIVO so precisa saber que elas existem para poder mapea-las.
 
-Isso causa dois bugs:
+As demais qualificacoes (IDs positivos) sao as que o RIVO cria na lista "RIVO Tabulacoes" via `sync_dispositions`. Essas sim precisam de mapeamento bidirecional.
 
-1. **Sobrescrita de dados**: Se o usuário salva credenciais e depois salva o mapeamento, o `settings` usado no spread ainda é o antigo (sem as credenciais). O mapeamento é salvo mas as credenciais são apagadas da coluna `settings`.
+## O que precisa mudar
 
-2. **Dados não aparecem ao recarregar**: Mesmo que o save funcione, ao navegar para outra página e voltar, o `tenant` do contexto pode estar desatualizado.
+### 1. Separar visualmente no mapeamento
 
-O mesmo problema afeta `handleSave` (credenciais): se o mapeamento já foi salvo, salvar credenciais sobrescreve o mapeamento.
+Na secao "Mapeamento de Tabulacoes" em `ThreeCPlusTab.tsx`, o dropdown de qualificacoes da 3CPlus mistura qualificacoes do sistema (IDs negativos) com as criadas pelo RIVO (IDs positivos). Precisamos:
 
-## Correção
+- Agrupar no Select: primeiro as qualificacoes do RIVO (criadas via sync), depois um separador, depois as "Padrao do sistema" (IDs -2 a -5)
+- Adicionar label de grupo no dropdown para clareza
 
-### `src/components/integracao/ThreeCPlusTab.tsx`
+### 2. Mostrar card informativo das qualificacoes padrao
 
-1. Importar `refetch` do `useTenant()`
-2. Em `handleSave` (credenciais): após o update bem-sucedido, chamar `await refetch()`
-3. Em `handleSaveMap` (mapeamento): 
-   - Antes de salvar, buscar o `settings` mais recente do banco (em vez de usar o do contexto)
-   - Após o update, chamar `await refetch()`
+Adicionar um card readonly abaixo do mapeamento mostrando as 4 qualificacoes nativas do sistema (como no screenshot do usuario), com colunas: Cor, ID, Nome, Impacto, Comportamento, e badge "Qualificacao nativa do sistema". Isso e apenas informativo — nao editavel.
 
-A busca fresca garante que não sobrescreva dados salvos por outra operação:
+### 3. Nao incluir qualificacoes do sistema no `sync_dispositions`
 
-```typescript
-const handleSaveMap = async () => {
-  // Buscar settings frescos do banco
-  const { data: freshTenant } = await supabase
-    .from("tenants").select("settings").eq("id", tenant.id).single();
-  const freshSettings = (freshTenant?.settings as Record<string,any>) || {};
-  
-  await supabase.from("tenants").update({
-    settings: { ...freshSettings, threecplus_disposition_map: dispositionMap }
-  }).eq("id", tenant.id);
-  
-  await refetch();
-};
-```
-
-Aplicar o mesmo padrão no `handleSave` de credenciais.
+O `sync_dispositions` ja nao cria as qualificacoes do sistema (so cria as do tenant). Isso esta correto. Nenhuma mudanca necessaria no proxy.
 
 ## Arquivo a editar
 
-| Arquivo | Mudança |
+| Arquivo | Mudanca |
 |---|---|
-| `src/components/integracao/ThreeCPlusTab.tsx` | Buscar settings frescos antes de salvar; chamar `refetch()` após cada save |
+| `src/components/integracao/ThreeCPlusTab.tsx` | Separar qualificacoes do sistema no dropdown com grupo; adicionar card informativo readonly das qualificacoes nativas |
 
