@@ -136,7 +136,12 @@ export const deleteDispositionType = async (id: string): Promise<void> => {
  * Sync RIVO disposition types to 3CPlus as a Qualification List.
  * Now includes extended properties (impact, behavior, flags).
  */
-export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record<string, number> | null> => {
+export interface SyncResult {
+  dispositionMap: Record<string, number>;
+  campaignsUpdated: number;
+}
+
+export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncResult | null> => {
   try {
     const { data: tenantData } = await supabase
       .from("tenants")
@@ -182,10 +187,12 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
     const dispositionMap = data?.disposition_map as Record<string, number> | undefined;
     if (!dispositionMap) return null;
 
+    const listId = data.list_id;
+
     const updatedSettings = {
       ...settings,
       threecplus_disposition_map: dispositionMap,
-      threecplus_qualification_list_id: data.list_id,
+      threecplus_qualification_list_id: listId,
     };
 
     await supabase
@@ -193,8 +200,38 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<Record
       .update({ settings: updatedSettings } as any)
       .eq("id", tenantId);
 
-    logger.info("dispositionService", "syncDispositionsTo3CPlus", { count: Object.keys(dispositionMap).length });
-    return dispositionMap;
+    // Auto-link qualification list to all campaigns
+    let campaignsUpdated = 0;
+    if (listId) {
+      try {
+        const { data: campaignsData } = await supabase.functions.invoke("threecplus-proxy", {
+          body: { action: "list_campaigns", domain, api_token: apiToken },
+        });
+        const campaigns = Array.isArray(campaignsData) ? campaignsData : campaignsData?.data || [];
+        for (const campaign of campaigns) {
+          try {
+            await supabase.functions.invoke("threecplus-proxy", {
+              body: {
+                action: "update_campaign",
+                domain,
+                api_token: apiToken,
+                campaign_id: String(campaign.id),
+                qualification_list: listId,
+              },
+            });
+            campaignsUpdated++;
+          } catch (e) {
+            logger.error("dispositionService", "linkQualListToCampaign", { campaignId: campaign.id, error: e });
+          }
+        }
+        logger.info("dispositionService", "syncDispositionsTo3CPlus", { campaignsUpdated });
+      } catch (e) {
+        logger.error("dispositionService", "listCampaignsForSync", e);
+      }
+    }
+
+    logger.info("dispositionService", "syncDispositionsTo3CPlus", { count: Object.keys(dispositionMap).length, campaignsUpdated });
+    return { dispositionMap, campaignsUpdated };
   } catch (err) {
     logger.error("dispositionService", "syncDispositionsTo3CPlus", err);
     return null;

@@ -188,8 +188,12 @@ const CallDispositionTypesTab = () => {
     if (!has3CPlus || !tenantId) return;
     setSyncing(true);
     try {
-      await syncDispositionsTo3CPlus(tenantId);
-      toast.success("Tabulações sincronizadas com 3CPlus");
+      const result = await syncDispositionsTo3CPlus(tenantId);
+      if (result && result.campaignsUpdated > 0) {
+        toast.success(`Tabulações sincronizadas com 3CPlus e vinculadas a ${result.campaignsUpdated} campanha(s)`);
+      } else {
+        toast.success("Tabulações sincronizadas com 3CPlus");
+      }
     } catch {
       toast.error("Erro ao sincronizar com 3CPlus");
     } finally {
