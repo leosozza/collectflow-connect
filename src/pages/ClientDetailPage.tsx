@@ -318,7 +318,7 @@ const ClientDetailPage = () => {
                       )}
                       {/* Boleto/Parcelas section for approved agreements */}
                       {agreement.status === "approved" && (
-                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} />
+                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} tenantId={tenant?.id} />
                       )}
                     </div>
                   ))}
