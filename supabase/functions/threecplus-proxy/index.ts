@@ -832,8 +832,11 @@ Deno.serve(async (req) => {
         }
         
         if (!extension) {
-          console.log(`Agent ${agentIdNum} extension not found, using agent_id as fallback`);
-          extension = agentIdNum;
+          console.error(`Agent ${agentIdNum} extension not found — cannot proceed with click2call`);
+          return new Response(
+            JSON.stringify({ status: 422, success: false, detail: `Extension SIP não encontrada para o agente ${agentIdNum}. Configure a extension no 3CPlus.` }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         // Normalize phone: remove non-digits and ensure Brazil DDI prefix
@@ -994,15 +997,20 @@ Deno.serve(async (req) => {
         const listsRes = await fetch(listsUrl, { headers: { 'Content-Type': 'application/json' } });
         const listsData = await listsRes.json();
         const allLists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-        let rivoList = allLists.find((l: any) => l.name === 'RIVO Tabulações');
+        // CORRECTION 5: Use tenant-specific list name for isolation
+        const tenantName = body.tenant_name || 'Tenant';
+        const rivoListName = `RIVO - ${tenantName}`;
+        let rivoList = allLists.find((l: any) => l.name === rivoListName)
+          || allLists.find((l: any) => l.name === 'RIVO Tabulações'); // backward compat
         
         if (!rivoList) {
           const createRes = await fetch(buildUrl(baseUrl, 'qualification_lists', authParam), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'RIVO Tabulações' }),
+            body: JSON.stringify({ name: rivoListName }),
           });
           rivoList = await createRes.json();
+          console.log(`Created qualification list "${rivoListName}":`, JSON.stringify(rivoList));
         }
 
         const listId = rivoList.id;
@@ -1089,10 +1097,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 4. Remove items that are no longer active
+        // 4. Remove items that are no longer active — match by ID first, then name
+        const activeIds = new Set(dispositions.filter(d => d.active).map(d => d.threecplus_qualification_id).filter(Boolean));
         const activeLabels = new Set(dispositions.filter(d => d.active).map(d => d.label));
         for (const item of existingItems) {
-          if (!activeLabels.has(item.name)) {
+          if (!activeIds.has(item.id) && !activeLabels.has(item.name)) {
+            console.log(`Removing qualification "${item.name}" (id: ${item.id}) — no longer active`);
             await fetch(buildUrl(baseUrl, `qualification_lists/${listId}/qualifications/${item.id}`, authParam), {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },

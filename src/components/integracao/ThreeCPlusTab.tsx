@@ -390,6 +390,18 @@ const ThreeCPlusTab = () => {
         .update({ settings: newSettings })
         .eq("id", tenant.id);
       if (error) throw error;
+
+      // CORRECTION 3: Also persist threecplus_qualification_id in DB table
+      for (const [key, qualId] of Object.entries(dispositionMap)) {
+        if (qualId) {
+          await supabase
+            .from("call_disposition_types")
+            .update({ threecplus_qualification_id: Number(qualId) } as any)
+            .eq("tenant_id", tenant.id)
+            .eq("key", key);
+        }
+      }
+
       await refetch();
       toast.success("Mapeamento de tabulações salvo!");
     } catch {

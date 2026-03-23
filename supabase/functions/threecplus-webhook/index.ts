@@ -34,8 +34,6 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     console.log("threecplus-webhook payload:", JSON.stringify(payload).substring(0, 2000));
 
-    // 3CPlus sends events with different structures
-    // Common fields: event, data, domain (or company_domain)
     const event = payload.event || payload.type || payload.action;
     const data = payload.data || payload;
     const domain = payload.domain || payload.company_domain || data?.domain || data?.company_domain;
@@ -72,7 +70,6 @@ Deno.serve(async (req) => {
 
     if (!tenantId) {
       console.warn(`threecplus-webhook: could not resolve tenant for domain "${domain}"`);
-      // Still return 200 to avoid 3CPlus retrying
       return new Response(JSON.stringify({ ok: true, warning: "tenant not found" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -119,7 +116,6 @@ Deno.serve(async (req) => {
       case "call.started":
       case "call_started":
       case "ringing": {
-        // Insert a new call_log with status ringing
         const { error } = await supabase.from("call_logs").insert({
           tenant_id: tenantId,
           external_id: callId ? String(callId) : null,
@@ -142,7 +138,6 @@ Deno.serve(async (req) => {
       case "call.answered":
       case "call_answered":
       case "answered": {
-        // Update existing call_log to in_progress
         if (callId) {
           const { error } = await supabase
             .from("call_logs")
@@ -159,9 +154,7 @@ Deno.serve(async (req) => {
       case "call_finished":
       case "hangup":
       case "finished": {
-        // Upsert call_log with final data
         if (callId) {
-          // Try to update existing
           const { data: existing } = await supabase
             .from("call_logs")
             .select("id")
@@ -210,7 +203,7 @@ Deno.serve(async (req) => {
       case "call.qualified":
       case "call_qualified":
       case "qualified": {
-        // Update call_log with qualification and create call_disposition if mappable
+        // Update call_log with qualification
         if (callId) {
           const { error } = await supabase
             .from("call_logs")
@@ -223,16 +216,39 @@ Deno.serve(async (req) => {
           if (error) console.error("threecplus-webhook: update qualification error:", error);
         }
 
-        // Try to map to a call_disposition_type and create a call_disposition
-        if (qualification && clientId) {
-          const { data: dispTypes } = await supabase
-            .from("call_disposition_types")
-            .select("id, key")
-            .eq("tenant_id", tenantId)
-            .ilike("label", qualification)
-            .limit(1);
+        // CORRECTION 4: Map to call_disposition by ID first, then label fallback
+        if (clientId && (qualificationId || qualification)) {
+          let matchedDispType: any = null;
 
-          if (dispTypes && dispTypes.length > 0) {
+          // Priority 1: Match by threecplus_qualification_id (robust, ID-based)
+          if (qualificationId) {
+            const { data: byId } = await supabase
+              .from("call_disposition_types")
+              .select("id, key")
+              .eq("tenant_id", tenantId)
+              .eq("threecplus_qualification_id", Number(qualificationId))
+              .limit(1);
+            if (byId && byId.length > 0) {
+              matchedDispType = byId[0];
+              console.log(`threecplus-webhook: matched disposition by qualification_id ${qualificationId} → key "${matchedDispType.key}"`);
+            }
+          }
+
+          // Priority 2: Fallback to label match (fragile, text-based)
+          if (!matchedDispType && qualification) {
+            const { data: byLabel } = await supabase
+              .from("call_disposition_types")
+              .select("id, key")
+              .eq("tenant_id", tenantId)
+              .ilike("label", qualification)
+              .limit(1);
+            if (byLabel && byLabel.length > 0) {
+              matchedDispType = byLabel[0];
+              console.log(`threecplus-webhook: matched disposition by label "${qualification}" → key "${matchedDispType.key}"`);
+            }
+          }
+
+          if (matchedDispType) {
             // Find the operator's profile_id via threecplus_agent_id
             let operatorId: string | null = null;
             if (agentId) {
@@ -252,13 +268,15 @@ Deno.serve(async (req) => {
               .insert({
                 tenant_id: tenantId,
                 client_id: clientId,
-                disposition_type: dispTypes[0].key,
+                disposition_type: matchedDispType.key,
                 operator_id: operatorId,
-                notes: `Qualificação automática via 3CPlus: ${qualification}`,
+                notes: `Qualificação automática via 3CPlus: ${qualification || `ID ${qualificationId}`}`,
                 source: "webhook",
               });
             if (dispError) console.error("threecplus-webhook: insert disposition error:", dispError);
-            else console.log(`threecplus-webhook: disposition created for qualification "${qualification}"`);
+            else console.log(`threecplus-webhook: disposition created for qualification "${qualification || qualificationId}"`);
+          } else {
+            console.warn(`threecplus-webhook: no matching disposition for qualification_id=${qualificationId} label="${qualification}"`);
           }
         }
         break;
@@ -266,7 +284,6 @@ Deno.serve(async (req) => {
 
       case "agent.status_changed":
       case "agent_status_changed": {
-        // Log for monitoring — no DB action needed since UI polls agent status
         console.log(`threecplus-webhook: agent status changed - agent=${agentId}, status=${data.status}, name=${agentName}`);
         break;
       }

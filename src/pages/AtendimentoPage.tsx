@@ -152,7 +152,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         }).catch(console.error);
       }
       if (effectiveAgentId && settings.threecplus_domain) {
-        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId })
+        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id })
           .then((success) => {
             if (success) {
               // Signal that qualify was already done from disposition panel — prevents ACW fallback screen
@@ -161,9 +161,16 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
               toast.success("Qualificação enviada automaticamente para a 3CPlus");
             } else {
               console.warn("[Atendimento] qualifyOn3CPlus retornou false — ACW fallback será exibido");
+              toast.warning("Tabulação salva no RIVO, mas falhou ao sincronizar com a 3CPlus", {
+                description: "A qualificação pode precisar ser feita manualmente no discador.",
+                duration: 8000,
+              });
             }
           })
-          .catch(console.error);
+          .catch((err) => {
+            console.error("[Atendimento] qualifyOn3CPlus error:", err);
+            toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+          });
       }
     },
   });
@@ -178,7 +185,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
         .then(() => {
           queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
           if (effectiveAgentId && settings.threecplus_domain) {
-            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId });
+            qualifyOn3CPlus({ dispositionType: "negotiated", tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id });
           }
         });
     }

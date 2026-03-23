@@ -43,6 +43,7 @@ export interface DbDispositionType {
   schedule_days_limit: number;
   blocklist_mode: string;
   blocklist_days: number;
+  threecplus_qualification_id?: number | null;
 }
 
 export const fetchTenantDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
@@ -145,11 +146,12 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
   try {
     const { data: tenantData } = await supabase
       .from("tenants")
-      .select("settings")
+      .select("settings, name")
       .eq("id", tenantId)
       .single();
 
     const settings = (tenantData?.settings as Record<string, any>) || {};
+    const tenantName = (tenantData as any)?.name || "Tenant";
     const domain = settings.threecplus_domain;
     const apiToken = settings.threecplus_api_token;
 
@@ -165,6 +167,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
         action: "sync_dispositions",
         domain,
         api_token: apiToken,
+        tenant_name: tenantName,
         dispositions: types.map(t => ({
           key: t.key, label: t.label, active: t.active,
           color: t.color, impact: t.impact, behavior: t.behavior,
@@ -182,11 +185,20 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
 
     if (error) {
       logger.error("dispositionService", "syncDispositionsTo3CPlus", error);
-      return null;
+      throw new Error("Falha na comunicação com a 3CPlus");
+    }
+
+    // Check success flag from proxy
+    if (data && data.success === false) {
+      const detail = data.detail || data.title || `Erro da 3CPlus (${data.status})`;
+      logger.error("dispositionService", "syncDispositionsTo3CPlus", { detail });
+      throw new Error(detail);
     }
 
     const dispositionMap = data?.disposition_map as Record<string, number> | undefined;
-    if (!dispositionMap) return null;
+    if (!dispositionMap) {
+      throw new Error("Sync retornou sem mapa de tabulações");
+    }
 
     const listId = data.list_id;
 
@@ -246,12 +258,13 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
     return { dispositionMap, campaignsUpdated };
   } catch (err) {
     logger.error("dispositionService", "syncDispositionsTo3CPlus", err);
-    return null;
+    throw err; // Re-throw so callers can handle it
   }
 };
 
 export type DispositionType = string;
 
+// DEPRECATED: Use fetchTenantDispositionTypes() instead
 export interface CustomDispositionType {
   key: string;
   label: string;
@@ -260,19 +273,13 @@ export interface CustomDispositionType {
   group?: string;
 }
 
-export const getDispositionTypes = (tenantSettings?: Record<string, any>): Record<string, string> => {
-  const custom = tenantSettings?.custom_disposition_types as CustomDispositionType[] | undefined;
-  if (custom && Array.isArray(custom) && custom.length > 0) {
-    const map: Record<string, string> = {};
-    for (const c of custom) map[c.key] = c.label;
-    return map;
-  }
+// DEPRECATED: Use fetchTenantDispositionTypes() — kept for backward compat but now just returns hardcoded fallback
+export const getDispositionTypes = (_tenantSettings?: Record<string, any>): Record<string, string> => {
   return DISPOSITION_TYPES;
 };
 
-export const getCustomDispositionList = (tenantSettings?: Record<string, any>): CustomDispositionType[] => {
-  const custom = tenantSettings?.custom_disposition_types as CustomDispositionType[] | undefined;
-  if (custom && Array.isArray(custom) && custom.length > 0) return custom;
+// DEPRECATED: Use fetchTenantDispositionTypes()
+export const getCustomDispositionList = (_tenantSettings?: Record<string, any>): CustomDispositionType[] => {
   return Object.entries(DISPOSITION_TYPES).map(([key, label]) => ({ key, label }));
 };
 
@@ -326,28 +333,54 @@ export const createDisposition = async (params: {
 
 /**
  * Auto-qualify the active call on 3CPlus after a Rivo disposition.
+ * CORRECTION 3: Prioritize threecplus_qualification_id from DB table instead of settings JSON.
  */
 export const qualifyOn3CPlus = async (params: {
   dispositionType: string;
   tenantSettings: Record<string, any>;
   agentId: number;
   callId?: string | number;
+  tenantId?: string;
 }): Promise<boolean> => {
   try {
-    const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
-    if (!map) {
-      console.warn("qualifyOn3CPlus: no disposition map configured");
-      return false;
-    }
-    const qualificationId = map[params.dispositionType];
-    if (!qualificationId) {
-      console.warn("qualifyOn3CPlus: no mapping for disposition type:", params.dispositionType);
-      return false;
-    }
-
     const domain = params.tenantSettings.threecplus_domain;
     const apiToken = params.tenantSettings.threecplus_api_token;
     if (!domain || !apiToken) return false;
+
+    let qualificationId: number | undefined;
+
+    // PRIORITY 1: Lookup threecplus_qualification_id from DB table
+    if (params.tenantId) {
+      const { data: dispType } = await supabase
+        .from("call_disposition_types")
+        .select("threecplus_qualification_id" as any)
+        .eq("tenant_id", params.tenantId)
+        .eq("key", params.dispositionType)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
+      
+      if (dispType && (dispType as any).threecplus_qualification_id) {
+        qualificationId = Number((dispType as any).threecplus_qualification_id);
+        console.log(`qualifyOn3CPlus: Found qualification_id ${qualificationId} from DB for "${params.dispositionType}"`);
+      }
+    }
+
+    // PRIORITY 2: Fallback to settings JSON map
+    if (!qualificationId) {
+      const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
+      if (map) {
+        qualificationId = map[params.dispositionType];
+        if (qualificationId) {
+          console.log(`qualifyOn3CPlus: Using fallback settings map, qualification_id ${qualificationId} for "${params.dispositionType}"`);
+        }
+      }
+    }
+
+    if (!qualificationId) {
+      console.warn("qualifyOn3CPlus: no mapping found for disposition type:", params.dispositionType);
+      return false;
+    }
 
     const callId = params.callId || sessionStorage.getItem("3cp_last_call_id");
     if (!callId) {
@@ -371,13 +404,13 @@ export const qualifyOn3CPlus = async (params: {
       return false;
     }
 
-    // Check if 3CPlus returned an error status
-    if (data?.status && data.status >= 400) {
-      console.error("qualifyOn3CPlus 3CPlus error:", data.detail || data.message);
+    // Check success flag from proxy
+    if (data && data.success === false) {
+      console.error("qualifyOn3CPlus 3CPlus error:", data.detail || data.message || `status ${data.status}`);
       return false;
     }
 
-    console.log("qualifyOn3CPlus success for disposition:", params.dispositionType);
+    console.log("qualifyOn3CPlus success for disposition:", params.dispositionType, "qualification_id:", qualificationId);
     return true;
   } catch (err) {
     console.error("qualifyOn3CPlus error (non-blocking):", err);
