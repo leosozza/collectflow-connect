@@ -473,7 +473,7 @@ const CampaignsPanel = () => {
                                     <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 text-sm">
                                       <div>
                                         <p className="font-medium">{agent.name || `Agent ${agent.id}`}</p>
-                                        <p className="text-xs text-muted-foreground">#{agent.extension || agent.id}</p>
+                                        <p className="text-xs text-muted-foreground">#{agent.extension_number || agent.extension?.extension_number || agent.id}</p>
                                       </div>
                                       {metric && (
                                         <div className="text-xs text-muted-foreground text-right space-y-0.5">
