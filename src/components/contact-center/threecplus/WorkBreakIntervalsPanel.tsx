@@ -178,12 +178,13 @@ const WorkBreakIntervalsPanel = () => {
   // Interval CRUD
   const handleSaveInterval = async () => {
     if (!intervalName.trim() || !intervalGroupId) { toast.error("Nome é obrigatório"); return; }
+    if (!intervalMaxTime || Number(intervalMaxTime) <= 0) { toast.error("Tempo máximo (minutos) é obrigatório"); return; }
     setSavingInterval(true);
     try {
       const payload: Record<string, any> = {
         group_id: intervalGroupId,
         name: intervalName.trim(),
-        max_time: intervalMaxTime ? Number(intervalMaxTime) : null,
+        max_time: Number(intervalMaxTime),
         daily_limit: intervalDailyLimit ? Number(intervalDailyLimit) : null,
         color: intervalColor,
         classification: intervalClassification || null,
@@ -200,8 +201,8 @@ const WorkBreakIntervalsPanel = () => {
       }
       setIntervalDialogOpen(false);
       fetchIntervals(intervalGroupId);
-    } catch {
-      toast.error("Erro ao salvar intervalo");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar intervalo");
     } finally {
       setSavingInterval(false);
     }
