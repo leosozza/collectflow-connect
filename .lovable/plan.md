@@ -1,55 +1,71 @@
 
 
-# Plano: Corrigir tabulação pós-chamada e detecção de ACW
+# Plano: Unificar tabulação — eliminar dupla tabulação
 
-## Diagnóstico
+## O que está acontecendo hoje (por que está confuso)
 
-Analisando os logs do console, identifiquei dois problemas principais:
+O operador tabula **duas vezes**:
 
-### Problema 1: ACW não é detectado de forma confiável
-A detecção de ACW depende de capturar a **transição** de status 2→3 (`previousStatusRef`). Se o polling não capturar o agente em status 2 (a ligação pode ser curta), ou se a página recarrega quando o agente já está em status 3, o `isACW` nunca é setado para `true`. Resultado: a tela de tabulação não aparece.
+1. **Durante a ligação** — O sistema abre a ficha do cliente (AtendimentoPage) que tem o `DispositionPanel`. O operador seleciona a tabulação RIVO e salva no banco de dados (`call_dispositions`)
+2. **Após a ligação** — A 3CPlus coloca o agente em ACW (pausa automática). O dashboard mostra uma **segunda** tela de tabulação que envia a qualificação para a API 3CPlus via `qualify_call` para liberar o agente
 
-### Problema 2: Chamada finalizada permanece no `activeCall`
-A API `company_calls` retorna chamadas com `status: "4"` (finalizada, com `hangup_time`). O `useMemo` que calcula `activeCall` não filtra por status — encontra qualquer chamada do agente, inclusive finalizadas. Isso não causa bug visual (o `isOnCall` é false), mas polui os logs e desperdiça ciclos.
+Resultado: o operador faz o mesmo trabalho duas vezes em telas diferentes.
 
-### Problema 3: `unpause_agent` retorna 422 em ACW
-Os logs mostram `3CPlus response: 422` ao tentar `unpause_agent` via `work_break/exit`. Isso é esperado — em ACW, o agente só sai da pausa via `qualify_call`. Mas o botão "Retomar" não mostra erro claro.
+## Solução: Unificar em um único passo
 
-## Correções
+Quando o operador tabular na ficha do cliente (DispositionPanel), o sistema deve **automaticamente**:
+1. Salvar a tabulação no RIVO (já faz)
+2. Enviar a qualificação correspondente para a 3CPlus via `qualify_call` (usando o mapeamento `threecplus_disposition_map` que já existe no tenant settings)
+3. Liberar o agente do ACW automaticamente
 
-### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+A tela separada de tabulação ACW só aparecerá como **fallback** — se o operador fechou a ficha sem tabular.
 
-**1. Detecção robusta de ACW** — Adicionar fallback: se o agente está em status 3, **não** está em pausa manual (`activePauseName` vazio), e existe uma chamada recente finalizada (`activeCall` com `hangup_time` ou status "4"), considerar como ACW.
+## Mudanças
 
+### 1. `src/components/atendimento/DispositionPanel.tsx`
+
+Após salvar a tabulação no RIVO (`onDisposition`), verificar se existe um `callId` ativo (vindo do contexto de telefonia) e um mapeamento 3CPlus para a tabulação selecionada. Se sim, chamar `qualify_call` automaticamente via `threecplus-proxy`.
+
+- Receber novas props opcionais: `callId`, `agentId` (do contexto de telefonia)
+- Após `onDisposition` concluir com sucesso, buscar o mapeamento `threecplus_disposition_map` do tenant settings
+- Se a tabulação selecionada tem correspondência no mapeamento, chamar `qualify_call`
+- Toast informando que a qualificação foi enviada automaticamente
+
+### 2. `src/hooks/useAtendimentoModal.tsx`
+
+Passar `callId` e `agentId` como parte do contexto do modal para que o `DispositionPanel` tenha acesso.
+
+### 3. `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+
+Na tela de ACW (fallback), adicionar texto explicativo: "Você não tabulou durante o atendimento. Selecione a qualificação para retornar à campanha."
+
+Quando a tabulação no `DispositionPanel` já fez o `qualify_call`, o agente sai do ACW automaticamente — a tela de fallback nem aparece.
+
+## Fluxo unificado
+
+```text
+Ligação ativa (status 2)
+  → Abre ficha do cliente (AtendimentoPage)
+  → Operador usa DispositionPanel para tabular
+
+Operador clica "Tabular"
+  → Salva call_disposition no RIVO ✓
+  → Busca mapeamento 3CPlus ✓
+  → Chama qualify_call automaticamente ✓
+  → Agente volta ao idle (status 1) ✓
+  → Tela de ACW NÃO aparece
+
+Se operador NÃO tabulou durante a ligação
+  → Ligação termina → ACW (status 3)
+  → Tela de tabulação fallback aparece
+  → Operador seleciona qualificação manualmente
 ```
-const isACWFallback = isPaused 
-  && !activePauseName 
-  && !isACW 
-  && (activeCall?.hangup_time || activeCall?.status === "4" || sessionStorage.getItem("3cp_last_call_id"));
-const effectiveACW = isACW || isACWFallback;
-```
 
-Usar `effectiveACW` no lugar de `isACW` na condição de renderização (linha 920).
-
-**2. Filtrar chamadas finalizadas do `activeCall`** — No `useMemo` que calcula `activeCall` (linha ~770-781), excluir chamadas com `hangup_time` definido ou `status === "4"`:
-
-```
-return allCalls.find((c) => 
-  (String(c.agent) === agentIdStr || String(c.agent_id) === agentIdStr) 
-  && !c.hangup_time 
-  && String(c.status) !== "4"
-) || null;
-```
-
-**Mas** manter uma referência separada `lastFinishedCall` para preencher `lastCallId` e dados de mailing quando em ACW.
-
-**3. Carregar qualificações no fallback de ACW** — Quando `effectiveACW` é true e `campaignQualifications` está vazio, disparar `loadCampaignQualifications` usando o `myCampaignId` do sessionStorage.
-
-**4. Inicializar `previousStatusRef` corretamente** — No primeiro render, se o agente já está em status 3 e `activePauseName` está vazio, iniciar em modo ACW diretamente.
-
-## Arquivo a editar
+## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Detecção robusta de ACW com fallback, filtrar chamadas finalizadas, carregar qualificações automaticamente |
+| `src/components/atendimento/DispositionPanel.tsx` | Após tabular, chamar `qualify_call` automaticamente se em contexto de telefonia |
+| `src/hooks/useAtendimentoModal.tsx` | Expor `callId` e `agentId` no contexto |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Texto de fallback na tela ACW |
 
