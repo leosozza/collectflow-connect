@@ -175,6 +175,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
           schedule_days_limit: t.schedule_days_limit,
           blocklist_mode: t.blocklist_mode,
           blocklist_days: t.blocklist_days,
+          threecplus_qualification_id: (t as any).threecplus_qualification_id || null,
         })),
       },
     });
