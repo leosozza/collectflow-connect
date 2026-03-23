@@ -6,9 +6,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, RefreshCw, Coffee, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+const COLOR_PALETTE = [
+  "#ffdd00","#fcea79","#d6ba00","#998500","#615400",
+  "#f17f0e","#fbd6a4","#ffaf2e","#c26000","#663300",
+  "#de2128","#ffb2b3","#f65157","#a50d0d","#5e0808",
+  "#e34ab8","#fbc1e9","#f580d3","#b80f7d","#620e39",
+  "#a820cb","#e7a8fa","#c45de0","#6e008f","#390057",
+  "#7036e4","#ccb6fc","#9c6bff","#411c9c","#2b1269",
+  "#2497fd","#b8ddff","#6cbafe","#0062d7","#00298b",
+  "#1abcad","#98f1e8","#52dbcd","#009484","#006b5a",
+  "#28cc39","#a4f4a7","#69de74","#049a04","#006b00",
+  "#8ebd00","#c6ef66","#a4d41c","#5f9400","#375200",
+  "#111111","#dedede","#a5a5a5","#6c6c6c","#3a3a3a",
+];
+
+const CLASSIFICATIONS = [
+  { value: "productive", label: "Produtivo" },
+  { value: "unproductive", label: "Improdutivo" },
+  { value: "nr17", label: "NR 17" },
+];
+
+const RETURN_TYPES = [
+  { value: "flexible", label: "Retorno flexível" },
+  { value: "automatic", label: "Retorno automático" },
+  { value: "request", label: "Solicitar retorno" },
+];
 
 const WorkBreakIntervalsPanel = () => {
   const { tenant } = useTenant();
@@ -34,6 +62,11 @@ const WorkBreakIntervalsPanel = () => {
   const [intervalGroupId, setIntervalGroupId] = useState<number | null>(null);
   const [intervalName, setIntervalName] = useState("");
   const [intervalMaxTime, setIntervalMaxTime] = useState("");
+  const [intervalDailyLimit, setIntervalDailyLimit] = useState("");
+  const [intervalColor, setIntervalColor] = useState("#28cc39");
+  const [intervalClassification, setIntervalClassification] = useState("");
+  const [intervalReturnType, setIntervalReturnType] = useState("flexible");
+  const [intervalAutoStart, setIntervalAutoStart] = useState(false);
   const [savingInterval, setSavingInterval] = useState(false);
   const [deletingInterval, setDeletingInterval] = useState<number | null>(null);
 
@@ -110,25 +143,53 @@ const WorkBreakIntervalsPanel = () => {
     }
   };
 
+  const openNewInterval = (groupId: number) => {
+    setEditingInterval(null);
+    setIntervalGroupId(groupId);
+    setIntervalName("");
+    setIntervalMaxTime("");
+    setIntervalDailyLimit("");
+    setIntervalColor("#28cc39");
+    setIntervalClassification("");
+    setIntervalReturnType("flexible");
+    setIntervalAutoStart(false);
+    setIntervalDialogOpen(true);
+  };
+
+  const openEditInterval = (interval: any, groupId: number) => {
+    setEditingInterval(interval);
+    setIntervalGroupId(groupId);
+    setIntervalName(interval.name || interval.description || "");
+    setIntervalMaxTime(String(interval.minutes || interval.limit || ""));
+    setIntervalDailyLimit(String(interval.daily_limit || interval.maximum_daily_time || ""));
+    setIntervalColor(interval.color || "#28cc39");
+    setIntervalClassification(interval.classification || "");
+    setIntervalReturnType(interval.return_type || "flexible");
+    setIntervalAutoStart(!!interval.auto_start);
+    setIntervalDialogOpen(true);
+  };
+
   // Interval CRUD
   const handleSaveInterval = async () => {
     if (!intervalName.trim() || !intervalGroupId) { toast.error("Nome é obrigatório"); return; }
     setSavingInterval(true);
     try {
+      const payload: Record<string, any> = {
+        group_id: intervalGroupId,
+        name: intervalName.trim(),
+        max_time: intervalMaxTime ? Number(intervalMaxTime) : null,
+        daily_limit: intervalDailyLimit ? Number(intervalDailyLimit) : null,
+        color: intervalColor,
+        classification: intervalClassification || null,
+        return_type: intervalReturnType || null,
+        auto_start: intervalAutoStart,
+      };
+
       if (editingInterval) {
-        await invoke("update_work_break_group_interval", {
-          group_id: intervalGroupId,
-          interval_id: editingInterval.id,
-          name: intervalName.trim(),
-          max_time: intervalMaxTime ? Number(intervalMaxTime) : null,
-        });
+        await invoke("update_work_break_group_interval", { ...payload, interval_id: editingInterval.id });
         toast.success("Intervalo atualizado");
       } else {
-        await invoke("create_work_break_group_interval", {
-          group_id: intervalGroupId,
-          name: intervalName.trim(),
-          max_time: intervalMaxTime ? Number(intervalMaxTime) : null,
-        });
+        await invoke("create_work_break_group_interval", payload);
         toast.success("Intervalo criado");
       }
       setIntervalDialogOpen(false);
@@ -201,7 +262,7 @@ const WorkBreakIntervalsPanel = () => {
                 <CardContent className="border-t pt-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Intervalos</p>
-                    <Button size="sm" variant="outline" onClick={() => { setEditingInterval(null); setIntervalGroupId(g.id); setIntervalName(""); setIntervalMaxTime(""); setIntervalDialogOpen(true); }} className="gap-1.5 h-7 text-xs">
+                    <Button size="sm" variant="outline" onClick={() => openNewInterval(g.id)} className="gap-1.5 h-7 text-xs">
                       <Plus className="w-3 h-3" /> Novo Intervalo
                     </Button>
                   </div>
@@ -212,12 +273,21 @@ const WorkBreakIntervalsPanel = () => {
                   ) : (
                     (groupIntervals[g.id] || []).map((interval: any) => (
                       <div key={interval.id} className="flex items-center justify-between p-2 rounded bg-muted/40 text-sm">
-                        <div>
-                          <span className="font-medium">{interval.name || interval.description || `Intervalo ${interval.id}`}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">{(interval.minutes || interval.limit || interval.maximum_time) ? `${interval.minutes || interval.limit || Math.round((interval.maximum_time || 0) / 60)} min` : "Sem limite"}</span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 border border-border"
+                            style={{ background: interval.color || "#28cc39" }}
+                          />
+                          <div>
+                            <span className="font-medium">{interval.name || interval.description || `Intervalo ${interval.id}`}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {(interval.minutes || interval.limit) ? `${interval.minutes || interval.limit} min` : "Sem limite"}
+                              {(interval.daily_limit || interval.maximum_daily_time) ? ` · ${interval.daily_limit || interval.maximum_daily_time} min/dia` : ""}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingInterval(interval); setIntervalGroupId(g.id); setIntervalName(interval.name || interval.description || ""); setIntervalMaxTime(String(interval.minutes || interval.limit || "")); setIntervalDialogOpen(true); }}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditInterval(interval, g.id)}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteInterval(g.id, interval.id)} disabled={deletingInterval === interval.id}>
@@ -248,17 +318,101 @@ const WorkBreakIntervalsPanel = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Interval Dialog */}
+      {/* Interval Dialog — Full fields like 3CPlus */}
       <Dialog open={intervalDialogOpen} onOpenChange={setIntervalDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingInterval ? "Editar Intervalo" : "Novo Intervalo"}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Nome</Label><Input value={intervalName} onChange={(e) => setIntervalName(e.target.value)} placeholder="Ex: Pausa Café" /></div>
-            <div><Label>Tempo Máximo (minutos)</Label><Input type="number" value={intervalMaxTime} onChange={(e) => setIntervalMaxTime(e.target.value)} placeholder="Vazio = sem limite" /></div>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{editingInterval ? "Atualizar Intervalo" : "Novo Intervalo"}</DialogTitle></DialogHeader>
+          <div className="space-y-5">
+            {/* Card: Informações do intervalo */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-foreground">Informações do intervalo</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Nome</Label>
+                  <Input value={intervalName} onChange={(e) => setIntervalName(e.target.value)} placeholder="Nome" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cor</Label>
+                  <div className="relative">
+                    <details className="group">
+                      <summary className="flex items-center justify-between h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm cursor-pointer list-none">
+                        <span className="w-5 h-5 rounded-full border border-border" style={{ background: intervalColor }} />
+                        <ChevronDown className="w-4 h-4 text-muted-foreground group-open:rotate-180 transition-transform" />
+                      </summary>
+                      <div className="absolute z-50 top-full mt-1 left-0 bg-popover border border-border rounded-md shadow-md p-3 w-64">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Selecione uma cor</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {COLOR_PALETTE.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              className="w-5 h-5 rounded-full border border-border hover:scale-125 transition-transform"
+                              style={{ background: c, outline: intervalColor === c ? "2px solid hsl(var(--primary))" : "none", outlineOffset: 2 }}
+                              onClick={() => setIntervalColor(c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Tempo máximo do intervalo</Label>
+                  <div className="flex">
+                    <Input type="number" min="0" value={intervalMaxTime} onChange={(e) => setIntervalMaxTime(e.target.value)} placeholder="10" className="rounded-r-none" />
+                    <span className="inline-flex items-center px-3 border border-l-0 border-input rounded-r-md bg-muted text-xs text-muted-foreground">Minutos</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Tempo máximo diário</Label>
+                  <div className="flex">
+                    <Input type="number" min="0" value={intervalDailyLimit} onChange={(e) => setIntervalDailyLimit(e.target.value)} placeholder="60" className="rounded-r-none" />
+                    <span className="inline-flex items-center px-3 border border-l-0 border-input rounded-r-md bg-muted text-xs text-muted-foreground">Minutos</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card: Configuração do intervalo */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="text-sm font-semibold text-foreground">Configuração do intervalo</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Classificação do intervalo</Label>
+                  <Select value={intervalClassification} onValueChange={setIntervalClassification}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {CLASSIFICATIONS.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Retorno do intervalo</Label>
+                  <Select value={intervalReturnType} onValueChange={setIntervalReturnType}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {RETURN_TYPES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={intervalAutoStart} onCheckedChange={setIntervalAutoStart} id="autoStart" />
+                <Label htmlFor="autoStart" className="font-semibold cursor-pointer">Intervalo automático</Label>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIntervalDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSaveInterval} disabled={savingInterval}>{savingInterval ? "Salvando..." : "Salvar"}</Button>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button onClick={handleSaveInterval} disabled={savingInterval} className="w-full">
+              {savingInterval ? "Salvando..." : editingInterval ? "Atualizar" : "Criar"}
+            </Button>
+            <Button variant="ghost" onClick={() => setIntervalDialogOpen(false)} className="w-full">Cancelar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
