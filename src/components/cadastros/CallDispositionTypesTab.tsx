@@ -222,11 +222,18 @@ const CallDispositionTypesTab = () => {
   const updateMut = useMutation({
     mutationFn: ({ id, ...p }: { id: string } & Parameters<typeof updateDispositionType>[1]) =>
       updateDispositionType(id, p),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
       toast.success("Tabulação atualizada");
       setOpen(false);
-      if (has3CPlus && tenantId) syncDispositionsTo3CPlus(tenantId).catch(() => {});
+      if (has3CPlus && tenantId) {
+        try {
+          const result = await syncDispositionsTo3CPlus(tenantId);
+          if (result) toast.success(`Sincronizado com 3CPlus (${result.campaignsUpdated} campanha(s))`);
+        } catch (e: any) {
+          toast.error(`Erro ao sincronizar com 3CPlus: ${e.message || "falha desconhecida"}`);
+        }
+      }
     },
     onError: () => toast.error("Erro ao atualizar"),
   });
