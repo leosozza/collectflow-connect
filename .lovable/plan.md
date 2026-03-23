@@ -1,33 +1,18 @@
 
 
-# Plano: Separar qualificacoes padrao do sistema das tabulacoes gerenciaveis
+# Plano: Remover qualificações nativas do mapeamento editável
 
-## Contexto
+## O que mudar
 
-As qualificacoes com IDs negativos (-2 a -5: Nao qualificada, Caixa Postal, Mudo, Limite de tempo excedido) sao **nativas do sistema 3CPlus** — nao podem ser criadas, editadas ou excluidas pelo RIVO. O RIVO so precisa saber que elas existem para poder mapea-las.
+O usuário quer que o dropdown de mapeamento mostre **apenas** as qualificações criadas na 3CPlus (IDs positivos), sem as nativas do sistema (IDs -2 a -5). As nativas já estão documentadas no card informativo abaixo — não precisam aparecer como opção de mapeamento.
 
-As demais qualificacoes (IDs positivos) sao as que o RIVO cria na lista "RIVO Tabulacoes" via `sync_dispositions`. Essas sim precisam de mapeamento bidirecional.
+## Correções em `src/components/integracao/ThreeCPlusTab.tsx`
 
-## O que precisa mudar
+1. **Remover SYSTEM_QUALIFICATIONS do dropdown de mapeamento** — Apagar o bloco de linhas 574-580 que renderiza as qualificações do sistema no SelectContent
+2. **Remover SYSTEM_QUALIFICATIONS do merge no `loadQualifications`** — Linha 359-362: parar de misturar IDs negativos no array `qualifications`. Manter apenas os itens vindos da API (IDs positivos)
+3. **Manter o card informativo** — O card readonly das linhas 595-652 continua existindo como referência visual
 
-### 1. Separar visualmente no mapeamento
-
-Na secao "Mapeamento de Tabulacoes" em `ThreeCPlusTab.tsx`, o dropdown de qualificacoes da 3CPlus mistura qualificacoes do sistema (IDs negativos) com as criadas pelo RIVO (IDs positivos). Precisamos:
-
-- Agrupar no Select: primeiro as qualificacoes do RIVO (criadas via sync), depois um separador, depois as "Padrao do sistema" (IDs -2 a -5)
-- Adicionar label de grupo no dropdown para clareza
-
-### 2. Mostrar card informativo das qualificacoes padrao
-
-Adicionar um card readonly abaixo do mapeamento mostrando as 4 qualificacoes nativas do sistema (como no screenshot do usuario), com colunas: Cor, ID, Nome, Impacto, Comportamento, e badge "Qualificacao nativa do sistema". Isso e apenas informativo — nao editavel.
-
-### 3. Nao incluir qualificacoes do sistema no `sync_dispositions`
-
-O `sync_dispositions` ja nao cria as qualificacoes do sistema (so cria as do tenant). Isso esta correto. Nenhuma mudanca necessaria no proxy.
-
-## Arquivo a editar
-
-| Arquivo | Mudanca |
+| Arquivo | Mudança |
 |---|---|
-| `src/components/integracao/ThreeCPlusTab.tsx` | Separar qualificacoes do sistema no dropdown com grupo; adicionar card informativo readonly das qualificacoes nativas |
+| `src/components/integracao/ThreeCPlusTab.tsx` | Remover system quals do dropdown e do merge de qualifications |
 
