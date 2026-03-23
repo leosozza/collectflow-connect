@@ -38,6 +38,7 @@ const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { tenant } = useTenant();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
