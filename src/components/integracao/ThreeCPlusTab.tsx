@@ -278,16 +278,47 @@ const ThreeCPlusTab = () => {
     if (!domain || !apiToken) return;
     setLoadingQuals(true);
     try {
-      const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "list_qualifications",
-          domain: domain.trim(),
-          api_token: apiToken.trim(),
-        },
-      });
-      if (error) throw error;
-      const list = Array.isArray(data) ? data : data?.data || [];
-      setQualifications(list);
+      // Find the qualification_list_id from campaigns
+      const qualListId = campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id;
+      
+      if (qualListId) {
+        // Fetch items from the specific qualification list
+        const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+          body: {
+            action: "list_qualification_list_items",
+            domain: domain.trim(),
+            api_token: apiToken.trim(),
+            list_id: qualListId,
+          },
+        });
+        if (error) throw error;
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setQualifications(list);
+      } else {
+        // Fallback: list all qualification lists, then fetch items from the first one
+        const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
+          body: {
+            action: "list_qualification_lists",
+            domain: domain.trim(),
+            api_token: apiToken.trim(),
+          },
+        });
+        if (listsError) throw listsError;
+        const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
+        if (lists.length > 0) {
+          const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+            body: {
+              action: "list_qualification_list_items",
+              domain: domain.trim(),
+              api_token: apiToken.trim(),
+              list_id: lists[0].id,
+            },
+          });
+          if (error) throw error;
+          const list = Array.isArray(data) ? data : data?.data || [];
+          setQualifications(list);
+        }
+      }
     } catch {
       toast.error("Erro ao carregar qualificações do 3CPlus");
     } finally {
