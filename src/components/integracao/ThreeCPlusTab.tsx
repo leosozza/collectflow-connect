@@ -226,6 +226,34 @@ const ThreeCPlusTab = () => {
     settings.threecplus_disposition_map || {}
   );
   const [savingMap, setSavingMap] = useState(false);
+  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string }[]>([]);
+
+  // Load tenant dispositions from DB
+  useEffect(() => {
+    if (!tenant?.id) return;
+    supabase
+      .from("call_disposition_types")
+      .select("key, label")
+      .eq("tenant_id", tenant.id)
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setTenantDispositions(data);
+        }
+      });
+  }, [tenant?.id]);
+
+  // Auto-load qualifications if credentials exist
+  useEffect(() => {
+    const d = settings.threecplus_domain;
+    const t = settings.threecplus_api_token;
+    if (d && t && qualifications.length === 0 && !loadingQuals) {
+      setDomain(d);
+      setApiToken(t);
+      loadQualificationsWithCredentials(d, t);
+    }
+  }, [settings.threecplus_domain, settings.threecplus_api_token]);
 
   const handleSave = async () => {
     if (!tenant?.id) return;
