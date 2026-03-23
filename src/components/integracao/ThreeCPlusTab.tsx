@@ -355,12 +355,7 @@ const ThreeCPlusTab = () => {
         items = Array.isArray(data) ? data : data?.data || [];
       }
 
-      // Merge with system qualifications (negative IDs)
-      const allQuals = [
-        ...SYSTEM_QUALIFICATIONS,
-        ...items.filter((q: any) => !SYSTEM_QUALIFICATIONS.some(sq => sq.id === q.id)),
-      ];
-      setQualifications(allQuals);
+      setQualifications(items);
     } catch {
       toast.error("Erro ao carregar qualificações do 3CPlus");
     } finally {
