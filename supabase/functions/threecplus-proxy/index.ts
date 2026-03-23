@@ -145,7 +145,11 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
         method = 'PATCH';
-        reqBody = JSON.stringify(body.campaign_data || {});
+        // Merge campaign_data with individual fields (e.g. aggressiveness)
+        const { campaign_id: _cid, campaign_data, action: _a, domain: _d, api_token: _t, ...restFields } = body;
+        const updatePayload = { ...(campaign_data || {}), ...restFields };
+        reqBody = JSON.stringify(updatePayload);
+        console.log(`update_campaign payload: ${reqBody}`);
         break;
       }
 

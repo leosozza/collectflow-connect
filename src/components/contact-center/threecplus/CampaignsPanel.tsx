@@ -462,7 +462,12 @@ const CampaignsPanel = () => {
 
                           {/* Agents */}
                           <TabsContent value="agents" className="mt-3 space-y-3">
-                            <p className="text-sm font-medium text-foreground">Agentes Vinculados</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-foreground">Agentes Vinculados</p>
+                              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => setLinkAgentCampaignId(cid)}>
+                                <Plus className="w-3 h-3" /> Vincular Agentes
+                              </Button>
+                            </div>
                             {(campaignAgents[cid] || []).length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">Nenhum agente vinculado</p>
                             ) : (
@@ -473,14 +478,19 @@ const CampaignsPanel = () => {
                                     <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 text-sm">
                                       <div>
                                         <p className="font-medium">{agent.name || `Agent ${agent.id}`}</p>
-                                        <p className="text-xs text-muted-foreground">#{agent.extension_number || agent.extension?.extension_number || agent.id}</p>
+                                        <p className="text-xs text-muted-foreground">#{agent.extension_number || (typeof agent.extension === 'object' ? agent.extension?.extension_number : agent.extension) || agent.id}</p>
                                       </div>
-                                      {metric && (
-                                        <div className="text-xs text-muted-foreground text-right space-y-0.5">
-                                          <p>Chamadas: {fmt(metric.total_calls || metric.calls)}</p>
-                                          <p>Online: {fmtTime(metric.online_time)} · Pausa: {fmtTime(metric.break_time || metric.pause_time)}</p>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-2">
+                                        {metric && (
+                                          <div className="text-xs text-muted-foreground text-right space-y-0.5">
+                                            <p>Chamadas: {fmt(metric.total_calls || metric.calls)}</p>
+                                            <p>Online: {fmtTime(metric.online_time)} · Pausa: {fmtTime(metric.break_time || metric.pause_time)}</p>
+                                          </div>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveAgent(cid, String(agent.id))} title="Desvincular agente">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
                                     </div>
                                   );
                                 })}
