@@ -1153,8 +1153,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         {/* ── Top Status Bar ── */}
         <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl ${statusBgClass(myAgent?.status)}`}>
           <div className="flex items-center gap-3">
-            {/* Interval dropdown */}
-            {isPaused ? (
+            {/* Interval dropdown — only show "Retomar" for MANUAL pause, not TPA */}
+            {isManualPause ? (
               <Button
                 size="sm"
                 onClick={handleUnpause}
