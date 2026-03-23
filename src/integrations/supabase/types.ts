@@ -616,6 +616,7 @@ export type Database = {
           schedule_days_limit: number
           sort_order: number
           tenant_id: string
+          threecplus_qualification_id: number | null
         }
         Insert: {
           active?: boolean
@@ -639,6 +640,7 @@ export type Database = {
           schedule_days_limit?: number
           sort_order?: number
           tenant_id: string
+          threecplus_qualification_id?: number | null
         }
         Update: {
           active?: boolean
@@ -662,6 +664,7 @@ export type Database = {
           schedule_days_limit?: number
           sort_order?: number
           tenant_id?: string
+          threecplus_qualification_id?: number | null
         }
         Relationships: [
           {
