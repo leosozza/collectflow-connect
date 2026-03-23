@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send, ShieldAlert, Info } from "lucide-react";
 import { toast } from "sonner";
 
 type TestLog = { time: string; status: "success" | "error" | "info"; message: string };
@@ -559,9 +560,22 @@ const ThreeCPlusTab = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Não mapeado</SelectItem>
-                        {qualifications.map((q: any) => (
+                        {qualifications.filter((q: any) => q.id > 0).length > 0 && (
+                          <>
+                            <Separator className="my-1" />
+                            <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">RIVO Tabulações</p>
+                            {qualifications.filter((q: any) => q.id > 0).map((q: any) => (
+                              <SelectItem key={q.id} value={String(q.id)}>
+                                {q.name || q.label || `ID ${q.id}`}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                        <Separator className="my-1" />
+                        <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Padrão do Sistema</p>
+                        {SYSTEM_QUALIFICATIONS.map((q) => (
                           <SelectItem key={q.id} value={String(q.id)}>
-                            {q.name || q.label || `ID ${q.id}`}
+                            {q.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -575,6 +589,60 @@ const ThreeCPlusTab = () => {
               </Button>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* System Qualifications Info Card */}
+      <Card className="border-muted">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Info className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-base">Qualificações Nativas do Sistema 3CPlus</CardTitle>
+              <CardDescription>
+                Estas qualificações são automáticas da 3CPlus e não podem ser editadas. São aplicadas pelo discador quando o contato não é atendido.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">ID</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Nome</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Comportamento</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-border">
+                  <td className="px-3 py-2 font-mono text-xs">-2</td>
+                  <td className="px-3 py-2">Não qualificada</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs">Ligação completada mas não tabulada pelo operador</td>
+                </tr>
+                <tr className="border-t border-border">
+                  <td className="px-3 py-2 font-mono text-xs">-3</td>
+                  <td className="px-3 py-2">Caixa Postal</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs">Chamada caiu na caixa postal</td>
+                </tr>
+                <tr className="border-t border-border">
+                  <td className="px-3 py-2 font-mono text-xs">-4</td>
+                  <td className="px-3 py-2">Mudo</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs">Chamada atendida sem áudio detectado</td>
+                </tr>
+                <tr className="border-t border-border">
+                  <td className="px-3 py-2 font-mono text-xs">-5</td>
+                  <td className="px-3 py-2">Limite de tempo excedido</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs">TPA expirou sem tabulação do operador</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <ShieldAlert className="w-3 h-3" />
+            Qualificações nativas — gerenciadas automaticamente pela 3CPlus
+          </p>
         </CardContent>
       </Card>
     </div>
