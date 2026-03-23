@@ -1,39 +1,34 @@
 
-
-# Plano: Corrigir salvamento de tempo nos Intervalos de Pausa
+# Plano: Corrigir exibição do tempo nos intervalos de pausa
 
 ## Diagnóstico
 
-O proxy envia o campo `max_time` no body do POST/PUT, e a UI lê `interval.max_time` da resposta. Porém a API 3CPlus provavelmente usa o campo `maximum_time` (em segundos), não `max_time`. Resultado: a API ignora o campo enviado, e ao listar, o campo `max_time` vem como `undefined`.
+Testei a API 3CPlus diretamente e confirmei que o campo retornado é `minutes` (em minutos), **não** `maximum_time` nem `max_time`. Exemplo da resposta real:
 
-Evidências:
-- Os logs confirmam que o PUT é chamado corretamente (status 200)
-- Mas ao recarregar, o valor aparece como "Sem limite"
-- O SDK da 3CPlus não documenta os nomes dos campos, mas o padrão da API usa `maximum_time`
+```json
+{ "id": 33098, "name": "Almoço", "minutes": 60, "limit": 60, "type": "NR17", "color": "#c62828" }
+```
 
-## Correção
+O código atual verifica `interval.maximum_time || interval.max_time` — ambos inexistentes, por isso tudo mostra "Sem limite".
+
+Além disso, o proxy envia `maximum_time` em segundos no create/update, mas a API espera `minutes` em minutos.
+
+## Correções
 
 ### 1. `supabase/functions/threecplus-proxy/index.ts`
 
-**create_work_break_group_interval** (linha 618-619):
-- Trocar `max_time` por `maximum_time` no body enviado
-- Converter minutos (input do usuário) para segundos (API)
-- Usar `body.max_time != null && body.max_time !== ''` em vez de `if (body.max_time)` (que falha para 0)
-
-**update_work_break_group_interval** (linha 631-633):
-- Trocar `max_time` por `maximum_time` no body enviado
-- Converter minutos para segundos
+- **create_work_break_group_interval**: trocar `intervalBody.maximum_time = Number(body.max_time) * 60` por `intervalBody.minutes = Number(body.max_time)` (o valor já vem em minutos do UI)
+- **update_work_break_group_interval**: trocar `updateBody.maximum_time = Number(body.max_time) * 60` por `updateBody.minutes = Number(body.max_time)`
 
 ### 2. `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx`
 
-- Na exibição (linha 217): ler `interval.maximum_time` e converter segundos → minutos para exibir
-- No edit (linha 220): preencher o campo com `interval.maximum_time / 60` ao abrir edição
-- Fallback: tentar ambos `interval.maximum_time` e `interval.max_time` para compatibilidade
+- **Exibição (linha 217)**: trocar `(interval.maximum_time || interval.max_time)` por `interval.minutes`, sem divisão por 60 (já está em minutos)
+- **Edição (linha 220)**: preencher campo com `interval.minutes` direto
+- Manter fallback para `interval.maximum_time` e `interval.limit` por segurança
 
 ## Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/threecplus-proxy/index.ts` | Trocar campo `max_time` → `maximum_time`, converter min→seg |
-| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Ler `maximum_time`, converter seg→min na exibição |
-
+| `supabase/functions/threecplus-proxy/index.ts` | Trocar `maximum_time` → `minutes`, remover conversão ×60 |
+| `src/components/contact-center/threecplus/WorkBreakIntervalsPanel.tsx` | Ler campo `minutes` da resposta da API |
