@@ -511,10 +511,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
 
-  // Load campaign qualifications
+  // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
     try {
-      const data = await invoke("campaign_qualifications", { campaign_id: campaignId });
+      // Use qualification_list_id from tenant settings if available (set by sync_dispositions)
+      const listId = (tenant?.settings as any)?.threecplus_qualification_list_id;
+      const params: any = { campaign_id: campaignId };
+      if (listId) {
+        params.list_id = listId;
+        console.log("[Telefonia] Using qualification_list_id from tenant settings:", listId);
+      }
+      const data = await invoke("campaign_qualifications", params);
       const list = Array.isArray(data) ? data : data?.data || [];
       console.log("[Telefonia] Campaign qualifications loaded:", list.length, list);
       setCampaignQualifications(list);
@@ -522,7 +529,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       console.warn("[Telefonia] Failed to load campaign qualifications:", err);
       setCampaignQualifications([]);
     }
-  }, [invoke]);
+  }, [invoke, tenant?.settings]);
 
   const handleCampaignLogin = async () => {
     if (!selectedCampaign || !operatorAgentId) return;

@@ -914,11 +914,59 @@ Deno.serve(async (req) => {
       }
 
       // ── Campaign Qualifications ──
+      // Fetches qualification list items for a campaign by first getting the campaign details
+      // to find the qualification_list id, then fetching items from that list
       case 'campaign_qualifications': {
         const err = requireField(body, 'campaign_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/qualifications`, authParam);
-        console.log(`Fetching qualifications for campaign ${body.campaign_id}`);
+        
+        // If list_id provided directly, use it
+        let qualListId = body.list_id;
+        
+        if (!qualListId) {
+          // Get campaign details to find qualification_list
+          const campUrl = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
+          console.log(`Fetching campaign details for qualifications: ${campUrl}`);
+          const campRes = await fetch(campUrl, { headers: { 'Content-Type': 'application/json' } });
+          if (!campRes.ok) {
+            const errText = await campRes.text();
+            console.error(`campaign_qualifications: campaign details failed ${campRes.status}: ${errText}`);
+            return new Response(
+              JSON.stringify({ status: campRes.status, detail: `Failed to fetch campaign details: ${errText}`, success: false }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const campData = await campRes.json();
+          const campaign = campData?.data || campData;
+          qualListId = campaign?.qualification_list?.id || campaign?.qualification_list || campaign?.dialer_settings?.qualification_list_id;
+          console.log(`campaign_qualifications: resolved qualification_list id = ${qualListId}`);
+        }
+        
+        if (!qualListId) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: 'Campaign has no qualification list assigned', success: false, data: [] }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        url = buildUrl(baseUrl, `qualification_lists/${qualListId}/qualifications`, authParam);
+        console.log(`Fetching qualification items from list ${qualListId}`);
+        break;
+      }
+
+      // ── Agent Work Break Intervals (uses agent token) ──
+      case 'agent_work_break_intervals': {
+        const err = requireField(body, 'agent_id', corsHeaders);
+        if (err) return err;
+        const agentForBreaks = await resolveAgentToken(baseUrl, authParam, body.agent_id);
+        if (!agentForBreaks?.api_token) {
+          return new Response(
+            JSON.stringify({ status: 404, detail: `Agent ${body.agent_id} not found or has no token`, success: false }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        url = buildUrl(baseUrl, 'agent/work_break_intervals', `api_token=${agentForBreaks.api_token}`);
+        console.log(`Fetching work break intervals for agent ${body.agent_id}`);
         break;
       }
 
