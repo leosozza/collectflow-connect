@@ -1,0 +1,1 @@
+ALTER TABLE agreements ADD COLUMN IF NOT EXISTS custom_installment_dates jsonb DEFAULT '{}';
