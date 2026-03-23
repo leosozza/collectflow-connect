@@ -3,6 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { useCallback, useEffect, useRef } from "react";
 
+// Slugs that were absorbed into CRM — always return true if CRM is active
+const CRM_ABSORBED_SLUGS = [
+  "automacao",
+  "relatorios",
+  "financeiro",
+  "integracoes",
+  "api_publica",
+  "portal_devedor",
+  "ia_negociacao",
+  "crm_core", // backward compat for old slug
+];
+
 export const useModules = () => {
   const { tenant, isSuperAdmin } = useTenant();
   const seedAttempted = useRef(false);
@@ -44,6 +56,12 @@ export const useModules = () => {
     (slug: string): boolean => {
       if (isSuperAdmin) return true;
       if (isLoading) return true;
+
+      // Absorbed modules: check if CRM is active
+      if (CRM_ABSORBED_SLUGS.includes(slug)) {
+        return enabledSlugs.includes("crm") || enabledSlugs.includes(slug);
+      }
+
       return enabledSlugs.includes(slug);
     },
     [isSuperAdmin, isLoading, enabledSlugs]

@@ -9,6 +9,8 @@ export interface SystemModule {
   icon: string | null;
   is_core: boolean;
   sort_order: number;
+  parent_slug: string | null;
+  depends_on: string[];
   created_at: string;
 }
 
@@ -28,7 +30,11 @@ export const getSystemModules = async (): Promise<SystemModule[]> => {
     .select("*")
     .order("sort_order");
   if (error) throw error;
-  return (data || []) as SystemModule[];
+  return ((data || []) as any[]).map((m) => ({
+    ...m,
+    depends_on: m.depends_on || [],
+    parent_slug: m.parent_slug || null,
+  }));
 };
 
 export const getTenantModules = async (tenantId: string): Promise<(TenantModule & { system_module: SystemModule })[]> => {
@@ -90,4 +96,70 @@ export const bulkToggleModules = async (
   }
 
   return { success, errors };
+};
+
+/**
+ * Returns list of dependency slugs that are NOT currently enabled,
+ * preventing activation of the target module.
+ */
+export const getDependencyErrors = (
+  moduleSlug: string,
+  enabledMap: Record<string, boolean>,
+  modules: SystemModule[]
+): string[] => {
+  const mod = modules.find((m) => m.slug === moduleSlug);
+  if (!mod || !mod.depends_on?.length) return [];
+
+  return mod.depends_on.filter((depSlug) => {
+    const depMod = modules.find((m) => m.slug === depSlug);
+    if (!depMod) return false;
+    if (depMod.is_core) return false; // core modules are always enabled
+    return !enabledMap[depMod.id];
+  });
+};
+
+/**
+ * Returns list of module IDs that must be disabled when disabling a module
+ * (cascade: anything that depends on the disabled module).
+ */
+export const getAutoDisableModules = (
+  moduleSlug: string,
+  enabledMap: Record<string, boolean>,
+  modules: SystemModule[]
+): SystemModule[] => {
+  return modules.filter((m) => {
+    if (m.is_core) return false;
+    if (!enabledMap[m.id]) return false;
+    return m.depends_on?.includes(moduleSlug);
+  });
+};
+
+/**
+ * Returns module IDs that need to be auto-enabled as dependencies.
+ */
+export const getAutoEnableModules = (
+  moduleSlug: string,
+  enabledMap: Record<string, boolean>,
+  modules: SystemModule[]
+): SystemModule[] => {
+  const mod = modules.find((m) => m.slug === moduleSlug);
+  if (!mod || !mod.depends_on?.length) return [];
+
+  const toEnable: SystemModule[] = [];
+  const visited = new Set<string>();
+
+  const collect = (slug: string) => {
+    if (visited.has(slug)) return;
+    visited.add(slug);
+    const m = modules.find((x) => x.slug === slug);
+    if (!m || m.is_core) return;
+    if (!enabledMap[m.id]) {
+      toEnable.push(m);
+    }
+    // Recursively collect dependencies of dependencies
+    m.depends_on?.forEach(collect);
+  };
+
+  mod.depends_on.forEach(collect);
+  return toEnable;
 };

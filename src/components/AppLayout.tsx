@@ -131,8 +131,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             );
           })}
 
-          {/* Automação */}
-          {permissions.canViewAutomacao && isModuleEnabled("automacao") && (
+          {/* Automação — always visible if CRM active (absorbed module) */}
+          {permissions.canViewAutomacao && (
             <Link
               to="/automacao"
               onClick={() => setSidebarOpen(false)}
