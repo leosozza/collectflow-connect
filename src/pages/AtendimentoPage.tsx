@@ -291,9 +291,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
 
   const getStatusConfig = () => {
     const s = Number(agentStatus);
+    const hasManualPause = !!sessionStorage.getItem("3cp_active_pause_name");
     if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
     if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
-    if (s === 3) return { label: "Em Pausa", icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 3 && hasManualPause) return { label: `Em Pausa: ${sessionStorage.getItem("3cp_active_pause_name")}`, icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
+    if (s === 3) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 1) return { label: "Ocioso — Aguardando", icon: CheckCircle2, bgClass: "bg-muted text-muted-foreground", pulse: false };
     return null;
   };
