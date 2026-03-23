@@ -934,7 +934,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen
-    if (isACW && isPaused) {
+    if (effectiveACW && isPaused) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
