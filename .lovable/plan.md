@@ -1,62 +1,41 @@
 
 
-# Plano: Melhorar página de Acordos — Boletos, Edição de Parcelas e Segunda Via
+# Plano: Sincronizar tabulações RIVO com qualificações nas campanhas 3CPlus
 
-## Problemas identificados
+## Situação atual
 
-1. **Sem botão para gerar boleto** — O `AgreementInstallments` mostra boletos existentes (download/PIX) mas não tem botão para **gerar** boleto via Negociarie quando não existe um
-2. **Sem opção de editar data da parcela** — As parcelas são virtuais (calculadas a partir de `first_due_date` + `addMonths`), não há como alterar data individual
-3. **Erro na geração automática** — O `negociarieService.generateAgreementBoletos` já existe mas não é chamado de nenhum lugar na UI
+O sistema já cria uma lista de qualificações "RIVO Tabulações" na 3CPlus via `sync_dispositions` e salva o `qualification_list_id` no tenant settings. Porém, **essa lista não é automaticamente vinculada às campanhas existentes**. Ao criar uma campanha nova, o campo `qualification_list` é enviado opcionalmente, mas campanhas já criadas ficam sem a lista RIVO.
 
-## Correções
+## O que fazer
 
-### 1. `src/components/client-detail/AgreementInstallments.tsx` — Adicionar ações por parcela
+Após sincronizar as tabulações, automaticamente vincular a lista "RIVO Tabulações" a **todas as campanhas do tenant** via `update_campaign` (PATCH com `qualification_list: listId`).
 
-Transformar de componente de visualização para componente interativo:
+## Mudanças
 
-- **Botão "Gerar Boleto"** em cada parcela sem boleto vinculado — chama `negociarieService.novaCobranca` para aquela parcela específica e salva em `negociarie_cobrancas`
-- **Botão "2ª Via"** quando já existe boleto — abre link do boleto existente (já funciona como "Boleto")
-- **Botão "Editar Data"** — permite alterar a data de vencimento de uma parcela individual. Como as parcelas são virtuais, salvar datas customizadas em `negociarie_cobrancas` ou criar um campo `custom_installment_dates` (JSONB) no agreement
-- **Copiar Linha Digitável** — botão adicional quando existe `linha_digitavel`
-- Status mais claro com ícones
+### 1. `src/services/dispositionService.ts` — `syncDispositionsTo3CPlus`
 
-### 2. Persistência de datas customizadas
+Após salvar o `disposition_map` e `qualification_list_id` no tenant settings, fazer um loop pelas campanhas do tenant e vincular a lista:
 
-Adicionar coluna `custom_installment_dates` (JSONB) na tabela `agreements` via migration. Formato: `{ "1": "2026-04-15", "3": "2026-06-20" }` — mapeia número da parcela para data customizada. O `AgreementInstallments` lê esse campo e usa a data customizada em vez da calculada.
+- Chamar `threecplus-proxy` com action `list_campaigns` para obter todas as campanhas
+- Para cada campanha, chamar `update_campaign` com `qualification_list: listId`
+- Logar resultado
 
-### 3. `src/components/client-detail/AgreementInstallments.tsx` — Redesign completo
+### 2. `src/components/contact-center/threecplus/CampaignsPanel.tsx`
 
-**Props adicionais**: `onRefresh` callback, `tenantId`
+Na aba "Qualificações" da campanha expandida:
+- Mostrar qual lista de qualificações está vinculada à campanha (campo `qualification_list` ou `dialer_settings.qualification_list_id` da resposta)
+- Botão "Vincular Tabulações RIVO" que faz o PATCH da campanha com o `qualification_list_id` salvo no tenant settings
+- Se já vinculada, mostrar badge "✅ Sincronizada"
 
-**Novas funcionalidades por parcela**:
-- Gerar boleto individual (chama Negociarie)
-- Editar data de vencimento (dialog inline com datepicker)
-- Download 2ª via do boleto
-- Copiar linha digitável / PIX
-- Registrar pagamento manual (baixa)
+### 3. `src/components/cadastros/CallDispositionTypesTab.tsx`
 
-**Layout melhorado**:
-- Coluna de ações com dropdown menu em vez de botões soltos
-- Indicador visual mais claro (ícones de check, clock, alert)
-- Progress bar mostrando % de parcelas pagas
+No botão "Sincronizar 3CPlus", após a sync, mostrar toast informando quantas campanhas foram atualizadas.
 
-### 4. `src/services/negociarieService.ts` — Método para gerar boleto individual
-
-Extrair lógica de `generateAgreementBoletos` em método `generateSingleBoleto` reutilizável.
-
-## Migration SQL
-
-```sql
-ALTER TABLE agreements ADD COLUMN IF NOT EXISTS custom_installment_dates jsonb DEFAULT '{}';
-```
-
-## Arquivos a criar/editar
+## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | Redesign com botões: gerar boleto, 2ª via, editar data, baixa manual |
-| `src/services/negociarieService.ts` | Novo método `generateSingleBoleto` |
-| `src/pages/AcordosPage.tsx` | Passar `tenantId` e `onRefresh` ao `AgreementInstallments` |
-| `src/services/agreementService.ts` | Novo método `updateInstallmentDate` para salvar datas customizadas |
-| Migration | Adicionar coluna `custom_installment_dates` em `agreements` |
+| `src/services/dispositionService.ts` | Após sync, vincular lista a todas as campanhas |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Mostrar status de qualificações vinculadas + botão manual |
+| `src/components/cadastros/CallDispositionTypesTab.tsx` | Toast com info de campanhas atualizadas |
 
