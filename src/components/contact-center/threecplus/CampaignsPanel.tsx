@@ -238,6 +238,35 @@ const CampaignsPanel = () => {
     }
   };
 
+  const handleRemoveAgent = async (campaignId: string, agentId: string) => {
+    try {
+      await invoke("remove_campaign_agent", { campaign_id: campaignId, agent_id: Number(agentId) });
+      toast.success("Agente desvinculado!");
+      loadCampaignDetails(campaignId);
+    } catch (err: any) {
+      toast.error("Erro ao desvincular agente: " + (err.message || ""));
+    }
+  };
+
+  const handleLinkAgents = async () => {
+    if (!linkAgentCampaignId || linkAgentIds.length === 0) return;
+    setLinkingAgents(true);
+    try {
+      const res = await invoke("add_agents_to_campaign", { campaign_id: linkAgentCampaignId, agent_ids: linkAgentIds.map(Number) });
+      console.log("add_agents_to_campaign response:", JSON.stringify(res));
+      toast.success(`${linkAgentIds.length} agente(s) vinculado(s)!`);
+      setLinkAgentCampaignId(null);
+      setLinkAgentIds([]);
+      setLinkAgentSearch("");
+      loadCampaignDetails(linkAgentCampaignId);
+    } catch (err: any) {
+      console.error("add_agents error:", err);
+      toast.error("Erro ao vincular agentes: " + (err.message || ""));
+    } finally {
+      setLinkingAgents(false);
+    }
+  };
+
   /* ─── Create Campaign ─── */
 
   const toggleAgent = (agentId: number) => {
