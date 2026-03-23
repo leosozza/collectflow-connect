@@ -380,8 +380,13 @@ const ThreeCPlusTab = () => {
     if (!tenant?.id) return;
     setSavingMap(true);
     try {
+      // Fetch fresh settings to avoid overwriting credentials or other fields
+      const { data: freshTenant } = await supabase
+        .from("tenants").select("settings").eq("id", tenant.id).single();
+      const freshSettings = (freshTenant?.settings as Record<string, any>) || {};
+
       const newSettings = {
-        ...settings,
+        ...freshSettings,
         threecplus_disposition_map: dispositionMap,
       };
       const { error } = await supabase
@@ -389,6 +394,7 @@ const ThreeCPlusTab = () => {
         .update({ settings: newSettings })
         .eq("id", tenant.id);
       if (error) throw error;
+      await refetch();
       toast.success("Mapeamento de tabulações salvo!");
     } catch {
       toast.error("Erro ao salvar mapeamento");
