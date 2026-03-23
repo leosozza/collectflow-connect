@@ -803,9 +803,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const mailingClientId = activeCall?.Extra3 || activeCall?.extra3 || activeCall?.mailing_extra3 || "";
   const activeCallPhone = activeCall?.phone || myAgent?.phone || myAgent?.remote_phone || "";
 
+  // ACW fallback: agent is paused (status 3) with no manual pause name and a finished call exists
+  const isACWFallback = isPaused && !activePauseName && !isACW && (
+    !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
+  );
+  const effectiveACW = isACW || isACWFallback;
+
+  // Auto-load qualifications when ACW fallback is detected
+  useEffect(() => {
+    if (effectiveACW && campaignQualifications.length === 0 && myCampaignId) {
+      loadCampaignQualifications(Number(myCampaignId));
+    }
+  }, [effectiveACW, campaignQualifications.length, myCampaignId, loadCampaignQualifications]);
+
   if (isOperatorView && myAgent) {
-    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "phone:", myAgent.phone, "remote_phone:", myAgent.remote_phone);
-    console.log("[3CPlus] activeCall from company_calls:", JSON.stringify(activeCall));
+    console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
+    console.log("[3CPlus] activeCall (live):", JSON.stringify(activeCall), "lastFinished:", JSON.stringify(lastFinishedCall));
     console.log("[3CPlus] resolved mailing — CPF:", mailingCpf, "clientDbId:", mailingClientId, "phone:", activeCallPhone);
   }
 
