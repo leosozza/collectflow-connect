@@ -772,6 +772,38 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls, myAgent?.status, myAgent?.name]);
 
+  // Feed agent status into the modal context
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline) {
+      setAgentStatus(myAgent?.status);
+    } else {
+      setAgentStatus(undefined);
+    }
+  }, [isOperatorView, isAgentOnline, myAgent?.status, setAgentStatus]);
+
+  // Provide a finish disposition callback to the modal
+  useEffect(() => {
+    if (isOperatorView && isAgentOnline && operatorAgentId) {
+      const finishFn = async () => {
+        const callIdToQualify = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+        // Try unpause to exit TPA/ACW
+        try {
+          await invoke("unpause_agent", { agent_id: operatorAgentId });
+          console.log("[Telefonia] unpause_agent success after finish disposition");
+        } catch (e) {
+          console.warn("[Telefonia] unpause_agent failed (may already be idle):", e);
+        }
+        setIsACW(false);
+        sessionStorage.removeItem("3cp_last_call_id");
+        sessionStorage.removeItem("3cp_qualified_from_disposition");
+        fetchAll();
+      };
+      setOnFinishDisposition(finishFn);
+    } else {
+      setOnFinishDisposition(null);
+    }
+  }, [isOperatorView, isAgentOnline, operatorAgentId, lastCallId, setOnFinishDisposition]);
+
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
   const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
   const isTPAStatus = myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
