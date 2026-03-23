@@ -566,13 +566,6 @@ const ThreeCPlusTab = () => {
                             ))}
                           </>
                         )}
-                        <Separator className="my-1" />
-                        <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Padrão do Sistema</p>
-                        {SYSTEM_QUALIFICATIONS.map((q) => (
-                          <SelectItem key={q.id} value={String(q.id)}>
-                            {q.name}
-                          </SelectItem>
-                        ))}
                       </SelectContent>
                     </Select>
                   </div>
