@@ -165,12 +165,16 @@ const WorkBreakIntervalsPanel = () => {
   const openEditInterval = (interval: any, groupId: number) => {
     setEditingInterval(interval);
     setIntervalGroupId(groupId);
+    const typeReverseMap: Record<number, string> = { 1: "productive", 2: "unproductive", 3: "nr17" };
+    const returnReverseMap: Record<number, string> = { 1: "flexible", 2: "automatic", 3: "request" };
     setIntervalName(interval.name || interval.description || "");
     setIntervalMaxTime(String(interval.minutes || interval.limit || ""));
     setIntervalDailyLimit(String(interval.daily_limit || interval.maximum_daily_time || ""));
     setIntervalColor(interval.color || "#28cc39");
-    setIntervalClassification(interval.classification || "");
-    setIntervalReturnType(interval.return_type || "flexible");
+    const rawType = interval.type ?? interval.classification;
+    setIntervalClassification(typeof rawType === "number" ? (typeReverseMap[rawType] || "") : (rawType || ""));
+    const rawReturn = interval.return_type;
+    setIntervalReturnType(typeof rawReturn === "number" ? (returnReverseMap[rawReturn] || "flexible") : (rawReturn || "flexible"));
     setIntervalAutoStart(!!interval.auto_start);
     setIntervalDialogOpen(true);
   };
@@ -179,6 +183,8 @@ const WorkBreakIntervalsPanel = () => {
   const handleSaveInterval = async () => {
     if (!intervalName.trim() || !intervalGroupId) { toast.error("Nome é obrigatório"); return; }
     if (!intervalMaxTime || Number(intervalMaxTime) <= 0) { toast.error("Tempo máximo (minutos) é obrigatório"); return; }
+    if (!intervalClassification) { toast.error("Classificação é obrigatória"); return; }
+    if (!intervalReturnType) { toast.error("Tipo de retorno é obrigatório"); return; }
     setSavingInterval(true);
     try {
       const payload: Record<string, any> = {
