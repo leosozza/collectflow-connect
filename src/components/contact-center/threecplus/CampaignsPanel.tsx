@@ -49,6 +49,10 @@ const CampaignsPanel = () => {
   const [aggressiveness, setAggressiveness] = useState<Record<string, number>>({});
   const [savingAggr, setSavingAggr] = useState<string | null>(null);
 
+  // Work break group per campaign
+  const [campaignWBG, setCampaignWBG] = useState<Record<string, string>>({});
+  const [savingWBG, setSavingWBG] = useState<string | null>(null);
+
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
