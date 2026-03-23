@@ -997,15 +997,20 @@ Deno.serve(async (req) => {
         const listsRes = await fetch(listsUrl, { headers: { 'Content-Type': 'application/json' } });
         const listsData = await listsRes.json();
         const allLists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-        let rivoList = allLists.find((l: any) => l.name === 'RIVO Tabulações');
+        // CORRECTION 5: Use tenant-specific list name for isolation
+        const tenantName = body.tenant_name || 'Tenant';
+        const rivoListName = `RIVO - ${tenantName}`;
+        let rivoList = allLists.find((l: any) => l.name === rivoListName)
+          || allLists.find((l: any) => l.name === 'RIVO Tabulações'); // backward compat
         
         if (!rivoList) {
           const createRes = await fetch(buildUrl(baseUrl, 'qualification_lists', authParam), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'RIVO Tabulações' }),
+            body: JSON.stringify({ name: rivoListName }),
           });
           rivoList = await createRes.json();
+          console.log(`Created qualification list "${rivoListName}":`, JSON.stringify(rivoList));
         }
 
         const listId = rivoList.id;
