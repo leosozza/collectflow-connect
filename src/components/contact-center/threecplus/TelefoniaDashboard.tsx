@@ -179,6 +179,7 @@ const statusBgClass = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive text-destructive-foreground";
   if (status === 4 || s === "acw") return "bg-amber-500 text-white";
+  if (status === 6 || s === "work_break") return "bg-amber-500 text-white";
   if (status === 3 || s === "paused") return "bg-amber-500 text-white";
   return "bg-primary text-primary-foreground";
 };
