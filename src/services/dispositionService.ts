@@ -202,16 +202,16 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
 
     const listId = data.list_id;
 
-    const updatedSettings = {
-      ...settings,
-      threecplus_disposition_map: dispositionMap,
-      threecplus_qualification_list_id: listId,
-    };
-
-    await supabase
-      .from("tenants")
-      .update({ settings: updatedSettings } as any)
-      .eq("id", tenantId);
+    // Persist list_id in settings for reference (but NOT the disposition map)
+    if (listId && settings.threecplus_qualification_list_id !== listId) {
+      const updatedSettings = { ...settings, threecplus_qualification_list_id: listId };
+      // Remove legacy field if present
+      delete updatedSettings.threecplus_disposition_map;
+      await supabase
+        .from("tenants")
+        .update({ settings: updatedSettings } as any)
+        .eq("id", tenantId);
+    }
 
     // Persist threecplus_qualification_id back to each disposition type
     const types2 = await fetchTenantDispositionTypes(tenantId);
