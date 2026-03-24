@@ -23,6 +23,9 @@ interface AtendimentoModalState {
   agentId?: number;
   callId?: string | number;
   waitingForCall?: boolean;
+  sessionId?: string;
+  channel?: string;
+  conversationId?: string;
 }
 
 interface AtendimentoModalContextType {
