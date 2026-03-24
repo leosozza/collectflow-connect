@@ -331,7 +331,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                 className="flex items-center gap-2 px-3 py-2.5 border-b border-border select-none cursor-grab active:cursor-grabbing bg-muted/50 rounded-t-xl"
               >
                 <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />
+                {state.channel === "whatsapp" ? <MessageSquare className="w-4 h-4 text-green-500 flex-shrink-0" /> :
+                 state.channel === "portal" ? <Globe className="w-4 h-4 text-teal-500 flex-shrink-0" /> :
+                 state.channel?.startsWith("ai_") ? <Bot className="w-4 h-4 text-purple-500 flex-shrink-0" /> :
+                 <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />}
                 <span className="text-sm font-semibold truncate flex-1">Atendimento — {clientName}</span>
                 <span className="text-xs text-muted-foreground font-mono tabular-nums mr-2">{formatTime(elapsed)}</span>
                 <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize} onMouseDown={e => e.stopPropagation()}>
