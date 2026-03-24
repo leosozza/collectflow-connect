@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import AtendimentoPage from "@/pages/AtendimentoPage";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2, Coffee, Play, ChevronDown } from "lucide-react";
+import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2, Coffee, Play, ChevronDown, MessageSquare, Globe, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
