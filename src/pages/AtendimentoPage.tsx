@@ -400,6 +400,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
           <Home className="w-3.5 h-3.5" />
           <span>/</span>
           <span className="font-medium text-foreground">Atendimento em Curso</span>
+          {activeChannel && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 ml-1">
+              {CHANNEL_ICONS[activeChannel]}
+              {CHANNEL_LABELS[activeChannel] || activeChannel}
+            </Badge>
+          )}
         </div>
       )}
 
