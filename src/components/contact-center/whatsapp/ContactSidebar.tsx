@@ -309,6 +309,15 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                 variant="outline"
                 size="sm"
                 className="w-full text-xs mt-2"
+                onClick={() => navigate(`/atendimento/${linkedClient.id}?channel=whatsapp`)}
+              >
+                <Headphones className="w-3 h-3 mr-1" />
+                Ir para Atendimento
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs mt-1"
                 onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?tab=acordo`)}
               >
                 <FileText className="w-3 h-3 mr-1" />
