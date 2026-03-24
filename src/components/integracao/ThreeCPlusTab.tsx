@@ -6,207 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, FlaskConical, CheckCircle2, XCircle, Send, ShieldAlert, Info } from "lucide-react";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, CheckCircle2, XCircle, ShieldAlert, Info } from "lucide-react";
 import { toast } from "sonner";
 
-type TestLog = { time: string; status: "success" | "error" | "info"; message: string };
-
-// System qualifications built into 3CPlus (negative IDs)
 const SYSTEM_QUALIFICATIONS = [
   { id: -2, name: "Não qualificada" },
   { id: -3, name: "Caixa Postal" },
   { id: -4, name: "Mudo" },
   { id: -5, name: "Limite de tempo excedido" },
 ];
-
-const MailingTestCard = ({ campaigns, domain, apiToken }: { campaigns: any[]; domain: string; apiToken: string }) => {
-  const [selectedCampaign, setSelectedCampaign] = useState("");
-  const [testPhone, setTestPhone] = useState("");
-  const [testName, setTestName] = useState("Contato Teste");
-  const [testCpf, setTestCpf] = useState("00000000000");
-  const [sending, setSending] = useState(false);
-  const [logs, setLogs] = useState<TestLog[]>([]);
-
-  const addLog = (status: TestLog["status"], message: string) => {
-    setLogs((prev) => [{ time: new Date().toLocaleTimeString("pt-BR"), status, message }, ...prev]);
-  };
-
-  const handleTestSend = async () => {
-    if (!selectedCampaign) { toast.error("Selecione uma campanha"); return; }
-    if (!testPhone) { toast.error("Informe um telefone de teste"); return; }
-
-    setSending(true);
-    setLogs([]);
-    addLog("info", "Iniciando teste de envio de mailing...");
-
-    try {
-      // Step 1: Create list
-      addLog("info", `Criando lista na campanha ${selectedCampaign}...`);
-      const { data: listData, error: listError } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "create_list", domain: domain.trim(), api_token: apiToken.trim(), campaign_id: selectedCampaign },
-      });
-      if (listError) throw listError;
-
-      const listId = listData?.data?.id || listData?.id;
-      if (!listId) {
-        addLog("error", `Resposta create_list: ${JSON.stringify(listData).slice(0, 300)}`);
-        throw new Error("Não foi possível criar a lista — ID não retornado");
-      }
-      addLog("success", `Lista criada com ID: ${listId}`);
-
-      // Step 2: Send mailing
-      const mailings = [{
-        identifier: testCpf.replace(/\D/g, ""),
-        phone: testPhone.replace(/\D/g, ""),
-        Nome: testName,
-        Extra1: "TESTE",
-        Extra2: "0.00",
-        Extra3: "test-id",
-      }];
-
-      addLog("info", `Enviando 1 contato de teste para lista ${listId}...`);
-      addLog("info", `Payload: ${JSON.stringify(mailings[0])}`);
-
-      const { data: sendData, error: sendError } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "send_mailing",
-          domain: domain.trim(),
-          api_token: apiToken.trim(),
-          campaign_id: selectedCampaign,
-          list_id: listId,
-          mailings,
-        },
-      });
-      if (sendError) throw sendError;
-
-      // Detect API-level errors (e.g. 422)
-      const httpStatus = sendData?.status;
-      const responseBody = JSON.stringify(sendData, null, 2);
-
-      if (httpStatus && httpStatus >= 400) {
-        addLog("error", `❌ API retornou HTTP ${httpStatus}`);
-        addLog("error", `Detalhes: ${responseBody.slice(0, 600)}`);
-        // Show validation errors if present
-        if (sendData?.data?.errors) {
-          Object.entries(sendData.data.errors).forEach(([field, msgs]: [string, any]) => {
-            addLog("error", `Campo "${field}": ${Array.isArray(msgs) ? msgs.join(", ") : msgs}`);
-          });
-        }
-      } else {
-        addLog("success", `✅ Mailing enviado com sucesso! HTTP ${httpStatus || 200}`);
-        addLog("info", `Resposta: ${responseBody.slice(0, 500)}`);
-      }
-
-      // Step 3: Verify — get campaign lists to check if mailing was received
-      addLog("info", "Verificando lista na campanha...");
-      const { data: listsData } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "get_campaign_lists", domain: domain.trim(), api_token: apiToken.trim(), campaign_id: selectedCampaign },
-      });
-      const allLists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-      const createdList = allLists.find((l: any) => String(l.id) === String(listId));
-
-      if (createdList) {
-        const count = createdList.mailing_count ?? createdList.total ?? "?";
-        addLog("success", `✅ Lista ${listId} encontrada na campanha! Contatos na lista: ${count}`);
-      } else {
-        addLog("info", `Lista ${listId} não encontrada na verificação (pode levar alguns segundos para aparecer)`);
-      }
-
-      addLog("success", "✅ Teste concluído com sucesso!");
-    } catch (err: any) {
-      addLog("error", `❌ Erro: ${err.message || JSON.stringify(err)}`);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <Card className="border-primary/20">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <FlaskConical className="w-5 h-5 text-primary" />
-          <div>
-            <CardTitle className="text-base">Teste de Envio de Mailing</CardTitle>
-            <CardDescription>
-              Envie um contato de teste para validar que o fluxo de criação de lista e envio está funcionando
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Campanha</Label>
-            <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione uma campanha" />
-              </SelectTrigger>
-              <SelectContent>
-                {campaigns.map((c: any) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Telefone de teste</Label>
-            <Input placeholder="11999998888" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Nome</Label>
-            <Input value={testName} onChange={(e) => setTestName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>CPF</Label>
-            <Input value={testCpf} onChange={(e) => setTestCpf(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button onClick={handleTestSend} disabled={sending || !selectedCampaign} className="gap-2">
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {sending ? "Enviando..." : "Enviar Teste"}
-          </Button>
-          {logs.length > 0 && !sending && (
-            <Badge variant="outline" className={
-              logs[0]?.status === "success"
-                ? "bg-green-500/10 text-green-600 border-green-200"
-                : logs[0]?.status === "error"
-                ? "bg-destructive/10 text-destructive border-destructive/20"
-                : "bg-muted text-muted-foreground"
-            }>
-              {logs[0]?.status === "success" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : logs[0]?.status === "error" ? <XCircle className="w-3 h-3 mr-1" /> : null}
-              {logs[0]?.status === "success" ? "Sucesso" : "Falha"}
-            </Badge>
-          )}
-        </div>
-
-        {logs.length > 0 && (
-          <ScrollArea className="h-[220px] rounded-md border border-border bg-muted/30 p-3">
-            <div className="space-y-1.5 font-mono text-xs">
-              {logs.map((log, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="text-muted-foreground shrink-0">[{log.time}]</span>
-                  {log.status === "success" && <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />}
-                  {log.status === "error" && <XCircle className="w-3 h-3 text-destructive mt-0.5 shrink-0" />}
-                  {log.status === "info" && <Wifi className="w-3 h-3 text-primary mt-0.5 shrink-0" />}
-                  <span className={
-                    log.status === "success" ? "text-green-600 dark:text-green-400"
-                    : log.status === "error" ? "text-destructive"
-                    : "text-foreground"
-                  }>{log.message}</span>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
 
 const ThreeCPlusTab = () => {
   const { tenant, refetch } = useTenant();
@@ -218,11 +26,10 @@ const ThreeCPlusTab = () => {
   const [testing, setTesting] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [showToken, setShowToken] = useState(false);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [showSyncStatus, setShowSyncStatus] = useState(false);
 
   const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string; threecplus_qualification_id?: number | null }[]>([]);
 
-  // Load tenant dispositions from DB
   useEffect(() => {
     if (!tenant?.id) return;
     supabase
@@ -238,7 +45,6 @@ const ThreeCPlusTab = () => {
       });
   }, [tenant?.id]);
 
-  // Auto-set credentials from settings
   useEffect(() => {
     const d = settings.threecplus_domain;
     const t = settings.threecplus_api_token;
@@ -250,11 +56,9 @@ const ThreeCPlusTab = () => {
     if (!tenant?.id) return;
     setSaving(true);
     try {
-      // Fetch fresh settings to avoid overwriting other fields
       const { data: freshTenant } = await supabase
         .from("tenants").select("settings").eq("id", tenant.id).single();
       const freshSettings = (freshTenant?.settings as Record<string, any>) || {};
-
       const newSettings = {
         ...freshSettings,
         threecplus_domain: domain.trim(),
@@ -292,7 +96,7 @@ const ThreeCPlusTab = () => {
       if (error) throw error;
       if (data?.status === 200 && data?.data) {
         setConnected(true);
-        setCampaigns(data.data || []);
+        setShowSyncStatus(true);
         toast.success(`Conectado! ${(data.data || []).length} campanhas encontradas`);
       } else {
         setConnected(false);
@@ -305,7 +109,6 @@ const ThreeCPlusTab = () => {
       setTesting(false);
     }
   };
-
 
   return (
     <div className="space-y-4">
@@ -380,41 +183,8 @@ const ThreeCPlusTab = () => {
         </CardContent>
       </Card>
 
-      {campaigns.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Campanhas Disponíveis</CardTitle>
-            <CardDescription>Campanhas encontradas na sua conta 3CPlus</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {campaigns.map((c: any) => (
-                <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">ID: {c.id}</p>
-                  </div>
-                  <Badge variant={c.status === "running" ? "default" : "secondary"}>
-                    {c.status || "—"}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Teste de Envio de Mailing */}
-      {campaigns.length > 0 && (
-        <MailingTestCard
-          campaigns={campaigns}
-          domain={domain}
-          apiToken={apiToken}
-        />
-      )}
-
-      {/* Sync Status Table */}
-      {tenantDispositions.length > 0 && (
+      {/* Sync Status — only after successful connection test */}
+      {showSyncStatus && tenantDispositions.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
