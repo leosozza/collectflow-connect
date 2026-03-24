@@ -177,11 +177,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
         }).catch(console.error);
       }
       if (effectiveAgentId && settings.threecplus_domain) {
+        // Set flag IMMEDIATELY to prevent ACW screen from appearing while qualify is async
+        sessionStorage.setItem("3cp_qualified_from_disposition", "true");
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id })
           .then((success) => {
             if (success) {
-              // Signal that qualify was already done from disposition panel — prevents ACW fallback screen
-              sessionStorage.setItem("3cp_qualified_from_disposition", "true");
               sessionStorage.removeItem("3cp_last_call_id");
               toast.success("Qualificação enviada automaticamente para a 3CPlus");
             } else {
@@ -374,6 +374,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const handleFinishDisposition = async () => {
     setFinishingDisposition(true);
     try {
+      // Set flag BEFORE closing modal to prevent TelefoniaDashboard from showing ACW screen
+      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
       if (onFinishDisposition) await onFinishDisposition();
       closeAtendimento();
       toast.success("Tabulação finalizada — retornando à fila");

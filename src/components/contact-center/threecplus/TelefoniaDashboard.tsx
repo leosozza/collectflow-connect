@@ -940,7 +940,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
