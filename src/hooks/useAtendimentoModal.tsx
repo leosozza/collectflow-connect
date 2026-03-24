@@ -29,9 +29,9 @@ interface AtendimentoModalState {
 }
 
 interface AtendimentoModalContextType {
-  openAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
+  openAtendimento: (clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => void;
   openWaiting: (agentId: number) => void;
-  updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
+  updateAtendimento: (clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => void;
   closeAtendimento: () => void;
   setPauseControls: (controls: PauseControls | null) => void;
   setAgentStatus: (status: number | string | undefined) => void;
