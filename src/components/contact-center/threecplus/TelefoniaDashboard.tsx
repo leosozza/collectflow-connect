@@ -764,6 +764,21 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals, loadCampaignQualifications]);
 
+  // Detect external pause (status 6) and resolve pause name from loaded intervals
+  useEffect(() => {
+    if (isOperatorView && myAgent?.status === 6 && !activePauseName) {
+      // Try to find the interval name from the loaded pauseIntervals
+      // The API doesn't return pause_name for status 6, so we use a generic fallback
+      const storedName = sessionStorage.getItem("3cp_active_pause_name");
+      if (storedName) {
+        setActivePauseName(storedName);
+      } else if (pauseIntervals.length > 0) {
+        // Can't determine exact interval from API, show generic
+        setActivePauseName("Intervalo");
+      }
+    }
+  }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
+
   // Rehydrate widget when operator is already online after page refresh
   useEffect(() => {
     if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
