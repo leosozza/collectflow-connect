@@ -1,52 +1,52 @@
 
 
-# Plano: Mapear status 6, mostrar nome da pausa e botao de retomar
+# Diagnostico: Status 3 da 3CPlus — TPA vs Pausa
 
-## Problema
+## O que a API retorna
 
-A API retorna `status: 6` para "Em Intervalo" (work break), mas o dashboard so mapeia status 0-5. Resultado: o banner mostra "6" em vez de "Em Intervalo", nao mostra o nome da pausa, e nao exibe botao para sair da pausa.
+A 3CPlus retorna **status `3`** tanto para TPA (pos-atendimento) quanto para pausa manual. A diferenca e contextual:
 
-Dados da API confirmam: `{"id":100707,"name":"Vitor Santana","status":6,"status_start_time":1774359007}` — sem campo `pause_name` no payload.
+- **TPA**: status `3` apos uma chamada terminar, sem nome de pausa
+- **Pausa manual**: status `3` apos o operador clicar em "Intervalo", com nome de pausa definido
 
-## Correcoes em `TelefoniaDashboard.tsx`
+A API **nao retorna status `4`** nesta conta — o TPA chega como status `3`. Confirmado pelos network requests: Vitor esta em `status: 3` com uma chamada finalizada em `status: "4"` nos `company_calls`.
 
-### 1. Mapear status 6 nas funcoes de label/cor/bg
+## Por que o RIVO mostra "Em Pausa" em vez de "TPA"
 
-- `statusLabel`: status 6 → "Em Intervalo"
-- `statusColor`: status 6 → `bg-amber-500`
-- `statusBgClass`: status 6 → `bg-amber-500 text-white`
+A logica interna ja sabe diferenciar (linha 828: `isTPA = status === 3 && !activePauseName`), mas o **banner de display** nao usa essa logica. O banner na linha 1236-1240 faz:
 
-### 2. Incluir status 6 nas derivacoes booleanas
+1. Se `isPaused && activePauseName` → mostra "Em Intervalo: {nome}"
+2. Se `isPaused && status === 6` → mostra "Em Intervalo"
+3. Senao → mostra `statusLabel(status)` que para status 3 retorna **"Em pausa"**
 
-- `isManualPause` (linha 773): adicionar `myAgent?.status === 6` — status 6 e sempre work break manual
-- `isPausedStatus` (linha 774): adicionar `myAgent?.status === 6`
-- `isPaused` (linha 875): adicionar `myAgent?.status === 6`
+Nao existe nenhum check para `effectiveACW` no banner — entao quando o agente esta em TPA (status 3 sem pause name), o banner mostra "Em pausa" em vez de "TPA — Pos-atendimento".
 
-### 3. Detectar nome da pausa quando ativada externamente
+## Correcao em `TelefoniaDashboard.tsx`
 
-A API `agents_status` nao retorna `pause_name`. Quando o agente esta em status 6 e `activePauseName` esta vazio (pausa ativada fora do RIVO), buscar o nome do intervalo ativo chamando `agent_work_break_intervals` e cruzando com o estado do agente. Se nao for possivel determinar o nome exato, mostrar "Em Intervalo" como fallback generico.
+### 1. Banner de status (linhas 1234-1241)
 
-Adicionar um `useEffect` que detecta status 6 sem `activePauseName` e seta `activePauseName` a partir dos intervalos ja carregados ou com texto generico.
+Adicionar verificacao de `effectiveACW` **antes** das outras condicoes:
 
-### 4. Botao "Retomar" aparece automaticamente
-
-Com status 6 incluido em `isManualPause`, o bloco de codigo na linha 1173-1183 ja renderiza o botao "Retomar" que chama `handleUnpause` (que faz `unpause_agent` na 3CPlus). Nenhuma mudanca adicional necessaria nesse bloco.
-
-### 5. AgentStatusTable — mapear status 6
-
-No `AgentStatusTable.tsx`, adicionar status 6 ao `numericStatusMap`:
 ```
-6: "work_break"
-```
-E ao `statusConfig`:
-```
-work_break: { label: "Em Intervalo", variant: "secondary" }
+Se effectiveACW → "TPA — Pos-atendimento (MM:SS)"
+Se isPaused && activePauseName → "Em Intervalo: {nome} (MM:SS)"
+Se isPaused && status === 6 → "Em Intervalo (MM:SS)"
+Senao → statusLabel(status) (MM:SS)
 ```
 
-## Arquivos a editar
+### 2. Cor do banner quando em TPA
+
+Atualmente status 3 usa `bg-amber-500` (mesma cor da pausa). Isso esta ok visualmente mas podemos diferenciar se desejado. Manter como esta por ora.
+
+### 3. Botao "Retomar" vs "Finalizar Tabulacao"
+
+Quando em TPA (effectiveACW + status 3), o botao da esquerda deve mostrar **"Finalizar Tabulacao"** (que ja aparece no bloco ACW da linha 1071) e **nao** "Retomar" (que e para pausa manual). A logica de `isManualPause` na linha 791 ja trata isso corretamente: `isManualPause` requer `activePauseName`, entao em TPA sem pause name o botao "Retomar" nao aparece.
+
+O problema visual e apenas no banner — o bloco ACW (formulario de tabulacao) ja renderiza corretamente na linha 1071.
+
+## Arquivo a editar
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Mapear status 6 em label/cor/bg; incluir em isPaused/isManualPause/isPausedStatus; detectar nome da pausa para pausas externas |
-| `src/components/contact-center/threecplus/AgentStatusTable.tsx` | Mapear status 6 como "Em Intervalo" |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Banner: priorizar `effectiveACW` para mostrar "TPA — Pos-atendimento" em vez de "Em pausa" quando status 3 sem pause name |
 
