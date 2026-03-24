@@ -63,8 +63,10 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const [savingNote, setSavingNote] = useState(false);
   const [finishingDisposition, setFinishingDisposition] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || null);
+  const [callHungUp, setCallHungUp] = useState(false);
   const activeChannel = propChannel || (callId ? "call" : undefined);
   const settings = (tenant?.settings as Record<string, any>) || {};
+  const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
 
   // Fetch client
   const { data: client, isLoading: clientLoading } = useQuery<any>({
@@ -157,6 +159,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
     onSuccess: (_, variables) => {
       trackAction("tabulacao", { tipo: variables.type, client_id: id });
       queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+      setCallHungUp(false);
       if (tenant?.id && id) {
         executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
       }
@@ -310,7 +313,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const handleHangup = async () => {
     const callAgentId = effectiveAgentId;
     if (!callAgentId) { toast.error("Agente não vinculado"); return; }
-    const activeCallId = callId;
+    const activeCallId = effectiveCallId;
     if (!activeCallId) { toast.error("Nenhuma chamada ativa para desligar"); return; }
     const domain = settings.threecplus_domain;
     const apiToken = settings.threecplus_api_token;
@@ -327,6 +330,23 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
         toast.error(data.detail || data.message || "Erro ao desligar");
       } else {
         toast.success("Ligação encerrada");
+        setCallHungUp(true);
+        // Register call_hangup event
+        if (tenant?.id && client?.cpf) {
+          supabase.from("client_events").insert({
+            tenant_id: tenant.id,
+            client_id: client.id,
+            client_cpf: client.cpf?.replace(/\D/g, "") || "",
+            event_type: "call_hangup",
+            event_source: "operator",
+            event_channel: "call",
+            event_value: "hangup",
+            metadata: { call_id: activeCallId, operator_name: profile?.full_name, agent_id: callAgentId, session_id: activeSessionId },
+          } as any).then(({ error: evErr }) => {
+            if (evErr) console.error("[Hangup] Erro ao registrar evento:", evErr);
+          });
+          queryClient.invalidateQueries({ queryKey: ["client-events-timeline"] });
+        }
       }
     } catch (e) {
       console.error("[Hangup] Exception:", e);
@@ -423,7 +443,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
         onNegotiate={() => setShowNegotiation(true)}
         onHangup={handleHangup}
         hangingUp={hangingUp}
-        hasActiveCall={!!callId}
+        hasActiveCall={!!effectiveCallId && !callHungUp}
       />
 
       {/* Main content — 3 columns */}
