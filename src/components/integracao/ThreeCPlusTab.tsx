@@ -220,40 +220,30 @@ const ThreeCPlusTab = () => {
   const [showToken, setShowToken] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
 
-  // Qualification mapping state
-  const [qualifications, setQualifications] = useState<any[]>([]);
-  const [loadingQuals, setLoadingQuals] = useState(false);
-  const [dispositionMap, setDispositionMap] = useState<Record<string, string>>(
-    settings.threecplus_disposition_map || {}
-  );
-  const [savingMap, setSavingMap] = useState(false);
-  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string }[]>([]);
+  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string; threecplus_qualification_id?: number | null }[]>([]);
 
   // Load tenant dispositions from DB
   useEffect(() => {
     if (!tenant?.id) return;
     supabase
       .from("call_disposition_types")
-      .select("key, label")
+      .select("key, label, threecplus_qualification_id" as any)
       .eq("tenant_id", tenant.id)
       .eq("active", true)
       .order("sort_order", { ascending: true })
       .then(({ data }) => {
         if (data && data.length > 0) {
-          setTenantDispositions(data);
+          setTenantDispositions(data as any);
         }
       });
   }, [tenant?.id]);
 
-  // Auto-load qualifications if credentials exist
+  // Auto-set credentials from settings
   useEffect(() => {
     const d = settings.threecplus_domain;
     const t = settings.threecplus_api_token;
-    if (d && t && qualifications.length === 0 && !loadingQuals) {
-      setDomain(d);
-      setApiToken(t);
-      loadQualificationsWithCredentials(d, t);
-    }
+    if (d && !domain) setDomain(d);
+    if (t && !apiToken) setApiToken(t);
   }, [settings.threecplus_domain, settings.threecplus_api_token]);
 
   const handleSave = async () => {
@@ -316,100 +306,6 @@ const ThreeCPlusTab = () => {
     }
   };
 
-  const loadQualificationsWithCredentials = async (d?: string, t?: string) => {
-    const useDomain = (d || domain || "").trim();
-    const useToken = (t || apiToken || "").trim();
-    if (!useDomain || !useToken) return;
-    setLoadingQuals(true);
-    try {
-      // List all qualification lists, prioritize "RIVO Tabulações" / "RIVO - Tabulações"
-      const { data: listsData, error: listsError } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "list_qualification_lists",
-          domain: useDomain,
-          api_token: useToken,
-        },
-      });
-      if (listsError) throw listsError;
-      const lists = Array.isArray(listsData) ? listsData : listsData?.data || [];
-
-      // Find RIVO list first, then fallback to campaign list, then first available
-      const rivoList = lists.find((l: any) =>
-        l.name?.toLowerCase().includes("rivo")
-      );
-      const qualListId = rivoList?.id
-        || campaigns.find((c: any) => c.dialer_settings?.qualification_list_id)?.dialer_settings?.qualification_list_id
-        || (lists.length > 0 ? lists[0].id : null);
-
-      let items: any[] = [];
-      if (qualListId) {
-        const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-          body: {
-            action: "list_qualification_list_items",
-            domain: useDomain,
-            api_token: useToken,
-            list_id: qualListId,
-          },
-        });
-        if (error) throw error;
-        items = Array.isArray(data) ? data : data?.data || [];
-      }
-
-      setQualifications(items);
-    } catch {
-      toast.error("Erro ao carregar qualificações do 3CPlus");
-    } finally {
-      setLoadingQuals(false);
-    }
-  };
-
-  const loadQualifications = () => loadQualificationsWithCredentials();
-
-  // Load qualifications when connection is tested
-  useEffect(() => {
-    if (connected) {
-      loadQualifications();
-    }
-  }, [connected]);
-
-  const handleSaveMap = async () => {
-    if (!tenant?.id) return;
-    setSavingMap(true);
-    try {
-      // Fetch fresh settings to avoid overwriting credentials or other fields
-      const { data: freshTenant } = await supabase
-        .from("tenants").select("settings").eq("id", tenant.id).single();
-      const freshSettings = (freshTenant?.settings as Record<string, any>) || {};
-
-      const newSettings = {
-        ...freshSettings,
-        threecplus_disposition_map: dispositionMap,
-      };
-      const { error } = await supabase
-        .from("tenants")
-        .update({ settings: newSettings })
-        .eq("id", tenant.id);
-      if (error) throw error;
-
-      // CORRECTION 3: Also persist threecplus_qualification_id in DB table
-      for (const [key, qualId] of Object.entries(dispositionMap)) {
-        if (qualId) {
-          await supabase
-            .from("call_disposition_types")
-            .update({ threecplus_qualification_id: Number(qualId) } as any)
-            .eq("tenant_id", tenant.id)
-            .eq("key", key);
-        }
-      }
-
-      await refetch();
-      toast.success("Mapeamento de tabulações salvo!");
-    } catch {
-      toast.error("Erro ao salvar mapeamento");
-    } finally {
-      setSavingMap(false);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -517,80 +413,66 @@ const ThreeCPlusTab = () => {
         />
       )}
 
-      {/* Disposition → Qualification Mapping */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <ArrowRightLeft className="w-5 h-5 text-primary" />
-            <div>
-              <CardTitle className="text-base">Mapeamento de Tabulações</CardTitle>
-              <CardDescription>
-                Vincule cada tabulação do Rivo a uma qualificação do 3CPlus para tabulação automática
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {qualifications.length === 0 && !loadingQuals && (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                {domain && apiToken
-                  ? "Clique para carregar as qualificações do 3CPlus."
-                  : "Salve as credenciais acima para carregar as qualificações do 3CPlus."}
-              </p>
-              <Button variant="outline" size="sm" onClick={loadQualifications} disabled={!domain || !apiToken || loadingQuals}>
-                {loadingQuals ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Carregar Qualificações
-              </Button>
-            </div>
-          )}
-
-          {loadingQuals && <p className="text-sm text-muted-foreground">Carregando qualificações...</p>}
-
-          {(qualifications.length > 0 || tenantDispositions.length > 0) && (
-            <>
-              <div className="space-y-3">
-                {tenantDispositions.map(({ key, label }) => (
-                  <div key={key} className="flex items-center gap-3">
-                    <div className="w-40 shrink-0">
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-[10px] text-muted-foreground">{key}</p>
-                    </div>
-                    <Select
-                      value={dispositionMap[key] || ""}
-                      onValueChange={(v) =>
-                        setDispositionMap((prev) => ({ ...prev, [key]: v === "__none__" ? "" : v }))
-                      }
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Não mapeado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Não mapeado</SelectItem>
-                        {qualifications.filter((q: any) => q.id > 0).length > 0 && (
-                          <>
-                            <Separator className="my-1" />
-                            <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">RIVO Tabulações</p>
-                            {qualifications.filter((q: any) => q.id > 0).map((q: any) => (
-                              <SelectItem key={q.id} value={String(q.id)}>
-                                {q.name || q.label || `ID ${q.id}`}
-                              </SelectItem>
-                            ))}
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+      {/* Sync Status Table */}
+      {tenantDispositions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <ArrowRightLeft className="w-5 h-5 text-primary" />
+              <div>
+                <CardTitle className="text-base">Status de Sincronização</CardTitle>
+                <CardDescription>
+                  Tabulações criadas em Cadastros são sincronizadas automaticamente com a 3CPlus
+                </CardDescription>
               </div>
-              <Button onClick={handleSaveMap} disabled={savingMap} className="gap-2">
-                {savingMap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Salvar Mapeamento
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Tabulação RIVO</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">ID 3CPlus</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenantDispositions.map((d) => {
+                    const qId = (d as any).threecplus_qualification_id;
+                    const synced = !!qId;
+                    return (
+                      <tr key={d.key} className="border-t border-border">
+                        <td className="px-3 py-2">
+                          <p className="font-medium">{d.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{d.key}</p>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs">{qId || "—"}</td>
+                        <td className="px-3 py-2">
+                          {synced ? (
+                            <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Sincronizado
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs gap-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
+                              <XCircle className="w-3 h-3" />
+                              Pendente sync
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Crie tabulações em <strong>Cadastros → Tabulações de Chamada</strong> e clique <strong>Sincronizar 3CPlus</strong> para vincular automaticamente.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* System Qualifications Info Card */}
       <Card className="border-muted">

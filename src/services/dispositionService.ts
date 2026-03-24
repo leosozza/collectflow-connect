@@ -202,16 +202,16 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
 
     const listId = data.list_id;
 
-    const updatedSettings = {
-      ...settings,
-      threecplus_disposition_map: dispositionMap,
-      threecplus_qualification_list_id: listId,
-    };
-
-    await supabase
-      .from("tenants")
-      .update({ settings: updatedSettings } as any)
-      .eq("id", tenantId);
+    // Persist list_id in settings for reference (but NOT the disposition map)
+    if (listId && settings.threecplus_qualification_list_id !== listId) {
+      const updatedSettings = { ...settings, threecplus_qualification_list_id: listId };
+      // Remove legacy field if present
+      delete (updatedSettings as any).threecplus_disposition_map;
+      await supabase
+        .from("tenants")
+        .update({ settings: updatedSettings } as any)
+        .eq("id", tenantId);
+    }
 
     // Persist threecplus_qualification_id back to each disposition type
     const types2 = await fetchTenantDispositionTypes(tenantId);
@@ -366,16 +366,7 @@ export const qualifyOn3CPlus = async (params: {
       }
     }
 
-    // PRIORITY 2: Fallback to settings JSON map
-    if (!qualificationId) {
-      const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
-      if (map) {
-        qualificationId = map[params.dispositionType];
-        if (qualificationId) {
-          console.log(`qualifyOn3CPlus: Using fallback settings map, qualification_id ${qualificationId} for "${params.dispositionType}"`);
-        }
-      }
-    }
+    // No more fallback to settings JSON — DB is the single source of truth
 
     if (!qualificationId) {
       console.warn("qualifyOn3CPlus: no mapping found for disposition type:", params.dispositionType);
