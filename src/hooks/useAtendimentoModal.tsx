@@ -135,8 +135,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setHasCustomPosition(true);
   }, []);
 
-  const updateAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
-    console.log("[AtendimentoModal] Updating with client:", clientId, "call:", callId);
+  const updateAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => {
+    console.log("[AtendimentoModal] Updating with client:", clientId, "call:", callId, "opts:", opts);
     setState((prev) => ({
       ...prev,
       isOpen: true,
@@ -144,6 +144,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       agentId: agentId ?? prev.agentId,
       callId: callId ?? prev.callId,
       waitingForCall: false,
+      sessionId: opts?.sessionId ?? prev.sessionId,
+      channel: opts?.channel ?? prev.channel,
+      conversationId: opts?.conversationId ?? prev.conversationId,
     }));
     // Force expand and center when call arrives
     setIsMinimized(false);
