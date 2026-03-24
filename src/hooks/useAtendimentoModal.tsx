@@ -352,6 +352,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                   clientId={state.clientId}
                   agentId={state.agentId}
                   callId={state.callId}
+                  sessionId={state.sessionId}
+                  channel={state.channel as any}
                   embedded
                 />
               </div>
