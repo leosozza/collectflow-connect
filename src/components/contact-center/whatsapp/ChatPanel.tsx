@@ -51,10 +51,55 @@ const ChatPanel = ({
   operatorName,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const { tenant } = useTenant();
+  const { profile } = useAuth();
+  const [openingAtendimento, setOpeningAtendimento] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
+
+  const handleOpenAtendimento = async () => {
+    if (!conversation) return;
+    if (!conversation.client_id) {
+      toast.warning("Vincule um cliente antes de abrir o atendimento", {
+        description: "Use a barra lateral para vincular um cliente à conversa.",
+      });
+      return;
+    }
+    if (!tenant?.id) return;
+
+    setOpeningAtendimento(true);
+    try {
+      // Get client info for session
+      const { data: clientData } = await (await import("@/integrations/supabase/client")).supabase
+        .from("clients").select("cpf, credor").eq("id", conversation.client_id).single();
+
+      if (!clientData) {
+        toast.error("Cliente não encontrado");
+        return;
+      }
+
+      const session = await findOrCreateSession({
+        tenantId: tenant.id,
+        clientId: conversation.client_id,
+        clientCpf: clientData.cpf,
+        credor: clientData.credor,
+        channel: "whatsapp",
+        actor: "operator",
+        assignedTo: profile?.id,
+        sourceConversationId: conversation.id,
+      });
+
+      navigate(`/atendimento/${conversation.client_id}?sessionId=${session.id}&channel=whatsapp`);
+    } catch (err) {
+      console.error("[ChatPanel] Error opening atendimento:", err);
+      toast.error("Erro ao abrir atendimento");
+    } finally {
+      setOpeningAtendimento(false);
+    }
+  };
 
   if (!conversation) {
     return (
