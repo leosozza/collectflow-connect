@@ -62,6 +62,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const [hangingUp, setHangingUp] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [finishingDisposition, setFinishingDisposition] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || null);
+  const activeChannel = propChannel || (callId ? "call" : undefined);
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   // Fetch client
