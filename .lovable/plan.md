@@ -1,34 +1,63 @@
 
 
-# Plano: Limpar tela de Configuracoes > Telefonia (3CPlus)
+# Plano: Indicador compacto de sync + modal de detalhes
 
-## Problema
+## Mudanca
 
-Ao clicar "Testar Conexao", o sistema exibe dois cards desnecessarios nessa pagina:
-1. **Campanhas Disponiveis** — lista de campanhas (linhas 383-405)
-2. **Teste de Envio de Mailing** — formulario de envio de teste (linhas 407-414 + componente MailingTestCard)
+Apos testar conexao com sucesso, em vez de exibir o card completo de Status de Sincronizacao e o card de Qualificacoes Nativas inline na pagina, mostrar apenas um **badge clicavel** ao lado do badge "Conectado":
 
-Alem disso, o card **Status de Sincronizacao** aparece sempre que ha tabulacoes, mas deveria ficar fechado por padrao e abrir apenas apos o teste de conexao.
+- **Todas sincronizadas** → badge verde "5/5 Sincronizadas" com icone CheckCircle2
+- **Parcial** → badge amber "3/5 Sincronizadas" com icone de alerta
+- **Nenhuma** → badge vermelho "0/5 Sincronizadas"
+
+Ao clicar no badge, abre um **Dialog (modal)** contendo:
+1. Tabela de Status de Sincronizacao (tabulacoes RIVO vs ID 3CPlus)
+2. Tabela de Qualificacoes Nativas
+3. Botao "Copiar Log" que copia todo o conteudo do modal como texto formatado para a clipboard (para enviar para IA ou suporte)
 
 ## Correcoes em `src/components/integracao/ThreeCPlusTab.tsx`
 
-### 1. Remover card "Campanhas Disponiveis" (linhas 383-405)
+### 1. Remover os dois Cards inline (sync status + qualificacoes nativas)
 
-Remover o bloco condicional `{campaigns.length > 0 && (<Card>...Campanhas Disponíveis...</Card>)}` e o state `campaigns` / `setCampaigns`.
+Remover linhas 186-299 (os dois cards que aparecem abaixo do card de credenciais).
 
-### 2. Remover card "Teste de Envio de Mailing" (linhas 407-414)
+### 2. Adicionar badge clicavel na area de botoes (linha 176-181)
 
-Remover o bloco condicional que renderiza `<MailingTestCard>` e remover o componente `MailingTestCard` inteiro (linhas 25-209), incluindo imports nao usados (`FlaskConical`, `Send`).
+Apos o badge de "Conectado/Falha", adicionar badge de sync clicavel:
 
-### 3. Status de Sincronizacao — fechado por padrao, abre apos testar conexao
+```
+{showSyncStatus && tenantDispositions.length > 0 && (
+  <Badge onClick={() => setSyncModalOpen(true)} className="cursor-pointer gap-1 ...">
+    {syncedCount}/{total} Sincronizadas
+  </Badge>
+)}
+```
 
-- Adicionar state `showSyncStatus` (default `false`)
-- No `handleTestConnection`, ao obter sucesso, setar `showSyncStatus = true`
-- Condicionar a renderizacao do card de Status de Sincronizacao a `showSyncStatus && tenantDispositions.length > 0`
+### 3. Adicionar Dialog com detalhes + botao copiar
+
+Usar `Dialog` do shadcn. Conteudo:
+- Tabela de sync (mesma que existia)
+- Tabela de qualificacoes nativas (mesma que existia)
+- Botao "Copiar Log" que gera texto formatado:
+
+```
+=== Status de Sincronização ===
+Caixa Postal (voicemail) → 198977 ✓
+Não Atende (no_answer) → 198979 ✓
+...
+=== Qualificações Nativas ===
+-2: Não qualificada
+-3: Caixa Postal
+...
+```
+
+### 4. Novos states
+
+- `syncModalOpen: boolean` (default false)
 
 ## Arquivo a editar
 
 | Arquivo | Mudanca |
 |---|---|
-| `src/components/integracao/ThreeCPlusTab.tsx` | Remover MailingTestCard + card Campanhas; Status de Sync condicionado a teste bem-sucedido |
+| `src/components/integracao/ThreeCPlusTab.tsx` | Substituir cards inline por badge clicavel + Dialog modal com tabelas e botao copiar |
 
