@@ -1,52 +1,51 @@
 
 
-# Diagnostico: Status 3 da 3CPlus — TPA vs Pausa
+# Plano: Eliminar mapeamento manual + zerar tabulacoes do tenant Y.BRASIL
 
-## O que a API retorna
+## Parte 1 — Zerar tabulacoes existentes do tenant Y.BRASIL
 
-A 3CPlus retorna **status `3`** tanto para TPA (pos-atendimento) quanto para pausa manual. A diferenca e contextual:
+O tenant Y.BRASIL (`39a450f8-7a40-46e5-8bc7-708da5043ec7`) possui 12 tabulacoes, sendo 5 defaults originais (voicemail, interrupted, no_answer, cpc, wrong_contact) e 7 customizadas. A maioria nao tem `threecplus_qualification_id` — apenas 3 foram sincronizadas.
 
-- **TPA**: status `3` apos uma chamada terminar, sem nome de pausa
-- **Pausa manual**: status `3` apos o operador clicar em "Intervalo", com nome de pausa definido
+**Acao**: Deletar todas as 12 tabulacoes do tenant via operacao de dados (DELETE), permitindo que o usuario crie as novas do zero com a nomenclatura correta e o sync automatico funcione limpo.
 
-A API **nao retorna status `4`** nesta conta — o TPA chega como status `3`. Confirmado pelos network requests: Vitor esta em `status: 3` com uma chamada finalizada em `status: "4"` nos `company_calls`.
-
-## Por que o RIVO mostra "Em Pausa" em vez de "TPA"
-
-A logica interna ja sabe diferenciar (linha 828: `isTPA = status === 3 && !activePauseName`), mas o **banner de display** nao usa essa logica. O banner na linha 1236-1240 faz:
-
-1. Se `isPaused && activePauseName` → mostra "Em Intervalo: {nome}"
-2. Se `isPaused && status === 6` → mostra "Em Intervalo"
-3. Senao → mostra `statusLabel(status)` que para status 3 retorna **"Em pausa"**
-
-Nao existe nenhum check para `effectiveACW` no banner — entao quando o agente esta em TPA (status 3 sem pause name), o banner mostra "Em pausa" em vez de "TPA — Pos-atendimento".
-
-## Correcao em `TelefoniaDashboard.tsx`
-
-### 1. Banner de status (linhas 1234-1241)
-
-Adicionar verificacao de `effectiveACW` **antes** das outras condicoes:
-
-```
-Se effectiveACW → "TPA — Pos-atendimento (MM:SS)"
-Se isPaused && activePauseName → "Em Intervalo: {nome} (MM:SS)"
-Se isPaused && status === 6 → "Em Intervalo (MM:SS)"
-Senao → statusLabel(status) (MM:SS)
+```sql
+DELETE FROM call_disposition_types WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
 ```
 
-### 2. Cor do banner quando em TPA
+Tambem limpar o `threecplus_disposition_map` do settings do tenant (se existir), ja que o novo fluxo nao usa mais esse campo.
 
-Atualmente status 3 usa `bg-amber-500` (mesma cor da pausa). Isso esta ok visualmente mas podemos diferenciar se desejado. Manter como esta por ora.
+## Parte 2 — Eliminar mapeamento manual (plano ja aprovado)
 
-### 3. Botao "Retomar" vs "Finalizar Tabulacao"
+### 1. ThreeCPlusTab.tsx — Remover dropdowns de mapeamento
 
-Quando em TPA (effectiveACW + status 3), o botao da esquerda deve mostrar **"Finalizar Tabulacao"** (que ja aparece no bloco ACW da linha 1071) e **nao** "Retomar" (que e para pausa manual). A logica de `isManualPause` na linha 791 ja trata isso corretamente: `isManualPause` requer `activePauseName`, entao em TPA sem pause name o botao "Retomar" nao aparece.
+Substituir a secao de mapeamento manual por uma tabela readonly de status de sync:
 
-O problema visual e apenas no banner — o bloco ACW (formulario de tabulacao) ja renderiza corretamente na linha 1071.
+| Tabulacao RIVO | ID 3CPlus | Status |
+|---|---|---|
+| CPC | 12345 | Sincronizado |
+| Nova Tab | — | Pendente sync |
 
-## Arquivo a editar
+### 2. dispositionService.ts — Remover `threecplus_disposition_map` do settings
 
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Banner: priorizar `effectiveACW` para mostrar "TPA — Pos-atendimento" em vez de "Em pausa" quando status 3 sem pause name |
+No `syncDispositionsTo3CPlus`, parar de salvar `threecplus_disposition_map` no JSON do tenant. Manter apenas a persistencia em `call_disposition_types.threecplus_qualification_id`.
+
+### 3. DispositionPanel.tsx — Confirmar fonte unica
+
+Garantir que `qualifyOn3CPlus` busca `threecplus_qualification_id` direto da tabela DB, sem fallback para o settings map.
+
+## Arquivos e acoes
+
+| Tipo | Alvo | Mudanca |
+|---|---|---|
+| **Dados** | Tabela `call_disposition_types` | DELETE todas as rows do tenant Y.BRASIL |
+| **Dados** | Tabela `tenants` (settings) | Remover `threecplus_disposition_map` e `threecplus_qualification_list_id` do JSON settings |
+| **Codigo** | `src/components/integracao/ThreeCPlusTab.tsx` | Remover secao de mapeamento manual; substituir por tabela readonly de status de sync |
+| **Codigo** | `src/services/dispositionService.ts` | Remover persistencia de `threecplus_disposition_map` no settings |
+| **Codigo** | `src/components/atendimento/DispositionPanel.tsx` | Confirmar que usa `threecplus_qualification_id` da tabela |
+
+## Resultado
+
+1. Tenant Y.BRASIL comeca do zero — cria tabulacoes novas no RIVO, sincroniza com 1 clique
+2. Sem mapeamento manual — o sync ja persiste o ID automaticamente
+3. Uma unica fonte de verdade: coluna `threecplus_qualification_id` na tabela DB
 
