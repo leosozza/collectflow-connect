@@ -1,137 +1,209 @@
 
 
-# Revisao Tecnica Completa: Integracao RIVO ↔ 3CPlus
+# Plano: Central Unica de Negociacao Omnichannel — /atendimento
 
-## Diagnostico
+## Visao Geral
 
-Apos analise detalhada de todos os arquivos envolvidos, identifiquei os seguintes problemas organizados por area:
+Evoluir a /atendimento existente para funcionar como central unica de negociacao, servindo telefonia, WhatsApp, portal, IA WhatsApp e IA Voz, sem redesenhar a tela e sem criar uma segunda tela de atendimento.
 
-### CORRECAO 1 — Fonte de verdade duplicada para tabulacoes
+## Fase 1 — Tabela `atendimento_sessions` (fundacao)
 
-**Problema**: Existem DUAS fontes de verdade concorrentes:
-- `call_disposition_types` (tabela DB) — usada pelo `CallDispositionTypesTab`, `DispositionPanel`, `ThreeCPlusTab` (mapeamento)
-- `tenant.settings.custom_disposition_types` (JSON no settings) — usada por `getDispositionTypes()` e `getCustomDispositionList()` no `dispositionService.ts` (linhas 263-277)
-- `DISPOSITION_TYPES` (hardcoded, linhas 16-22) — fallback quando nenhuma das anteriores existe
+### Migracao SQL
 
-O `DispositionPanel` pode estar lendo de `getCustomDispositionList(settings)` que retorna `custom_disposition_types` do settings em vez da tabela DB. Isso gera divergencia: o mapeamento mostra tabulacoes do DB mas o atendimento pode mostrar tabulacoes do settings.
+Criar a tabela que representa o caso ativo de negociacao:
 
-**Correcao**:
-- Eliminar `getDispositionTypes()` e `getCustomDispositionList()` — substituir por `fetchTenantDispositionTypes()` em todos os pontos de consumo
-- Remover dependencia de `custom_disposition_types` do settings
-- Manter `DISPOSITION_TYPES` apenas como fallback de seed
+```sql
+CREATE TABLE public.atendimento_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  client_id uuid REFERENCES clients(id),
+  client_cpf text NOT NULL,
+  credor text,
+  status text NOT NULL DEFAULT 'open', -- open, closed
+  origin_channel text NOT NULL, -- call, whatsapp, portal, ai_whatsapp, ai_voice
+  current_channel text,
+  origin_actor text, -- operator, ai, portal_self
+  current_actor text,
+  assigned_to uuid REFERENCES profiles(id),
+  source_conversation_id uuid,
+  source_call_id text,
+  portal_session_id text,
+  ai_session_id text,
+  opened_at timestamptz NOT NULL DEFAULT now(),
+  closed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-### CORRECAO 2 — Sync desacoplado (CRUD local nao garante sync remoto)
+-- Indice unico para regra: 1 sessao ativa por tenant+client+credor
+CREATE UNIQUE INDEX idx_active_session ON atendimento_sessions (tenant_id, client_id, credor)
+  WHERE status = 'open';
 
-**Problema**: O `CallDispositionTypesTab` ja chama `syncDispositionsTo3CPlus()` apos create/update/delete, mas:
-- O sync e fire-and-forget (`.catch(() => {})` — linhas 210, 222, 232) — falhas sao silenciosas
-- O usuario nao tem feedback se o sync falhou
-- Nao ha retry automatico
-- Deletar uma tabulacao local remove da tabela DB, mas o sync so remove da 3CPlus por nome (matching por `activeLabels` — proxy linha 1093-1101), o que pode falhar se o nome mudou
+ALTER TABLE atendimento_sessions ENABLE ROW LEVEL SECURITY;
 
-**Correcao**:
-- Tornar o sync pos-CRUD awaitable com feedback (toast de sucesso/erro especifico para sync)
-- Na delecao, usar `threecplus_qualification_id` para deletar por ID na 3CPlus em vez de por nome
-- Adicionar badge de status de sync por tabulacao (sincronizado/pendente)
-
-### CORRECAO 3 — Mapeamento de qualification_id fragil
-
-**Problema**:
-- `qualifyOn3CPlus()` usa `threecplus_disposition_map` do settings como mapa `key → qualification_id`
-- O mapeamento manual (ThreeCPlusTab) e o mapeamento automatico (syncDispositionsTo3CPlus) escrevem no mesmo campo `threecplus_disposition_map`
-- Se o usuario faz sync automatico e depois edita manualmente, um sobrescreve o outro
-- A coluna `threecplus_qualification_id` na tabela `call_disposition_types` e preenchida pelo sync mas NUNCA e usada pelo `qualifyOn3CPlus()` — e ignorada, preferindo o settings JSON
-
-**Correcao**:
-- `qualifyOn3CPlus()` deve priorizar `threecplus_qualification_id` da tabela DB (lookup por key na `call_disposition_types`) em vez do settings JSON
-- O settings `threecplus_disposition_map` passa a ser backup/cache, nao fonte primaria
-- Unificar: o mapeamento manual no ThreeCPlusTab tambem deve persistir o `threecplus_qualification_id` na tabela DB alem do settings
-
-### CORRECAO 4 — Webhook faz lookup por label (texto), nao por ID
-
-**Problema**: `threecplus-webhook/index.ts` linhas 227-233:
-```typescript
-.ilike("label", qualification)  // match por TEXTO!
+-- RLS: usuarios autenticados do tenant
+CREATE POLICY "Tenant users can manage sessions"
+  ON atendimento_sessions FOR ALL TO authenticated
+  USING (tenant_id = get_my_tenant_id())
+  WITH CHECK (tenant_id = get_my_tenant_id());
 ```
-Se o nome da tabulacao no RIVO difere minimamente do nome na 3CPlus (acento, espaco, maiuscula), o match falha silenciosamente.
 
-**Correcao**:
-- Priorizar lookup por `threecplus_qualification_id` (match `qualificationId` do payload contra a coluna `threecplus_qualification_id` da tabela)
-- Usar `ilike("label", ...)` apenas como fallback secundario
+Habilitar realtime para atualizacoes em tempo real:
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.atendimento_sessions;
+```
 
-### CORRECAO 5 — Lista "RIVO Tabulacoes" pode misturar contextos
+### Servico `atendimentoSessionService.ts`
 
-**Problema**: O sync cria UMA lista chamada "RIVO Tabulacoes" global na conta 3CPlus e vincula a TODAS as campanhas. Se dois tenants compartilham a mesma conta 3CPlus, as tabulacoes se misturam.
+Criar servico com funcoes:
 
-**Correcao**:
-- Nomear a lista com o tenant: `"RIVO - {tenant_name}"` para isolamento
-- Verificar se o tenant ja tem `threecplus_qualification_list_id` salvo e usar esse ID diretamente em vez de buscar por nome
+- `findOrCreateSession({ tenantId, clientId, clientCpf, credor, channel, actor, sourceConversationId?, sourceCallId?, assignedTo? })` — busca sessao ativa para tenant+client+credor; se nao existe, cria nova
+- `updateSessionChannel(sessionId, channel, actor)` — atualiza `current_channel` e `current_actor`
+- `closeSession(sessionId)` — marca `status=closed`, `closed_at=now()`
+- `getActiveSession(tenantId, clientId, credor?)` — retorna sessao ativa se existir
 
-### CORRECAO 6 — Intervalos de pausa: fluxo ja funcional, mas verificar robustez
+## Fase 2 — Eventos estruturados para sessao
 
-**Problema menor**: O `loadPauseIntervals` usa `agent_work_break_intervals` como primario (correto), com fallback para `campaign_details → list_work_break_group_intervals`. Funciona, mas:
-- Se o agente nao esta logado em campanha, `agent_work_break_intervals` pode retornar vazio
-- O fallback precisa de `campaign_id` que pode nao estar disponivel
+### Novos event_types no `client_events`
 
-**Correcao**: Adicionar log mais claro quando intervalos estao vazios e exibir mensagem na UI explicando que a campanha pode nao ter grupo de intervalos vinculado.
+Adicionar coluna opcional `session_id` a `client_events`:
 
-### CORRECAO 7 — Proxy mascara erros como HTTP 200
+```sql
+ALTER TABLE client_events ADD COLUMN session_id uuid REFERENCES atendimento_sessions(id);
+```
 
-**Problema**: O proxy SEMPRE retorna HTTP 200 (linhas 1181-1189), incluindo `success: boolean` no body. Porem:
-- Erros de agent nao encontrado retornam HTTP 200 com `status: 404` no body (linhas 694-697, 711-714, etc.)
-- O frontend em varios pontos nao checa `data.success === false`
-- O `invoke()` do TelefoniaDashboard (linha 347-353) nao verifica `success`
+Novos tipos de evento (nao requerem alteracao de schema, apenas uso no codigo):
+- `atendimento_opened`
+- `atendimento_closed`
+- `channel_switched`
+- `portal_negotiation_started`
+- `portal_agreement_created`
+- `ai_whatsapp_negotiation_started`
+- `ai_voice_negotiation_started`
 
-**Correcao**:
-- Padronizar o `invoke()` do TelefoniaDashboard para checar `data.success === false` e lancar erro (mesmo padrao ja aplicado no WorkBreakIntervalsPanel)
-- Manter o proxy retornando 200 (necessario para evitar que o Supabase SDK lance erro), mas garantir que TODOS os consumidores verifiquem o campo `success`
+### Registro automatico de eventos
 
-### CORRECAO 8 — Fluxo do atendimento: disposition local antes de qualify remoto
+No `findOrCreateSession`, ao criar sessao nova, inserir evento `atendimento_opened` em `client_events`.
+No `closeSession`, inserir evento `atendimento_closed`.
+No `updateSessionChannel`, inserir evento `channel_switched`.
 
-**Problema**: Em `AtendimentoPage.tsx`, o `dispositionMutation.onSuccess` (linhas 135-168):
-1. Salva a disposition local
-2. Executa automacoes
-3. Salva call_log
-4. Chama `qualifyOn3CPlus()` — mas de forma fire-and-forget (.then/.catch)
+## Fase 3 — Adaptar a /atendimento
 
-Se o qualify falha, a disposition local ja foi salva. O usuario ve "Tabulacao salva" mas a 3CPlus fica dessincronizada.
+### `src/pages/AtendimentoPage.tsx`
 
-**Correcao**:
-- Manter a ordem atual (local primeiro para nao perder dados), mas mostrar toast especifico quando o qualify falha: "Tabulacao salva no RIVO, mas falhou na 3CPlus — tente sincronizar manualmente"
-- Registrar flag de "sync pendente" para a disposition
+Mudancas minimas:
 
-### CORRECAO 9 — Operacoes de agente: click2call com fallback perigoso
+1. Aceitar nova prop opcional `sessionId` e `channel` no `AtendimentoPageProps`
+2. Se `sessionId` for passado, carregar dados da sessao e exibir badge do canal atual (WhatsApp/Telefonia/Portal/IA) no header
+3. Se nao for passado (fluxo atual), continuar funcionando exatamente como hoje (compatibilidade total)
+4. Ao tabular, se houver sessao ativa, associar o `session_id` ao evento de disposition
 
-**Problema**: `click2call` (proxy linhas 812-849) usa `agent_id` como fallback de `extension` quando a extension nao e encontrada (linha 836-837). Isso pode causar comportamento incorreto pois `agent_id` nao e o mesmo que `extension` SIP.
+### `src/components/atendimento/DispositionPanel.tsx`
 
-**Correcao**: Em vez de usar agent_id como fallback, retornar erro claro: "Extension SIP nao encontrada para o agente. Configure a extension no 3CPlus."
+Renomear "Tabulacao da Chamada" para "Resultado do Atendimento" (uma mudanca de texto, linha 132).
 
-### CORRECAO 10 — Isolamento por tenant
+### `src/components/atendimento/ClientTimeline.tsx`
 
-**Problema menor**: O proxy recebe `domain` e `api_token` do frontend em cada chamada. Cada tenant tem suas credenciais no settings. O isolamento depende do frontend enviar as credenciais corretas. Nao ha validacao no proxy de que o tenant autenticado corresponde ao domain/token enviados.
+Nenhuma mudanca estrutural. A timeline ja consome `client_events` e ja suporta os tipos whatsapp_inbound, whatsapp_outbound, agreement_*, call, disposition, field_update. Os novos event_types (`atendimento_opened`, `channel_switched`, etc.) serao adicionados aos mapas `EVENT_TYPE_LABELS`, `COLOR_MAP` e `TYPE_ICON` para renderizacao automatica.
 
-**Correcao**: No proxy, opcionalmente validar o tenant_id do usuario autenticado contra o domain/token, mas isso requer JWT validation que o proxy atualmente nao faz. Como correcao minima: logar o tenant_id junto com o domain em cada chamada para auditoria.
+## Fase 4 — Contexto omnichannel no modal
 
-## Arquivos a editar
+### `src/hooks/useAtendimentoModal.tsx`
 
-| Arquivo | Mudancas |
+Expandir interfaces para suportar contexto adicional:
+
+```typescript
+interface AtendimentoModalState {
+  // ... campos existentes mantidos
+  sessionId?: string;
+  channel?: string; // 'call' | 'whatsapp' | 'portal' | 'ai_whatsapp' | 'ai_voice'
+  conversationId?: string;
+}
+```
+
+Expandir `openAtendimento` e `updateAtendimento` para aceitar esses campos opcionais.
+O header do modal mostra icone do canal (Phone/MessageSquare/Globe/Bot) em vez de sempre Phone.
+
+## Fase 5 — Botao "Abrir Atendimento" no WhatsApp
+
+### `src/components/contact-center/whatsapp/ChatPanel.tsx`
+
+Adicionar botao "Abrir Atendimento" no header do chat (ao lado do seletor de status):
+
+- Visivel apenas quando a conversa tem `client_id` vinculado
+- Ao clicar: chama `findOrCreateSession` com `channel='whatsapp'`, depois navega para `/atendimento?clientId={clientId}&sessionId={sessionId}&channel=whatsapp`
+- Se ja existir sessao ativa, abre a existente
+- Se a conversa nao tem client vinculado, mostra toast pedindo para vincular primeiro
+
+### `src/components/contact-center/whatsapp/ContactSidebar.tsx`
+
+Adicionar botao secundario "Ir para Atendimento" na secao do cliente vinculado (abaixo dos dados do cliente), como acao rapida alternativa.
+
+## Fase 6 — Integracao com telefonia (preservar fluxo)
+
+### `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+
+Ao abrir atendimento via chamada 3CPlus:
+- Chamar `findOrCreateSession` com `channel='call'`, `sourceCallId=callId`
+- Passar `sessionId` para o `openAtendimento`/`updateAtendimento`
+- Nenhuma mudanca visual no fluxo do operador
+
+## Fase 7 — Portal e IA (sem UI humana)
+
+### Portal — `supabase/functions/portal-checkout/index.ts`
+
+Ao criar acordo via portal:
+- Chamar `findOrCreateSession` (via query direta no banco usando service_role) com `channel='portal'`, `actor='portal_self'`
+- Inserir evento `portal_agreement_created` em `client_events` com `session_id`
+
+### IA WhatsApp — `src/components/contact-center/whatsapp/AIAgentTab.tsx` (futuro)
+
+Quando o agente IA processar negociacao:
+- Criar/reutilizar sessao com `channel='ai_whatsapp'`
+- Registrar eventos estruturados na sessao
+
+(Esta fase e preparatoria — a infraestrutura fica pronta para quando IA de negociacao for implementada)
+
+## Fase 8 — Observacoes estruturadas
+
+### `src/pages/AtendimentoPage.tsx` — `handleSaveNote`
+
+Alem de salvar em `clients.observacoes` (compatibilidade), tambem inserir em `client_events`:
+
+```typescript
+await supabase.from("client_events").insert({
+  tenant_id: tenant.id,
+  client_id: client.id,
+  client_cpf: client.cpf,
+  event_type: "observation_added",
+  event_source: "operator",
+  event_value: "note",
+  metadata: { note: note, operator_name: profile.full_name, session_id: sessionId },
+  session_id: sessionId || null,
+});
+```
+
+Observacoes aparecem no historico mas NAO alimentam o score (o `calculate-propensity` ignora `observation_added`).
+
+## Resumo de arquivos
+
+| Arquivo | Mudanca |
 |---|---|
-| `src/services/dispositionService.ts` | Eliminar `getDispositionTypes()`/`getCustomDispositionList()`, usar DB como fonte unica; `qualifyOn3CPlus()` buscar `threecplus_qualification_id` da tabela; melhorar feedback de sync |
-| `src/components/atendimento/DispositionPanel.tsx` | Usar `fetchTenantDispositionTypes()` em vez de `getCustomDispositionList(settings)` |
-| `src/pages/AtendimentoPage.tsx` | Toast especifico quando qualify na 3CPlus falha |
-| `supabase/functions/threecplus-webhook/index.ts` | Priorizar lookup por `threecplus_qualification_id` em vez de label |
-| `supabase/functions/threecplus-proxy/index.ts` | Nomear lista com tenant; click2call sem fallback perigoso; delecao por ID no sync |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Padronizar `invoke()` para checar `success`; mensagem clara quando intervalos vazios |
-| `src/components/integracao/ThreeCPlusTab.tsx` | Mapeamento manual persiste `threecplus_qualification_id` na tabela DB |
-| `src/components/cadastros/CallDispositionTypesTab.tsx` | Sync com feedback visivel (await + toast de erro especifico); badge de status de sync |
+| **Migracao SQL** | Criar tabela `atendimento_sessions` + indice unico + RLS + coluna `session_id` em `client_events` |
+| `src/services/atendimentoSessionService.ts` | **Novo** — CRUD de sessoes |
+| `src/pages/AtendimentoPage.tsx` | Aceitar `sessionId`/`channel` opcionais; salvar observacao como evento |
+| `src/hooks/useAtendimentoModal.tsx` | Expandir state com `sessionId`/`channel`/`conversationId`; icone dinamico |
+| `src/components/atendimento/DispositionPanel.tsx` | Renomear titulo para "Resultado do Atendimento" |
+| `src/components/atendimento/ClientTimeline.tsx` | Adicionar labels/cores/icones para novos event_types |
+| `src/components/contact-center/whatsapp/ChatPanel.tsx` | Botao "Abrir Atendimento" no header |
+| `src/components/contact-center/whatsapp/ContactSidebar.tsx` | Botao "Ir para Atendimento" na secao do cliente |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Criar sessao ao abrir atendimento via chamada |
+| `supabase/functions/portal-checkout/index.ts` | Criar sessao + evento ao gerar acordo pelo portal |
 
-## Resultado esperado
+## O que NAO muda
 
-- Uma unica fonte de verdade: tabela `call_disposition_types`
-- CRUD local dispara sync confiavel com feedback
-- `qualifyOn3CPlus` usa ID da tabela DB (nao settings JSON)
-- Webhook mapeia por ID, nao por texto
-- Erros da 3CPlus nunca sao mascarados
-- Click2call nao usa fallback perigoso
-- Lista de qualificacoes isolada por tenant
-- Intervalos com mensagem clara quando vazios
+- Layout da /atendimento (3 colunas: tabulacao/historico/observacoes)
+- Fluxo da telefonia 3CPlus (mantido 100%)
+- Timeline baseada em client_events (reaproveitada)
+- Score operacional (alimentado apenas por eventos estruturados, nunca por texto livre)
+- Compatibilidade com `clients.observacoes`
 
