@@ -117,9 +117,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     });
   }, []);
 
-  const openAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
-    console.log("[AtendimentoModal] Opening for client:", clientId, "agent:", agentId, "call:", callId);
-    setState({ isOpen: true, clientId, agentId, callId, waitingForCall: false });
+  const openAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => {
+    console.log("[AtendimentoModal] Opening for client:", clientId, "agent:", agentId, "call:", callId, "opts:", opts);
+    setState({ isOpen: true, clientId, agentId, callId, waitingForCall: false, sessionId: opts?.sessionId, channel: opts?.channel, conversationId: opts?.conversationId });
     setIsMinimized(false);
     if (!hasCustomPosition) centerPosition();
   }, [hasCustomPosition, centerPosition]);
