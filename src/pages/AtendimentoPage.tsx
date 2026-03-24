@@ -27,6 +27,8 @@ interface AtendimentoPageProps {
   agentId?: number;
   callId?: string | number;
   embedded?: boolean;
+  sessionId?: string;
+  channel?: SessionChannel;
 }
 
 const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: AtendimentoPageProps) => {
