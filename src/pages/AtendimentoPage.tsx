@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { formatCPF } from "@/lib/formatters";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
+import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
 import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
