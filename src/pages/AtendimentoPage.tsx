@@ -63,8 +63,10 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const [savingNote, setSavingNote] = useState(false);
   const [finishingDisposition, setFinishingDisposition] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || null);
+  const [callHungUp, setCallHungUp] = useState(false);
   const activeChannel = propChannel || (callId ? "call" : undefined);
   const settings = (tenant?.settings as Record<string, any>) || {};
+  const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
 
   // Fetch client
   const { data: client, isLoading: clientLoading } = useQuery<any>({
