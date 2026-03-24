@@ -1,14 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import AISuggestion from "./AISuggestion";
 import { Conversation, ChatMessage } from "@/services/conversationService";
+import { findOrCreateSession } from "@/services/atendimentoSessionService";
+import { useTenant } from "@/hooks/useTenant";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface ChatPanelProps {
   conversation: Conversation | null;
