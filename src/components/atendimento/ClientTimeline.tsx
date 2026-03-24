@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature } from "lucide-react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote } from "lucide-react";
 
 interface TimelineItem {
   id: string;
