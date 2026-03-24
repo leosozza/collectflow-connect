@@ -220,14 +220,7 @@ const ThreeCPlusTab = () => {
   const [showToken, setShowToken] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
 
-  // Qualification mapping state
-  const [qualifications, setQualifications] = useState<any[]>([]);
-  const [loadingQuals, setLoadingQuals] = useState(false);
-  const [dispositionMap, setDispositionMap] = useState<Record<string, string>>(
-    settings.threecplus_disposition_map || {}
-  );
-  const [savingMap, setSavingMap] = useState(false);
-  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string }[]>([]);
+  const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string; threecplus_qualification_id?: number | null }[]>([]);
 
   // Load tenant dispositions from DB
   useEffect(() => {
