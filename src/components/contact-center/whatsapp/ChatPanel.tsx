@@ -156,6 +156,29 @@ const ChatPanel = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={handleOpenAtendimento}
+                  disabled={openingAtendimento}
+                >
+                  {openingAtendimento ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Headphones className="w-3.5 h-3.5" />
+                  )}
+                  Atendimento
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>{conversation.client_id ? "Abrir tela de atendimento/negociação" : "Vincule um cliente primeiro"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Select value={conversation.status} onValueChange={onStatusChange}>
             <SelectTrigger className="h-8 w-[120px] text-xs">
               <SelectValue />
