@@ -111,6 +111,14 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   debtor_category: <Tags className="w-3.5 h-3.5 text-pink-500" />,
   field_update: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
   disposition: <Phone className="w-3.5 h-3.5 text-amber-500" />,
+  atendimento_opened: <Headphones className="w-3.5 h-3.5 text-cyan-500" />,
+  atendimento_closed: <Headphones className="w-3.5 h-3.5 text-slate-500" />,
+  channel_switched: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
+  observation_added: <StickyNote className="w-3.5 h-3.5 text-amber-500" />,
+  portal_negotiation_started: <Globe className="w-3.5 h-3.5 text-teal-500" />,
+  portal_agreement_created: <Globe className="w-3.5 h-3.5 text-emerald-500" />,
+  ai_whatsapp_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
+  ai_voice_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {
