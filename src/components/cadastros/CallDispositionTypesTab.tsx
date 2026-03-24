@@ -189,13 +189,21 @@ const CallDispositionTypesTab = () => {
     setSyncing(true);
     try {
       const result = await syncDispositionsTo3CPlus(tenantId);
-      if (result && result.campaignsUpdated > 0) {
-        toast.success(`Tabulações sincronizadas com 3CPlus e vinculadas a ${result.campaignsUpdated} campanha(s)`);
+      if (result) {
+        const mappedCount = Object.keys(result.dispositionMap).length;
+        const totalActive = types.filter(t => t.active).length;
+        if (mappedCount < totalActive) {
+          toast.warning(`Sync parcial: ${mappedCount}/${totalActive} tabulações sincronizadas. ${result.campaignsUpdated} campanha(s) vinculadas. Verifique os logs.`);
+        } else if (result.campaignsUpdated > 0) {
+          toast.success(`${mappedCount} tabulações sincronizadas com 3CPlus e vinculadas a ${result.campaignsUpdated} campanha(s)`);
+        } else {
+          toast.success(`${mappedCount} tabulações sincronizadas com 3CPlus`);
+        }
       } else {
-        toast.success("Tabulações sincronizadas com 3CPlus");
+        toast.info("Sem credenciais 3CPlus configuradas");
       }
-    } catch {
-      toast.error("Erro ao sincronizar com 3CPlus");
+    } catch (e: any) {
+      toast.error(`Erro ao sincronizar com 3CPlus: ${e.message || "falha desconhecida"}`);
     } finally {
       setSyncing(false);
     }
