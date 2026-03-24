@@ -238,15 +238,12 @@ const ThreeCPlusTab = () => {
       });
   }, [tenant?.id]);
 
-  // Auto-load qualifications if credentials exist
+  // Auto-set credentials from settings
   useEffect(() => {
     const d = settings.threecplus_domain;
     const t = settings.threecplus_api_token;
-    if (d && t && qualifications.length === 0 && !loadingQuals) {
-      setDomain(d);
-      setApiToken(t);
-      loadQualificationsWithCredentials(d, t);
-    }
+    if (d && !domain) setDomain(d);
+    if (t && !apiToken) setApiToken(t);
   }, [settings.threecplus_domain, settings.threecplus_api_token]);
 
   const handleSave = async () => {
