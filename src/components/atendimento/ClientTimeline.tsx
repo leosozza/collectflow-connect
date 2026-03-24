@@ -62,6 +62,14 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   ai:          { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   debtor_category: { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
   field_update:{ border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  atendimento_opened: { border: "border-cyan-200", bg: "bg-cyan-50/50", dot: "border-cyan-400" },
+  atendimento_closed: { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
+  channel_switched: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  observation_added: { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
+  portal_negotiation_started: { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
+  portal_agreement_created: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  ai_whatsapp_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  ai_voice_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
 };
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
