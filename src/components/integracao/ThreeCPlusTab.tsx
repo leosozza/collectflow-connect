@@ -6,14 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, ArrowRightLeft, CheckCircle2, XCircle, ShieldAlert, Info } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff, CheckCircle2, XCircle, ShieldAlert, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const SYSTEM_QUALIFICATIONS = [
-  { id: -2, name: "Não qualificada" },
-  { id: -3, name: "Caixa Postal" },
-  { id: -4, name: "Mudo" },
-  { id: -5, name: "Limite de tempo excedido" },
+  { id: -2, name: "Não qualificada", behavior: "Ligação completada mas não tabulada pelo operador" },
+  { id: -3, name: "Caixa Postal", behavior: "Chamada caiu na caixa postal" },
+  { id: -4, name: "Mudo", behavior: "Chamada atendida sem áudio detectado" },
+  { id: -5, name: "Limite de tempo excedido", behavior: "TPA expirou sem tabulação do operador" },
 ];
 
 const ThreeCPlusTab = () => {
@@ -27,6 +28,7 @@ const ThreeCPlusTab = () => {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [showSyncStatus, setShowSyncStatus] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
   const [tenantDispositions, setTenantDispositions] = useState<{ key: string; label: string; threecplus_qualification_id?: number | null }[]>([]);
 
@@ -51,6 +53,10 @@ const ThreeCPlusTab = () => {
     if (d && !domain) setDomain(d);
     if (t && !apiToken) setApiToken(t);
   }, [settings.threecplus_domain, settings.threecplus_api_token]);
+
+  const syncedCount = tenantDispositions.filter((d) => !!(d as any).threecplus_qualification_id).length;
+  const totalCount = tenantDispositions.length;
+  const allSynced = totalCount > 0 && syncedCount === totalCount;
 
   const handleSave = async () => {
     if (!tenant?.id) return;
@@ -110,6 +116,21 @@ const ThreeCPlusTab = () => {
     }
   };
 
+  const handleCopyLog = () => {
+    let log = "=== Status de Sincronização ===\n";
+    tenantDispositions.forEach((d) => {
+      const qId = (d as any).threecplus_qualification_id;
+      log += `${d.label} (${d.key}) → ${qId || "—"} ${qId ? "✓" : "✗"}\n`;
+    });
+    log += `\nTotal: ${syncedCount}/${totalCount} sincronizadas\n`;
+    log += "\n=== Qualificações Nativas ===\n";
+    SYSTEM_QUALIFICATIONS.forEach((q) => {
+      log += `${q.id}: ${q.name} — ${q.behavior}\n`;
+    });
+    navigator.clipboard.writeText(log);
+    toast.success("Log copiado!");
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -164,7 +185,7 @@ const ThreeCPlusTab = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Salvar
@@ -179,25 +200,44 @@ const ThreeCPlusTab = () => {
                 {connected ? "Conectado" : "Falha"}
               </Badge>
             )}
+            {showSyncStatus && totalCount > 0 && (
+              <Badge
+                onClick={() => setSyncModalOpen(true)}
+                className={`cursor-pointer gap-1 ${
+                  allSynced
+                    ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/25"
+                    : syncedCount === 0
+                    ? "bg-destructive/15 text-destructive border-destructive/30 hover:bg-destructive/25"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+                }`}
+                variant="outline"
+              >
+                {allSynced ? (
+                  <CheckCircle2 className="w-3 h-3" />
+                ) : syncedCount === 0 ? (
+                  <XCircle className="w-3 h-3" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3" />
+                )}
+                {syncedCount}/{totalCount} Sincronizadas
+              </Badge>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Sync Status — only after successful connection test */}
-      {showSyncStatus && tenantDispositions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <ArrowRightLeft className="w-5 h-5 text-primary" />
-              <div>
-                <CardTitle className="text-base">Status de Sincronização</CardTitle>
-                <CardDescription>
-                  Tabulações criadas em Cadastros são sincronizadas automaticamente com a 3CPlus
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
+      {/* Sync Details Modal */}
+      <Dialog open={syncModalOpen} onOpenChange={setSyncModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Status de Sincronização — 3CPlus</DialogTitle>
+            <DialogDescription>
+              Tabulações criadas em Cadastros sincronizadas com a 3CPlus
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Sync table */}
             <div className="rounded-lg border border-border overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -220,14 +260,14 @@ const ThreeCPlusTab = () => {
                         <td className="px-3 py-2 font-mono text-xs">{qId || "—"}</td>
                         <td className="px-3 py-2">
                           {synced ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1">
+                            <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs gap-1" variant="outline">
                               <CheckCircle2 className="w-3 h-3" />
                               Sincronizado
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-xs gap-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
                               <XCircle className="w-3 h-3" />
-                              Pendente sync
+                              Pendente
                             </Badge>
                           )}
                         </td>
@@ -237,66 +277,43 @@ const ThreeCPlusTab = () => {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Crie tabulações em <strong>Cadastros → Tabulações de Chamada</strong> e clique <strong>Sincronizar 3CPlus</strong> para vincular automaticamente.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* System Qualifications Info Card */}
-      <Card className="border-muted">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Info className="w-5 h-5 text-muted-foreground" />
+            {/* Native qualifications */}
             <div>
-              <CardTitle className="text-base">Qualificações Nativas do Sistema 3CPlus</CardTitle>
-              <CardDescription>
-                Estas qualificações são automáticas da 3CPlus e não podem ser editadas. São aplicadas pelo discador quando o contato não é atendido.
-              </CardDescription>
+              <p className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <ShieldAlert className="w-4 h-4" />
+                Qualificações Nativas do Sistema 3CPlus
+              </p>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">ID</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Nome</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Comportamento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {SYSTEM_QUALIFICATIONS.map((q) => (
+                      <tr key={q.id} className="border-t border-border">
+                        <td className="px-3 py-2 font-mono text-xs">{q.id}</td>
+                        <td className="px-3 py-2">{q.name}</td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">{q.behavior}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* Copy button */}
+            <Button variant="outline" onClick={handleCopyLog} className="w-full gap-2">
+              <Copy className="w-4 h-4" />
+              Copiar Log
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">ID</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Nome</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Comportamento</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-t border-border">
-                  <td className="px-3 py-2 font-mono text-xs">-2</td>
-                  <td className="px-3 py-2">Não qualificada</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">Ligação completada mas não tabulada pelo operador</td>
-                </tr>
-                <tr className="border-t border-border">
-                  <td className="px-3 py-2 font-mono text-xs">-3</td>
-                  <td className="px-3 py-2">Caixa Postal</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">Chamada caiu na caixa postal</td>
-                </tr>
-                <tr className="border-t border-border">
-                  <td className="px-3 py-2 font-mono text-xs">-4</td>
-                  <td className="px-3 py-2">Mudo</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">Chamada atendida sem áudio detectado</td>
-                </tr>
-                <tr className="border-t border-border">
-                  <td className="px-3 py-2 font-mono text-xs">-5</td>
-                  <td className="px-3 py-2">Limite de tempo excedido</td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs">TPA expirou sem tabulação do operador</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-            <ShieldAlert className="w-3 h-3" />
-            Qualificações nativas — gerenciadas automaticamente pela 3CPlus
-          </p>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
