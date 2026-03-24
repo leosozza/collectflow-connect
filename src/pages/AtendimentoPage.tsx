@@ -374,6 +374,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const handleFinishDisposition = async () => {
     setFinishingDisposition(true);
     try {
+      // Set flag BEFORE closing modal to prevent TelefoniaDashboard from showing ACW screen
+      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
       if (onFinishDisposition) await onFinishDisposition();
       closeAtendimento();
       toast.success("Tabulação finalizada — retornando à fila");
