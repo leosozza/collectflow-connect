@@ -11,7 +11,8 @@ import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, typ
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
-import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
