@@ -206,7 +206,7 @@ export const syncDispositionsTo3CPlus = async (tenantId: string): Promise<SyncRe
     if (listId && settings.threecplus_qualification_list_id !== listId) {
       const updatedSettings = { ...settings, threecplus_qualification_list_id: listId };
       // Remove legacy field if present
-      delete updatedSettings.threecplus_disposition_map;
+      delete (updatedSettings as any).threecplus_disposition_map;
       await supabase
         .from("tenants")
         .update({ settings: updatedSettings } as any)
