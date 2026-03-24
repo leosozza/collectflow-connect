@@ -1219,7 +1219,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-300" : "bg-white"} ${isOnCall ? "animate-pulse" : ""}`} />
             <span className="font-semibold text-sm">
               {isPaused && activePauseName
-                ? `Em pausa: ${activePauseName} (${formatTimer(timerSeconds)})`
+                ? `Em Intervalo: ${activePauseName} (${formatTimer(timerSeconds)})`
+                : isPaused && myAgent?.status === 6
+                ? `Em Intervalo (${formatTimer(timerSeconds)})`
                 : `${statusLabel(myAgent?.status)} (${formatTimer(timerSeconds)})`
               }
             </span>
