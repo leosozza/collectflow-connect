@@ -43,11 +43,12 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   paused: { label: "Em Pausa", variant: "secondary" },
   acw: { label: "TPA", variant: "secondary" },
   manual: { label: "Manual", variant: "secondary" },
+  work_break: { label: "Em Intervalo", variant: "secondary" },
   offline: { label: "Offline", variant: "outline" },
 };
 
 const numericStatusMap: Record<number, string> = {
-  0: "offline", 1: "idle", 2: "on_call", 3: "paused", 4: "acw", 5: "manual",
+  0: "offline", 1: "idle", 2: "on_call", 3: "paused", 4: "acw", 5: "manual", 6: "work_break",
 };
 
 function getStatusInfo(status: string | number) {

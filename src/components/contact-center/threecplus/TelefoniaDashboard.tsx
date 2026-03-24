@@ -160,6 +160,7 @@ const statusLabel = (status: any): string => {
   if (status === 1 || ["idle", "available"].includes(s)) return "Aguardando ligação";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em ligação";
   if (status === 4 || s === "acw") return "TPA — Pós-atendimento";
+  if (status === 6 || s === "work_break") return "Em Intervalo";
   if (status === 3 || s === "paused") return "Em pausa";
   return String(status ?? "Desconhecido");
 };
@@ -169,6 +170,7 @@ const statusColor = (status: any): string => {
   if (status === 1 || ["idle", "available"].includes(s)) return "bg-emerald-500";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive";
   if (status === 4 || s === "acw") return "bg-amber-500";
+  if (status === 6 || s === "work_break") return "bg-amber-500";
   if (status === 3 || s === "paused") return "bg-amber-500";
   return "bg-muted-foreground";
 };
@@ -177,6 +179,7 @@ const statusBgClass = (status: any): string => {
   const s = String(status ?? "").toLowerCase().replace(/[\s-]/g, "_");
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "bg-destructive text-destructive-foreground";
   if (status === 4 || s === "acw") return "bg-amber-500 text-white";
+  if (status === 6 || s === "work_break") return "bg-amber-500 text-white";
   if (status === 3 || s === "paused") return "bg-amber-500 text-white";
   return "bg-primary text-primary-foreground";
 };
@@ -761,6 +764,21 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals, loadCampaignQualifications]);
 
+  // Detect external pause (status 6) and resolve pause name from loaded intervals
+  useEffect(() => {
+    if (isOperatorView && myAgent?.status === 6 && !activePauseName) {
+      // Try to find the interval name from the loaded pauseIntervals
+      // The API doesn't return pause_name for status 6, so we use a generic fallback
+      const storedName = sessionStorage.getItem("3cp_active_pause_name");
+      if (storedName) {
+        setActivePauseName(storedName);
+      } else if (pauseIntervals.length > 0) {
+        // Can't determine exact interval from API, show generic
+        setActivePauseName("Intervalo");
+      }
+    }
+  }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
+
   // Rehydrate widget when operator is already online after page refresh
   useEffect(() => {
     if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
@@ -770,8 +788,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
 
   // Derived telephony state: distinguish TPA from manual pause
-  const isManualPause = (myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused") && !!activePauseName;
-  const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
+  const isManualPause = (myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break") && (!!activePauseName || myAgent?.status === 6);
+  const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
   // Feed pause controls into the floating widget
   useEffect(() => {
@@ -872,7 +890,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [isOperatorView, isAgentOnline, operatorAgentId, lastCallId, myAgent?.status, activePauseName, campaignQualifications, setOnFinishDisposition]);
 
   const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
-  const isPaused = myAgent?.status === 3 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused";
+  const isPaused = myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
   const isTPAStatus = myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
 
@@ -1216,7 +1234,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-300" : "bg-white"} ${isOnCall ? "animate-pulse" : ""}`} />
             <span className="font-semibold text-sm">
               {isPaused && activePauseName
-                ? `Em pausa: ${activePauseName} (${formatTimer(timerSeconds)})`
+                ? `Em Intervalo: ${activePauseName} (${formatTimer(timerSeconds)})`
+                : isPaused && myAgent?.status === 6
+                ? `Em Intervalo (${formatTimer(timerSeconds)})`
                 : `${statusLabel(myAgent?.status)} (${formatTimer(timerSeconds)})`
               }
             </span>
