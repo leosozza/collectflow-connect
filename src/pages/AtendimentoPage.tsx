@@ -443,7 +443,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
         onNegotiate={() => setShowNegotiation(true)}
         onHangup={handleHangup}
         hangingUp={hangingUp}
-        hasActiveCall={!!callId}
+        hasActiveCall={!!effectiveCallId && !callHungUp}
       />
 
       {/* Main content — 3 columns */}
