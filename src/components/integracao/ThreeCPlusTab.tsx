@@ -227,13 +227,13 @@ const ThreeCPlusTab = () => {
     if (!tenant?.id) return;
     supabase
       .from("call_disposition_types")
-      .select("key, label")
+      .select("key, label, threecplus_qualification_id" as any)
       .eq("tenant_id", tenant.id)
       .eq("active", true)
       .order("sort_order", { ascending: true })
       .then(({ data }) => {
         if (data && data.length > 0) {
-          setTenantDispositions(data);
+          setTenantDispositions(data as any);
         }
       });
   }, [tenant?.id]);
