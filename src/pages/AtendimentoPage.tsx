@@ -31,7 +31,23 @@ interface AtendimentoPageProps {
   channel?: SessionChannel;
 }
 
-const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: AtendimentoPageProps) => {
+const CHANNEL_ICONS: Record<string, React.ReactNode> = {
+  call: <Phone className="w-3.5 h-3.5" />,
+  whatsapp: <MessageSquare className="w-3.5 h-3.5" />,
+  portal: <Globe className="w-3.5 h-3.5" />,
+  ai_whatsapp: <Bot className="w-3.5 h-3.5" />,
+  ai_voice: <Bot className="w-3.5 h-3.5" />,
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  call: "Telefonia",
+  whatsapp: "WhatsApp",
+  portal: "Portal",
+  ai_whatsapp: "IA WhatsApp",
+  ai_voice: "IA Voz",
+};
+
+const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, sessionId: propSessionId, channel: propChannel }: AtendimentoPageProps) => {
   const { clientId: paramClientId } = useParams<{ clientId: string }>();
   const [searchParams] = useSearchParams();
   const id = propClientId || paramClientId || searchParams.get("clientId");
