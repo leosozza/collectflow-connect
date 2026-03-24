@@ -159,6 +159,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
     onSuccess: (_, variables) => {
       trackAction("tabulacao", { tipo: variables.type, client_id: id });
       queryClient.invalidateQueries({ queryKey: ["dispositions", id] });
+      setCallHungUp(false);
       if (tenant?.id && id) {
         executeAutomations(tenant.id, variables.type, id, profile?.user_id || "").catch(console.error);
       }
