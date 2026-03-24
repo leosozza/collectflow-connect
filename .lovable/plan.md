@@ -1,51 +1,34 @@
 
 
-# Plano: Eliminar mapeamento manual + zerar tabulacoes do tenant Y.BRASIL
+# Plano: Limpar tela de Configuracoes > Telefonia (3CPlus)
 
-## Parte 1 — Zerar tabulacoes existentes do tenant Y.BRASIL
+## Problema
 
-O tenant Y.BRASIL (`39a450f8-7a40-46e5-8bc7-708da5043ec7`) possui 12 tabulacoes, sendo 5 defaults originais (voicemail, interrupted, no_answer, cpc, wrong_contact) e 7 customizadas. A maioria nao tem `threecplus_qualification_id` — apenas 3 foram sincronizadas.
+Ao clicar "Testar Conexao", o sistema exibe dois cards desnecessarios nessa pagina:
+1. **Campanhas Disponiveis** — lista de campanhas (linhas 383-405)
+2. **Teste de Envio de Mailing** — formulario de envio de teste (linhas 407-414 + componente MailingTestCard)
 
-**Acao**: Deletar todas as 12 tabulacoes do tenant via operacao de dados (DELETE), permitindo que o usuario crie as novas do zero com a nomenclatura correta e o sync automatico funcione limpo.
+Alem disso, o card **Status de Sincronizacao** aparece sempre que ha tabulacoes, mas deveria ficar fechado por padrao e abrir apenas apos o teste de conexao.
 
-```sql
-DELETE FROM call_disposition_types WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
-```
+## Correcoes em `src/components/integracao/ThreeCPlusTab.tsx`
 
-Tambem limpar o `threecplus_disposition_map` do settings do tenant (se existir), ja que o novo fluxo nao usa mais esse campo.
+### 1. Remover card "Campanhas Disponiveis" (linhas 383-405)
 
-## Parte 2 — Eliminar mapeamento manual (plano ja aprovado)
+Remover o bloco condicional `{campaigns.length > 0 && (<Card>...Campanhas Disponíveis...</Card>)}` e o state `campaigns` / `setCampaigns`.
 
-### 1. ThreeCPlusTab.tsx — Remover dropdowns de mapeamento
+### 2. Remover card "Teste de Envio de Mailing" (linhas 407-414)
 
-Substituir a secao de mapeamento manual por uma tabela readonly de status de sync:
+Remover o bloco condicional que renderiza `<MailingTestCard>` e remover o componente `MailingTestCard` inteiro (linhas 25-209), incluindo imports nao usados (`FlaskConical`, `Send`).
 
-| Tabulacao RIVO | ID 3CPlus | Status |
-|---|---|---|
-| CPC | 12345 | Sincronizado |
-| Nova Tab | — | Pendente sync |
+### 3. Status de Sincronizacao — fechado por padrao, abre apos testar conexao
 
-### 2. dispositionService.ts — Remover `threecplus_disposition_map` do settings
+- Adicionar state `showSyncStatus` (default `false`)
+- No `handleTestConnection`, ao obter sucesso, setar `showSyncStatus = true`
+- Condicionar a renderizacao do card de Status de Sincronizacao a `showSyncStatus && tenantDispositions.length > 0`
 
-No `syncDispositionsTo3CPlus`, parar de salvar `threecplus_disposition_map` no JSON do tenant. Manter apenas a persistencia em `call_disposition_types.threecplus_qualification_id`.
+## Arquivo a editar
 
-### 3. DispositionPanel.tsx — Confirmar fonte unica
-
-Garantir que `qualifyOn3CPlus` busca `threecplus_qualification_id` direto da tabela DB, sem fallback para o settings map.
-
-## Arquivos e acoes
-
-| Tipo | Alvo | Mudanca |
-|---|---|---|
-| **Dados** | Tabela `call_disposition_types` | DELETE todas as rows do tenant Y.BRASIL |
-| **Dados** | Tabela `tenants` (settings) | Remover `threecplus_disposition_map` e `threecplus_qualification_list_id` do JSON settings |
-| **Codigo** | `src/components/integracao/ThreeCPlusTab.tsx` | Remover secao de mapeamento manual; substituir por tabela readonly de status de sync |
-| **Codigo** | `src/services/dispositionService.ts` | Remover persistencia de `threecplus_disposition_map` no settings |
-| **Codigo** | `src/components/atendimento/DispositionPanel.tsx` | Confirmar que usa `threecplus_qualification_id` da tabela |
-
-## Resultado
-
-1. Tenant Y.BRASIL comeca do zero — cria tabulacoes novas no RIVO, sincroniza com 1 clique
-2. Sem mapeamento manual — o sync ja persiste o ID automaticamente
-3. Uma unica fonte de verdade: coluna `threecplus_qualification_id` na tabela DB
+| Arquivo | Mudanca |
+|---|---|
+| `src/components/integracao/ThreeCPlusTab.tsx` | Remover MailingTestCard + card Campanhas; Status de Sync condicionado a teste bem-sucedido |
 
