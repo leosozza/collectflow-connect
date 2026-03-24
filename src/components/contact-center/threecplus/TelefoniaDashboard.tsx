@@ -160,6 +160,7 @@ const statusLabel = (status: any): string => {
   if (status === 1 || ["idle", "available"].includes(s)) return "Aguardando ligação";
   if (status === 2 || ["on_call", "ringing"].includes(s)) return "Em ligação";
   if (status === 4 || s === "acw") return "TPA — Pós-atendimento";
+  if (status === 6 || s === "work_break") return "Em Intervalo";
   if (status === 3 || s === "paused") return "Em pausa";
   return String(status ?? "Desconhecido");
 };
