@@ -76,6 +76,14 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   whatsapp_outbound: "WhatsApp Enviado",
   message_sent: "Mensagem de Prevenção",
   field_update: "Alteração de Dados",
+  atendimento_opened: "Atendimento Iniciado",
+  atendimento_closed: "Atendimento Encerrado",
+  channel_switched: "Canal Alterado",
+  observation_added: "Observação Registrada",
+  portal_negotiation_started: "Negociação Portal",
+  portal_agreement_created: "Acordo via Portal",
+  ai_whatsapp_negotiation_started: "IA WhatsApp Iniciou",
+  ai_voice_negotiation_started: "IA Voz Iniciou",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
