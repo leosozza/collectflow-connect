@@ -549,6 +549,91 @@ export type Database = {
           },
         ]
       }
+      atendimento_sessions: {
+        Row: {
+          ai_session_id: string | null
+          assigned_to: string | null
+          client_cpf: string
+          client_id: string | null
+          closed_at: string | null
+          created_at: string
+          credor: string | null
+          current_actor: string | null
+          current_channel: string | null
+          id: string
+          opened_at: string
+          origin_actor: string | null
+          origin_channel: string
+          portal_session_id: string | null
+          source_call_id: string | null
+          source_conversation_id: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          ai_session_id?: string | null
+          assigned_to?: string | null
+          client_cpf: string
+          client_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          credor?: string | null
+          current_actor?: string | null
+          current_channel?: string | null
+          id?: string
+          opened_at?: string
+          origin_actor?: string | null
+          origin_channel: string
+          portal_session_id?: string | null
+          source_call_id?: string | null
+          source_conversation_id?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          ai_session_id?: string | null
+          assigned_to?: string | null
+          client_cpf?: string
+          client_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          credor?: string | null
+          current_actor?: string | null
+          current_channel?: string | null
+          id?: string
+          opened_at?: string
+          origin_actor?: string | null
+          origin_channel?: string
+          portal_session_id?: string | null
+          source_call_id?: string | null
+          source_conversation_id?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_sessions_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1003,6 +1088,7 @@ export type Database = {
           event_value: string | null
           id: string
           metadata: Json | null
+          session_id: string | null
           tenant_id: string
         }
         Insert: {
@@ -1015,6 +1101,7 @@ export type Database = {
           event_value?: string | null
           id?: string
           metadata?: Json | null
+          session_id?: string | null
           tenant_id: string
         }
         Update: {
@@ -1027,6 +1114,7 @@ export type Database = {
           event_value?: string | null
           id?: string
           metadata?: Json | null
+          session_id?: string | null
           tenant_id?: string
         }
         Relationships: [
@@ -1035,6 +1123,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "atendimento_sessions"
             referencedColumns: ["id"]
           },
           {

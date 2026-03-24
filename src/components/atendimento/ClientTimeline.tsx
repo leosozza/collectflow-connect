@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature } from "lucide-react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote } from "lucide-react";
 
 interface TimelineItem {
   id: string;
@@ -62,6 +62,14 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   ai:          { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   debtor_category: { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
   field_update:{ border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  atendimento_opened: { border: "border-cyan-200", bg: "bg-cyan-50/50", dot: "border-cyan-400" },
+  atendimento_closed: { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
+  channel_switched: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  observation_added: { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
+  portal_negotiation_started: { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
+  portal_agreement_created: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  ai_whatsapp_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  ai_voice_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
 };
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -76,6 +84,14 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   whatsapp_outbound: "WhatsApp Enviado",
   message_sent: "Mensagem de Prevenção",
   field_update: "Alteração de Dados",
+  atendimento_opened: "Atendimento Iniciado",
+  atendimento_closed: "Atendimento Encerrado",
+  channel_switched: "Canal Alterado",
+  observation_added: "Observação Registrada",
+  portal_negotiation_started: "Negociação Portal",
+  portal_agreement_created: "Acordo via Portal",
+  ai_whatsapp_negotiation_started: "IA WhatsApp Iniciou",
+  ai_voice_negotiation_started: "IA Voz Iniciou",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -95,6 +111,14 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   debtor_category: <Tags className="w-3.5 h-3.5 text-pink-500" />,
   field_update: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
   disposition: <Phone className="w-3.5 h-3.5 text-amber-500" />,
+  atendimento_opened: <Headphones className="w-3.5 h-3.5 text-cyan-500" />,
+  atendimento_closed: <Headphones className="w-3.5 h-3.5 text-slate-500" />,
+  channel_switched: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
+  observation_added: <StickyNote className="w-3.5 h-3.5 text-amber-500" />,
+  portal_negotiation_started: <Globe className="w-3.5 h-3.5 text-teal-500" />,
+  portal_agreement_created: <Globe className="w-3.5 h-3.5 text-emerald-500" />,
+  ai_whatsapp_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
+  ai_voice_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {

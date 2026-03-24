@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,9 @@ import { formatCPF } from "@/lib/formatters";
 import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
-import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -25,9 +27,27 @@ interface AtendimentoPageProps {
   agentId?: number;
   callId?: string | number;
   embedded?: boolean;
+  sessionId?: string;
+  channel?: SessionChannel;
 }
 
-const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: AtendimentoPageProps) => {
+const CHANNEL_ICONS: Record<string, React.ReactNode> = {
+  call: <Phone className="w-3.5 h-3.5" />,
+  whatsapp: <MessageSquare className="w-3.5 h-3.5" />,
+  portal: <Globe className="w-3.5 h-3.5" />,
+  ai_whatsapp: <Bot className="w-3.5 h-3.5" />,
+  ai_voice: <Bot className="w-3.5 h-3.5" />,
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  call: "Telefonia",
+  whatsapp: "WhatsApp",
+  portal: "Portal",
+  ai_whatsapp: "IA WhatsApp",
+  ai_voice: "IA Voz",
+};
+
+const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, sessionId: propSessionId, channel: propChannel }: AtendimentoPageProps) => {
   const { clientId: paramClientId } = useParams<{ clientId: string }>();
   const [searchParams] = useSearchParams();
   const id = propClientId || paramClientId || searchParams.get("clientId");
@@ -42,6 +62,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
   const [hangingUp, setHangingUp] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [finishingDisposition, setFinishingDisposition] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || null);
+  const activeChannel = propChannel || (callId ? "call" : undefined);
   const settings = (tenant?.settings as Record<string, any>) || {};
 
   // Fetch client
@@ -203,8 +225,24 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
       const updated = current ? `${entry}\n---\n${current}` : entry;
       const { error } = await supabase.from("clients").update({ observacoes: updated }).eq("id", client.id);
       if (error) throw error;
+
+      // Also register as structured event
+      if (tenant?.id) {
+        await supabase.from("client_events").insert({
+          tenant_id: tenant.id,
+          client_id: client.id,
+          client_cpf: client.cpf?.replace(/\D/g, "") || "",
+          event_type: "observation_added",
+          event_source: "operator",
+          event_value: "note",
+          metadata: { note, operator_name: opName, session_id: activeSessionId },
+          session_id: activeSessionId,
+        } as any);
+      }
+
       toast.success("Observação salva");
       queryClient.invalidateQueries({ queryKey: ["atendimento-client", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["client-events-timeline"] });
     } catch {
       toast.error("Erro ao salvar observação");
     } finally {
@@ -362,6 +400,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded }: 
           <Home className="w-3.5 h-3.5" />
           <span>/</span>
           <span className="font-medium text-foreground">Atendimento em Curso</span>
+          {activeChannel && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 ml-1">
+              {CHANNEL_ICONS[activeChannel]}
+              {CHANNEL_LABELS[activeChannel] || activeChannel}
+            </Badge>
+          )}
         </div>
       )}
 

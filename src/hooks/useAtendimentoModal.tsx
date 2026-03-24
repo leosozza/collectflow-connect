@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import AtendimentoPage from "@/pages/AtendimentoPage";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2, Coffee, Play, ChevronDown } from "lucide-react";
+import { X, Minimize2, Maximize2, GripHorizontal, Phone, Loader2, Coffee, Play, ChevronDown, MessageSquare, Globe, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -23,12 +23,15 @@ interface AtendimentoModalState {
   agentId?: number;
   callId?: string | number;
   waitingForCall?: boolean;
+  sessionId?: string;
+  channel?: string;
+  conversationId?: string;
 }
 
 interface AtendimentoModalContextType {
-  openAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
+  openAtendimento: (clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => void;
   openWaiting: (agentId: number) => void;
-  updateAtendimento: (clientId: string, agentId?: number, callId?: string | number) => void;
+  updateAtendimento: (clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => void;
   closeAtendimento: () => void;
   setPauseControls: (controls: PauseControls | null) => void;
   setAgentStatus: (status: number | string | undefined) => void;
@@ -114,9 +117,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     });
   }, []);
 
-  const openAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
-    console.log("[AtendimentoModal] Opening for client:", clientId, "agent:", agentId, "call:", callId);
-    setState({ isOpen: true, clientId, agentId, callId, waitingForCall: false });
+  const openAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => {
+    console.log("[AtendimentoModal] Opening for client:", clientId, "agent:", agentId, "call:", callId, "opts:", opts);
+    setState({ isOpen: true, clientId, agentId, callId, waitingForCall: false, sessionId: opts?.sessionId, channel: opts?.channel, conversationId: opts?.conversationId });
     setIsMinimized(false);
     if (!hasCustomPosition) centerPosition();
   }, [hasCustomPosition, centerPosition]);
@@ -132,8 +135,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     setHasCustomPosition(true);
   }, []);
 
-  const updateAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number) => {
-    console.log("[AtendimentoModal] Updating with client:", clientId, "call:", callId);
+  const updateAtendimento = useCallback((clientId: string, agentId?: number, callId?: string | number, opts?: { sessionId?: string; channel?: string; conversationId?: string }) => {
+    console.log("[AtendimentoModal] Updating with client:", clientId, "call:", callId, "opts:", opts);
     setState((prev) => ({
       ...prev,
       isOpen: true,
@@ -141,6 +144,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       agentId: agentId ?? prev.agentId,
       callId: callId ?? prev.callId,
       waitingForCall: false,
+      sessionId: opts?.sessionId ?? prev.sessionId,
+      channel: opts?.channel ?? prev.channel,
+      conversationId: opts?.conversationId ?? prev.conversationId,
     }));
     // Force expand and center when call arrives
     setIsMinimized(false);
@@ -325,7 +331,10 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                 className="flex items-center gap-2 px-3 py-2.5 border-b border-border select-none cursor-grab active:cursor-grabbing bg-muted/50 rounded-t-xl"
               >
                 <GripHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />
+                {state.channel === "whatsapp" ? <MessageSquare className="w-4 h-4 text-green-500 flex-shrink-0" /> :
+                 state.channel === "portal" ? <Globe className="w-4 h-4 text-teal-500 flex-shrink-0" /> :
+                 state.channel?.startsWith("ai_") ? <Bot className="w-4 h-4 text-purple-500 flex-shrink-0" /> :
+                 <Phone className="w-4 h-4 text-green-500 flex-shrink-0" />}
                 <span className="text-sm font-semibold truncate flex-1">Atendimento — {clientName}</span>
                 <span className="text-xs text-muted-foreground font-mono tabular-nums mr-2">{formatTime(elapsed)}</span>
                 <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={handleMinimize} onMouseDown={e => e.stopPropagation()}>
@@ -343,6 +352,8 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
                   clientId={state.clientId}
                   agentId={state.agentId}
                   callId={state.callId}
+                  sessionId={state.sessionId}
+                  channel={state.channel as any}
                   embedded
                 />
               </div>

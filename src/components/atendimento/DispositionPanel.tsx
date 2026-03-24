@@ -130,7 +130,7 @@ const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => 
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <Headset className="w-4 h-4" />
-            Tabulação da Chamada
+            Resultado do Atendimento
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
