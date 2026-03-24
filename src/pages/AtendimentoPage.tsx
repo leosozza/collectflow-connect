@@ -225,8 +225,24 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
       const updated = current ? `${entry}\n---\n${current}` : entry;
       const { error } = await supabase.from("clients").update({ observacoes: updated }).eq("id", client.id);
       if (error) throw error;
+
+      // Also register as structured event
+      if (tenant?.id) {
+        await supabase.from("client_events").insert({
+          tenant_id: tenant.id,
+          client_id: client.id,
+          client_cpf: client.cpf?.replace(/\D/g, "") || "",
+          event_type: "observation_added",
+          event_source: "operator",
+          event_value: "note",
+          metadata: { note, operator_name: opName, session_id: activeSessionId },
+          session_id: activeSessionId,
+        } as any);
+      }
+
       toast.success("Observação salva");
       queryClient.invalidateQueries({ queryKey: ["atendimento-client", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["client-events-timeline"] });
     } catch {
       toast.error("Erro ao salvar observação");
     } finally {
