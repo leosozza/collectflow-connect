@@ -366,16 +366,7 @@ export const qualifyOn3CPlus = async (params: {
       }
     }
 
-    // PRIORITY 2: Fallback to settings JSON map
-    if (!qualificationId) {
-      const map = params.tenantSettings.threecplus_disposition_map as Record<string, number> | undefined;
-      if (map) {
-        qualificationId = map[params.dispositionType];
-        if (qualificationId) {
-          console.log(`qualifyOn3CPlus: Using fallback settings map, qualification_id ${qualificationId} for "${params.dispositionType}"`);
-        }
-      }
-    }
+    // No more fallback to settings JSON — DB is the single source of truth
 
     if (!qualificationId) {
       console.warn("qualifyOn3CPlus: no mapping found for disposition type:", params.dispositionType);
