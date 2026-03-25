@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, Trash2, Pencil } from "lucide-react";
+import { Check, X, ExternalLink } from "lucide-react";
 import { formatCurrency, formatCPF } from "@/lib/formatters";
 import { format } from "date-fns";
 import {
@@ -16,8 +17,8 @@ interface AgreementsListProps {
   isAdmin: boolean;
   onApprove: (agreement: Agreement) => void;
   onReject: (id: string) => void;
-  onCancel: (id: string) => void;
-  onEdit?: (agreement: Agreement) => void;
+  onCancel?: (id: string) => void;
+  showOperationalActions?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -38,14 +39,18 @@ const statusLabels: Record<string, string> = {
   overdue: "Vencido",
 };
 
-const activeStatuses = ["pending", "pending_approval", "approved", "overdue"];
-
-const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, onEdit }: AgreementsListProps) => {
+const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, showOperationalActions }: AgreementsListProps) => {
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   if (agreements.length === 0) {
     return <p className="text-muted-foreground text-center py-8">Nenhum acordo encontrado.</p>;
   }
+
+  const handleOpenProfile = (cpf: string) => {
+    const rawCpf = cpf.replace(/\D/g, "");
+    navigate(`/clientes/${rawCpf}?tab=acordo`);
+  };
 
   return (
     <>
@@ -56,6 +61,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
               <TableHead>Cliente</TableHead>
               <TableHead>CPF</TableHead>
               <TableHead>Credor</TableHead>
+              <TableHead>Operador</TableHead>
               <TableHead className="text-right">Original</TableHead>
               <TableHead className="text-right">Proposto</TableHead>
               <TableHead className="text-center">Parcelas</TableHead>
@@ -70,6 +76,9 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 <TableCell className="font-medium">{a.client_name}</TableCell>
                 <TableCell>{formatCPF(a.client_cpf)}</TableCell>
                 <TableCell>{a.credor}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {(a as any).creator_name || "—"}
+                </TableCell>
                 <TableCell className="text-right">{formatCurrency(a.original_total)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(a.proposed_total)}</TableCell>
                 <TableCell className="text-center">
@@ -83,7 +92,8 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    {isAdmin && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
+                    {/* Approve/Reject only for pending_approval (admin) */}
+                    {isAdmin && showOperationalActions && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
                       <>
                         <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
                           <Check className="w-4 h-4 text-green-600" />
@@ -93,16 +103,10 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
                         </Button>
                       </>
                     )}
-                    {activeStatuses.includes(a.status) && onEdit && (
-                      <Button size="sm" variant="ghost" onClick={() => onEdit(a)} title="Editar">
-                        <Pencil className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                    )}
-                    {activeStatuses.includes(a.status) && (
-                      <Button size="sm" variant="ghost" onClick={() => setCancelId(a.id)} title="Cancelar">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    )}
+                    {/* Navigate to client profile */}
+                    <Button size="sm" variant="ghost" onClick={() => handleOpenProfile(a.client_cpf)} title="Ver Perfil">
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -111,30 +115,32 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, on
         </Table>
       </div>
 
-      <AlertDialog open={!!cancelId} onOpenChange={(open) => !open && setCancelId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar Acordo</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja cancelar este acordo? As parcelas pendentes serão marcadas como <strong>Quebra de Acordo</strong> e não voltarão para "Aguardando Acionamento".
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Não, manter</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (cancelId) {
-                  onCancel(cancelId);
-                  setCancelId(null);
-                }
-              }}
-            >
-              Sim, cancelar acordo
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {onCancel && (
+        <AlertDialog open={!!cancelId} onOpenChange={(open) => !open && setCancelId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancelar Acordo</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja cancelar este acordo? As parcelas pendentes serão marcadas como <strong>Quebra de Acordo</strong>.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Não, manter</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (cancelId && onCancel) {
+                    onCancel(cancelId);
+                    setCancelId(null);
+                  }
+                }}
+              >
+                Sim, cancelar acordo
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 };
