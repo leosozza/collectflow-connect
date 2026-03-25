@@ -1,13 +1,1 @@
-project_id = "gskbmiwblyqpmubthnpc"
-
-[functions.targetdata-webhook]
-verify_jwt = false
-
-[functions.targetdata-enrich]
-verify_jwt = false
-
-[functions.seed-modules]
-verify_jwt = false
-
-[functions.threecplus-webhook]
-verify_jwt = false
+project_id = "hulwcntfioqifopyjcvv"
