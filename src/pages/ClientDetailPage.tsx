@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +34,29 @@ import AgreementInstallments from "@/components/client-detail/AgreementInstallme
 import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
 import { useTenant } from "@/hooks/useTenant";
 
+const statusLabelsMap: Record<string, string> = {
+  approved: "Pago",
+  pending: "Vigente",
+  pending_approval: "Aguardando Liberação",
+  rejected: "Rejeitado",
+  cancelled: "Cancelado",
+  overdue: "Vencido",
+};
+
+const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "destructive"> = {
+  approved: "default",
+  pending: "outline",
+  pending_approval: "outline",
+  overdue: "destructive",
+  cancelled: "secondary",
+  rejected: "secondary",
+};
+
+// Statuses that show installments
+const installmentStatuses = ["pending", "pending_approval", "approved", "overdue"];
+// Statuses that allow edit/cancel
+const activeStatuses = ["pending", "pending_approval", "approved"];
+
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
@@ -46,12 +69,10 @@ const ClientDetailPage = () => {
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
 
-  // Support ?tab=acordo deep link
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "acordo") {
       setActiveTab("acordo");
-      setShowAcordoDialog(true);
     }
   }, [searchParams]);
 
@@ -80,12 +101,27 @@ const ClientDetailPage = () => {
         .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      
+      // Fetch creator profiles for all agreements
+      const creatorIds = [...new Set((data || []).map((a: any) => a.created_by).filter(Boolean))];
+      let profilesMap: Record<string, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", creatorIds);
+        if (profiles) {
+          profiles.forEach((p: any) => { profilesMap[p.user_id] = p.full_name; });
+        }
+      }
+      
+      return (data || []).map((a: any) => ({
+        ...a,
+        creator_name: profilesMap[a.created_by] || (a.portal_origin ? "Portal" : null),
+      }));
     },
     enabled: !!cpf,
   });
-
-
 
   if (isLoading) {
     return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
@@ -103,7 +139,6 @@ const ClientDetailPage = () => {
   }
 
   const first = clients[0];
-  const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
   const lastAgreement = agreements[0] || null;
 
   const handleAgreementCreated = () => {
@@ -111,8 +146,6 @@ const ClientDetailPage = () => {
     refetch();
     refetchAgreements();
   };
-
-  const activeStatuses = ["pending", "pending_approval", "approved"];
 
   const handleCancelAgreement = async (id: string) => {
     try {
@@ -133,18 +166,33 @@ const ClientDetailPage = () => {
       new_installments: agreement.new_installments,
       new_installment_value: agreement.new_installment_value,
       first_due_date: agreement.first_due_date,
+      entrada_value: agreement.entrada_value || 0,
+      entrada_date: agreement.entrada_date || "",
       notes: agreement.notes || "",
     });
   };
 
+  const recalcInstallmentValue = (proposed: number, entrada: number, installments: number) => {
+    const remaining = Math.max(proposed - entrada, 0);
+    return installments > 0 ? Math.round((remaining / installments) * 100) / 100 : remaining;
+  };
+
   const handleEditProposed = (proposed: number) => {
     const installments = editForm.new_installments || 1;
-    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: proposed / installments });
+    const entrada = (editForm as any).entrada_value || 0;
+    setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditInstallments = (n: number) => {
     const proposed = editForm.proposed_total || 0;
-    setEditForm({ ...editForm, new_installments: n, new_installment_value: n > 0 ? proposed / n : proposed });
+    const entrada = (editForm as any).entrada_value || 0;
+    setEditForm({ ...editForm, new_installments: n, new_installment_value: recalcInstallmentValue(proposed, entrada, n) });
+  };
+
+  const handleEditEntrada = (entrada: number) => {
+    const proposed = editForm.proposed_total || 0;
+    const installments = editForm.new_installments || 1;
+    setEditForm({ ...editForm, entrada_value: entrada, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   const handleEditSubmit = async () => {
@@ -218,7 +266,7 @@ const ClientDetailPage = () => {
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
-                        <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
@@ -252,17 +300,8 @@ const ClientDetailPage = () => {
                           Acordo — {new Date(agreement.created_at).toLocaleDateString("pt-BR")}
                         </h3>
                         <div className="flex items-center gap-2">
-                          <Badge variant={
-                            agreement.status === "approved" ? "default" :
-                            agreement.status === "pending_approval" ? "outline" :
-                            "secondary"
-                          }>
-                            {agreement.status === "approved" ? "Aprovado" :
-                             agreement.status === "pending" ? "Pendente" :
-                             agreement.status === "pending_approval" ? "Aguardando Liberação" :
-                             agreement.status === "rejected" ? "Rejeitado" :
-                             agreement.status === "cancelled" ? "Cancelado" :
-                             agreement.status}
+                          <Badge variant={statusVariantMap[agreement.status] || "secondary"}>
+                            {statusLabelsMap[agreement.status] || agreement.status}
                           </Badge>
                           {activeStatuses.includes(agreement.status) && (
                             <>
@@ -276,7 +315,8 @@ const ClientDetailPage = () => {
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
                           <p className="text-sm font-semibold">{formatCurrency(Number(agreement.original_total))}</p>
@@ -300,10 +340,22 @@ const ClientDetailPage = () => {
                           <p className="text-sm font-semibold">{formatDate(agreement.first_due_date)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Criado em</p>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
+                          <p className="text-sm font-semibold">{agreement.credor}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Operador / Canal</p>
+                          <p className="text-sm font-semibold flex items-center gap-1">
+                            <User className="w-3 h-3 text-muted-foreground" />
+                            {agreement.creator_name || (agreement.portal_origin ? "Portal" : "—")}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Data do Acordo</p>
                           <p className="text-sm font-semibold">{new Date(agreement.created_at).toLocaleDateString("pt-BR")}</p>
                         </div>
                       </div>
+
                       {agreement.approval_reason && (
                         <div className="pt-2 border-t border-border">
                           <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Motivo da Liberação</p>
@@ -316,9 +368,16 @@ const ClientDetailPage = () => {
                           <p className="text-sm text-foreground">{agreement.notes}</p>
                         </div>
                       )}
-                      {/* Boleto/Parcelas section for approved agreements */}
-                      {agreement.status === "approved" && (
-                        <AgreementInstallments agreementId={agreement.id} agreement={agreement} cpf={cpf || ""} tenantId={tenant?.id} />
+
+                      {/* Installments for all active statuses */}
+                      {installmentStatuses.includes(agreement.status) && (
+                        <AgreementInstallments
+                          agreementId={agreement.id}
+                          agreement={agreement}
+                          cpf={cpf || ""}
+                          tenantId={tenant?.id}
+                          onRefresh={() => { refetch(); refetchAgreements(); }}
+                        />
                       )}
                     </div>
                   ))}
@@ -400,50 +459,97 @@ const ClientDetailPage = () => {
 
       {/* Edit Agreement Dialog */}
       <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar Acordo</DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle>Editar Acordo</DialogTitle>
+              {editingAgreement && (
+                <Badge variant={statusVariantMap[editingAgreement.status] || "secondary"}>
+                  {statusLabelsMap[editingAgreement.status] || editingAgreement.status}
+                </Badge>
+              )}
+            </div>
           </DialogHeader>
           {editingAgreement && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Cliente</Label>
-                  <Input disabled value={editingAgreement.client_name} />
+            <div className="space-y-5">
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Cliente</span>
+                  <span className="font-medium">{editingAgreement.client_name}</span>
                 </div>
-                <div>
-                  <Label>Credor</Label>
-                  <Input disabled value={editingAgreement.credor} />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CPF</span>
+                  <span className="font-medium">{editingAgreement.client_cpf}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Credor</span>
+                  <span className="font-medium">{editingAgreement.credor}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Valor Original (R$)</Label>
-                  <Input disabled value={Number(editingAgreement.original_total).toFixed(2)} />
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Valores</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs">Valor Original</Label>
+                    <Input disabled value={`R$ ${editingAgreement.original_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Desconto</Label>
+                    <Input disabled value={`${editingAgreement.discount_percent ?? 0}%`} />
+                  </div>
                 </div>
                 <div>
-                  <Label>Valor Proposto (R$)</Label>
+                  <Label className="text-xs">Valor do Acordo</Label>
                   <CurrencyInput value={editForm.proposed_total || 0} onValueChange={handleEditProposed} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Nº Parcelas</Label>
-                  <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
-                </div>
-                <div>
-                  <Label>Valor Parcela (R$)</Label>
-                  <Input type="number" disabled value={(editForm.new_installment_value || 0).toFixed(2)} />
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Entrada</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs">Valor da Entrada</Label>
+                    <CurrencyInput value={(editForm as any).entrada_value || 0} onValueChange={handleEditEntrada} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Data da Entrada</Label>
+                    <Input type="date" value={(editForm as any).entrada_date || ""} onChange={e => setEditForm({ ...editForm, entrada_date: e.target.value })} />
+                  </div>
                 </div>
               </div>
-              <div>
-                <Label>Primeiro Vencimento</Label>
-                <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Parcelamento</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs">Nº de Parcelas</Label>
+                    <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Valor da Parcela</Label>
+                    <Input disabled value={`R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">1º Vencimento das Parcelas</Label>
+                  <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
+                </div>
+                <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground text-center">
+                  {((editForm as any).entrada_value || 0) > 0
+                    ? `Entrada R$ ${((editForm as any).entrada_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} + ${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                    : `${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                  }
+                </div>
               </div>
+
               <div>
-                <Label>Observações</Label>
+                <Label className="text-xs">Observações</Label>
                 <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
               </div>
+
+              <AgreementInstallments agreementId={editingAgreement.id} agreement={editingAgreement} cpf={cpf || ""} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
+
               <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
                 {editLoading ? "Salvando..." : "Salvar Alterações"}
               </Button>

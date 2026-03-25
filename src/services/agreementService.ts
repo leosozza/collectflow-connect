@@ -404,6 +404,34 @@ export const updateInstallmentDate = async (
   }
 };
 
+export const updateInstallmentValue = async (
+  agreementId: string,
+  installmentKey: string,
+  newValue: number
+): Promise<void> => {
+  try {
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("custom_installment_values")
+      .eq("id", agreementId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const current = (agreement as any)?.custom_installment_values || {};
+    const updated = { ...current, [installmentKey]: newValue };
+
+    const { error } = await supabase
+      .from("agreements")
+      .update({ custom_installment_values: updated } as any)
+      .eq("id", agreementId);
+    if (error) throw error;
+
+    logger.info(MODULE, "updateInstallmentValue", { agreementId, installmentKey, newValue });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,
