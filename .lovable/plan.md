@@ -1,43 +1,54 @@
 
 
-# Plano: Tabulação apenas na tela de Atendimento, sem duplicação
+# Plano: Parcela vencida importada deve ser "Vencido", não "Quebrado"
 
-## Problema
+## Causa raiz
 
-Após o operador tabular no modal de Atendimento e o modal fechar (`closeAtendimento`), existe uma janela de tempo onde o agente ainda está em status TPA (3 ou 4) no polling da 3CPlus. Como `modalIsOpen` agora é `false`, a tela de ACW do `TelefoniaDashboard` aparece — gerando uma segunda tela de tabulação desnecessária.
+Em `src/services/importService.ts` (linha 255-256), quando uma parcela importada tem pagamento parcial (`valorPago > 0 && valorPago < valorParcela`), o status é definido como `"quebrado"`. Isso está errado — parcelas importadas com pagamento parcial devem permanecer `"pendente"`, e a interface já exibe "Vencido" automaticamente quando `status === "pendente"` e a data de vencimento é anterior a hoje.
+
+**"Quebrado" deve ser reservado exclusivamente para acordos formalizados no RIVO que não foram honrados.**
 
 ## Correções
 
-### 1. `TelefoniaDashboard.tsx` — Suprimir ACW quando qualify já foi feito
+### 1. `src/services/importService.ts` — Remover atribuição automática de "quebrado" na importação
 
-Linha 943 — o `effectiveACW` já checa `!qualifiedFromDisposition`, mas o `sessionStorage` flag pode não ter sido setado ainda (o `qualifyOn3CPlus` é assíncrono). 
-
-**Correção**: Adicionar `!isManualPause` ao `effectiveACW` (já planejado) E garantir que ao fechar o modal via "Finalizar Tabulação", o flag `3cp_qualified_from_disposition` seja setado **antes** de fechar o modal.
-
-### 2. `AtendimentoPage.tsx` — Setar flag antes de fechar
-
-No `handleFinishDisposition` (linha 374), setar `sessionStorage.setItem("3cp_qualified_from_disposition", "true")` **antes** de chamar `closeAtendimento()`. Isso garante que quando o TelefoniaDashboard re-renderiza após o modal fechar, o `qualifiedFromDisposition` já é `true` e a tela ACW não aparece.
-
-### 3. `AtendimentoPage.tsx` — Disposition já seta o flag
-
-Na `onSuccess` do `dispositionMutation` (linha 184), o flag já é setado após `qualifyOn3CPlus` retornar sucesso. Mas como é assíncrono, o modal pode fechar antes. 
-
-**Correção**: Setar `sessionStorage.setItem("3cp_qualified_from_disposition", "true")` **imediatamente** após a disposition ser salva (antes do `qualifyOn3CPlus`), não depois. Se o qualify falhar, o flag ainda é válido (a tabulação RIVO já foi feita).
-
-### 4. `TelefoniaDashboard.tsx` — effectiveACW mais restritivo
+Linha 255-256: trocar `status = "quebrado"` por manter `"pendente"`. Pagamento parcial na importação não significa quebra de acordo.
 
 ```typescript
-const effectiveACW = (isACW || isACWFallback || isTPAStatus) 
-  && !qualifiedFromDisposition 
-  && !isManualPause;
+// DE:
+} else if (valorPago > 0 && valorPago < valorParcela) {
+  status = "quebrado";
+}
+
+// PARA:
+// Pagamento parcial mantém "pendente" — será exibido como "Vencido" se a data passou
 ```
 
-Isso impede que pausas manuais (status 3 com pause name, ou status 6) mostrem a tela de ACW.
+### 2. Corrigir dados existentes no banco
+
+Executar UPDATE para todos os tenants: parcelas com `status = 'quebrado'` que **não** estão vinculadas a nenhum acordo devem voltar para `'pendente'`.
+
+```sql
+UPDATE clients
+SET status = 'pendente'
+WHERE status = 'quebrado'
+  AND id NOT IN (
+    SELECT DISTINCT unnest(title_ids) FROM agreements
+    WHERE status IN ('vigente', 'vencido', 'pago', 'cancelado')
+  );
+```
+
+### 3. Nenhuma mudança na exibição
+
+A lógica de exibição em `ClientDetailPage.tsx` (linha 205-207) já está correta:
+- `pendente` + data passada → mostra **"Vencido"** (laranja)
+- `pendente` + data futura → mostra **"Em Aberto"** (verde)
+- `quebrado` → mostra **"Quebrado"** (cinza) — reservado para quebra de acordo
 
 ## Arquivos a editar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/AtendimentoPage.tsx` | Mover `sessionStorage.setItem("3cp_qualified_from_disposition")` para antes do `qualifyOn3CPlus`; setar flag no `handleFinishDisposition` antes de fechar modal |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Adicionar `&& !isManualPause` ao `effectiveACW` |
+| `src/services/importService.ts` | Remover linhas 255-256 (não atribuir "quebrado" por pagamento parcial) |
+| Banco de dados | UPDATE para corrigir parcelas "quebrado" sem acordo vinculado |
 
