@@ -156,12 +156,24 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
       Vencimento: c.data_vencimento,
       Status: c.status,
     }));
+    const manualRows = manualPayments
+      .filter((mp: any) => mp.status === "confirmed")
+      .map((mp: any) => ({
+        "Acordo ID": mp.agreement_id,
+        "Parcela": mp.installment_number,
+        "Valor Pago": mp.amount_paid,
+        "Data Pgto": mp.payment_date,
+        "Meio": mp.payment_method,
+        "Recebedor": mp.receiver,
+        "Status": mp.status,
+      }));
     exportMultiSheetExcel(
       [
         { name: "Resumo", rows: resumoRows },
         { name: "Aging", rows: agingRows },
         { name: "Acordos", rows: acordosRows },
         { name: "Parcelas", rows: parcelasRows },
+        ...(manualRows.length > 0 ? [{ name: "Baixas Manuais", rows: manualRows }] : []),
       ],
       `prestacao_contas_${selectedCredor.replace(/\s/g, "_")}`
     );
@@ -313,6 +325,28 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
             </TableBody>
           </Table>
         </div>
+
+        {/* Baixas Manuais */}
+        {manualPayments.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5">
+            <h3 className="text-sm font-semibold text-card-foreground mb-3">Baixas Manuais</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+              {[
+                { label: "Confirmadas", value: manualPaymentStats.confirmedCount },
+                { label: "Total Confirmado", value: formatCurrency(manualPaymentStats.confirmedTotal) },
+                { label: "Pendentes", value: manualPaymentStats.pendingCount },
+                { label: "Total Pendente", value: formatCurrency(manualPaymentStats.pendingTotal) },
+                { label: "Recebido pelo CREDOR", value: formatCurrency(manualPaymentStats.credorTotal) },
+                { label: "Recebido pela COBRADORA", value: formatCurrency(manualPaymentStats.cobradoraTotal) },
+              ].map((item) => (
+                <div key={item.label} className="text-center">
+                  <p className="text-xs text-muted-foreground">{item.label}</p>
+                  <p className="text-sm font-semibold text-card-foreground">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Parcelas detalhadas */}
         <div className="bg-card rounded-xl border border-border p-5">
