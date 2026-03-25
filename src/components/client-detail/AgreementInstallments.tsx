@@ -393,7 +393,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {/* Edit date */}
                       {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
+                        <DropdownMenuItem onSelect={(e) => {
+                          e.preventDefault();
+                          requestAnimationFrame(() => setEditingDateIdx(idx));
+                        }}>
                           <CalendarIcon className="w-4 h-4 mr-2" />
                           Editar Data
                         </DropdownMenuItem>
@@ -401,9 +404,12 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {/* Edit value */}
                       {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onClick={() => {
-                          setEditingValueIdx(idx);
-                          setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
+                        <DropdownMenuItem onSelect={(e) => {
+                          e.preventDefault();
+                          requestAnimationFrame(() => {
+                            setEditingValueIdx(idx);
+                            setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
+                          });
                         }}>
                           <Pencil className="w-4 h-4 mr-2" />
                           Editar Valor
