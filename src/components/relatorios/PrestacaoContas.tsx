@@ -29,6 +29,43 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
   const [selectedCredor, setSelectedCredor] = useState("");
   const today = new Date();
 
+  // Fetch manual payments for selected credor's agreements
+  const credorAgreementIds = useMemo(() => {
+    if (!selectedCredor) return [];
+    return agreements.filter((a: any) => a.credor === selectedCredor).map((a: any) => a.id);
+  }, [agreements, selectedCredor]);
+
+  const { data: manualPayments = [] } = useQuery({
+    queryKey: ["manual-payments-report", selectedCredor],
+    queryFn: async () => {
+      if (credorAgreementIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("manual_payments" as any)
+        .select("*")
+        .in("agreement_id", credorAgreementIds);
+      if (error) return [];
+      return (data as any[]) || [];
+    },
+    enabled: credorAgreementIds.length > 0,
+  });
+
+  const manualPaymentStats = useMemo(() => {
+    const confirmed = manualPayments.filter((mp: any) => mp.status === "confirmed");
+    const pending = manualPayments.filter((mp: any) => mp.status === "pending_confirmation");
+    const rejected = manualPayments.filter((mp: any) => mp.status === "rejected");
+    const byCredor = confirmed.filter((mp: any) => mp.receiver === "CREDOR");
+    const byCobradora = confirmed.filter((mp: any) => mp.receiver === "COBRADORA");
+    return {
+      confirmedCount: confirmed.length,
+      confirmedTotal: confirmed.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      pendingCount: pending.length,
+      pendingTotal: pending.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      rejectedCount: rejected.length,
+      credorTotal: byCredor.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      cobradoraTotal: byCobradora.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+    };
+  }, [manualPayments]);
+
   const credorClients = useMemo(
     () => (selectedCredor ? clients.filter((c) => c.credor === selectedCredor) : []),
     [clients, selectedCredor]
