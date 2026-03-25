@@ -36,9 +36,11 @@ interface AgreementInstallmentsProps {
 
 const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefresh }: AgreementInstallmentsProps) => {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [editingDateIdx, setEditingDateIdx] = useState<number | null>(null);
+  const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
 
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
@@ -51,6 +53,13 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       if (error) return [];
       return (data as any[]) || [];
     },
+    enabled: !!agreementId,
+  });
+
+  // Fetch manual payments for this agreement
+  const { data: manualPayments = [] } = useQuery({
+    queryKey: ["manual-payments", agreementId],
+    queryFn: () => manualPaymentService.fetchByAgreement(agreementId),
     enabled: !!agreementId,
   });
 
