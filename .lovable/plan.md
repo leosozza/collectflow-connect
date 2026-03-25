@@ -1,31 +1,61 @@
 
+Corrigir o datepicker em `src/components/client-detail/AgreementInstallments.tsx` mudando a forma como o modo de edição é acionado.
 
-# Plano: Indicador visual de progresso na barra de parcelas
+## Diagnóstico
+O problema não está mais no `Popover` em si. O calendário já usa:
+- `onOpenAutoFocus={(e) => e.preventDefault()}`
+- `onInteractOutside` para fechar manualmente
+- `pointer-events-auto` no `Calendar`
 
-## O que será feito
+O fechamento rápido continua porque o estado `editingDateIdx` é ativado diretamente dentro do `DropdownMenuItem`. Como o item está dentro de um menu Radix, o clique de seleção fecha o dropdown e gera uma sequência de foco/interação que desmonta ou desestabiliza o popover logo em seguida.
 
-Transformar a barra de progresso (`Progress`) do `AgreementInstallments` em um indicador visual mais rico, mostrando o texto "X/Y pagas" centralizado **dentro** da própria barra e aplicando cores semânticas (verde para progresso, com fundo cinza).
+## Correção proposta
+### 1) Abrir o editor de data após o fechamento do menu
+Em vez de:
+```tsx
+<DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
+```
 
-## Mudanças
+Trocar para uma abertura adiada, por exemplo com `requestAnimationFrame` ou `setTimeout(0)`, para que o dropdown termine de fechar antes de montar o `Popover` da linha:
+```tsx
+onClick={() => {
+  requestAnimationFrame(() => setEditingDateIdx(idx));
+}}
+```
 
-### `src/components/client-detail/AgreementInstallments.tsx`
+Isso separa os dois ciclos de UI:
+- primeiro o menu fecha
+- depois o calendário abre
 
-Substituir o `<Progress>` genérico (linha 250) por uma barra customizada com:
+### 2) Evitar que a seleção do item dispare fluxo indesejado do menu
+Usar o evento apropriado do Radix no item (`onSelect`) com `preventDefault()` antes de agendar a abertura:
+```tsx
+<DropdownMenuItem
+  onSelect={(e) => {
+    e.preventDefault();
+    requestAnimationFrame(() => setEditingDateIdx(idx));
+  }}
+>
+```
 
-1. **Barra com texto embutido**: div com largura proporcional ao `progressPercent`, exibindo `"{paidCount}/{totalInstallments} pagas"` centralizado sobre a barra
-2. **Cores semânticas**: fundo `bg-muted`, preenchimento `bg-green-500` (parcelas pagas), texto branco sobre a parte preenchida
-3. **Altura aumentada** (`h-5`) para acomodar o texto legível
-4. **Animação suave** via `transition-all duration-500` no preenchimento
+Esse é o ajuste mais importante, porque o item “Editar Data” hoje depende do comportamento padrão do dropdown.
 
-Resultado visual: uma barra de progresso que mostra claramente quantas parcelas foram pagas, diretamente dentro do elemento — sem precisar olhar o texto separado acima.
+### 3) Manter o popover controlado como está
+Preservar a abordagem atual do calendário:
+- `Popover open`
+- `onOpenAutoFocus` prevenido
+- `onInteractOutside` fechando com `setEditingDateIdx(null)`
+- `Calendar` com `className={cn("p-3 pointer-events-auto")}`
 
-### Remover texto duplicado
+### 4) Ajuste opcional de robustez
+Se ainda houver instabilidade, substituir o `PopoverTrigger` visual por um botão neutro/read-only ou até renderizar o `PopoverContent` ancorado sem depender do trigger clicável, já que a abertura é programática. Mas isso deve ser plano B; a correção principal deve resolver.
 
-O `{paidCount}/{totalInstallments} pagas` que hoje aparece no header do Collapsible (linha 246) será mantido ali para quando colapsado, mas dentro da barra expandida o texto fica embutido na própria barra.
+## Arquivo afetado
+- `src/components/client-detail/AgreementInstallments.tsx`
 
-## Arquivos afetados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | Substituir `<Progress>` por barra customizada com texto embutido |
-
+## Resultado esperado
+Ao clicar em “Editar Data”:
+- o menu de ações fecha normalmente
+- o calendário abre em seguida
+- o componente permanece aberto tempo suficiente para selecionar a nova data
+- o fechamento só acontece ao escolher uma data ou clicar fora
