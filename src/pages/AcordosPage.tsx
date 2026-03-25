@@ -317,7 +317,9 @@ const AcordosPage = () => {
 
       {/* Status filter badges */}
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
+        {statusFilterConfig
+          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
+          .map(({ key, label, color, selectedColor }) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}
@@ -325,6 +327,7 @@ const AcordosPage = () => {
               statusFilter === key ? selectedColor : color
             }`}
           >
+            {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
             {label}
           </button>
         ))}
@@ -377,7 +380,9 @@ const AcordosPage = () => {
         </Button>
       </div>
 
-      {loading ? (
+      {statusFilter === "payment_confirmation" ? (
+        tenant?.id ? <PaymentConfirmationTab tenantId={tenant.id} /> : <p className="text-muted-foreground">Carregando...</p>
+      ) : loading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
         <AgreementsList
