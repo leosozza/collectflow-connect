@@ -183,11 +183,7 @@ const ClientDetailPage = () => {
     setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
-  const handleEditInstallments = (n: number) => {
-    const proposed = editForm.proposed_total || 0;
-    const entrada = (editForm as any).entrada_value || 0;
-    setEditForm({ ...editForm, new_installments: n, new_installment_value: recalcInstallmentValue(proposed, entrada, n) });
-  };
+  // handleEditInstallments removed — installment count cannot be changed on existing agreements
 
   const handleEditEntrada = (entrada: number) => {
     const proposed = editForm.proposed_total || 0;
@@ -524,7 +520,8 @@ const ClientDetailPage = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs">Nº de Parcelas</Label>
-                    <Input type="number" min="1" value={editForm.new_installments || 1} onChange={e => handleEditInstallments(Number(e.target.value))} />
+                    <Input type="number" disabled value={editForm.new_installments || 1} className="bg-muted cursor-not-allowed" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Para alterar a quantidade de parcelas, cancele o acordo atual e gere um novo.</p>
                   </div>
                   <div>
                     <Label className="text-xs">Valor da Parcela</Label>

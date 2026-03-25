@@ -284,6 +284,7 @@ export type Database = {
           notes: string | null
           original_total: number
           portal_origin: boolean
+          previous_agreement_id: string | null
           proposed_total: number
           requires_approval: boolean
           status: string
@@ -311,6 +312,7 @@ export type Database = {
           notes?: string | null
           original_total?: number
           portal_origin?: boolean
+          previous_agreement_id?: string | null
           proposed_total?: number
           requires_approval?: boolean
           status?: string
@@ -338,6 +340,7 @@ export type Database = {
           notes?: string | null
           original_total?: number
           portal_origin?: boolean
+          previous_agreement_id?: string | null
           proposed_total?: number
           requires_approval?: boolean
           status?: string
@@ -345,6 +348,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "agreements_previous_agreement_id_fkey"
+            columns: ["previous_agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "agreements_tenant_id_fkey"
             columns: ["tenant_id"]

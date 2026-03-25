@@ -1,0 +1,1 @@
+ALTER TABLE public.agreements ADD COLUMN IF NOT EXISTS previous_agreement_id uuid REFERENCES public.agreements(id);
