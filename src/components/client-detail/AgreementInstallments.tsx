@@ -144,8 +144,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     } else {
       remainingPaid = 0;
     }
-    const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue };
+    // Check for pending manual payment
+    const pendingManual = manualPayments.find(
+      (mp: any) => mp.installment_number === inst.number && mp.status === "pending_confirmation"
+    );
+    const status = pendingManual
+      ? "pending_confirmation"
+      : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+    return { ...inst, status, isOverdue, pendingManual };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
