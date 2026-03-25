@@ -2,6 +2,42 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { logger } from "@/lib/logger";
 import { addMonths } from "date-fns";
+import { formatCPFDisplay } from "@/lib/cpfUtils";
+
+/** Fetch client address trying CPF clean then formatted */
+async function fetchClientAddress(cpf: string) {
+  const cleanCpf = cpf.replace(/[.\-]/g, "");
+  // Try with clean CPF first
+  const { data } = await supabase
+    .from("clients")
+    .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
+    .eq("cpf", cleanCpf)
+    .limit(1)
+    .maybeSingle();
+  if (data) return data;
+
+  // Try formatted CPF
+  const formatted = formatCPFDisplay(cleanCpf);
+  const { data: data2 } = await supabase
+    .from("clients")
+    .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
+    .eq("cpf", formatted)
+    .limit(1)
+    .maybeSingle();
+  return data2 || {};
+}
+
+/** Validate address fields are real values (not placeholders) */
+function validateAddressFields(payload: Record<string, unknown>) {
+  const required = ["documento", "nome", "cep", "endereco", "cidade", "uf"] as const;
+  const placeholders = ["00000000", "Não informado", ""];
+  for (const field of required) {
+    const val = String(payload[field] || "").trim();
+    if (!val || placeholders.includes(val)) {
+      throw new Error(`Preencha o endereço do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
+    }
+  }
+}
 
 const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-proxy`;
 const MODULE = "negociarieService";
@@ -69,17 +105,9 @@ export const negociarieService = {
     agreement: { id: string; client_cpf: string; credor: string; tenant_id: string; client_name: string },
     installment: { number: number; value: number; dueDate: string }
   ) {
-    // Fetch client address data
     let clientData: any = {};
     try {
-      const { data } = await supabase
-        .from("clients")
-        .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
-        .eq("cpf", agreement.client_cpf)
-        .eq("credor", agreement.credor)
-        .limit(1)
-        .maybeSingle();
-      if (data) clientData = data;
+      clientData = await fetchClientAddress(agreement.client_cpf);
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_single_boleto", e);
     }
@@ -89,17 +117,19 @@ export const negociarieService = {
     const payload: Record<string, unknown> = {
       documento: cleanCpf,
       nome: clientData.nome_completo || agreement.client_name,
-      cep: clientData.cep || "00000000",
-      endereco: clientData.endereco || "Não informado",
-      bairro: clientData.bairro || "Não informado",
-      cidade: clientData.cidade || "Não informado",
-      uf: clientData.uf || "SP",
+      cep: clientData.cep || "",
+      endereco: clientData.endereco || "",
+      bairro: clientData.bairro || "",
+      cidade: clientData.cidade || "",
+      uf: clientData.uf || "",
       email: clientData.email || "",
       telefone: (clientData.phone || "").replace(/\D/g, ""),
       valor: installment.value,
       vencimento: installment.dueDate,
       descricao: `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`,
     };
+
+    validateAddressFields(payload);
 
     const apiResult = await this.novaCobranca(payload);
 
@@ -153,17 +183,9 @@ export const negociarieService = {
   ): Promise<BoletoGenerationResult> {
     const result: BoletoGenerationResult = { total: installments.length, success: 0, failed: 0, errors: [] };
 
-    // Fetch client address data
     let clientData: any = {};
     try {
-      const { data } = await supabase
-        .from("clients")
-        .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
-        .eq("cpf", agreement.client_cpf)
-        .eq("credor", agreement.credor)
-        .limit(1)
-        .maybeSingle();
-      if (data) clientData = data;
+      clientData = await fetchClientAddress(agreement.client_cpf);
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_boleto", e);
     }
@@ -186,6 +208,8 @@ export const negociarieService = {
           vencimento: inst.dueDate,
           descricao: `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`,
         };
+
+        validateAddressFields(payload);
 
         const apiResult = await this.novaCobranca(payload);
 
