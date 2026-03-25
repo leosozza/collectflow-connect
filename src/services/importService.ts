@@ -252,8 +252,6 @@ const parseRows = (
       status = "pago";
     } else if (valorPago > 0 && valorPago >= valorParcela) {
       status = "pago";
-    } else if (valorPago > 0 && valorPago < valorParcela) {
-      status = "quebrado";
     }
 
     // status_raw removed — status is derived automatically post-import
