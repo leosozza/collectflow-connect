@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +32,7 @@ import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
 import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
+import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
 
 const statusLabelsMap: Record<string, string> = {
@@ -319,7 +320,7 @@ const ClientDetailPage = () => {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
-                          <p className="text-sm font-semibold">{formatCurrency(Number(agreement.proposed_total))}</p>
+                          <p className="text-sm font-semibold">{formatCurrency(getEffectiveAgreementSummary(agreement).effectiveTotal)}</p>
                         </div>
                         {agreement.discount_percent > 0 && (
                           <div>
@@ -329,7 +330,7 @@ const ClientDetailPage = () => {
                         )}
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
-                          <p className="text-sm font-semibold">{agreement.new_installments}x de {formatCurrency(Number(agreement.new_installment_value))}</p>
+                          <p className="text-sm font-semibold">{getEffectiveAgreementSummary(agreement).label}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
@@ -533,10 +534,16 @@ const ClientDetailPage = () => {
                   <Input type="date" value={editForm.first_due_date || ""} onChange={e => setEditForm({ ...editForm, first_due_date: e.target.value })} />
                 </div>
                 <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground text-center">
-                  {((editForm as any).entrada_value || 0) > 0
-                    ? `Entrada R$ ${((editForm as any).entrada_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} + ${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                    : `${editForm.new_installments || 1}x R$ ${(editForm.new_installment_value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                  }
+                  {(() => {
+                    const liveAgreement = agreements.find((a: any) => a.id === editingAgreement?.id);
+                    const summary = getEffectiveAgreementSummary({
+                      entrada_value: (editForm as any).entrada_value,
+                      new_installments: editForm.new_installments || 1,
+                      new_installment_value: editForm.new_installment_value || 0,
+                      custom_installment_values: liveAgreement?.custom_installment_values,
+                    });
+                    return summary.label;
+                  })()}
                 </div>
               </div>
 
@@ -545,7 +552,7 @@ const ClientDetailPage = () => {
                 <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
               </div>
 
-              <AgreementInstallments agreementId={editingAgreement.id} agreement={editingAgreement} cpf={cpf || ""} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
+              <AgreementInstallments agreementId={editingAgreement.id} agreement={agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement} cpf={cpf || ""} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
 
               <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
                 {editLoading ? "Salvando..." : "Salvar Alterações"}
