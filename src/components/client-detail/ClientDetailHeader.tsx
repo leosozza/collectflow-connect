@@ -382,12 +382,21 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Endereço */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
-                <InfoItem label="Endereço" value={client.endereco} className="md:col-span-2" />
-                <InfoItem label="Bairro" value={client.bairro} />
-                <InfoItem label="Cidade" value={client.cidade} />
-                <InfoItem label="UF" value={client.uf} />
-                <InfoItem label="CEP" value={client.cep} />
+              <div className="pt-3 border-t border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Endereço</p>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={() => setEditOpen(true)}>
+                    <Pencil className="w-3 h-3" />
+                    Editar endereço
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+                  <InfoItem label="Rua" value={client.endereco} className="md:col-span-2" />
+                  <InfoItem label="Bairro" value={client.bairro} />
+                  <InfoItem label="Cidade" value={client.cidade} />
+                  <InfoItem label="UF" value={client.uf} />
+                  <InfoItem label="CEP" value={client.cep} />
+                </div>
               </div>
 
               {/* Valores */}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, ExternalLink } from "lucide-react";
 import { formatCurrency, formatCPF } from "@/lib/formatters";
+import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { format } from "date-fns";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -80,11 +81,9 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
                   {(a as any).creator_name || "—"}
                 </TableCell>
                 <TableCell className="text-right">{formatCurrency(a.original_total)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(a.proposed_total)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(getEffectiveAgreementSummary(a as any).effectiveTotal)}</TableCell>
                 <TableCell className="text-center">
-                  {(a as any).entrada_value > 0
-                    ? `Entrada ${formatCurrency((a as any).entrada_value)} + ${a.new_installments}x ${formatCurrency(a.new_installment_value)}`
-                    : `${a.new_installments}x ${formatCurrency(a.new_installment_value)}`}
+                  {getEffectiveAgreementSummary(a as any).label}
                 </TableCell>
                 <TableCell>{format(new Date(a.first_due_date + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
                 <TableCell>

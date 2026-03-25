@@ -283,7 +283,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                 </TableCell>
                 <TableCell className="text-xs">
                   {editingDateIdx === idx ? (
-                    <Popover open>
+                    <Popover open={true} onOpenChange={(o) => { if (!o) setEditingDateIdx(null); }}>
                       <PopoverTrigger asChild>
                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
                           <CalendarIcon className="w-3 h-3" />
@@ -291,13 +291,12 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-auto p-0"
+                        className="w-auto p-0 z-[9999]"
                         align="start"
+                        side="bottom"
+                        sideOffset={4}
                         onOpenAutoFocus={(e) => e.preventDefault()}
-                        onInteractOutside={(e) => {
-                          e.preventDefault();
-                          setEditingDateIdx(null);
-                        }}
+                        onCloseAutoFocus={(e) => e.preventDefault()}
                       >
                         <Calendar
                           mode="single"
@@ -393,9 +392,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {/* Edit date */}
                       {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onSelect={(e) => {
-                          e.preventDefault();
-                          requestAnimationFrame(() => setEditingDateIdx(idx));
+                        <DropdownMenuItem onClick={() => {
+                          setTimeout(() => setEditingDateIdx(idx), 150);
                         }}>
                           <CalendarIcon className="w-4 h-4 mr-2" />
                           Editar Data
@@ -404,12 +402,11 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {/* Edit value */}
                       {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onSelect={(e) => {
-                          e.preventDefault();
-                          requestAnimationFrame(() => {
+                        <DropdownMenuItem onClick={() => {
+                          setTimeout(() => {
                             setEditingValueIdx(idx);
                             setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
-                          });
+                          }, 150);
                         }}>
                           <Pencil className="w-4 h-4 mr-2" />
                           Editar Valor
