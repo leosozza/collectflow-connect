@@ -1046,6 +1046,7 @@ export type Database = {
           file_name: string
           file_path: string
           id: string
+          manual_payment_id: string | null
           tenant_id: string
           uploaded_by: string
         }
@@ -1055,6 +1056,7 @@ export type Database = {
           file_name: string
           file_path: string
           id?: string
+          manual_payment_id?: string | null
           tenant_id: string
           uploaded_by: string
         }
@@ -1064,10 +1066,18 @@ export type Database = {
           file_name?: string
           file_path?: string
           id?: string
+          manual_payment_id?: string | null
           tenant_id?: string
           uploaded_by?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "client_attachments_manual_payment_id_fkey"
+            columns: ["manual_payment_id"]
+            isOneToOne: false
+            referencedRelation: "manual_payments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_attachments_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -2816,6 +2826,89 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "invite_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_payments: {
+        Row: {
+          agreement_id: string
+          amount_paid: number
+          created_at: string
+          id: string
+          installment_number: number
+          notes: string | null
+          payment_date: string
+          payment_method: string
+          receiver: string
+          requested_by: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          agreement_id: string
+          amount_paid: number
+          created_at?: string
+          id?: string
+          installment_number: number
+          notes?: string | null
+          payment_date: string
+          payment_method: string
+          receiver: string
+          requested_by: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          agreement_id?: string
+          amount_paid?: number
+          created_at?: string
+          id?: string
+          installment_number?: number
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+          receiver?: string
+          requested_by?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_payments_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_payments_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_payments_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_payments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
