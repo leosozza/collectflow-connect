@@ -77,8 +77,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         setJurosPercent(rules.juros_mes || 0);
         setMultaPercent(rules.multa || 0);
 
-        // Auto-calculate honorários from grade based on total original value
-        const totalOriginal = pendentes.reduce((s, c) => s + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+        // Auto-calculate honorários from grade based on effective balance (after payments)
+        const totalOriginal = pendentes.reduce((s, c) => {
+          const bruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+          const pago = Number(c.valor_pago) || 0;
+          return s + Math.max(0, bruto - pago);
+        }, 0);
         if (rules.honorarios_grade && rules.honorarios_grade.length > 0) {
           const matchedTier = rules.honorarios_grade.find((tier: any) => {
             const parts = (tier.faixa || "").split("-").map(Number);
@@ -125,13 +129,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       const venc = new Date(c.data_vencimento + "T00:00:00");
       const atraso = Math.max(0, Math.floor((refDate.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)));
       const mesesAtraso = Math.max(0, (refDate.getFullYear() - venc.getFullYear()) * 12 + (refDate.getMonth() - venc.getMonth()));
-      const valorOriginal = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+      const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+      const valorPago = Number(c.valor_pago) || 0;
+      const valorOriginal = Math.max(0, valorBruto - valorPago);
       const valorBase = valorOriginal;
       const jurosVal = valorBase * (jurosPercent / 100) * mesesAtraso;
       const multaVal = atraso > 0 ? valorBase * (multaPercent / 100) : 0;
       const honorariosVal = valorBase * (honorariosPercent / 100);
       const total = valorBase + jurosVal + multaVal + honorariosVal;
-      return { id: c.id, atraso, valorOriginal, valorBase, jurosVal, multaVal, honorariosVal, total };
+      return { id: c.id, atraso, valorOriginal, valorPago, valorBase, jurosVal, multaVal, honorariosVal, total };
     });
   }, [pendentes, calcDate, jurosPercent, multaPercent, honorariosPercent]);
 
@@ -386,7 +392,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     <TableHead className="px-2">Parc</TableHead>
                     <TableHead className="px-2">Vencimento</TableHead>
                     <TableHead className="px-2 text-right">Atraso</TableHead>
-                    <TableHead className="px-2 text-right">V. Original</TableHead>
+                    <TableHead className="px-2 text-right">V. Bruto</TableHead>
+                    <TableHead className="px-2 text-right">V. Pago</TableHead>
+                    <TableHead className="px-2 text-right">Saldo</TableHead>
                     <TableHead className="px-2 text-right">Juros</TableHead>
                     <TableHead className="px-2 text-right">Multa</TableHead>
                     <TableHead className="px-2 text-right">Honorários</TableHead>
@@ -397,6 +405,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   {pendentes.map((c, idx) => {
                     const row = rowCalcs[idx];
                     const isSelected = selectedIds.has(c.id);
+                    const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
                     return (
                       <TableRow key={c.id} className={`text-xs ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
                         <TableCell className="px-2">
@@ -407,7 +416,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                         <TableCell className="px-2 text-center text-xs text-muted-foreground">
                           {row.atraso}
                         </TableCell>
-                        <TableCell className="px-2 text-right">{formatCurrency(row.valorOriginal)}</TableCell>
+                        <TableCell className="px-2 text-right">{formatCurrency(valorBruto)}</TableCell>
+                        <TableCell className="px-2 text-right text-blue-600 dark:text-blue-400">{formatCurrency(row.valorPago)}</TableCell>
+                        <TableCell className="px-2 text-right font-medium">{formatCurrency(row.valorOriginal)}</TableCell>
                         <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</TableCell>
                         <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</TableCell>
                         <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</TableCell>
@@ -418,6 +429,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   {/* Totals row */}
                   <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
                     <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
+                    <TableCell className="px-2 text-right">—</TableCell>
+                    <TableCell className="px-2 text-right">—</TableCell>
                     <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
                     <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
                     <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
@@ -426,7 +439,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   </TableRow>
                   {descontoPercent > 0 && (
                     <TableRow className="text-xs">
-                      <TableCell colSpan={8} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
+                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
                       <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
                     </TableRow>
                   )}

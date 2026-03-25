@@ -316,14 +316,17 @@ export const updateAgreement = async (
   data: Partial<AgreementFormData>
 ): Promise<void> => {
   try {
+    // Protect: never allow changing installment count on existing agreements
+    const { new_installments, ...safeData } = data as any;
+    
     const { error } = await supabase
       .from("agreements")
-      .update(data as any)
+      .update(safeData as any)
       .eq("id", id);
 
     if (error) throw error;
     logger.info(MODULE, "update", { id });
-    logAction({ action: "update", entity_type: "agreement", entity_id: id, details: data });
+    logAction({ action: "update", entity_type: "agreement", entity_id: id, details: safeData });
   } catch (error) {
     handleServiceError(error, MODULE);
   }
