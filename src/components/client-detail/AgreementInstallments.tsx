@@ -443,7 +443,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           }}
         />
       )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
