@@ -273,6 +273,7 @@ export type Database = {
           created_by: string
           credor: string
           custom_installment_dates: Json | null
+          custom_installment_values: Json | null
           discount_percent: number | null
           entrada_date: string | null
           entrada_value: number | null
@@ -299,6 +300,7 @@ export type Database = {
           created_by: string
           credor: string
           custom_installment_dates?: Json | null
+          custom_installment_values?: Json | null
           discount_percent?: number | null
           entrada_date?: string | null
           entrada_value?: number | null
@@ -325,6 +327,7 @@ export type Database = {
           created_by?: string
           credor?: string
           custom_installment_dates?: Json | null
+          custom_installment_values?: Json | null
           discount_percent?: number | null
           entrada_date?: string | null
           entrada_value?: number | null
