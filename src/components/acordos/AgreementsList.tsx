@@ -8,7 +8,6 @@ import { Check, X, ExternalLink } from "lucide-react";
 import { formatCurrency, formatCPF } from "@/lib/formatters";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { format } from "date-fns";
-import { format } from "date-fns";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
