@@ -320,10 +320,18 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                       )}
 
                       {/* Edit date */}
-                      {!isPaid && (
+                      {!isPaid && inst.status !== "pending_confirmation" && (
                         <DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
                           <CalendarIcon className="w-4 h-4 mr-2" />
                           Editar Data
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Manual payment */}
+                      {!isPaid && inst.status !== "pending_confirmation" && tenantId && profile && (
+                        <DropdownMenuItem onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}>
+                          <HandCoins className="w-4 h-4 mr-2" />
+                          Baixar Manualmente
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -334,6 +342,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
           })}
         </TableBody>
       </Table>
+
+      {manualPaymentInst && tenantId && profile && (
+        <ManualPaymentDialog
+          open={!!manualPaymentInst}
+          onOpenChange={(open) => !open && setManualPaymentInst(null)}
+          agreementId={agreementId}
+          installmentNumber={manualPaymentInst.number}
+          installmentValue={manualPaymentInst.value}
+          tenantId={tenantId}
+          profileId={profile.id}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+            onRefresh?.();
+          }}
+        />
+      )}
     </div>
   );
 };
