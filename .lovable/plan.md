@@ -1,55 +1,31 @@
 
 
-# Fix: Calendar date picker closing too quickly
+# Plano: Indicador visual de progresso na barra de parcelas
 
-## Root cause
+## O que será feito
 
-The `Popover` at line 270 uses `onOpenChange={(open) => !open && setEditingDateIdx(null)}`. When the DropdownMenu item "Editar Data" is clicked, the dropdown closes and triggers focus/pointer events that cause the Popover to immediately fire `onOpenChange(false)`, closing the calendar before the user can interact.
+Transformar a barra de progresso (`Progress`) do `AgreementInstallments` em um indicador visual mais rico, mostrando o texto "X/Y pagas" centralizado **dentro** da própria barra e aplicando cores semânticas (verde para progresso, com fundo cinza).
 
-## Fix
+## Mudanças
 
-In `src/components/client-detail/AgreementInstallments.tsx` (line 270):
+### `src/components/client-detail/AgreementInstallments.tsx`
 
-1. Add `modal={true}` to `PopoverContent` — this prevents the popover from closing on outside pointer events and keeps focus trapped inside
-2. Remove the `onOpenChange` handler from the Popover — instead, only close via:
-   - Successful date selection (already handled in `handleEditDate` which calls `setEditingDateIdx(null)`)
-   - An explicit cancel/close button inside the popover
+Substituir o `<Progress>` genérico (linha 250) por uma barra customizada com:
 
-Concrete change:
+1. **Barra com texto embutido**: div com largura proporcional ao `progressPercent`, exibindo `"{paidCount}/{totalInstallments} pagas"` centralizado sobre a barra
+2. **Cores semânticas**: fundo `bg-muted`, preenchimento `bg-green-500` (parcelas pagas), texto branco sobre a parte preenchida
+3. **Altura aumentada** (`h-5`) para acomodar o texto legível
+4. **Animação suave** via `transition-all duration-500` no preenchimento
 
-```tsx
-// FROM:
-<Popover open onOpenChange={(open) => !open && setEditingDateIdx(null)}>
-  <PopoverTrigger asChild>...</PopoverTrigger>
-  <PopoverContent className="w-auto p-0" align="start">
-    <Calendar ... />
-  </PopoverContent>
-</Popover>
+Resultado visual: uma barra de progresso que mostra claramente quantas parcelas foram pagas, diretamente dentro do elemento — sem precisar olhar o texto separado acima.
 
-// TO:
-<Popover open>
-  <PopoverTrigger asChild>...</PopoverTrigger>
-  <PopoverContent 
-    className="w-auto p-0" 
-    align="start"
-    onOpenAutoFocus={(e) => e.preventDefault()}
-    onInteractOutside={(e) => {
-      e.preventDefault();
-      setEditingDateIdx(null);
-    }}
-  >
-    <Calendar ... />
-  </PopoverContent>
-</Popover>
-```
+### Remover texto duplicado
 
-This separates "interact outside to dismiss" (which fires after the popover is stable) from the initial focus-shift event that was causing the premature close.
+O `{paidCount}/{totalInstallments} pagas` que hoje aparece no header do Collapsible (linha 246) será mantido ali para quando colapsado, mas dentro da barra expandida o texto fica embutido na própria barra.
 
-## Files affected
+## Arquivos afetados
 
-| File | Change |
+| Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | Fix Popover dismiss behavior for date editing |
-
-No other files, no database changes, no impact on other flows.
+| `src/components/client-detail/AgreementInstallments.tsx` | Substituir `<Progress>` por barra customizada com texto embutido |
 
