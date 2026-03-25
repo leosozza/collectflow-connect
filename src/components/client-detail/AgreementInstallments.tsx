@@ -18,8 +18,9 @@ import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Download, FileText, Copy, CalendarIcon, MoreHorizontal,
-  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown,
+  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown, ChevronDown,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -232,16 +233,23 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="pt-3 border-t border-border space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
-          <FileText className="w-3 h-3" /> Parcelas do Acordo
-        </p>
-        <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
-      </div>
+    <Collapsible open={open} onOpenChange={setOpen} className="pt-3 border-t border-border space-y-3">
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between hover:bg-muted/30 rounded-md px-1 py-1 transition-colors cursor-pointer">
+          <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
+            <FileText className="w-3 h-3" /> Parcelas do Acordo
+            <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${open ? "rotate-180" : ""}`} />
+          </p>
+          <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+        </button>
+      </CollapsibleTrigger>
 
       <Progress value={progressPercent} className="h-2" />
+
+      <CollapsibleContent>
 
       <Table>
         <TableHeader>
@@ -436,7 +444,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           }}
         />
       )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
