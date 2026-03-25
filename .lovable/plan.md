@@ -1,61 +1,74 @@
 
-Corrigir o datepicker em `src/components/client-detail/AgreementInstallments.tsx` mudando a forma como o modo de edição é acionado.
+Objetivo: corrigir 3 pontos no fluxo do cliente em `/carteira/:cpf` sem alterar schema do banco.
 
-## Diagnóstico
-O problema não está mais no `Popover` em si. O calendário já usa:
-- `onOpenAutoFocus={(e) => e.preventDefault()}`
-- `onInteractOutside` para fechar manualmente
-- `pointer-events-auto` no `Calendar`
+1. Estabilizar o componente de alteração de data da parcela
+- Diagnóstico: o problema agora parece vir menos do `Popover` e mais do ciclo do `DropdownMenu`. Em `AgreementInstallments.tsx`, o item “Editar Data” usa `onSelect + preventDefault + requestAnimationFrame`, o que tende a manter o menu “vivo” por mais tempo e conflitar com o calendário quando o cursor sai do menu.
+- Implementação:
+  - controlar a abertura do menu de ações por linha, sem depender do fechamento implícito;
+  - remover o `preventDefault()` do fluxo de abrir o editor de data;
+  - abrir o datepicker só depois do menu terminar de fechar;
+  - manter o `Calendar` interativo com `pointer-events-auto` e fechar apenas em seleção de data, cancelar, ou clique fora real.
+- Resultado esperado: o calendário abre, permanece aberto ao mover o cursor e só fecha quando o usuário realmente conclui ou cancela.
 
-O fechamento rápido continua porque o estado `editingDateIdx` é ativado diretamente dentro do `DropdownMenuItem`. Como o item está dentro de um menu Radix, o clique de seleção fecha o dropdown e gera uma sequência de foco/interação que desmonta ou desestabiliza o popover logo em seguida.
+2. Fazer o acordo recalcular os números ao editar valor de parcela/entrada
+- Diagnóstico:
+  - hoje `updateInstallmentValue` atualiza apenas `custom_installment_values`;
+  - os resumos de acordo continuam lendo `agreement.proposed_total`, `agreement.new_installment_value` e `agreement.entrada_value`;
+  - além disso, o modal de edição usa um snapshot local (`editingAgreement`), então mesmo após refetch os números visíveis continuam antigos.
+- Implementação:
+  - criar um helper compartilhado para montar o “resumo efetivo” do acordo a partir de:
+    - `entrada_value`
+    - `new_installments`
+    - `new_installment_value`
+    - `custom_installment_values`
+  - esse helper deve devolver:
+    - entrada efetiva
+    - lista/valores efetivos das parcelas
+    - valor proposto efetivo (entrada + parcelas)
+    - texto formatado do parcelamento
+  - trocar os pontos da UI que hoje usam os campos crus para usar o resumo efetivo.
+- Resultado esperado:
+  - se a entrada mudar de R$ 5,00 para R$ 10,00, o “Valor Proposto” e o resumo do parcelamento passam a refletir isso imediatamente;
+  - se o acordo for “entrada + 5 parcelas”, a UI deixa de mostrar só “5x de R$ 203,00” e passa a mostrar a composição correta.
 
-## Correção proposta
-### 1) Abrir o editor de data após o fechamento do menu
-Em vez de:
-```tsx
-<DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
-```
+3. Corrigir a exibição do resumo de parcelamento
+- Implementação nas telas que mostram resumo:
+  - `ClientDetailPage.tsx`: card do acordo e modal de edição;
+  - `AgreementsList.tsx`: listagem de acordos;
+  - manter o formato:
+    - `Entrada R$ 10,00 + 5x de R$ 203,00`
+  - se no futuro houver parcelas com valores diferentes entre si, preparar fallback como:
+    - `Entrada R$ X + 5 parcelas com valores personalizados`
+- Resultado esperado: o resumo textual fica coerente com o que foi editado nas parcelas.
 
-Trocar para uma abertura adiada, por exemplo com `requestAnimationFrame` ou `setTimeout(0)`, para que o dropdown termine de fechar antes de montar o `Popover` da linha:
-```tsx
-onClick={() => {
-  requestAnimationFrame(() => setEditingDateIdx(idx));
-}}
-```
+4. Eliminar estado obsoleto no modal de edição do acordo
+- Diagnóstico: `handleEditOpen` salva o acordo inteiro em `editingAgreement`, então o componente aninhado de parcelas recebe dados congelados.
+- Implementação:
+  - substituir o snapshot por uma referência por ID, ou sincronizar `editingAgreement` sempre que os dados refetchados mudarem;
+  - garantir que o componente de parcelas e o topo do modal usem sempre o acordo mais recente.
+- Resultado esperado: após editar data/valor/entrada, o cabeçalho e os números do acordo mudam sem precisar fechar e reabrir o modal.
 
-Isso separa os dois ciclos de UI:
-- primeiro o menu fecha
-- depois o calendário abre
+5. Ajustar a edição de endereço no perfil do cliente
+- Diagnóstico: a edição já existe em `ClientDetailHeader.tsx` no botão “Editar” do topo. O problema parece ser de descoberta, não de backend.
+- Implementação:
+  - manter o sheet atual de edição;
+  - adicionar um atalho visível na seção de endereço (“Editar endereço”) para abrir o mesmo sheet;
+  - opcionalmente destacar o botão quando a seção “Mais informações do devedor” estiver aberta.
+- Resultado esperado: o usuário encontra a edição de endereço exatamente no bloco onde vê o endereço, sem precisar adivinhar que o botão geral do topo abre esse formulário.
 
-### 2) Evitar que a seleção do item dispare fluxo indesejado do menu
-Usar o evento apropriado do Radix no item (`onSelect`) com `preventDefault()` antes de agendar a abertura:
-```tsx
-<DropdownMenuItem
-  onSelect={(e) => {
-    e.preventDefault();
-    requestAnimationFrame(() => setEditingDateIdx(idx));
-  }}
->
-```
-
-Esse é o ajuste mais importante, porque o item “Editar Data” hoje depende do comportamento padrão do dropdown.
-
-### 3) Manter o popover controlado como está
-Preservar a abordagem atual do calendário:
-- `Popover open`
-- `onOpenAutoFocus` prevenido
-- `onInteractOutside` fechando com `setEditingDateIdx(null)`
-- `Calendar` com `className={cn("p-3 pointer-events-auto")}`
-
-### 4) Ajuste opcional de robustez
-Se ainda houver instabilidade, substituir o `PopoverTrigger` visual por um botão neutro/read-only ou até renderizar o `PopoverContent` ancorado sem depender do trigger clicável, já que a abertura é programática. Mas isso deve ser plano B; a correção principal deve resolver.
-
-## Arquivo afetado
+Arquivos principais
 - `src/components/client-detail/AgreementInstallments.tsx`
+- `src/pages/ClientDetailPage.tsx`
+- `src/components/acordos/AgreementsList.tsx`
+- `src/components/client-detail/ClientDetailHeader.tsx`
+- `src/lib/installmentUtils.ts`
+- possivelmente `src/services/agreementService.ts` para devolver/sincronizar dados atualizados após edição
 
-## Resultado esperado
-Ao clicar em “Editar Data”:
-- o menu de ações fecha normalmente
-- o calendário abre em seguida
-- o componente permanece aberto tempo suficiente para selecionar a nova data
-- o fechamento só acontece ao escolher uma data ou clicar fora
+Detalhes técnicos
+- Não precisa migration.
+- O problema do endereço não está em `PerfilPage.tsx` / `PersonalDataTab.tsx`; esses arquivos tratam perfil de usuário, não o cadastro do devedor.
+- O cálculo de resumo do acordo deve ser centralizado para evitar divergência entre:
+  - tabela de parcelas,
+  - card do acordo,
+  - modal de edição,
+  - listagem geral de acordos.
