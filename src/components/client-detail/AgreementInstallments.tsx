@@ -18,8 +18,9 @@ import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Download, FileText, Copy, CalendarIcon, MoreHorizontal,
-  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown,
+  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown, ChevronDown,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
