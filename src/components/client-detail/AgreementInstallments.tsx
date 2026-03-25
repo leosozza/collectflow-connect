@@ -200,6 +200,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
+    if (status === "pending_confirmation") return <HandCoins className="w-3.5 h-3.5 text-blue-600" />;
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
@@ -264,10 +265,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                     "gap-1 text-[10px]",
                     inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
                     inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                    inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
                     "bg-warning/10 text-warning border-warning/30"
                   )}>
                     {statusIcon(inst.status)}
-                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : "Em Aberto"}
+                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando Confirmação" : "Em Aberto"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
