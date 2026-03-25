@@ -1,123 +1,86 @@
 
 
-# Plano: Fluxo de Baixa Manual com Confirmação de Pagamento
+# Plano: Reorganizar `/acordos` e aba Acordos do perfil do cliente
 
 ## Resumo
 
-Criar um fluxo completo de baixa manual de parcelas dentro do módulo Acordos, com aprovação obrigatória por admin, rastreabilidade total e campo `recebedor` (CREDOR/COBRADORA). Sem impactar baixa automática via Negociarie/boletos.
+Transformar `/acordos` em painel de consulta/navegação. Mover toda gestão operacional de acordos e parcelas para a aba "Acordos" do perfil do cliente (`ClientDetailPage`). Eliminar duplicidade.
 
-## Arquitetura
+## Mudanças
 
-```text
-Operador → "Baixar Manualmente" (parcela) → Modal com campos obrigatórios
-  ↓
-Registro na tabela `manual_payments` (status: pending_confirmation)
-  ↓
-Admin acessa aba "Confirmação de Pagamento" em /acordos
-  ↓
-Admin aprova → executa baixa real (clients.status=pago) + contabiliza
-Admin recusa → registro fica como recusado, parcela inalterada
+### 1. `src/components/acordos/AgreementsList.tsx` — Simplificar para consulta
+
+**Remover**: botões Editar e Cancelar para status Pagos, Vigentes, Vencidos, Cancelados.
+**Manter**: botões Aprovar/Rejeitar apenas para "Aguardando Liberação" (admin).
+**Adicionar**: coluna "Operador" (join com profiles via `created_by`).
+**Adicionar**: link/botão "Ver Perfil" em cada linha que navega para `/clientes/{cpf}?tab=acordo`.
+
+### 2. `src/pages/AcordosPage.tsx` — Remover dialog de edição
+
+**Remover**: `editDialog` completo (o dialog com `AgreementInstallments` embutido).
+**Remover**: `handleEditOpen`, `handleEditSubmit`, `editForm`, `editingAgreement` e toda lógica de edição.
+**Remover**: import de `AgreementInstallments`, `CurrencyInput`, `Textarea`, `Label`.
+**Manter**: `handleApprove`, `handleReject` (necessários para "Aguardando Liberação").
+**Manter**: `handleCancel` apenas para admin (cancelar acordo direto).
+**Manter**: `PaymentConfirmationTab` para a aba de confirmação de pagamento.
+
+### 3. `src/pages/ClientDetailPage.tsx` — Enriquecer aba "Acordos"
+
+**3a. Buscar nome do operador**: Alterar query de `agreements` para fazer join com `profiles` via `created_by`:
+```sql
+.select("*, profiles:created_by(full_name)")
 ```
 
-## Banco de Dados
+**3b. Exibir operador/canal** em cada card de acordo:
+- Adicionar campo "Operador" mostrando `profiles.full_name` ou "Portal" / "IA WhatsApp" conforme o canal de origem.
 
-### Nova tabela: `manual_payments`
+**3c. Mostrar parcelas para TODOS os status** (não apenas `approved`):
+- Remover condição `agreement.status === "approved"` do `AgreementInstallments`.
+- Mostrar para `pending`, `pending_approval`, `approved`, `overdue`.
 
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| id | uuid PK | |
-| tenant_id | uuid FK | |
-| agreement_id | uuid FK agreements | Acordo vinculado |
-| installment_number | int | Número da parcela (0=entrada) |
-| amount_paid | numeric | Valor pago informado |
-| payment_date | date | Data do pagamento |
-| payment_method | text | Meio (PIX, Transferência, Depósito, Dinheiro, Outro) |
-| receiver | text | 'CREDOR' ou 'COBRADORA' |
-| notes | text | Observação do operador |
-| status | text | 'pending_confirmation', 'confirmed', 'rejected' |
-| requested_by | uuid FK profiles | Operador que solicitou |
-| reviewed_by | uuid FK profiles | Admin que aprovou/recusou |
-| reviewed_at | timestamptz | Data da revisão |
-| review_notes | text | Observação do admin |
-| created_at | timestamptz | |
+**3d. Adicionar ao `AgreementInstallments`** (componente compartilhado):
+- **Editar valor da parcela**: novo item no DropdownMenu (apenas quando não paga). Abre input inline ou popover para alterar valor. Persiste em `custom_installment_values` (novo campo JSONB no agreements, similar ao `custom_installment_dates`).
+- **Baixar recibo**: novo item "Baixar Recibo" no DropdownMenu, visível **apenas quando `status === "pago"`**. Gera/baixa um PDF simples ou link do comprovante.
 
-RLS: tenant isolation + leitura para authenticated do mesmo tenant.
+### 4. `src/components/client-detail/AgreementInstallments.tsx` — Novas funcionalidades
 
-### Alteração na tabela `client_attachments`
+**Adicionar no DropdownMenu**:
+- "Editar Valor" (quando não paga e não pending_confirmation)
+- "Baixar Recibo" (apenas quando `isPaid === true`)
 
-Adicionar coluna opcional `manual_payment_id uuid` para vincular comprovantes à baixa manual (sem alterar fluxo existente de anexos).
+**Editar valor**: usa `updateInstallmentValue` (nova função no agreementService) que salva em `custom_installment_values` JSONB no agreement, similar a `custom_installment_dates`.
 
-## Mudanças por Arquivo
+**Baixar recibo**: gera um recibo simples via download (pode ser window.print de um template ou link do boleto pago).
 
-### 1. Migração SQL
-- Criar tabela `manual_payments` com RLS
-- Adicionar coluna `manual_payment_id` em `client_attachments`
-- Habilitar realtime (opcional)
+### 5. Migração SQL
 
-### 2. `src/services/manualPaymentService.ts` (NOVO)
-- `createManualPayment()` — insere com status `pending_confirmation`
-- `fetchPendingConfirmations()` — lista pendentes para admin
-- `confirmPayment()` — admin aprova → executa baixa real via `registerAgreementPayment` + atualiza status
-- `rejectPayment()` — admin recusa com motivo
-- Registra `client_events` e `audit_logs` em cada ação
+Adicionar coluna `custom_installment_values` JSONB ao `agreements` para permitir edição de valores individuais por parcela.
 
-### 3. `src/components/acordos/ManualPaymentDialog.tsx` (NOVO)
-Modal com campos obrigatórios:
-- Valor pago (CurrencyInput)
-- Data do pagamento (date picker)
-- Meio de pagamento (select: PIX, Transferência, Depósito, Dinheiro, Outro)
-- Recebedor (select: CREDOR, COBRADORA)
-- Observação (textarea)
+### 6. `src/services/agreementService.ts`
 
-Sem abertura automática de anexos após salvar.
+Adicionar função `updateInstallmentValue(agreementId, installmentKey, newValue)` — mesma lógica de `updateInstallmentDate` mas para valores.
 
-### 4. `src/components/acordos/PaymentConfirmationTab.tsx` (NOVO)
-Tabela listando baixas manuais pendentes com:
-- Cliente, CPF, credor, parcela, valor, data, meio, recebedor, operador, data da solicitação
-- Botões Aprovar/Recusar (apenas admin)
-- Ao aprovar: executa baixa real e registra auditoria
-- Ao recusar: solicita motivo e registra
+### 7. `src/services/agreementService.ts` — fetchAgreements com operador
 
-### 5. `src/components/client-detail/AgreementInstallments.tsx`
-- Adicionar item "Baixar Manualmente" no DropdownMenu de cada parcela (quando não paga e sem boleto pago)
-- Adicionar badge visual "Aguardando Confirmação" quando parcela tem `manual_payment` pendente
-- Query para verificar `manual_payments` existentes por agreement_id
-
-### 6. `src/pages/AcordosPage.tsx`
-- Adicionar badge/filtro "Confirmação de Pagamento" ao lado dos filtros existentes (Vigentes, Pagos, etc.)
-- Quando selecionado, renderiza `PaymentConfirmationTab` ao invés de `AgreementsList`
-- Visível apenas para admin/perfil com permissão
-
-### 7. `src/components/relatorios/PrestacaoContas.tsx`
-- Adicionar coluna/seção diferenciando:
-  - Baixas automáticas (boleto/Negociarie)
-  - Baixas manuais confirmadas
-  - Pendentes de confirmação
-- Exibir campo `recebedor` (CREDOR vs COBRADORA) no relatório
-- Totalizar por tipo de recebedor
-
-### 8. Auditoria (`client_events`)
-- Ao criar solicitação: evento `manual_payment_requested`
-- Ao confirmar: evento `manual_payment_confirmed`
-- Ao recusar: evento `manual_payment_rejected`
-- Metadata inclui todos os campos (valor, meio, recebedor, operador, aprovador)
+Alterar select para incluir join com profiles: `"*, profiles:created_by(full_name)"` e mapear `creator_name` no retorno.
 
 ## O que NÃO será alterado
 
-- Fluxo de geração de boletos pela Negociarie
-- Baixa automática de boletos pagos
-- Header do cliente / ClientDetailPage
-- Outras abas fora de Acordos
-- Módulo de anexos existente (apenas adiciona FK opcional)
-- `PaymentDialog` da aba Carteira (completamente separado)
+- Header do cliente
+- Outras abas do perfil
+- Fluxo de formalização de acordo (AgreementCalculator)
+- Baixa automática de boletos (Negociarie)
+- Fluxo de baixa manual com confirmação
+- PaymentConfirmationTab (permanece em /acordos)
 
-## Ordem de implementação
+## Arquivos afetados
 
-1. Migração SQL (tabela + RLS)
-2. Service layer (`manualPaymentService.ts`)
-3. Modal de baixa manual (`ManualPaymentDialog.tsx`)
-4. Integração no `AgreementInstallments.tsx`
-5. Aba de confirmação (`PaymentConfirmationTab.tsx`)
-6. Integração no `AcordosPage.tsx`
-7. Atualização da Prestação de Contas
+| Arquivo | Ação |
+|---|---|
+| `src/pages/AcordosPage.tsx` | Remover dialog de edição, simplificar |
+| `src/components/acordos/AgreementsList.tsx` | Adicionar coluna operador, link perfil, remover editar/cancelar de status de consulta |
+| `src/pages/ClientDetailPage.tsx` | Join com profiles, mostrar operador, parcelas para todos status |
+| `src/components/client-detail/AgreementInstallments.tsx` | Adicionar editar valor e baixar recibo |
+| `src/services/agreementService.ts` | updateInstallmentValue, fetchAgreements com creator |
+| Migração SQL | custom_installment_values JSONB |
 
