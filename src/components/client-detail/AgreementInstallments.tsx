@@ -247,7 +247,15 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </button>
       </CollapsibleTrigger>
 
-      <Progress value={progressPercent} className="h-2" />
+      <div className="relative w-full bg-muted rounded-full h-5 overflow-hidden">
+        <div
+          className="bg-green-500 h-full rounded-full transition-all duration-500"
+          style={{ width: `${progressPercent}%` }}
+        />
+        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground mix-blend-difference">
+          {paidCount}/{totalInstallments} pagas
+        </span>
+      </div>
 
       <CollapsibleContent>
 
