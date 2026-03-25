@@ -1,10 +1,13 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { differenceInDays, parseISO } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Download, Printer, FileText } from "lucide-react";
 import { exportMultiSheetExcel, printSection } from "@/lib/exportUtils";
 
@@ -25,6 +28,43 @@ const AGING_BUCKETS = [
 const PrestacaoContas = ({ clients, agreements, operators, credores }: PrestacaoContasProps) => {
   const [selectedCredor, setSelectedCredor] = useState("");
   const today = new Date();
+
+  // Fetch manual payments for selected credor's agreements
+  const credorAgreementIds = useMemo(() => {
+    if (!selectedCredor) return [];
+    return agreements.filter((a: any) => a.credor === selectedCredor).map((a: any) => a.id);
+  }, [agreements, selectedCredor]);
+
+  const { data: manualPayments = [] } = useQuery({
+    queryKey: ["manual-payments-report", selectedCredor],
+    queryFn: async () => {
+      if (credorAgreementIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("manual_payments" as any)
+        .select("*")
+        .in("agreement_id", credorAgreementIds);
+      if (error) return [];
+      return (data as any[]) || [];
+    },
+    enabled: credorAgreementIds.length > 0,
+  });
+
+  const manualPaymentStats = useMemo(() => {
+    const confirmed = manualPayments.filter((mp: any) => mp.status === "confirmed");
+    const pending = manualPayments.filter((mp: any) => mp.status === "pending_confirmation");
+    const rejected = manualPayments.filter((mp: any) => mp.status === "rejected");
+    const byCredor = confirmed.filter((mp: any) => mp.receiver === "CREDOR");
+    const byCobradora = confirmed.filter((mp: any) => mp.receiver === "COBRADORA");
+    return {
+      confirmedCount: confirmed.length,
+      confirmedTotal: confirmed.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      pendingCount: pending.length,
+      pendingTotal: pending.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      rejectedCount: rejected.length,
+      credorTotal: byCredor.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+      cobradoraTotal: byCobradora.reduce((s: number, mp: any) => s + Number(mp.amount_paid), 0),
+    };
+  }, [manualPayments]);
 
   const credorClients = useMemo(
     () => (selectedCredor ? clients.filter((c) => c.credor === selectedCredor) : []),
@@ -116,12 +156,24 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
       Vencimento: c.data_vencimento,
       Status: c.status,
     }));
+    const manualRows = manualPayments
+      .filter((mp: any) => mp.status === "confirmed")
+      .map((mp: any) => ({
+        "Acordo ID": mp.agreement_id,
+        "Parcela": mp.installment_number,
+        "Valor Pago": mp.amount_paid,
+        "Data Pgto": mp.payment_date,
+        "Meio": mp.payment_method,
+        "Recebedor": mp.receiver,
+        "Status": mp.status,
+      }));
     exportMultiSheetExcel(
       [
         { name: "Resumo", rows: resumoRows },
         { name: "Aging", rows: agingRows },
         { name: "Acordos", rows: acordosRows },
         { name: "Parcelas", rows: parcelasRows },
+        ...(manualRows.length > 0 ? [{ name: "Baixas Manuais", rows: manualRows }] : []),
       ],
       `prestacao_contas_${selectedCredor.replace(/\s/g, "_")}`
     );
@@ -273,6 +325,28 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
             </TableBody>
           </Table>
         </div>
+
+        {/* Baixas Manuais */}
+        {manualPayments.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5">
+            <h3 className="text-sm font-semibold text-card-foreground mb-3">Baixas Manuais</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+              {[
+                { label: "Confirmadas", value: manualPaymentStats.confirmedCount },
+                { label: "Total Confirmado", value: formatCurrency(manualPaymentStats.confirmedTotal) },
+                { label: "Pendentes", value: manualPaymentStats.pendingCount },
+                { label: "Total Pendente", value: formatCurrency(manualPaymentStats.pendingTotal) },
+                { label: "Recebido pelo CREDOR", value: formatCurrency(manualPaymentStats.credorTotal) },
+                { label: "Recebido pela COBRADORA", value: formatCurrency(manualPaymentStats.cobradoraTotal) },
+              ].map((item) => (
+                <div key={item.label} className="text-center">
+                  <p className="text-xs text-muted-foreground">{item.label}</p>
+                  <p className="text-sm font-semibold text-card-foreground">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Parcelas detalhadas */}
         <div className="bg-card rounded-xl border border-border p-5">

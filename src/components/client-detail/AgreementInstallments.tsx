@@ -10,11 +10,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate } from "@/services/agreementService";
+import { manualPaymentService } from "@/services/manualPaymentService";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Download, FileText, Copy, CalendarIcon, MoreHorizontal,
-  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt,
+  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins,
 } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -33,9 +36,11 @@ interface AgreementInstallmentsProps {
 
 const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefresh }: AgreementInstallmentsProps) => {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [editingDateIdx, setEditingDateIdx] = useState<number | null>(null);
+  const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
 
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
@@ -48,6 +53,13 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       if (error) return [];
       return (data as any[]) || [];
     },
+    enabled: !!agreementId,
+  });
+
+  // Fetch manual payments for this agreement
+  const { data: manualPayments = [] } = useQuery({
+    queryKey: ["manual-payments", agreementId],
+    queryFn: () => manualPaymentService.fetchByAgreement(agreementId),
     enabled: !!agreementId,
   });
 
@@ -132,8 +144,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     } else {
       remainingPaid = 0;
     }
-    const status = inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue };
+    // Check for pending manual payment
+    const pendingManual = manualPayments.find(
+      (mp: any) => mp.installment_number === inst.number && mp.status === "pending_confirmation"
+    );
+    const status = pendingManual
+      ? "pending_confirmation"
+      : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+    return { ...inst, status, isOverdue, pendingManual };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
@@ -182,6 +200,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
+    if (status === "pending_confirmation") return <HandCoins className="w-3.5 h-3.5 text-blue-600" />;
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
@@ -246,10 +265,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                     "gap-1 text-[10px]",
                     inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
                     inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                    inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
                     "bg-warning/10 text-warning border-warning/30"
                   )}>
                     {statusIcon(inst.status)}
-                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : "Em Aberto"}
+                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando Confirmação" : "Em Aberto"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
@@ -300,10 +320,18 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                       )}
 
                       {/* Edit date */}
-                      {!isPaid && (
+                      {!isPaid && inst.status !== "pending_confirmation" && (
                         <DropdownMenuItem onClick={() => setEditingDateIdx(idx)}>
                           <CalendarIcon className="w-4 h-4 mr-2" />
                           Editar Data
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Manual payment */}
+                      {!isPaid && inst.status !== "pending_confirmation" && tenantId && profile && (
+                        <DropdownMenuItem onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}>
+                          <HandCoins className="w-4 h-4 mr-2" />
+                          Baixar Manualmente
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -314,6 +342,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
           })}
         </TableBody>
       </Table>
+
+      {manualPaymentInst && tenantId && profile && (
+        <ManualPaymentDialog
+          open={!!manualPaymentInst}
+          onOpenChange={(open) => !open && setManualPaymentInst(null)}
+          agreementId={agreementId}
+          installmentNumber={manualPaymentInst.number}
+          installmentValue={manualPaymentInst.value}
+          tenantId={tenantId}
+          profileId={profile.id}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+            onRefresh?.();
+          }}
+        />
+      )}
     </div>
   );
 };
