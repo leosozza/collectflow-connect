@@ -64,8 +64,27 @@ export const fetchAgreements = async (filters?: {
 
     const { data, error } = await query;
     if (error) throw error;
-    logger.info(MODULE, "fetch", { count: data?.length ?? 0 });
-    return (data as Agreement[]) || [];
+    
+    // Fetch creator profiles
+    const creatorIds = [...new Set((data || []).map((a: any) => a.created_by).filter(Boolean))];
+    let profilesMap: Record<string, string> = {};
+    if (creatorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", creatorIds);
+      if (profiles) {
+        profiles.forEach((p: any) => { profilesMap[p.user_id] = p.full_name; });
+      }
+    }
+    
+    const enriched = (data || []).map((a: any) => ({
+      ...a,
+      creator_name: profilesMap[a.created_by] || (a.portal_origin ? "Portal" : null),
+    }));
+    
+    logger.info(MODULE, "fetch", { count: enriched.length });
+    return enriched as Agreement[];
   } catch (error) {
     handleServiceError(error, MODULE);
   }
