@@ -267,14 +267,22 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                 </TableCell>
                 <TableCell className="text-xs">
                   {editingDateIdx === idx ? (
-                    <Popover open onOpenChange={(open) => !open && setEditingDateIdx(null)}>
+                    <Popover open>
                       <PopoverTrigger asChild>
                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
                           <CalendarIcon className="w-3 h-3" />
                           {formatDate(inst.dueDate.toISOString().split("T")[0])}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
+                      <PopoverContent
+                        className="w-auto p-0"
+                        align="start"
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                        onInteractOutside={(e) => {
+                          e.preventDefault();
+                          setEditingDateIdx(null);
+                        }}
+                      >
                         <Calendar
                           mode="single"
                           selected={inst.dueDate}
