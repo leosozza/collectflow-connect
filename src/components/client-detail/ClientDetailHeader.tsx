@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Phone as PhoneIcon, MessageCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +53,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const { isModuleEnabled } = useModules();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [fetchingCep, setFetchingCep] = useState(false);
   const [editForm, setEditForm] = useState({
     nome_completo: client.nome_completo || "",
     phone: client.phone || "",
@@ -68,6 +70,27 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     external_id: client.external_id || "",
   });
   const formattedCpf = formatCPF(cpf || "");
+
+  const handleCepBlur = useCallback(async () => {
+    const cleanCep = editForm.cep.replace(/\D/g, "");
+    if (cleanCep.length !== 8) return;
+    setFetchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setEditForm(f => ({
+          ...f,
+          endereco: data.logradouro || f.endereco,
+          bairro: data.bairro || f.bairro,
+          cidade: data.localidade || f.cidade,
+          uf: data.uf || f.uf,
+        }));
+      }
+    } catch { /* silently fail */ } finally {
+      setFetchingCep(false);
+    }
+  }, [editForm.cep]);
 
   const { data: tiposDevedor = [] } = useQuery({
     queryKey: ["tipos_devedor", tenant?.id],
@@ -490,6 +513,20 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="cep">CEP</Label>
+              <div className="relative">
+                <Input
+                  id="cep"
+                  value={editForm.cep}
+                  onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))}
+                  onBlur={handleCepBlur}
+                  placeholder="00000-000"
+                  maxLength={10}
+                />
+                {fetchingCep && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="endereco">Endereço</Label>
               <Input id="endereco" value={editForm.endereco} onChange={e => setEditForm(f => ({ ...f, endereco: e.target.value }))} />
             </div>
@@ -506,10 +543,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 <Label htmlFor="uf">UF</Label>
                 <Input id="uf" value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value }))} maxLength={2} placeholder="SP" />
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="cep">CEP</Label>
-              <Input id="cep" value={editForm.cep} onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))} placeholder="00000-000" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="observacoes">Observações</Label>
