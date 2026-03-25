@@ -1,86 +1,120 @@
 
 
-# Plano: Reorganizar `/acordos` e aba Acordos do perfil do cliente
+# Plano: Bloquear edição de parcelas + Análise de saldo após quebra
 
-## Resumo
+## Parte 1 — Bloquear edição de quantidade de parcelas
 
-Transformar `/acordos` em painel de consulta/navegação. Mover toda gestão operacional de acordos e parcelas para a aba "Acordos" do perfil do cliente (`ClientDetailPage`). Eliminar duplicidade.
+### Problema atual
+O dialog "Editar Acordo" em `ClientDetailPage.tsx` (linhas 522-533) permite alterar `Nº de Parcelas` via input editável. Isso permite que um operador mude a quantidade de parcelas de um acordo já formalizado.
 
-## Mudanças
+### Correção
 
-### 1. `src/components/acordos/AgreementsList.tsx` — Simplificar para consulta
+**`src/pages/ClientDetailPage.tsx`**:
+- Linha 527: tornar o campo `Nº de Parcelas` **disabled** (read-only)
+- Remover a função `handleEditInstallments` (linha 186-190) — não será mais usada
+- Adicionar mensagem orientativa abaixo do campo:
+  `"Para alterar a quantidade de parcelas, cancele o acordo atual e gere um novo."`
+- Manter editáveis: valor do acordo, valor da entrada, data da entrada, 1º vencimento, observações
 
-**Remover**: botões Editar e Cancelar para status Pagos, Vigentes, Vencidos, Cancelados.
-**Manter**: botões Aprovar/Rejeitar apenas para "Aguardando Liberação" (admin).
-**Adicionar**: coluna "Operador" (join com profiles via `created_by`).
-**Adicionar**: link/botão "Ver Perfil" em cada linha que navega para `/clientes/{cpf}?tab=acordo`.
+**`src/services/agreementService.ts`** — `updateAgreement`:
+- Adicionar proteção no service: remover `new_installments` do payload antes de enviar ao banco, garantindo que mesmo chamadas diretas não alterem a quantidade
 
-### 2. `src/pages/AcordosPage.tsx` — Remover dialog de edição
+### Resumo visual do dialog após ajuste
+- Valor do Acordo: **editável**
+- Valor da Entrada: **editável**
+- Data da Entrada: **editável**
+- Nº de Parcelas: **bloqueado** + mensagem orientativa
+- Valor da Parcela: **calculado automaticamente** (disabled)
+- 1º Vencimento: **editável**
+- Observações: **editável**
 
-**Remover**: `editDialog` completo (o dialog com `AgreementInstallments` embutido).
-**Remover**: `handleEditOpen`, `handleEditSubmit`, `editForm`, `editingAgreement` e toda lógica de edição.
-**Remover**: import de `AgreementInstallments`, `CurrencyInput`, `Textarea`, `Label`.
-**Manter**: `handleApprove`, `handleReject` (necessários para "Aguardando Liberação").
-**Manter**: `handleCancel` apenas para admin (cancelar acordo direto).
-**Manter**: `PaymentConfirmationTab` para a aba de confirmação de pagamento.
+---
 
-### 3. `src/pages/ClientDetailPage.tsx` — Enriquecer aba "Acordos"
+## Parte 2 — Análise da lógica de saldo após quebra de acordo
 
-**3a. Buscar nome do operador**: Alterar query de `agreements` para fazer join com `profiles` via `created_by`:
-```sql
-.select("*, profiles:created_by(full_name)")
+### Como funciona HOJE
+
+1. **Criação do acordo**: `createAgreement` marca títulos originais como `status = "em_acordo"` (linhas 119-140 do agreementService)
+
+2. **Cancelamento do acordo**: `cancelAgreement` reverte títulos para `status = "pendente"` (linhas 361-366). **O campo `valor_pago` NÃO é zerado** — os pagamentos feitos permanecem registrados nos títulos.
+
+3. **Nova negociação**: `AgreementCalculator` filtra títulos com `status === "pendente" || status === "vencido"` (linha 43) e usa `valor_parcela` como valor base para cálculo (linha 128: `valorOriginal = Number(c.valor_parcela)`).
+
+### Problema identificado
+
+**O sistema NÃO abate o `valor_pago` do saldo base.**
+
+O `AgreementCalculator` usa `valor_parcela` como base — o valor original do título importado. Mesmo que o cliente tenha pago R$ 200 de um título de R$ 1.000, o sistema apresenta R$ 1.000 como valor para renegociação.
+
+O campo `valor_pago` existe nos títulos mas é completamente ignorado pelo calculador de acordos.
+
+### Tabelas/campos envolvidos
+
+| Tabela | Campo | Uso |
+|---|---|---|
+| `clients` | `valor_parcela` | Valor original do título (usado como base pelo calculador) |
+| `clients` | `valor_pago` | Valor já pago (existe mas é IGNORADO no cálculo) |
+| `clients` | `status` | Filtro para títulos elegíveis ("pendente", "vencido") |
+| `agreements` | `proposed_total` | Valor total do acordo |
+| `agreements` | `original_total` | Valor original registrado no acordo |
+
+---
+
+## Parte 3 — Padrão de mercado e correção proposta
+
+### Padrão de mercado (cobrança)
+
+No mercado de cobrança brasileiro, a regra padrão é:
+
+1. **Saldo devedor = valor original - pagamentos efetivos**: Ao renegociar, o saldo base deve considerar apenas o que o devedor ainda deve efetivamente. Valores já quitados não voltam à mesa.
+
+2. **Encargos recalculados sobre saldo remanescente**: Juros, multa e honorários incidem sobre o saldo em aberto, não sobre o valor original completo.
+
+3. **Rastreabilidade entre acordos**: O novo acordo deve referenciar o anterior (cancelado/quebrado) para auditoria.
+
+### Correção proposta
+
+**`src/components/client-detail/AgreementCalculator.tsx`** (linha 128):
+
+Alterar o cálculo de `valorOriginal` para considerar o saldo efetivo:
+
+```typescript
+// DE:
+const valorOriginal = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+
+// PARA:
+const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+const valorPago = Number(c.valor_pago) || 0;
+const valorOriginal = Math.max(0, valorBruto - valorPago);
 ```
 
-**3b. Exibir operador/canal** em cada card de acordo:
-- Adicionar campo "Operador" mostrando `profiles.full_name` ou "Portal" / "IA WhatsApp" conforme o canal de origem.
+Isso garante que:
+- Títulos com pagamento parcial entram com o saldo real
+- Títulos totalmente pagos (valor_pago >= valor_parcela) entram com R$ 0 e podem ser filtrados
+- Juros, multa e honorários incidem sobre o saldo real
 
-**3c. Mostrar parcelas para TODOS os status** (não apenas `approved`):
-- Remover condição `agreement.status === "approved"` do `AgreementInstallments`.
-- Mostrar para `pending`, `pending_approval`, `approved`, `overdue`.
+**Exibir coluna "V. Pago"** na tabela de títulos do calculador para transparência, mostrando o que já foi abatido.
 
-**3d. Adicionar ao `AgreementInstallments`** (componente compartilhado):
-- **Editar valor da parcela**: novo item no DropdownMenu (apenas quando não paga). Abre input inline ou popover para alterar valor. Persiste em `custom_installment_values` (novo campo JSONB no agreements, similar ao `custom_installment_dates`).
-- **Baixar recibo**: novo item "Baixar Recibo" no DropdownMenu, visível **apenas quando `status === "pago"`**. Gera/baixa um PDF simples ou link do comprovante.
+**Referência ao acordo anterior**: Adicionar campo `previous_agreement_id` (opcional) na tabela `agreements` para rastreabilidade. Ao criar novo acordo para um CPF/credor que teve acordo cancelado, preencher automaticamente.
 
-### 4. `src/components/client-detail/AgreementInstallments.tsx` — Novas funcionalidades
+### Migração SQL
+- Adicionar coluna `previous_agreement_id uuid REFERENCES agreements(id)` na tabela `agreements`
 
-**Adicionar no DropdownMenu**:
-- "Editar Valor" (quando não paga e não pending_confirmation)
-- "Baixar Recibo" (apenas quando `isPaid === true`)
-
-**Editar valor**: usa `updateInstallmentValue` (nova função no agreementService) que salva em `custom_installment_values` JSONB no agreement, similar a `custom_installment_dates`.
-
-**Baixar recibo**: gera um recibo simples via download (pode ser window.print de um template ou link do boleto pago).
-
-### 5. Migração SQL
-
-Adicionar coluna `custom_installment_values` JSONB ao `agreements` para permitir edição de valores individuais por parcela.
-
-### 6. `src/services/agreementService.ts`
-
-Adicionar função `updateInstallmentValue(agreementId, installmentKey, newValue)` — mesma lógica de `updateInstallmentDate` mas para valores.
-
-### 7. `src/services/agreementService.ts` — fetchAgreements com operador
-
-Alterar select para incluir join com profiles: `"*, profiles:created_by(full_name)"` e mapear `creator_name` no retorno.
-
-## O que NÃO será alterado
-
-- Header do cliente
-- Outras abas do perfil
-- Fluxo de formalização de acordo (AgreementCalculator)
-- Baixa automática de boletos (Negociarie)
-- Fluxo de baixa manual com confirmação
-- PaymentConfirmationTab (permanece em /acordos)
+---
 
 ## Arquivos afetados
 
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---|---|
-| `src/pages/AcordosPage.tsx` | Remover dialog de edição, simplificar |
-| `src/components/acordos/AgreementsList.tsx` | Adicionar coluna operador, link perfil, remover editar/cancelar de status de consulta |
-| `src/pages/ClientDetailPage.tsx` | Join com profiles, mostrar operador, parcelas para todos status |
-| `src/components/client-detail/AgreementInstallments.tsx` | Adicionar editar valor e baixar recibo |
-| `src/services/agreementService.ts` | updateInstallmentValue, fetchAgreements com creator |
-| Migração SQL | custom_installment_values JSONB |
+| `src/pages/ClientDetailPage.tsx` | Bloquear edição de parcelas, remover `handleEditInstallments`, mensagem orientativa |
+| `src/services/agreementService.ts` | Proteger `new_installments` no `updateAgreement` |
+| `src/components/client-detail/AgreementCalculator.tsx` | Usar saldo real (valor_parcela - valor_pago), coluna "V. Pago" |
+| Migração SQL | Adicionar `previous_agreement_id` em `agreements` |
+
+## O que NÃO será alterado
+- Header do cliente
+- Outras abas
+- Fluxo Negociarie
+- Baixa automática de boletos
+- Baixa manual com confirmação
 
