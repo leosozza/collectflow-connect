@@ -10,11 +10,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate } from "@/services/agreementService";
+import { manualPaymentService } from "@/services/manualPaymentService";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Download, FileText, Copy, CalendarIcon, MoreHorizontal,
-  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt,
+  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins,
 } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
