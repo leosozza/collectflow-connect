@@ -135,6 +135,18 @@ Deno.serve(async (req) => {
           if (clienteObj.nome) {
             clienteObj.nome = String(clienteObj.nome).trim();
           }
+          // Ensure numero and complemento always exist (API requires keys)
+          if (!("numero" in clienteObj)) clienteObj.numero = "";
+          if (!("complemento" in clienteObj)) clienteObj.complemento = "";
+        }
+        // Ensure parcelas valor is always a float
+        const parcelasArr = cobrancaData.parcelas as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(parcelasArr)) {
+          for (const p of parcelasArr) {
+            if (typeof p.valor === "number") {
+              p.valor = parseFloat(p.valor.toFixed(2));
+            }
+          }
         }
         console.log("[negociarie-proxy] nova-cobranca structured payload:", JSON.stringify(cobrancaData));
         result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);

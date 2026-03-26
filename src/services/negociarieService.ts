@@ -104,6 +104,8 @@ function buildNegociariePayload(
     nome: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
+    numero: (clientData.numero || "").trim(),
+    complemento: (clientData.complemento || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
     telefones: phone ? [phone] : [],
@@ -124,7 +126,7 @@ function buildNegociariePayload(
       {
         id_parcela: installment.idParcela,
         data_vencimento: validatedDueDate,
-        valor: installment.value,
+        valor: parseFloat(installment.value.toFixed(2)),
       },
     ],
   };
