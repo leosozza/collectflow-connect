@@ -149,16 +149,16 @@ Deno.serve(async (req) => {
             clienteObj.uf = String(clienteObj.uf).trim().toUpperCase();
           }
           // Trim string fields
-          for (const field of ["nome", "bairro", "endereco", "cidade", "email"]) {
+          for (const field of ["nome", "endereco", "cidade", "email"]) {
             if (clienteObj[field]) {
               clienteObj[field] = String(clienteObj[field]).trim();
             }
           }
-          // Ensure numero and complemento exist
-          if (!clienteObj.numero && clienteObj.numero !== "") clienteObj.numero = "";
+          // Ensure numero defaults to "SN" if empty
+          if (!clienteObj.numero) clienteObj.numero = "SN";
           if (!clienteObj.complemento && clienteObj.complemento !== "") clienteObj.complemento = "";
           
-          // Ensure razao_social exists (API may require it)
+          // Ensure razao_social exists
           if (!clienteObj.razao_social && clienteObj.razao_social !== "") {
             clienteObj.razao_social = "";
           }
@@ -168,12 +168,16 @@ Deno.serve(async (req) => {
             let celular = String(clienteObj.celular).replace(/\D/g, "");
             if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
             clienteObj.telefones = [celular];
-            delete clienteObj.celular;
           }
+          // Remove celular (not part of boleto contract)
+          delete clienteObj.celular;
           // Ensure telefones is an array
           if (clienteObj.telefones && !Array.isArray(clienteObj.telefones)) {
             clienteObj.telefones = [String(clienteObj.telefones)];
           }
+
+          // Remove bairro (not in Negociarie /cobranca/nova documentation)
+          delete clienteObj.bairro;
 
           // Set as 'cliente' root key (boleto contract)
           cobrancaData.cliente = clienteObj;
@@ -186,16 +190,19 @@ Deno.serve(async (req) => {
             if (typeof p.valor === "number") {
               p.valor = Number(p.valor.toFixed(2));
             }
-            const numericIdParcela = Number(p.id_parcela);
-            if (p.id_parcela !== undefined && Number.isFinite(numericIdParcela)) {
-              p.id_parcela = numericIdParcela;
-            } else {
-              delete p.id_parcela;
+            // id_parcela must be a non-zero string per docs
+            if (p.id_parcela !== undefined) {
+              const strId = String(p.id_parcela);
+              if (strId === "0" || strId === "") {
+                delete p.id_parcela;
+              } else {
+                p.id_parcela = strId;
+              }
             }
           }
         }
 
-        // Remove sandbox for boleto endpoint (not part of the contract)
+        // Remove sandbox (not part of /cobranca/nova contract)
         delete cobrancaData.sandbox;
 
         console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));

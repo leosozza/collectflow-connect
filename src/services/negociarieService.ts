@@ -81,15 +81,24 @@ function buildBoletoPayload(
 ): Record<string, unknown> {
   const celular = normalizeCellphoneForApi(clientData.phone || "");
 
+  // Extract numero from endereco if it contains a comma (e.g. "Rua X, 123")
+  let endereco = (clientData.endereco || "").trim();
+  let numero = "";
+  if (endereco.includes(",")) {
+    const parts = endereco.split(",");
+    endereco = parts[0].trim();
+    numero = (parts[1] || "").trim();
+  }
+  if (!numero) numero = "SN";
+
   const cliente: Record<string, unknown> = {
     documento: cleanCpf.replace(/\D/g, ""),
     nome: (clientData.nome_completo || fallbackName || "").trim(),
     razao_social: "",
     cep: formatCepForApi(clientData.cep || ""),
-    endereco: (clientData.endereco || "").trim(),
-    numero: "",
+    endereco,
+    numero,
     complemento: "",
-    bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
     email: (clientData.email || "").trim(),
@@ -109,21 +118,24 @@ function buildBoletoPayload(
     valor: Number(installment.value.toFixed(2)),
   };
 
-  const installmentApiId = Number(installment.idParcela);
-  if (Number.isFinite(installmentApiId)) {
-    parcela.id_parcela = installmentApiId;
+  // id_parcela must be a non-zero string per Negociarie docs
+  if (installment.idParcela && installment.idParcela !== "0") {
+    parcela.id_parcela = String(installment.idParcela);
   }
+
+  // Generate a unique numeric-like id_geral (API example uses integer)
+  const idGeralHash = agreementId.replace(/\D/g, "").slice(0, 8) || String(Date.now()).slice(-8);
 
   return {
     cliente,
-    id_geral: `ACORDO-${agreementId.substring(0, 8)}`,
+    id_geral: idGeralHash,
     parcelas: [parcela],
   };
 }
 
 /** Validate address fields within the cliente object for boleto */
 function validateClienteFields(cliente: Record<string, unknown>) {
-  const required = ["documento", "nome", "cep", "endereco", "bairro", "cidade", "uf", "email"] as const;
+  const required = ["documento", "nome", "cep", "endereco", "cidade", "uf", "email"] as const;
   const placeholders = ["00000000", "00000-000", "Não informado", ""];
 
   for (const field of required) {
