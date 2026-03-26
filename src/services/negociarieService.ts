@@ -6,9 +6,9 @@ import { formatCPFDisplay } from "@/lib/cpfUtils";
 
 /** Format CEP to XXXXX-XXX pattern expected by Negociarie API */
 function formatCepForApi(cep: string): string {
-  const digits = cep.replace(/\D/g, "");
+  const digits = (cep || "").replace(/\D/g, "");
   if (digits.length === 8) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-  return digits;
+  return cep || "";
 }
 
 /** Fetch client address trying CPF clean then formatted */
@@ -32,16 +32,55 @@ async function fetchClientAddress(cpf: string) {
   return data2 || {};
 }
 
-/** Validate address fields are real values (not placeholders) */
+/** Validate address fields with Negociarie-compatible format checks */
 function validateAddressFields(payload: Record<string, unknown>) {
   const required = ["documento", "nome", "cep", "endereco", "cidade", "uf"] as const;
-  const placeholders = ["00000000", "Não informado", ""];
+  const placeholders = ["00000000", "00000-000", "Não informado", ""];
   for (const field of required) {
     const val = String(payload[field] || "").trim();
     if (!val || placeholders.includes(val)) {
       throw new Error(`Preencha o endereço do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
     }
   }
+  // CEP must be XXXXX-XXX
+  const cep = String(payload.cep || "");
+  if (!/^\d{5}-\d{3}$/.test(cep)) {
+    throw new Error(`CEP em formato inválido: "${cep}". O formato esperado é 00000-000.`);
+  }
+  // documento must be 11 or 14 digits
+  const doc = String(payload.documento || "");
+  if (!/^\d{11}$/.test(doc) && !/^\d{14}$/.test(doc)) {
+    throw new Error(`CPF/CNPJ em formato inválido: "${doc}". Informe apenas dígitos (11 ou 14).`);
+  }
+  // UF must be 2 uppercase letters
+  const uf = String(payload.uf || "");
+  if (!/^[A-Z]{2}$/.test(uf)) {
+    throw new Error(`UF em formato inválido: "${uf}". Informe a sigla do estado (ex: SP, RJ).`);
+  }
+}
+
+/** Build a Negociarie-compliant payload from client data */
+function buildNegociariePayload(
+  cleanCpf: string,
+  clientData: any,
+  fallbackName: string,
+  installment: { value: number; dueDate: string; label: string }
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    documento: cleanCpf.replace(/\D/g, ""),
+    nome: (clientData.nome_completo || fallbackName || "").trim(),
+    cep: formatCepForApi(clientData.cep || ""),
+    endereco: (clientData.endereco || "").trim(),
+    bairro: (clientData.bairro || "").trim(),
+    cidade: (clientData.cidade || "").trim(),
+    uf: (clientData.uf || "").trim().toUpperCase(),
+    email: (clientData.email || "").trim(),
+    telefone: (clientData.phone || "").replace(/\D/g, ""),
+    valor: installment.value,
+    vencimento: installment.dueDate,
+    descricao: installment.label,
+  };
+  return payload;
 }
 
 /** Build installment_key from agreement_id and installment number */
@@ -140,20 +179,12 @@ export const negociarieService = {
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
-    const payload: Record<string, unknown> = {
-      documento: cleanCpf,
-      nome: clientData.nome_completo || agreement.client_name,
-      cep: formatCepForApi((clientData.cep || "")),
-      endereco: clientData.endereco || "",
-      bairro: clientData.bairro || "",
-      cidade: clientData.cidade || "",
-      uf: clientData.uf || "",
-      email: clientData.email || "",
-      telefone: (clientData.phone || "").replace(/\D/g, ""),
-      valor: installment.value,
-      vencimento: installment.dueDate,
-      descricao: `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`,
-    };
+    const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
+    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+      value: installment.value,
+      dueDate: installment.dueDate,
+      label: instLabel,
+    });
 
     validateAddressFields(payload);
 
@@ -223,20 +254,12 @@ export const negociarieService = {
     for (const inst of installments) {
       try {
         const installmentKey = buildInstallmentKey(agreement.id, inst.number);
-        const payload: Record<string, unknown> = {
-          documento: cleanCpf,
-          nome: clientData.nome_completo || agreement.client_name,
-          cep: formatCepForApi((clientData.cep || "")),
-          endereco: clientData.endereco || "",
-          bairro: clientData.bairro || "",
-          cidade: clientData.cidade || "",
-          uf: clientData.uf || "",
-          email: clientData.email || "",
-          telefone: (clientData.phone || "").replace(/\D/g, ""),
-          valor: inst.value,
-          vencimento: inst.dueDate,
-          descricao: `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`,
-        };
+        const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
+        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+          value: inst.value,
+          dueDate: inst.dueDate,
+          label: instLabel,
+        });
 
         validateAddressFields(payload);
 
