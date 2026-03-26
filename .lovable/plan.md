@@ -1,39 +1,49 @@
 
 
-# Plano: Resolver erro 500 da API Negociarie no endpoint /cobranca/nova
+# Plano: Resolver erro 500 na geração de boleto Negociarie
 
 ## Diagnóstico
 
-O payload está estruturado corretamente no formato `{ cliente, id_geral, parcelas }`. O login funciona (test-connection OK). Porém, o endpoint `/cobranca/nova` retorna **HTML com status 500** — um erro interno do servidor Negociarie.
+O payload enviado está estruturalmente correto (`{ cliente, id_geral, parcelas }`), mas a API Negociarie retorna 500 (erro interno do servidor, não validação). Isso sugere que o servidor tenta acessar campos que não existem no payload e crasha.
 
-O proxy atual descarta o conteúdo HTML e loga apenas "API returned HTML (500)", sem mostrar o corpo da resposta, o que impede o diagnóstico.
+Comparando o payload enviado com a documentação:
 
-## Possíveis causas do lado do payload
+```text
+ENVIADO:                          DOCS ESPERAM:
+─────────                         ──────────────
+documento ✓                       documento ✓
+nome ✓                            nome ✓
+cep ✓                             cep ✓
+endereco ✓                        endereco ✓
+cidade ✓                          cidade ✓
+uf ✓                              uf ✓
+telefones ✓                       telefones ✓
+email ✓                           email ✓
+(ausente)                         numero ← falta!
+(ausente)                         complemento ← falta!
+valor: 10 (inteiro)               valor: 10.00 (decimal?)
+```
 
-1. **`telefones` com DDI**: O valor `"5511945542245"` inclui DDI 55. A API pode esperar apenas DDD+número: `"11945542245"`
-2. **Campos vazios**: `numero: ""` e `complemento: ""` podem causar erro de validação no servidor. Melhor omitir ou enviar valor padrão
-3. **Campo `bairro`**: Não consta na documentação da API `/cobranca/nova` — pode estar causando rejeição silenciosa
+## Problemas prováveis
+
+1. **`numero` ausente**: Removido na última correção (omitir vazios). A API pode exigir a chave mesmo vazia — sem ela, o servidor pode crashar ao tentar ler o campo
+2. **`complemento` ausente**: Mesmo caso
+3. **`valor` como inteiro**: `10` em vez de `10.00` — algumas APIs rejeitam inteiros quando esperam float
 
 ## Correções
 
-### 1. `supabase/functions/negociarie-proxy/index.ts`
-- Logar o corpo HTML/texto completo (primeiros 500 chars) quando a API retorna erro, em vez de apenas "API returned HTML"
-- Incluir o texto real na mensagem de erro retornada ao frontend
+### `src/services/negociarieService.ts`
+- Sempre incluir `numero` e `complemento` no objeto `cliente` (string vazia se não houver valor)
+- Garantir que `valor` nas parcelas seja sempre float com `parseFloat(value.toFixed(2))`
 
-### 2. `src/services/negociarieService.ts`
-- **Telefone**: Remover DDI 55 do início se presente (manter apenas DDD+número)
-- **Campos vazios**: Não incluir `numero`, `complemento` e `bairro` quando estiverem vazios
-- **Remover `bairro`**: Não está na documentação do endpoint `/cobranca/nova`
+### `supabase/functions/negociarie-proxy/index.ts`
+- Garantir que `numero` e `complemento` existam no `clienteObj` antes de enviar (default para `""`)
+- Converter `valor` de cada parcela para float explícito
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/negociarie-proxy/index.ts` | Logar corpo de erro completo (primeiros 500 chars) |
-| `src/services/negociarieService.ts` | Limpar telefone (remover DDI 55), omitir campos vazios opcionais |
-
-## Resultado esperado
-- Mensagem de erro mais informativa caso persista
-- Payload mais limpo sem campos vazios que podem causar erro
-- Telefone no formato correto (sem DDI)
+| `src/services/negociarieService.ts` | Incluir `numero` e `complemento` sempre; forçar `valor` como float |
+| `supabase/functions/negociarie-proxy/index.ts` | Default `numero`/`complemento` para `""`; converter `valor` para float |
 
