@@ -125,12 +125,24 @@ Deno.serve(async (req) => {
       }
 
       case "nova-cobranca": {
-        const cobrancaData = (params.data as Record<string, unknown>) || {};
+        let cobrancaData = (params.data as Record<string, unknown>) || {};
         
         // Support both 'cliente' (correct for boleto) and 'devedor' (legacy fallback)
         let clienteObj =
           (cobrancaData.cliente as Record<string, unknown> | undefined) ??
           (cobrancaData.devedor as Record<string, unknown> | undefined);
+
+        // Fallback: if payload is flat (no cliente/devedor wrapper but has documento/nome at root)
+        if (!clienteObj && cobrancaData.documento) {
+          console.log("[negociarie-proxy] Detected flat payload, wrapping into cliente structure");
+          const { id_geral, parcelas, sandbox, ...clientFields } = cobrancaData as any;
+          clienteObj = clientFields;
+          cobrancaData = {
+            cliente: clienteObj,
+            id_geral: id_geral || `RIVO-${Date.now()}`,
+            parcelas: parcelas || [],
+          };
+        }
 
         if (clienteObj) {
           // Clean documento
@@ -149,7 +161,7 @@ Deno.serve(async (req) => {
             clienteObj.uf = String(clienteObj.uf).trim().toUpperCase();
           }
           // Trim string fields
-          for (const field of ["nome", "endereco", "cidade", "email"]) {
+          for (const field of ["nome", "endereco", "cidade", "email", "bairro"]) {
             if (clienteObj[field]) {
               clienteObj[field] = String(clienteObj[field]).trim();
             }
@@ -161,6 +173,11 @@ Deno.serve(async (req) => {
           // Ensure razao_social exists
           if (!clienteObj.razao_social && clienteObj.razao_social !== "") {
             clienteObj.razao_social = "";
+          }
+
+          // Ensure bairro exists (API accepts it; missing bairro may cause validation failure)
+          if (!clienteObj.bairro && clienteObj.bairro !== "") {
+            clienteObj.bairro = "";
           }
 
           // Handle telefones: if celular was sent instead of telefones, convert
@@ -175,9 +192,6 @@ Deno.serve(async (req) => {
           if (clienteObj.telefones && !Array.isArray(clienteObj.telefones)) {
             clienteObj.telefones = [String(clienteObj.telefones)];
           }
-
-          // Remove bairro (not in Negociarie /cobranca/nova documentation)
-          delete clienteObj.bairro;
 
           // Set as 'cliente' root key (boleto contract)
           cobrancaData.cliente = clienteObj;

@@ -99,6 +99,7 @@ function buildBoletoPayload(
     endereco,
     numero,
     complemento: "",
+    bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
     email: (clientData.email || "").trim(),
@@ -118,9 +119,12 @@ function buildBoletoPayload(
     valor: Number(installment.value.toFixed(2)),
   };
 
-  // id_parcela must be a non-zero string per Negociarie docs
+  // id_parcela must be a non-zero string per Negociarie docs — never omit
   if (installment.idParcela && installment.idParcela !== "0") {
     parcela.id_parcela = String(installment.idParcela);
+  } else {
+    // Generate a unique id_parcela to avoid omission (which causes 500) or conflict
+    parcela.id_parcela = String(Date.now()).slice(-8);
   }
 
   // Generate a unique numeric-like id_geral (API example uses integer)
