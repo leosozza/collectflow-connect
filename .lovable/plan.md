@@ -1,64 +1,48 @@
 
 
-# Plano: Corrigir payload do boleto para match exato com documentação Negociarie
+# Plano: Alinhar payload ao teste Postman que funcionou
 
-## Diagnóstico (baseado na documentação oficial do Postman)
+## O que o teste Postman provou
 
-Analisei a documentação oficial do endpoint `/cobranca/nova` (Adicionar cobrança). Comparando com o que estamos enviando:
+O boleto foi gerado com sucesso com este payload exato:
 
 ```text
-DOCUMENTAÇÃO ESPERA                    ESTAMOS ENVIANDO
-──────────────────                     ──────────────────
-cliente.documento ✓                    cliente.documento ✓
-cliente.nome ✓                         cliente.nome ✓
-cliente.razao_social ✓                 cliente.razao_social ✓
-cliente.cep ✓                          cliente.cep ✓
-cliente.endereco (só logradouro)       cliente.endereco "Rua ..., 123" ← inclui número!
-cliente.numero "100"                   cliente.numero "" ← vazio!
-cliente.complemento ✓                  cliente.complemento ✓
-cliente.cidade ✓                       cliente.cidade ✓
-cliente.uf ✓                           cliente.uf ✓
-cliente.telefones[] ✓                  cliente.telefones[] ✓
-cliente.email ✓                        cliente.email ✓
-(não existe na doc)                    cliente.bairro ← CAMPO EXTRA!
-
-id_geral: 54 (inteiro)                id_geral: "ACORDO-535df9af" ← string!
-parcelas[].id_parcela: "8723" (str)   parcelas[].id_parcela: 0 ← inteiro zero!
-parcelas[].valor: 100.00              parcelas[].valor: 10 ✓
-parcelas[].data_vencimento ✓          parcelas[].data_vencimento ✓
+POSTMAN (SUCESSO)                      NOSSO CÓDIGO (FALHA)
+─────────────────                      ────────────────────
+cliente.bairro: "Centro" ✓            delete bairro ← REMOVEMOS!
+cliente.numero: "3000"                 numero: "" ou "SN" ← VAZIO!
+cliente.telefones: ["11999991111"]     telefones: ["11945542245"] ✓
+id_geral: "RIVO-TESTE-1001"           "53591244" ✓ (string ok)
+parcelas[0].id_parcela: "1001"         sem id_parcela ou "2" ← CONFLITO
 ```
 
-## Problemas encontrados
+## Problemas encontrados (3 bugs)
 
-1. **`id_parcela: 0`** causa erro 500 no servidor (crash). O doc usa string `"8723"`, não inteiro zero.
-2. **`bairro`** é um campo extra que não existe na documentação — pode causar rejeição.
-3. **`id_geral`** na doc é inteiro, não string. Enviar `"ACORDO-535df9af"` pode ser aceito ou não, mas é uma divergência.
-4. **`endereco`** inclui o número concatenado (`"Rua Luiz Henrique de Oliveira, 123"`) enquanto `numero` está vazio — o campo `endereco` deveria conter apenas o logradouro.
-5. **`id_parcela: 2`** retornou "Já existe boleto gerado com o código 2" — precisamos usar IDs únicos por cobrança.
+1. **`bairro` deletado** (proxy linha 179): `delete clienteObj.bairro` remove o campo, mas o Postman provou que a API ACEITA `bairro`. Sem ele, a validação de endereço pode falhar.
+
+2. **`numero` vazio**: O service envia `""` ou `"SN"` quando não extrai do endereço. O Postman usou `"3000"`. Número vazio pode causar rejeição.
+
+3. **Payload flat no proxy**: Os logs mais recentes mostram que o proxy recebeu dados FLAT (sem `cliente` wrapper) e repassou assim para a API. Isso acontece quando `cobrancaData.cliente` e `cobrancaData.devedor` são ambos undefined -- o bloco `if (clienteObj)` não executa e os dados vão flat para `/cobranca/nova`.
 
 ## Correções
 
-### `src/services/negociarieService.ts`
-- Remover `bairro` do objeto `cliente` (não existe na documentação)
-- Converter `id_parcela` para string (como na doc: `"8723"`)
-- Nunca enviar `id_parcela: 0` — usar `"1"`, `"2"`, etc., ou omitir se não tiver ID real
-- Tentar extrair número do endereço (separar por vírgula) para preencher `numero`
-- Gerar `id_geral` como string alfanumérica curta (a doc aceita string também no campo, mas o exemplo mostra inteiro)
-
 ### `supabase/functions/negociarie-proxy/index.ts`
-- Remover `bairro` do `clienteObj` antes de enviar
-- Garantir que `id_parcela` nunca seja `0` — se for `0`, converter para `"1"` ou deletar
-- Converter `id_parcela` para string
+1. **Remover `delete clienteObj.bairro`** -- bairro é aceito pela API
+2. **Adicionar fallback para payload flat**: se não existir `cliente` nem `devedor` mas existir `documento`/`nome` na raiz, montar automaticamente o objeto `cliente` + `parcelas` a partir dos campos flat
+3. Manter `numero` default como `"SN"` (melhor que vazio)
+
+### `src/services/negociarieService.ts`
+1. **Incluir `bairro`** no objeto `cliente` do `buildBoletoPayload` (busca do DB já traz `bairro`)
+2. **`id_parcela`**: usar timestamp-based unique ID quando `installment.number === 0` em vez de string vazia (evitar omissão e conflito)
+
+### `src/components/integracao/CobrancaForm.tsx`
+1. Já envia payload estruturado correto -- só precisa incluir `bairro` no objeto `cliente` (linha 142 está sem bairro)
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | Remover `bairro`; `id_parcela` como string não-zero; extrair `numero` do endereço |
-| `supabase/functions/negociarie-proxy/index.ts` | Remover `bairro`; sanitizar `id_parcela` |
-
-## Resultado esperado
-- Payload alinhado 100% com a documentação oficial
-- Sem campo extra (`bairro`) que pode causar rejeição
-- Sem `id_parcela: 0` que causa crash (500) no servidor
+| `supabase/functions/negociarie-proxy/index.ts` | Manter `bairro`; fallback flat→estruturado |
+| `src/services/negociarieService.ts` | Incluir `bairro`; `id_parcela` nunca vazio |
+| `src/components/integracao/CobrancaForm.tsx` | Incluir `bairro` no `cliente` |
 
