@@ -31,28 +31,45 @@ async function fetchClientAddress(cpf: string) {
   return data2 || {};
 }
 
-/** Validate address fields within the cliente object */
-function validateClienteFields(cliente: Record<string, unknown>) {
-  const required = ["documento", "nome", "cep", "endereco", "cidade", "uf"] as const;
+/** Validate address fields within the devedor object */
+function validateDevedorFields(devedor: Record<string, unknown>) {
+  const required = ["documento", "razao_social", "cep", "endereco", "bairro", "cidade", "uf", "email", "celular"] as const;
   const placeholders = ["00000000", "00000-000", "Não informado", ""];
+
   for (const field of required) {
-    const val = String(cliente[field] || "").trim();
+    const val = String(devedor[field] || "").trim();
     if (!val || placeholders.includes(val)) {
-      throw new Error(`Preencha o endereço do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
+      throw new Error(`Preencha o cadastro do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
     }
   }
-  const cep = String(cliente.cep || "");
+
+  const cep = String(devedor.cep || "");
   if (!/^\d{5}-\d{3}$/.test(cep)) {
     throw new Error(`CEP em formato inválido: "${cep}". O formato esperado é 00000-000.`);
   }
-  const doc = String(cliente.documento || "");
+
+  const doc = String(devedor.documento || "");
   if (!/^\d{11}$/.test(doc) && !/^\d{14}$/.test(doc)) {
     throw new Error(`CPF/CNPJ em formato inválido: "${doc}". Informe apenas dígitos (11 ou 14).`);
   }
-  const uf = String(cliente.uf || "");
+
+  const uf = String(devedor.uf || "");
   if (!/^[A-Z]{2}$/.test(uf)) {
     throw new Error(`UF em formato inválido: "${uf}". Informe a sigla do estado (ex: SP, RJ).`);
   }
+
+  const celular = String(devedor.celular || "");
+  if (!/^\d{10,11}$/.test(celular)) {
+    throw new Error(`Celular em formato inválido: "${celular}". Informe DDD + número, sem símbolos.`);
+  }
+}
+
+function normalizeCellphoneForApi(phone: string): string {
+  let digits = (phone || "").replace(/\D/g, "");
+  if (digits.length >= 12 && digits.startsWith("55")) {
+    digits = digits.slice(2);
+  }
+  return digits;
 }
 
 function getTodayLocalIso(): string {
@@ -85,7 +102,7 @@ function validateDueDate(dueDate: string, installmentLabel: string): string {
   return normalizedDueDate;
 }
 
-/** Build a Negociarie-compliant nested payload: { cliente, id_geral, parcelas } */
+/** Build a Negociarie-compliant payload: { devedor, id_geral, parcelas, sandbox } */
 function buildNegociariePayload(
   cleanCpf: string,
   clientData: any,
@@ -93,23 +110,18 @@ function buildNegociariePayload(
   agreementId: string,
   installment: { value: number; dueDate: string; label: string; idParcela: string }
 ): Record<string, unknown> {
-  let phone = (clientData.phone || "").replace(/\D/g, "");
-  // Remove DDI 55 if present — API expects only DDD+number
-  if (phone.length >= 12 && phone.startsWith("55")) {
-    phone = phone.slice(2);
-  }
+  const celular = normalizeCellphoneForApi(clientData.phone || "");
 
-  const cliente: Record<string, unknown> = {
+  const devedor: Record<string, unknown> = {
     documento: cleanCpf.replace(/\D/g, ""),
-    nome: (clientData.nome_completo || fallbackName || "").trim(),
+    razao_social: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
-    numero: (clientData.numero || "").trim(),
-    complemento: (clientData.complemento || "").trim(),
+    bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
-    telefones: phone ? [phone] : [],
     email: (clientData.email || "").trim(),
+    celular,
   };
 
   const validatedDueDate = validateDueDate(
@@ -117,19 +129,31 @@ function buildNegociariePayload(
     installment.label
   );
 
-  validateClienteFields(cliente);
+  validateDevedorFields(devedor);
+
+  const parcela: Record<string, unknown> = {
+    data_vencimento: validatedDueDate,
+    valor: Number(installment.value.toFixed(2)),
+  };
+
+  const installmentApiId = Number(installment.idParcela);
+  if (Number.isFinite(installmentApiId)) {
+    parcela.id_parcela = installmentApiId;
+  }
 
   return {
-    cliente,
+    devedor,
     id_geral: `ACORDO-${agreementId.substring(0, 8)}`,
-    parcelas: [
-      {
-        id_parcela: installment.idParcela,
-        data_vencimento: validatedDueDate,
-        valor: parseFloat(installment.value.toFixed(2)),
-      },
-    ],
+    parcelas: [parcela],
+    sandbox: false,
   };
+}
+
+function getPrimaryParcelResult(apiResult: any) {
+  if (Array.isArray(apiResult?.parcelas) && apiResult.parcelas.length > 0) {
+    return apiResult.parcelas[0];
+  }
+  return apiResult || {};
 }
 
 /** Build installment_key from agreement_id and installment number */
@@ -229,7 +253,7 @@ export const negociarieService = {
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
-    const idParcela = installment.number === 0 ? "entrada" : String(installment.number);
+    const idParcela = installment.number === 0 ? "" : String(installment.number);
     const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
       value: installment.value,
       dueDate: installment.dueDate,
@@ -238,6 +262,7 @@ export const negociarieService = {
     });
 
     const apiResult = await this.novaCobranca(payload);
+    const parcelaResult = getPrimaryParcelResult(apiResult);
 
     // Mark previous boletos for this installment as substituido
     await markPreviousBoletosAsSubstituido(agreement.id, installmentKey);
@@ -247,12 +272,12 @@ export const negociarieService = {
       tenant_id: agreement.tenant_id,
       agreement_id: agreement.id,
       id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
-      data_vencimento: installment.dueDate,
-      valor: installment.value,
+      data_vencimento: parcelaResult?.data_vencimento || installment.dueDate,
+      valor: Number(parcelaResult?.valor || installment.value),
       status: "pendente",
-      link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
-      linha_digitavel: apiResult?.linha_digitavel || null,
-      pix_copia_cola: apiResult?.pix_copia_cola || null,
+      link_boleto: parcelaResult?.link_boleto || parcelaResult?.url_boleto || apiResult?.link_boleto || apiResult?.url_boleto || null,
+      linha_digitavel: parcelaResult?.linha_digitavel || apiResult?.linha_digitavel || null,
+      pix_copia_cola: parcelaResult?.pix_copia_cola || apiResult?.pix_copia_cola || null,
       callback_data: apiResult || null,
       installment_key: installmentKey,
     });
@@ -304,7 +329,7 @@ export const negociarieService = {
       try {
         const installmentKey = buildInstallmentKey(agreement.id, inst.number);
         const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
-        const idParcela = inst.number === 0 ? "entrada" : String(inst.number);
+        const idParcela = inst.number === 0 ? "" : String(inst.number);
         const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
           value: inst.value,
           dueDate: inst.dueDate,
@@ -313,6 +338,7 @@ export const negociarieService = {
         });
 
         const apiResult = await this.novaCobranca(payload);
+        const parcelaResult = getPrimaryParcelResult(apiResult);
 
         // Mark previous boletos as substituido
         await markPreviousBoletosAsSubstituido(agreement.id, installmentKey);
@@ -322,12 +348,12 @@ export const negociarieService = {
             tenant_id: agreement.tenant_id,
             agreement_id: agreement.id,
             id_geral: apiResult?.id_geral || apiResult?.id || `manual-${Date.now()}`,
-            data_vencimento: inst.dueDate,
-            valor: inst.value,
+            data_vencimento: parcelaResult?.data_vencimento || inst.dueDate,
+            valor: Number(parcelaResult?.valor || inst.value),
             status: "pendente",
-            link_boleto: apiResult?.link_boleto || apiResult?.url_boleto || null,
-            linha_digitavel: apiResult?.linha_digitavel || null,
-            pix_copia_cola: apiResult?.pix_copia_cola || null,
+            link_boleto: parcelaResult?.link_boleto || parcelaResult?.url_boleto || apiResult?.link_boleto || apiResult?.url_boleto || null,
+            linha_digitavel: parcelaResult?.linha_digitavel || apiResult?.linha_digitavel || null,
+            pix_copia_cola: parcelaResult?.pix_copia_cola || apiResult?.pix_copia_cola || null,
             callback_data: apiResult || null,
             installment_key: installmentKey,
           });

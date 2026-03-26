@@ -8,7 +8,6 @@ const corsHeaders = {
 const NEGOCIARIE_BASE = "https://sistema.negociarie.com.br/api/v2";
 const LOGIN_URL = "https://sistema.negociarie.com.br/api/login";
 
-// Simple in-memory token cache
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
 
@@ -37,7 +36,6 @@ async function getToken(): Promise<string> {
   const data = await res.json();
   cachedToken = data.access_token || data.token;
   if (!cachedToken) throw new Error("Token não retornado pela API Negociarie");
-  // Cache for 50 minutes (tokens usually last 60 min)
   tokenExpiry = Date.now() + 50 * 60 * 1000;
   return cachedToken;
 }
@@ -52,27 +50,35 @@ async function negociarieRequest(method: string, endpoint: string, body?: unknow
       Authorization: `Bearer ${token}`,
     },
   };
+
   if (body && (method === "POST" || method === "PATCH" || method === "PUT")) {
     const bodyStr = JSON.stringify(body);
     console.log(`[negociarie-proxy] ${method} ${endpoint} payload:`, bodyStr);
     opts.body = bodyStr;
   }
+
   const res = await fetch(url, opts);
   const text = await res.text();
   let json;
   const isHtml = text.trim().startsWith("<!") || text.includes("<html");
+
   if (isHtml) {
     const preview = text.substring(0, 500);
     console.error(`[negociarie-proxy] API returned HTML (${res.status}):`, preview);
     if (!res.ok) throw new Error(`Negociarie retornou erro ${res.status}. Resposta: ${preview.substring(0, 200)}`);
     json = { raw: "HTML response" };
   } else {
-    try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { raw: text };
+    }
     if (!res.ok) {
       console.error(`[negociarie-proxy] API error ${res.status}:`, JSON.stringify(json));
       throw new Error(json.message || json.error || JSON.stringify(json.errors || json) || `Negociarie ${res.status}`);
     }
   }
+
   return json;
 }
 
@@ -80,10 +86,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Não autenticado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient(
@@ -96,10 +104,13 @@ Deno.serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError || !claimsData?.claims?.sub) {
       console.error("[negociarie-proxy] Auth error:", claimsError?.message);
-      return new Response(JSON.stringify({ error: "Token inválido. Faça login novamente." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Token inválido. Faça login novamente." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    const userId = claimsData.claims.sub;
 
+    const userId = claimsData.claims.sub;
     const body = await req.json();
     const { action, ...params } = body;
     console.log(`[negociarie-proxy] action=${action} user=${userId}`);
@@ -108,46 +119,84 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "test-connection": {
-        // Try to authenticate with Negociarie - if getToken succeeds, we're connected
         await getToken();
         result = { connected: true, status: 200 };
         break;
       }
 
       case "nova-cobranca": {
-        // Payload already arrives structured as { cliente, id_geral, parcelas }
-        const cobrancaData = params.data as Record<string, unknown> || {};
-        // Normalize fields inside cliente if present
-        const clienteObj = cobrancaData.cliente as Record<string, unknown> | undefined;
-        if (clienteObj) {
-          if (clienteObj.documento) {
-            clienteObj.documento = String(clienteObj.documento).replace(/\D/g, "");
+        const cobrancaData = (params.data as Record<string, unknown>) || {};
+        const devedorObj =
+          (cobrancaData.devedor as Record<string, unknown> | undefined) ??
+          (cobrancaData.cliente as Record<string, unknown> | undefined);
+
+        if (devedorObj) {
+          if (devedorObj.documento) {
+            devedorObj.documento = String(devedorObj.documento).replace(/\D/g, "");
           }
-          if (clienteObj.cep) {
-            const cepDigits = String(clienteObj.cep).replace(/\D/g, "");
-            clienteObj.cep = cepDigits.length === 8
+          if (devedorObj.cep) {
+            const cepDigits = String(devedorObj.cep).replace(/\D/g, "");
+            devedorObj.cep = cepDigits.length === 8
               ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
-              : clienteObj.cep;
+              : devedorObj.cep;
           }
-          if (clienteObj.uf) {
-            clienteObj.uf = String(clienteObj.uf).trim().toUpperCase();
+          if (devedorObj.uf) {
+            devedorObj.uf = String(devedorObj.uf).trim().toUpperCase();
           }
-          if (clienteObj.nome) {
-            clienteObj.nome = String(clienteObj.nome).trim();
+          if (devedorObj.razao_social) {
+            devedorObj.razao_social = String(devedorObj.razao_social).trim();
           }
-          // Ensure numero and complemento always exist (API requires keys)
-          if (!("numero" in clienteObj)) clienteObj.numero = "";
-          if (!("complemento" in clienteObj)) clienteObj.complemento = "";
+          if (!devedorObj.razao_social && devedorObj.nome) {
+            devedorObj.razao_social = String(devedorObj.nome).trim();
+          }
+          if (devedorObj.bairro) {
+            devedorObj.bairro = String(devedorObj.bairro).trim();
+          }
+          if (devedorObj.endereco) {
+            devedorObj.endereco = String(devedorObj.endereco).trim();
+          }
+          if (devedorObj.cidade) {
+            devedorObj.cidade = String(devedorObj.cidade).trim();
+          }
+          if (devedorObj.email) {
+            devedorObj.email = String(devedorObj.email).trim();
+          }
+          if (devedorObj.celular) {
+            let celular = String(devedorObj.celular).replace(/\D/g, "");
+            if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
+            devedorObj.celular = celular;
+          }
+          if (!devedorObj.celular && Array.isArray(devedorObj.telefones) && devedorObj.telefones.length > 0) {
+            let celular = String(devedorObj.telefones[0] ?? "").replace(/\D/g, "");
+            if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
+            devedorObj.celular = celular;
+          }
+
+          delete devedorObj.nome;
+          delete devedorObj.telefones;
+          cobrancaData.devedor = devedorObj;
+          delete cobrancaData.cliente;
         }
-        // Ensure parcelas valor is always a float
+
         const parcelasArr = cobrancaData.parcelas as Array<Record<string, unknown>> | undefined;
         if (Array.isArray(parcelasArr)) {
           for (const p of parcelasArr) {
             if (typeof p.valor === "number") {
-              p.valor = parseFloat(p.valor.toFixed(2));
+              p.valor = Number(p.valor.toFixed(2));
+            }
+            const numericIdParcela = Number(p.id_parcela);
+            if (p.id_parcela !== undefined && Number.isFinite(numericIdParcela)) {
+              p.id_parcela = numericIdParcela;
+            } else {
+              delete p.id_parcela;
             }
           }
         }
+
+        if (!("sandbox" in cobrancaData)) {
+          cobrancaData.sandbox = false;
+        }
+
         console.log("[negociarie-proxy] nova-cobranca structured payload:", JSON.stringify(cobrancaData));
         result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
         break;
@@ -165,8 +214,8 @@ Deno.serve(async (req) => {
 
       case "consulta-cobrancas": {
         const qs = new URLSearchParams();
-        if (params.cpf) qs.set("cpf", params.cpf);
-        if (params.id_geral) qs.set("id_geral", params.id_geral);
+        if (params.cpf) qs.set("cpf", String(params.cpf));
+        if (params.id_geral) qs.set("id_geral", String(params.id_geral));
         if (params.limit) qs.set("limit", String(params.limit));
         const query = qs.toString() ? `?${qs.toString()}` : "";
         result = await negociarieRequest("GET", `/cobranca/consulta${query}`);
@@ -190,8 +239,7 @@ Deno.serve(async (req) => {
       }
 
       case "atualizar-callback": {
-        // A API Negociarie espera o campo url_callback
-        const cbUrl = params.data?.url || params.data?.url_callback || "";
+        const cbUrl = (params.data as any)?.url || (params.data as any)?.url_callback || "";
         const callbackPayload = { url_callback: cbUrl };
         console.log("[negociarie-proxy] Registrando callback:", JSON.stringify(callbackPayload));
         result = await negociarieRequest("POST", "/cobranca/atualizar-url-callback", callbackPayload);
@@ -216,7 +264,7 @@ Deno.serve(async (req) => {
 
       case "inadimplencia-titulos": {
         const qs = new URLSearchParams();
-        if (params.cpf) qs.set("cpf", params.cpf);
+        if (params.cpf) qs.set("cpf", String(params.cpf));
         const query = qs.toString() ? `?${qs.toString()}` : "";
         result = await negociarieRequest("GET", `/inadimplencia/titulos${query}`);
         break;
@@ -248,13 +296,13 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error(`[negociarie-proxy] ERROR: ${e.message}`);
-    // Reset token on auth errors
-    if (e.message?.includes("401") || e.message?.includes("autenticar")) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[negociarie-proxy] ERROR: ${message}`);
+    if (message.includes("401") || message.includes("autenticar")) {
       cachedToken = null;
       tokenExpiry = 0;
     }
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
