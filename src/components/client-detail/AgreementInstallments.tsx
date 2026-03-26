@@ -5,10 +5,8 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate, updateInstallmentValue } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
@@ -16,6 +14,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Download, FileText, Copy, CalendarIcon, MoreHorizontal,
   CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown, ChevronDown,
@@ -41,10 +42,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
-  const [editingDateIdx, setEditingDateIdx] = useState<number | null>(null);
   const [editingValueIdx, setEditingValueIdx] = useState<number | null>(null);
   const [editValueInput, setEditValueInput] = useState("");
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
+
+  // Date edit dialog state
+  const [dateEditDialogOpen, setDateEditDialogOpen] = useState(false);
+  const [selectedInstallmentForDateEdit, setSelectedInstallmentForDateEdit] = useState<any>(null);
+  const [selectedDateForEdit, setSelectedDateForEdit] = useState<Date | undefined>(undefined);
+  const [savingDate, setSavingDate] = useState(false);
 
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
@@ -53,6 +59,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         .from("negociarie_cobrancas" as any)
         .select("*")
         .eq("agreement_id", agreementId)
+        .neq("status", "substituido")
         .order("data_vencimento", { ascending: true });
       if (error) return [];
       return (data as any[]) || [];
@@ -150,11 +157,16 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
     setGeneratingIdx(idx);
     try {
+      const hasPreviousBoleto = inst.cobranca?.link_boleto;
       await negociarieService.generateSingleBoleto(
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
         { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0] }
       );
-      toast({ title: "Boleto gerado com sucesso!" });
+      if (hasPreviousBoleto) {
+        toast({ title: "Novo boleto gerado com sucesso!", description: "O boleto anterior foi substituído no sistema." });
+      } else {
+        toast({ title: "Boleto gerado com sucesso!" });
+      }
       refetchCobrancas();
       onRefresh?.();
     } catch (err: any) {
@@ -164,18 +176,30 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
   };
 
-  const handleEditDate = async (inst: any, newDate: Date | undefined) => {
-    if (!newDate) return;
-    const dateStr = format(newDate, "yyyy-MM-dd");
+  const handleOpenDateEdit = (inst: any) => {
+    setSelectedInstallmentForDateEdit(inst);
+    setSelectedDateForEdit(inst.dueDate);
+    setDateEditDialogOpen(true);
+  };
+
+  const handleSaveDateEdit = async () => {
+    if (!selectedDateForEdit || !selectedInstallmentForDateEdit) return;
+    setSavingDate(true);
+    const inst = selectedInstallmentForDateEdit;
+    const dateStr = format(selectedDateForEdit, "yyyy-MM-dd");
     try {
       await updateInstallmentDate(agreementId, inst.isEntrada ? 0 : inst.number, dateStr);
-      toast({ title: "Data atualizada!" });
-      setEditingDateIdx(null);
+      toast({ title: "Data atualizada com sucesso" });
+      setDateEditDialogOpen(false);
+      setSelectedInstallmentForDateEdit(null);
+      setSelectedDateForEdit(undefined);
       onRefresh?.();
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements"] });
     } catch (err: any) {
       toast({ title: "Erro ao atualizar data", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingDate(false);
     }
   };
 
@@ -236,6 +260,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
   const [open, setOpen] = useState(false);
 
   return (
+    <>
     <Collapsible open={open} onOpenChange={setOpen} className="pt-3 border-t border-border space-y-3">
       <CollapsibleTrigger asChild>
         <button className="w-full flex items-center justify-between hover:bg-muted/30 rounded-md px-1 py-1 transition-colors cursor-pointer">
@@ -282,33 +307,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                   {inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
                 </TableCell>
                 <TableCell className="text-xs">
-                  {editingDateIdx === idx ? (
-                    <Popover open={true} onOpenChange={(o) => { if (!o) setEditingDateIdx(null); }}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-                          <CalendarIcon className="w-3 h-3" />
-                          {formatDate(inst.dueDate.toISOString().split("T")[0])}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className="w-auto p-0 z-[9999]"
-                        align="start"
-                        side="bottom"
-                        sideOffset={4}
-                        onOpenAutoFocus={(e) => e.preventDefault()}
-                        onCloseAutoFocus={(e) => e.preventDefault()}
-                      >
-                        <Calendar
-                          mode="single"
-                          selected={inst.dueDate}
-                          onSelect={(d) => handleEditDate(inst, d)}
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    formatDate(inst.dueDate.toISOString().split("T")[0])
-                  )}
+                  {formatDate(inst.dueDate.toISOString().split("T")[0])}
                 </TableCell>
                 <TableCell className="text-right text-xs">
                   {editingValueIdx === idx ? (
@@ -349,8 +348,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                      {/* Generate boleto */}
-                      {!hasBoleto && !isPaid && (
+                      {/* Generate / re-issue boleto */}
+                      {!isPaid && (
                         <DropdownMenuItem
                           onClick={() => handleGenerateBoleto(inst, idx)}
                           disabled={generatingIdx === idx}
@@ -360,7 +359,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                           ) : (
                             <Receipt className="w-4 h-4 mr-2" />
                           )}
-                          Gerar Boleto
+                          {hasBoleto ? "Reemitir Boleto" : "Gerar Boleto"}
                         </DropdownMenuItem>
                       )}
 
@@ -390,11 +389,9 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {(hasBoleto || hasLinhaDigitavel || hasPix) && !isPaid && <DropdownMenuSeparator />}
 
-                      {/* Edit date */}
+                      {/* Edit date - opens dialog */}
                       {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onClick={() => {
-                          setTimeout(() => setEditingDateIdx(idx), 150);
-                        }}>
+                        <DropdownMenuItem onClick={() => handleOpenDateEdit(inst)}>
                           <CalendarIcon className="w-4 h-4 mr-2" />
                           Editar Data
                         </DropdownMenuItem>
@@ -457,6 +454,53 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
       )}
       </CollapsibleContent>
     </Collapsible>
+
+    {/* Date Edit Dialog */}
+    <Dialog open={dateEditDialogOpen} onOpenChange={(o) => {
+      if (!o) {
+        setDateEditDialogOpen(false);
+        setSelectedInstallmentForDateEdit(null);
+        setSelectedDateForEdit(undefined);
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Editar vencimento da parcela</DialogTitle>
+          <DialogDescription>
+            {selectedInstallmentForDateEdit?.isEntrada
+              ? "Entrada"
+              : selectedInstallmentForDateEdit
+                ? `Parcela ${selectedInstallmentForDateEdit.displayNumber}/${totalInstallments}`
+                : ""}
+            {selectedInstallmentForDateEdit && (
+              <> — Data atual: {formatDate(selectedInstallmentForDateEdit.dueDate.toISOString().split("T")[0])}</>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-center py-4">
+          <Calendar
+            mode="single"
+            selected={selectedDateForEdit}
+            onSelect={setSelectedDateForEdit}
+            className={cn("p-3 pointer-events-auto")}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => {
+            setDateEditDialogOpen(false);
+            setSelectedInstallmentForDateEdit(null);
+            setSelectedDateForEdit(undefined);
+          }}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSaveDateEdit} disabled={savingDate || !selectedDateForEdit}>
+            {savingDate && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 
