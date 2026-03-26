@@ -18,8 +18,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Download, FileText, Copy,
-  CheckCircle2, Clock, AlertTriangle, Loader2, Receipt, HandCoins, Pencil, FileDown, ChevronDown,
+  ExternalLink, FileText, ClipboardCopy,
+  CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -253,7 +253,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
-    if (status === "pending_confirmation") return <HandCoins className="w-3.5 h-3.5 text-blue-600" />;
+    if (status === "pending_confirmation") return <Clock className="w-3.5 h-3.5 text-blue-600" />;
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
@@ -387,7 +387,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                 {/* Inline action icons */}
                 <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-0.5">
+                  <div className="flex items-center justify-center gap-1">
                     <TooltipProvider delayDuration={200}>
                       {/* Gerar/Reemitir Boleto */}
                       {!isPaid && (
@@ -396,14 +396,14 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
                               disabled={generatingIdx === idx}
                               onClick={() => handleGenerateBoleto(inst, idx)}
                             >
                               {generatingIdx === idx ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                <Receipt className="w-3.5 h-3.5" />
+                                <FileBarChart className="w-4 h-4" />
                               )}
                             </Button>
                           </TooltipTrigger>
@@ -411,20 +411,20 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </Tooltip>
                       )}
 
-                      {/* Download boleto */}
+                      {/* Abrir boleto */}
                       {hasBoleto && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
                               onClick={() => window.open(inst.cobranca.link_boleto, "_blank")}
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Baixar Boleto"}</p></TooltipContent>
+                          <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Abrir Boleto"}</p></TooltipContent>
                         </Tooltip>
                       )}
 
@@ -435,10 +435,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
                               onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <ClipboardCopy className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Copiar Linha Digitável</p></TooltipContent>
@@ -452,10 +452,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
                               onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <ClipboardCopy className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Copiar PIX</p></TooltipContent>
@@ -469,10 +469,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
                               onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}
                             >
-                              <HandCoins className="w-3.5 h-3.5" />
+                              <DollarSign className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
@@ -486,10 +486,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
                               onClick={() => handleDownloadReceipt(inst)}
                             >
-                              <FileDown className="w-3.5 h-3.5" />
+                              <FileCheck className="w-4 h-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
