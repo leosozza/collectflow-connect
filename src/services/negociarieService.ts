@@ -4,6 +4,13 @@ import { logger } from "@/lib/logger";
 import { addMonths } from "date-fns";
 import { formatCPFDisplay } from "@/lib/cpfUtils";
 
+/** Format CEP to XXXXX-XXX pattern expected by Negociarie API */
+function formatCepForApi(cep: string): string {
+  const digits = cep.replace(/\D/g, "");
+  if (digits.length === 8) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return digits;
+}
+
 /** Fetch client address trying CPF clean then formatted */
 async function fetchClientAddress(cpf: string) {
   const cleanCpf = cpf.replace(/[.\-]/g, "");
