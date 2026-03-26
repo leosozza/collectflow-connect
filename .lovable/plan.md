@@ -1,61 +1,39 @@
 
-# Resposta: Impacto nos demais clientes/tenants
 
-## Análise de impacto
+# Plano: Resolver erro 500 da API Negociarie no endpoint /cobranca/nova
 
-**Não vai atrapalhar nenhum cliente de nenhuma tenant.** Na verdade, vai **corrigir para todos**, porque:
+## Diagnóstico
 
-1. O formato flat atual (`documento`, `nome`, `valor`, `vencimento` na raiz) **não funciona para ninguém** — é por isso que retorna erro 400 para qualquer cliente, não só o Raul
-2. Todos os clientes (manuais ou via API) passam pelo mesmo fluxo: `buildNegociariePayload()` → `negociarie-proxy` → Negociarie
-3. Os dados de cada cliente vêm do próprio registro no banco (via `fetchClientAddress`), então cada boleto usa os dados corretos do respectivo devedor
+O payload está estruturado corretamente no formato `{ cliente, id_geral, parcelas }`. O login funciona (test-connection OK). Porém, o endpoint `/cobranca/nova` retorna **HTML com status 500** — um erro interno do servidor Negociarie.
 
-## Correção necessária
+O proxy atual descarta o conteúdo HTML e loga apenas "API returned HTML (500)", sem mostrar o corpo da resposta, o que impede o diagnóstico.
 
-O payload precisa mudar de formato flat para o formato aninhado que a API exige:
+## Possíveis causas do lado do payload
 
-```text
-ANTES (flat - não funciona para ninguém):
-{ documento, nome, cep, endereco, valor, vencimento }
+1. **`telefones` com DDI**: O valor `"5511945542245"` inclui DDI 55. A API pode esperar apenas DDD+número: `"11945542245"`
+2. **Campos vazios**: `numero: ""` e `complemento: ""` podem causar erro de validação no servidor. Melhor omitir ou enviar valor padrão
+3. **Campo `bairro`**: Não consta na documentação da API `/cobranca/nova` — pode estar causando rejeição silenciosa
 
-DEPOIS (aninhado - formato correto da API):
-{ cliente: { documento, nome, cep, endereco, ... }, id_geral, parcelas: [...] }
-```
+## Correções
 
-## Arquivos a alterar
+### 1. `supabase/functions/negociarie-proxy/index.ts`
+- Logar o corpo HTML/texto completo (primeiros 500 chars) quando a API retorna erro, em vez de apenas "API returned HTML"
+- Incluir o texto real na mensagem de erro retornada ao frontend
+
+### 2. `src/services/negociarieService.ts`
+- **Telefone**: Remover DDI 55 do início se presente (manter apenas DDD+número)
+- **Campos vazios**: Não incluir `numero`, `complemento` e `bairro` quando estiverem vazios
+- **Remover `bairro`**: Não está na documentação do endpoint `/cobranca/nova`
+
+## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | Refatorar `buildNegociariePayload` para retornar `{ cliente, id_geral, parcelas }` |
-| `supabase/functions/negociarie-proxy/index.ts` | No case `nova-cobranca`: normalizar dentro de `cliente` (não flat) e repassar |
+| `supabase/functions/negociarie-proxy/index.ts` | Logar corpo de erro completo (primeiros 500 chars) |
+| `src/services/negociarieService.ts` | Limpar telefone (remover DDI 55), omitir campos vazios opcionais |
 
-## Detalhes técnicos
+## Resultado esperado
+- Mensagem de erro mais informativa caso persista
+- Payload mais limpo sem campos vazios que podem causar erro
+- Telefone no formato correto (sem DDI)
 
-### `buildNegociariePayload` — novo formato:
-```typescript
-{
-  cliente: {
-    documento: "38568385893",        // só dígitos
-    nome: "Raul Jose Seixas Junior",
-    cep: "06186-130",                // com hífen
-    endereco: "Rua Luiz Henrique de Oliveira",
-    numero: "",
-    complemento: "",
-    cidade: "Osasco",
-    uf: "SP",
-    telefones: ["11945542245"],      // array
-    email: "raulsjunior@hotmail.com"
-  },
-  id_geral: "ACORDO-535df9af",
-  parcelas: [
-    { id_parcela: "entrada", data_vencimento: "2026-03-27", valor: 10.00 }
-  ]
-}
-```
-
-### Proxy — simplificação:
-- Normalizar campos dentro de `data.cliente` (não na raiz)
-- Repassar payload estruturado diretamente para `/cobranca/nova`
-
-### Validação:
-- `validateAddressFields` será ajustada para validar dentro de `cliente`
-- Mesmas regras: CEP com hífen, CPF só dígitos, UF 2 letras maiúsculas
