@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { action, ...params } = body;
-    console.log(`[negociarie-proxy] action=${action} user=${user.id}`);
+    console.log(`[negociarie-proxy] action=${action} user=${userId}`);
 
     let result;
 
