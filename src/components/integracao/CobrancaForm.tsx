@@ -134,15 +134,18 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
       let apiResult;
       if (tipo === "boleto") {
-        // Boleto uses flat payload
-        const flatPayload = {
-          documento, nome, cep, endereco, bairro, cidade, uf, email,
-          telefone: celular,
-          valor,
-          vencimento: form.vencimento,
-          descricao,
+        const boletoPayload = {
+          cliente: {
+            documento, nome, razao_social: "",
+            cep: cep.length === 8 ? `${cep.slice(0, 5)}-${cep.slice(5)}` : cep,
+            endereco, numero: "", complemento: "",
+            bairro, cidade, uf, email,
+            telefones: [celular],
+          },
+          id_geral: idGeral,
+          parcelas: [{ valor, data_vencimento: form.vencimento, descricao }],
         };
-        apiResult = await negociarieService.novaCobranca(flatPayload);
+        apiResult = await negociarieService.novaCobranca(boletoPayload);
       } else {
         // Pix and Cartão use nested payload
         const nestedPayload = {
