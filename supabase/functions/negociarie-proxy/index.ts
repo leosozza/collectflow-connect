@@ -114,30 +114,28 @@ Deno.serve(async (req) => {
       }
 
       case "nova-cobranca": {
-        // Defensive normalization before forwarding to Negociarie
+        // Payload already arrives structured as { cliente, id_geral, parcelas }
         const cobrancaData = params.data as Record<string, unknown> || {};
-        if (cobrancaData.documento) {
-          cobrancaData.documento = String(cobrancaData.documento).replace(/\D/g, "");
+        // Normalize fields inside cliente if present
+        const clienteObj = cobrancaData.cliente as Record<string, unknown> | undefined;
+        if (clienteObj) {
+          if (clienteObj.documento) {
+            clienteObj.documento = String(clienteObj.documento).replace(/\D/g, "");
+          }
+          if (clienteObj.cep) {
+            const cepDigits = String(clienteObj.cep).replace(/\D/g, "");
+            clienteObj.cep = cepDigits.length === 8
+              ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
+              : clienteObj.cep;
+          }
+          if (clienteObj.uf) {
+            clienteObj.uf = String(clienteObj.uf).trim().toUpperCase();
+          }
+          if (clienteObj.nome) {
+            clienteObj.nome = String(clienteObj.nome).trim();
+          }
         }
-        if (cobrancaData.cep) {
-          const cepDigits = String(cobrancaData.cep).replace(/\D/g, "");
-          cobrancaData.cep = cepDigits.length === 8
-            ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
-            : cobrancaData.cep;
-        }
-        if (cobrancaData.uf) {
-          cobrancaData.uf = String(cobrancaData.uf).trim().toUpperCase();
-        }
-        if (cobrancaData.nome) {
-          cobrancaData.nome = String(cobrancaData.nome).trim();
-        }
-        if (cobrancaData.endereco) {
-          cobrancaData.endereco = String(cobrancaData.endereco).trim();
-        }
-        if (cobrancaData.cidade) {
-          cobrancaData.cidade = String(cobrancaData.cidade).trim();
-        }
-        console.log("[negociarie-proxy] nova-cobranca normalized payload:", JSON.stringify(cobrancaData));
+        console.log("[negociarie-proxy] nova-cobranca structured payload:", JSON.stringify(cobrancaData));
         result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
         break;
       }

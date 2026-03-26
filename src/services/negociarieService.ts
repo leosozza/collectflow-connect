@@ -31,28 +31,25 @@ async function fetchClientAddress(cpf: string) {
   return data2 || {};
 }
 
-/** Validate address fields with Negociarie-compatible format checks */
-function validateAddressFields(payload: Record<string, unknown>) {
+/** Validate address fields within the cliente object */
+function validateClienteFields(cliente: Record<string, unknown>) {
   const required = ["documento", "nome", "cep", "endereco", "cidade", "uf"] as const;
   const placeholders = ["00000000", "00000-000", "Não informado", ""];
   for (const field of required) {
-    const val = String(payload[field] || "").trim();
+    const val = String(cliente[field] || "").trim();
     if (!val || placeholders.includes(val)) {
       throw new Error(`Preencha o endereço do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
     }
   }
-  // CEP must be XXXXX-XXX
-  const cep = String(payload.cep || "");
+  const cep = String(cliente.cep || "");
   if (!/^\d{5}-\d{3}$/.test(cep)) {
     throw new Error(`CEP em formato inválido: "${cep}". O formato esperado é 00000-000.`);
   }
-  // documento must be 11 or 14 digits
-  const doc = String(payload.documento || "");
+  const doc = String(cliente.documento || "");
   if (!/^\d{11}$/.test(doc) && !/^\d{14}$/.test(doc)) {
     throw new Error(`CPF/CNPJ em formato inválido: "${doc}". Informe apenas dígitos (11 ou 14).`);
   }
-  // UF must be 2 uppercase letters
-  const uf = String(payload.uf || "");
+  const uf = String(cliente.uf || "");
   if (!/^[A-Z]{2}$/.test(uf)) {
     throw new Error(`UF em formato inválido: "${uf}". Informe a sigla do estado (ex: SP, RJ).`);
   }
@@ -88,28 +85,47 @@ function validateDueDate(dueDate: string, installmentLabel: string): string {
   return normalizedDueDate;
 }
 
-/** Build a Negociarie-compliant payload from client data */
+/** Build a Negociarie-compliant nested payload: { cliente, id_geral, parcelas } */
 function buildNegociariePayload(
   cleanCpf: string,
   clientData: any,
   fallbackName: string,
-  installment: { value: number; dueDate: string; label: string }
+  agreementId: string,
+  installment: { value: number; dueDate: string; label: string; idParcela: string }
 ): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
+  const phone = (clientData.phone || "").replace(/\D/g, "");
+  const cliente: Record<string, unknown> = {
     documento: cleanCpf.replace(/\D/g, ""),
     nome: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
+    numero: "",
+    complemento: "",
     bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
+    telefones: phone ? [phone] : [],
     email: (clientData.email || "").trim(),
-    telefone: (clientData.phone || "").replace(/\D/g, ""),
-    valor: installment.value,
-    vencimento: String(installment.dueDate || "").slice(0, 10),
-    descricao: installment.label,
   };
-  return payload;
+
+  const validatedDueDate = validateDueDate(
+    String(installment.dueDate || "").slice(0, 10),
+    installment.label
+  );
+
+  validateClienteFields(cliente);
+
+  return {
+    cliente,
+    id_geral: `ACORDO-${agreementId.substring(0, 8)}`,
+    parcelas: [
+      {
+        id_parcela: installment.idParcela,
+        data_vencimento: validatedDueDate,
+        valor: installment.value,
+      },
+    ],
+  };
 }
 
 /** Build installment_key from agreement_id and installment number */
@@ -209,14 +225,13 @@ export const negociarieService = {
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
-    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+    const idParcela = installment.number === 0 ? "entrada" : String(installment.number);
+    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
       value: installment.value,
       dueDate: installment.dueDate,
       label: instLabel,
+      idParcela,
     });
-
-    validateAddressFields(payload);
-    payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
     const apiResult = await this.novaCobranca(payload);
 
@@ -285,14 +300,13 @@ export const negociarieService = {
       try {
         const installmentKey = buildInstallmentKey(agreement.id, inst.number);
         const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
-        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+        const idParcela = inst.number === 0 ? "entrada" : String(inst.number);
+        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
           value: inst.value,
           dueDate: inst.dueDate,
           label: instLabel,
+          idParcela,
         });
-
-        validateAddressFields(payload);
-        payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
         const apiResult = await this.novaCobranca(payload);
 
