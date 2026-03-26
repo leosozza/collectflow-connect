@@ -93,15 +93,17 @@ function buildNegociariePayload(
   agreementId: string,
   installment: { value: number; dueDate: string; label: string; idParcela: string }
 ): Record<string, unknown> {
-  const phone = (clientData.phone || "").replace(/\D/g, "");
+  let phone = (clientData.phone || "").replace(/\D/g, "");
+  // Remove DDI 55 if present — API expects only DDD+number
+  if (phone.length >= 12 && phone.startsWith("55")) {
+    phone = phone.slice(2);
+  }
+
   const cliente: Record<string, unknown> = {
     documento: cleanCpf.replace(/\D/g, ""),
     nome: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
-    numero: "",
-    complemento: "",
-    bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
     telefones: phone ? [phone] : [],

@@ -62,8 +62,9 @@ async function negociarieRequest(method: string, endpoint: string, body?: unknow
   let json;
   const isHtml = text.trim().startsWith("<!") || text.includes("<html");
   if (isHtml) {
-    console.error(`[negociarie-proxy] API returned HTML (${res.status})`);
-    if (!res.ok) throw new Error(`Servidor Negociarie indisponível (status ${res.status}). Tente novamente em alguns minutos.`);
+    const preview = text.substring(0, 500);
+    console.error(`[negociarie-proxy] API returned HTML (${res.status}):`, preview);
+    if (!res.ok) throw new Error(`Negociarie retornou erro ${res.status}. Resposta: ${preview.substring(0, 200)}`);
     json = { raw: "HTML response" };
   } else {
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
