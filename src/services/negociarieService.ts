@@ -219,7 +219,7 @@ export const negociarieService = {
         const payload: Record<string, unknown> = {
           documento: cleanCpf,
           nome: clientData.nome_completo || agreement.client_name,
-          cep: clientData.cep || "",
+          cep: (clientData.cep || "").replace(/[^\d\-]/g, ""),
           endereco: clientData.endereco || "",
           bairro: clientData.bairro || "",
           cidade: clientData.cidade || "",
