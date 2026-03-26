@@ -31,38 +31,7 @@ async function fetchClientAddress(cpf: string) {
   return data2 || {};
 }
 
-/** Validate address fields within the devedor object */
-function validateDevedorFields(devedor: Record<string, unknown>) {
-  const required = ["documento", "nome", "cep", "endereco", "bairro", "cidade", "uf", "email", "celular"] as const;
-  const placeholders = ["00000000", "00000-000", "Não informado", ""];
-
-  for (const field of required) {
-    const val = String(devedor[field] || "").trim();
-    if (!val || placeholders.includes(val)) {
-      throw new Error(`Preencha o cadastro do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
-    }
-  }
-
-  const cep = String(devedor.cep || "");
-  if (!/^\d{5}-\d{3}$/.test(cep)) {
-    throw new Error(`CEP em formato inválido: "${cep}". O formato esperado é 00000-000.`);
-  }
-
-  const doc = String(devedor.documento || "");
-  if (!/^\d{11}$/.test(doc) && !/^\d{14}$/.test(doc)) {
-    throw new Error(`CPF/CNPJ em formato inválido: "${doc}". Informe apenas dígitos (11 ou 14).`);
-  }
-
-  const uf = String(devedor.uf || "");
-  if (!/^[A-Z]{2}$/.test(uf)) {
-    throw new Error(`UF em formato inválido: "${uf}". Informe a sigla do estado (ex: SP, RJ).`);
-  }
-
-  const celular = String(devedor.celular || "");
-  if (!/^\d{10,11}$/.test(celular)) {
-    throw new Error(`Celular em formato inválido: "${celular}". Informe DDD + número, sem símbolos.`);
-  }
-}
+/** validateDevedorFields is now replaced by validateClienteFields in buildBoletoPayload */
 
 function normalizeCellphoneForApi(phone: string): string {
   let digits = (phone || "").replace(/\D/g, "");
