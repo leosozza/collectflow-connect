@@ -143,11 +143,8 @@ Deno.serve(async (req) => {
           if (devedorObj.uf) {
             devedorObj.uf = String(devedorObj.uf).trim().toUpperCase();
           }
-          if (devedorObj.razao_social) {
-            devedorObj.razao_social = String(devedorObj.razao_social).trim();
-          }
-          if (!devedorObj.razao_social && devedorObj.nome) {
-            devedorObj.razao_social = String(devedorObj.nome).trim();
+          if (devedorObj.nome) {
+            devedorObj.nome = String(devedorObj.nome).trim();
           }
           if (devedorObj.bairro) {
             devedorObj.bairro = String(devedorObj.bairro).trim();
@@ -172,7 +169,6 @@ Deno.serve(async (req) => {
             devedorObj.celular = celular;
           }
 
-          delete devedorObj.nome;
           delete devedorObj.telefones;
           cobrancaData.devedor = devedorObj;
           delete cobrancaData.cliente;

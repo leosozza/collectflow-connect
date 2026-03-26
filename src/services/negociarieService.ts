@@ -33,7 +33,7 @@ async function fetchClientAddress(cpf: string) {
 
 /** Validate address fields within the devedor object */
 function validateDevedorFields(devedor: Record<string, unknown>) {
-  const required = ["documento", "razao_social", "cep", "endereco", "bairro", "cidade", "uf", "email", "celular"] as const;
+  const required = ["documento", "nome", "cep", "endereco", "bairro", "cidade", "uf", "email", "celular"] as const;
   const placeholders = ["00000000", "00000-000", "Não informado", ""];
 
   for (const field of required) {
@@ -114,7 +114,7 @@ function buildNegociariePayload(
 
   const devedor: Record<string, unknown> = {
     documento: cleanCpf.replace(/\D/g, ""),
-    razao_social: (clientData.nome_completo || fallbackName || "").trim(),
+    nome: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
     bairro: (clientData.bairro || "").trim(),
