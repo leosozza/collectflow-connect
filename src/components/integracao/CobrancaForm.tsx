@@ -163,7 +163,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
       const idGeral2 = apiResult.id_geral || apiResult.idGeral || idGeral;
       const parcela = apiResult.parcelas?.[0] || apiResult;
-      const linkBoleto = parcela.link_boleto || parcela.linkBoleto || parcela.url_boleto || apiResult.link_boleto || null;
+      const linkBoleto = parcela.link || parcela.link_boleto || parcela.linkBoleto || parcela.url_boleto || apiResult.link_boleto || null;
       const pixCopiaCola = parcela.pix_copia_cola || parcela.pixCopiaCola || apiResult.pix_copia_cola || null;
       const linkCartao = parcela.link_cartao || parcela.linkCartao || parcela.url_cartao || apiResult.link_cartao || null;
       const linhaDigitavel = parcela.linha_digitavel || parcela.linhaDigitavel || apiResult.linha_digitavel || null;
