@@ -400,7 +400,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
 export const updateInstallmentDate = async (
   agreementId: string,
-  installmentNumber: number,
+  installmentKey: string,
   newDate: string
 ): Promise<void> => {
   try {
@@ -412,7 +412,7 @@ export const updateInstallmentDate = async (
     if (fetchErr) throw fetchErr;
 
     const current = (agreement as any)?.custom_installment_dates || {};
-    const updated = { ...current, [String(installmentNumber)]: newDate };
+    const updated = { ...current, [installmentKey]: newDate };
 
     const { error } = await supabase
       .from("agreements")
@@ -420,7 +420,7 @@ export const updateInstallmentDate = async (
       .eq("id", agreementId);
     if (error) throw error;
 
-    logger.info(MODULE, "updateInstallmentDate", { agreementId, installmentNumber, newDate });
+    logger.info(MODULE, "updateInstallmentDate", { agreementId, installmentKey, newDate });
   } catch (error) {
     handleServiceError(error, MODULE);
   }

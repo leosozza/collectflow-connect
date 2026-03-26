@@ -188,14 +188,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const inst = selectedInstallmentForDateEdit;
     const dateStr = format(selectedDateForEdit, "yyyy-MM-dd");
     try {
-      await updateInstallmentDate(agreementId, inst.isEntrada ? 0 : inst.number, dateStr);
+      await updateInstallmentDate(agreementId, inst.customKey, dateStr);
       toast({ title: "Data atualizada com sucesso" });
       setDateEditDialogOpen(false);
       setSelectedInstallmentForDateEdit(null);
       setSelectedDateForEdit(undefined);
       onRefresh?.();
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
-      queryClient.invalidateQueries({ queryKey: ["client-agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
     } catch (err: any) {
       toast({ title: "Erro ao atualizar data", description: err.message, variant: "destructive" });
     } finally {
@@ -215,7 +215,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       setEditingValueIdx(null);
       setEditValueInput("");
       onRefresh?.();
-      queryClient.invalidateQueries({ queryKey: ["client-agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
     } catch (err: any) {
       toast({ title: "Erro ao atualizar valor", description: err.message, variant: "destructive" });
     }
