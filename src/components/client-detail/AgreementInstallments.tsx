@@ -253,7 +253,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
-    if (status === "pending_confirmation") return <HandCoins className="w-3.5 h-3.5 text-blue-600" />;
+    if (status === "pending_confirmation") return <Clock className="w-3.5 h-3.5 text-blue-600" />;
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
