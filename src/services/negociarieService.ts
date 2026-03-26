@@ -117,6 +117,8 @@ function buildNegociariePayload(
     nome: (clientData.nome_completo || fallbackName || "").trim(),
     cep: formatCepForApi(clientData.cep || ""),
     endereco: (clientData.endereco || "").trim(),
+    numero: "",
+    complemento: "",
     bairro: (clientData.bairro || "").trim(),
     cidade: (clientData.cidade || "").trim(),
     uf: (clientData.uf || "").trim().toUpperCase(),
