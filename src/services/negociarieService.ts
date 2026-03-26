@@ -225,14 +225,13 @@ export const negociarieService = {
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
-    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+    const idParcela = installment.number === 0 ? "entrada" : String(installment.number);
+    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
       value: installment.value,
       dueDate: installment.dueDate,
       label: instLabel,
+      idParcela,
     });
-
-    validateAddressFields(payload);
-    payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
     const apiResult = await this.novaCobranca(payload);
 
@@ -301,14 +300,13 @@ export const negociarieService = {
       try {
         const installmentKey = buildInstallmentKey(agreement.id, inst.number);
         const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
-        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, {
+        const idParcela = inst.number === 0 ? "entrada" : String(inst.number);
+        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
           value: inst.value,
           dueDate: inst.dueDate,
           label: instLabel,
+          idParcela,
         });
-
-        validateAddressFields(payload);
-        payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
         const apiResult = await this.novaCobranca(payload);
 
