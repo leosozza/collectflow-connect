@@ -116,7 +116,9 @@ function buildBoletoPayload(
 
   const parcela: Record<string, unknown> = {
     data_vencimento: validatedDueDate,
-    valor: Number(installment.value.toFixed(2)),
+    valor: parseFloat(installment.value.toFixed(2)),
+    valor_mora_dia: 0,
+    valor_multa: 0,
   };
 
   // id_parcela must be a non-zero string per Negociarie docs — never omit
@@ -127,12 +129,13 @@ function buildBoletoPayload(
     parcela.id_parcela = String(Date.now()).slice(-8);
   }
 
-  // Generate a unique numeric-like id_geral (API example uses integer)
-  const idGeralHash = agreementId.replace(/\D/g, "").slice(0, 8) || String(Date.now()).slice(-8);
+  // Generate a UNIQUE id_geral per attempt to avoid 500 from duplicate id_geral
+  const shortId = agreementId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 4);
+  const idGeral = `RIVO-${shortId}-${Date.now()}`;
 
   return {
     cliente,
-    id_geral: idGeralHash,
+    id_geral: idGeral,
     parcelas: [parcela],
   };
 }
