@@ -1,42 +1,44 @@
 
 
-# Plano: Corrigir campo `nome` no payload da Negociarie
+# Plano: Adicionar campo `numero` ao payload Negociarie
 
-## Problema raiz
+## Diagnóstico
 
-A API Negociarie retorna 400: `"Preencha os dados corretamente [documento, nome, cep, endereco, cidade, uf]"`. 
+O payload enviado contém todos os campos listados no erro (`documento, nome, cep, endereco, cidade, uf`), mas a API retorna 400. A causa provável é que o campo **`numero`** (número do endereço) é obrigatório na API mas não está sendo enviado. Sem ele, a validação do endereço falha.
 
-O campo esperado é **`nome`**, mas estamos enviando **`razao_social`** e deletando `nome` (linha 175 do proxy).
+O campo `numero` não existe na tabela `clients` — o import concatena tudo em `endereco`. Precisamos enviá-lo como string vazia `""` quando não disponível.
 
-## Comparação lado a lado
+## Payload atual vs esperado
 
 ```text
-ENVIADO HOJE:                         API ESPERA:
+ENVIADO:                              API ESPERA:
 ──────────────                        ──────────────
-devedor.razao_social ← ERRADO         devedor.nome ← CERTO
 devedor.documento ✓                   devedor.documento ✓
+devedor.nome ✓                        devedor.nome ✓
 devedor.cep ✓                         devedor.cep ✓
 devedor.endereco ✓                    devedor.endereco ✓
+(ausente)                             devedor.numero ← FALTA
+(ausente)                             devedor.complemento ← FALTA
+devedor.bairro ✓                      devedor.bairro ✓
 devedor.cidade ✓                      devedor.cidade ✓
 devedor.uf ✓                          devedor.uf ✓
-devedor.celular ✓                     devedor.celular ✓
 devedor.email ✓                       devedor.email ✓
+devedor.celular ✓                     devedor.celular ✓
 ```
 
-## Correção
+## Correções
 
 ### `src/services/negociarieService.ts`
-- Trocar `razao_social` por `nome` no objeto `devedor`
+- Adicionar `numero: ""` e `complemento: ""` no objeto `devedor` em `buildNegociariePayload` (linhas ~119-120)
+- Esses campos não existem na tabela `clients`, então sempre serão string vazia
 
 ### `supabase/functions/negociarie-proxy/index.ts`
-- Remover a lógica que converte `nome` → `razao_social` (linhas 146-151)
-- Remover o `delete devedorObj.nome` (linha 175)
-- Garantir que o campo `nome` existe e está trimado
+- Garantir que `numero` e `complemento` existam no `devedorObj` com default `""` caso ausentes (após linha 165, antes de enviar)
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | `razao_social` → `nome` |
-| `supabase/functions/negociarie-proxy/index.ts` | Remover conversão `nome→razao_social`; manter `nome` |
+| `src/services/negociarieService.ts` | Adicionar `numero: ""` e `complemento: ""` ao devedor |
+| `supabase/functions/negociarie-proxy/index.ts` | Default `numero`/`complemento` para `""` se ausentes |
 
