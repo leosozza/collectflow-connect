@@ -170,6 +170,8 @@ Deno.serve(async (req) => {
           }
 
           delete devedorObj.telefones;
+          if (!devedorObj.numero && devedorObj.numero !== "") devedorObj.numero = "";
+          if (!devedorObj.complemento && devedorObj.complemento !== "") devedorObj.complemento = "";
           cobrancaData.devedor = devedorObj;
           delete cobrancaData.cliente;
         }
