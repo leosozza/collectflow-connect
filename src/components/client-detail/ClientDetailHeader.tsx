@@ -142,6 +142,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   const updateClientMutation = useMutation({
     mutationFn: async (data: typeof editForm) => {
+      // Normalize CEP to XXXXX-XXX and UF to uppercase before saving
+      const cepDigits = (data.cep || "").replace(/\D/g, "");
+      const normalizedCep = cepDigits.length === 8
+        ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
+        : data.cep || null;
+      const normalizedUf = (data.uf || "").trim().toUpperCase() || null;
+
       const clientIds = clients.map(c => c.id);
       for (const id of clientIds) {
         const { error } = await supabase.from("clients").update({
@@ -150,11 +157,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           phone2: data.phone2 || null,
           phone3: data.phone3 || null,
           email: data.email || null,
-          endereco: data.endereco || null,
-          bairro: data.bairro || null,
-          cidade: data.cidade || null,
-          uf: data.uf || null,
-          cep: data.cep || null,
+          endereco: (data.endereco || "").trim() || null,
+          bairro: (data.bairro || "").trim() || null,
+          cidade: (data.cidade || "").trim() || null,
+          uf: normalizedUf,
+          cep: normalizedCep,
           cod_contrato: data.cod_contrato || null,
           observacoes: data.observacoes || null,
           external_id: data.external_id || null,
@@ -541,7 +548,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="uf">UF</Label>
-                <Input id="uf" value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value }))} maxLength={2} placeholder="SP" />
+                <Input id="uf" value={editForm.uf} onChange={e => setEditForm(f => ({ ...f, uf: e.target.value.toUpperCase() }))} maxLength={2} placeholder="SP" />
               </div>
             </div>
             <div className="grid gap-2">

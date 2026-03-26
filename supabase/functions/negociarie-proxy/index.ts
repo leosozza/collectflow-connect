@@ -111,7 +111,31 @@ Deno.serve(async (req) => {
       }
 
       case "nova-cobranca": {
-        result = await negociarieRequest("POST", "/cobranca/nova", params.data);
+        // Defensive normalization before forwarding to Negociarie
+        const cobrancaData = params.data as Record<string, unknown> || {};
+        if (cobrancaData.documento) {
+          cobrancaData.documento = String(cobrancaData.documento).replace(/\D/g, "");
+        }
+        if (cobrancaData.cep) {
+          const cepDigits = String(cobrancaData.cep).replace(/\D/g, "");
+          cobrancaData.cep = cepDigits.length === 8
+            ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
+            : cobrancaData.cep;
+        }
+        if (cobrancaData.uf) {
+          cobrancaData.uf = String(cobrancaData.uf).trim().toUpperCase();
+        }
+        if (cobrancaData.nome) {
+          cobrancaData.nome = String(cobrancaData.nome).trim();
+        }
+        if (cobrancaData.endereco) {
+          cobrancaData.endereco = String(cobrancaData.endereco).trim();
+        }
+        if (cobrancaData.cidade) {
+          cobrancaData.cidade = String(cobrancaData.cidade).trim();
+        }
+        console.log("[negociarie-proxy] nova-cobranca normalized payload:", JSON.stringify(cobrancaData));
+        result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
         break;
       }
 
