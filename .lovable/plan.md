@@ -1,37 +1,64 @@
 
 
-# Plano: Corrigir geração de boleto e formulário de edição de endereço
+# Plano: Datepicker via Dialog + Reemissão de boleto com controle de vigência
 
-## Problema raiz
+## Resumo
 
-1. **Boleto falha mesmo após editar endereço**: O `generateSingleBoleto` busca dados do cliente com `.eq("cpf", cpf).eq("credor", credor)` — se o credor no acordo não bater exatamente com o campo `credor` na tabela `clients`, a query retorna vazio. Com dados vazios, os fallbacks ("00000000", "Não informado") são rejeitados pela API Negociarie.
+O prompt faz total sentido e está bem estruturado. Ele resolve 3 problemas reais:
+1. O Popover inline dentro da tabela continua instável — substituir por Dialog é a solução definitiva
+2. O botão "Gerar Boleto" hoje fica oculto se já existe boleto — precisa permitir reemissão
+3. Não existe controle de boleto substituído — precisa marcar cobranças antigas como obsoletas
 
-2. **Formulário de edição**: CEP está no final do formulário e não faz busca automática via ViaCEP (como já existe no cadastro de novo cliente).
+## Mudanças
 
-## Correções
+### 1. Substituir Popover por Dialog para edição de data (`AgreementInstallments.tsx`)
 
-### 1. Tornar a busca de dados do cliente mais resiliente (`negociarieService.ts`)
+- Remover o `Popover`/`PopoverContent`/`Calendar` inline na célula de vencimento (linhas 285-308)
+- Remover `setTimeout` do `DropdownMenuItem` "Editar Data" (linhas 395-400)
+- Criar estados: `dateEditDialogOpen`, `selectedInstallmentForDateEdit`, `selectedDateForEdit`
+- No `DropdownMenuItem`, apenas setar o estado e abrir o Dialog
+- O Dialog exibe: título, identificação da parcela (Entrada ou Parcela X/Y), data atual, Calendar, botões Cancelar/Salvar
+- Calendar fica estável dentro de Dialog — sem conflito de foco com DropdownMenu
+- Ao salvar: chamar `updateInstallmentDate`, fechar Dialog, limpar estados, toast, refresh
 
-- Remover o filtro `.eq("credor", agreement.credor)` da query de busca de endereço — usar apenas `.eq("cpf", cpf)` com `.limit(1)`, já que o endereço é do devedor, não do credor
-- Se a primeira tentativa retornar vazio, tentar também com CPF formatado (caso o banco armazene com pontuação)
-- Lançar erro claro se nenhum dado de endereço for encontrado e os campos obrigatórios estiverem vazios, em vez de enviar placeholders que a API rejeita
-- Aplicar a mesma correção em `generateAgreementBoletos`
+### 2. Permitir reemissão de boleto (`AgreementInstallments.tsx`)
 
-### 2. Reorganizar formulário de edição + busca por CEP (`ClientDetailHeader.tsx`)
+- Alterar a condição do botão "Gerar Boleto" (linha 353): remover `!hasBoleto` da condicional
+- Quando já existe boleto anterior e a parcela não está paga, mostrar o botão como "Reemitir Boleto"
+- Exibir aviso discreto no toast ao gerar quando já existe boleto anterior
 
-- Mover o campo CEP para o **primeiro** campo da seção de endereço
-- Adicionar `onBlur` no campo CEP que chama a API ViaCEP (`https://viacep.com.br/ws/{cep}/json/`) e preenche automaticamente endereço, bairro, cidade e UF — idêntico ao que já existe em `ClientForm.tsx`
-- Adicionar indicador visual de loading enquanto busca o CEP
+### 3. Marcar boletos anteriores como substituídos (`negociarieService.ts`)
 
-### 3. Validação pré-envio de boleto
+- Em `generateSingleBoleto`, antes de salvar a nova cobrança:
+  - Buscar cobranças anteriores da mesma parcela (`agreement_id` + número da parcela na `descricao` ou campo identificador)
+  - Atualizar status das não-pagas para `"substituido"`
+- Só marcar como substituído **após** gerar com sucesso o novo boleto
+- Se a geração falhar, não alterar cobranças existentes
 
-- Antes de chamar `novaCobranca`, verificar se os campos obrigatórios (documento, nome, cep, endereco, cidade, uf) possuem valores reais
-- Se não, exibir toast informativo: "Preencha o endereço do devedor antes de gerar o boleto"
+### 4. Query de cobrancas vigentes (`AgreementInstallments.tsx`)
+
+- Na query de cobrancas (linhas 49-61), filtrar `.neq("status", "substituido")` para que a UI mostre apenas o boleto vigente
+- Preservar histórico no banco — apenas ocultar na interface principal
+
+### 5. Migração SQL
+
+- Adicionar coluna `installment_key` à tabela `negociarie_cobrancas` para identificar a parcela sem depender da `descricao`
+- Popular com o número/key da parcela ao gerar boleto
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/negociarieService.ts` | Remover filtro por credor na busca de endereço; validar campos antes de chamar API |
-| `src/components/client-detail/ClientDetailHeader.tsx` | Mover CEP para primeiro; adicionar busca ViaCEP no onBlur |
+| `src/components/client-detail/AgreementInstallments.tsx` | Substituir Popover por Dialog; permitir reemissão; filtrar substituídos |
+| `src/services/negociarieService.ts` | Marcar cobranças anteriores como substituídas; salvar `installment_key` |
+| Migração SQL | Adicionar `installment_key` em `negociarie_cobrancas` |
+
+## O que NÃO será alterado
+
+- Edição de valor (já funciona)
+- Baixa manual
+- Geração de recibo
+- Layout geral da tabela
+- Fluxo Negociarie (criação de cobrança)
+- Outras abas do perfil do cliente
 
