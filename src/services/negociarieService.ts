@@ -300,7 +300,7 @@ export const negociarieService = {
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
     const idParcela = installment.number === 0 ? "" : String(installment.number);
-    const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
+    const payload = buildBoletoPayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
       value: installment.value,
       dueDate: installment.dueDate,
       label: instLabel,
@@ -321,7 +321,7 @@ export const negociarieService = {
       data_vencimento: parcelaResult?.data_vencimento || installment.dueDate,
       valor: Number(parcelaResult?.valor || installment.value),
       status: "pendente",
-      link_boleto: parcelaResult?.link_boleto || parcelaResult?.url_boleto || apiResult?.link_boleto || apiResult?.url_boleto || null,
+      link_boleto: extractBoletoLink(apiResult, parcelaResult),
       linha_digitavel: parcelaResult?.linha_digitavel || apiResult?.linha_digitavel || null,
       pix_copia_cola: parcelaResult?.pix_copia_cola || apiResult?.pix_copia_cola || null,
       callback_data: apiResult || null,
@@ -376,7 +376,7 @@ export const negociarieService = {
         const installmentKey = buildInstallmentKey(agreement.id, inst.number);
         const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
         const idParcela = inst.number === 0 ? "" : String(inst.number);
-        const payload = buildNegociariePayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
+        const payload = buildBoletoPayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
           value: inst.value,
           dueDate: inst.dueDate,
           label: instLabel,
@@ -397,7 +397,7 @@ export const negociarieService = {
             data_vencimento: parcelaResult?.data_vencimento || inst.dueDate,
             valor: Number(parcelaResult?.valor || inst.value),
             status: "pendente",
-            link_boleto: parcelaResult?.link_boleto || parcelaResult?.url_boleto || apiResult?.link_boleto || apiResult?.url_boleto || null,
+            link_boleto: extractBoletoLink(apiResult, parcelaResult),
             linha_digitavel: parcelaResult?.linha_digitavel || apiResult?.linha_digitavel || null,
             pix_copia_cola: parcelaResult?.pix_copia_cola || apiResult?.pix_copia_cola || null,
             callback_data: apiResult || null,
