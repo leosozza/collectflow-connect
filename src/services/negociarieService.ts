@@ -136,7 +136,7 @@ export const negociarieService = {
     const payload: Record<string, unknown> = {
       documento: cleanCpf,
       nome: clientData.nome_completo || agreement.client_name,
-      cep: (clientData.cep || "").replace(/[^\d\-]/g, ""),
+      cep: formatCepForApi((clientData.cep || "")),
       endereco: clientData.endereco || "",
       bairro: clientData.bairro || "",
       cidade: clientData.cidade || "",
