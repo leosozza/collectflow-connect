@@ -1,35 +1,61 @@
 
+# Resposta: Impacto nos demais clientes/tenants
 
-# Plano: Corrigir edição de data da parcela que não reflete na UI
+## Análise de impacto
 
-## Problema raiz (dois bugs)
+**Não vai atrapalhar nenhum cliente de nenhuma tenant.** Na verdade, vai **corrigir para todos**, porque:
 
-1. **Query invalidation não bate**: Após salvar a data, o componente invalida `["client-agreements"]`, mas o query real em `ClientDetailPage.tsx` usa `["client-agreements", cpf]`. Como as keys não batem, o React Query não refaz o fetch e a UI continua mostrando a data antiga.
+1. O formato flat atual (`documento`, `nome`, `valor`, `vencimento` na raiz) **não funciona para ninguém** — é por isso que retorna erro 400 para qualquer cliente, não só o Raul
+2. Todos os clientes (manuais ou via API) passam pelo mesmo fluxo: `buildNegociariePayload()` → `negociarie-proxy` → Negociarie
+3. Os dados de cada cliente vêm do próprio registro no banco (via `fetchClientAddress`), então cada boleto usa os dados corretos do respectivo devedor
 
-2. **Key da Entrada divergente**: Ao salvar a data da entrada, o código passa `0` como número da parcela (que vira key `"0"` no JSON), mas ao ler o componente usa `customKey = "entrada"`. Resultado: salva em `"0"`, lê de `"entrada"` → nunca encontra o valor salvo.
+## Correção necessária
 
-## Correção
+O payload precisa mudar de formato flat para o formato aninhado que a API exige:
 
-**Arquivo**: `src/components/client-detail/AgreementInstallments.tsx`
+```text
+ANTES (flat - não funciona para ninguém):
+{ documento, nome, cep, endereco, valor, vencimento }
 
-1. Na função `handleSaveDateEdit`, trocar a chamada de:
-   ```ts
-   await updateInstallmentDate(agreementId, inst.isEntrada ? 0 : inst.number, dateStr);
-   ```
-   para usar `inst.customKey` diretamente (que já é `"entrada"` ou o número correto como string).
+DEPOIS (aninhado - formato correto da API):
+{ cliente: { documento, nome, cep, endereco, ... }, id_geral, parcelas: [...] }
+```
 
-2. Ajustar `updateInstallmentDate` em `agreementService.ts` para aceitar `string` como chave (em vez de `number`), já que a key no JSON é sempre string.
-
-3. Corrigir todas as invalidações de query para usar a key completa:
-   ```ts
-   queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
-   ```
-   Isso afeta tanto `handleSaveDateEdit` quanto `handleEditValue`.
-
-## Arquivos afetados
+## Arquivos a alterar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | Usar `inst.customKey` na edição de data; corrigir query keys nas invalidações |
-| `src/services/agreementService.ts` | Alterar tipo do parâmetro `installmentNumber` para `string` em `updateInstallmentDate` |
+| `src/services/negociarieService.ts` | Refatorar `buildNegociariePayload` para retornar `{ cliente, id_geral, parcelas }` |
+| `supabase/functions/negociarie-proxy/index.ts` | No case `nova-cobranca`: normalizar dentro de `cliente` (não flat) e repassar |
 
+## Detalhes técnicos
+
+### `buildNegociariePayload` — novo formato:
+```typescript
+{
+  cliente: {
+    documento: "38568385893",        // só dígitos
+    nome: "Raul Jose Seixas Junior",
+    cep: "06186-130",                // com hífen
+    endereco: "Rua Luiz Henrique de Oliveira",
+    numero: "",
+    complemento: "",
+    cidade: "Osasco",
+    uf: "SP",
+    telefones: ["11945542245"],      // array
+    email: "raulsjunior@hotmail.com"
+  },
+  id_geral: "ACORDO-535df9af",
+  parcelas: [
+    { id_parcela: "entrada", data_vencimento: "2026-03-27", valor: 10.00 }
+  ]
+}
+```
+
+### Proxy — simplificação:
+- Normalizar campos dentro de `data.cliente` (não na raiz)
+- Repassar payload estruturado diretamente para `/cobranca/nova`
+
+### Validação:
+- `validateAddressFields` será ajustada para validar dentro de `cliente`
+- Mesmas regras: CEP com hífen, CPF só dígitos, UF 2 letras maiúsculas
