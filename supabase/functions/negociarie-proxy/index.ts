@@ -126,54 +126,58 @@ Deno.serve(async (req) => {
 
       case "nova-cobranca": {
         const cobrancaData = (params.data as Record<string, unknown>) || {};
-        const devedorObj =
-          (cobrancaData.devedor as Record<string, unknown> | undefined) ??
-          (cobrancaData.cliente as Record<string, unknown> | undefined);
+        
+        // Support both 'cliente' (correct for boleto) and 'devedor' (legacy fallback)
+        let clienteObj =
+          (cobrancaData.cliente as Record<string, unknown> | undefined) ??
+          (cobrancaData.devedor as Record<string, unknown> | undefined);
 
-        if (devedorObj) {
-          if (devedorObj.documento) {
-            devedorObj.documento = String(devedorObj.documento).replace(/\D/g, "");
+        if (clienteObj) {
+          // Clean documento
+          if (clienteObj.documento) {
+            clienteObj.documento = String(clienteObj.documento).replace(/\D/g, "");
           }
-          if (devedorObj.cep) {
-            const cepDigits = String(devedorObj.cep).replace(/\D/g, "");
-            devedorObj.cep = cepDigits.length === 8
+          // Format CEP
+          if (clienteObj.cep) {
+            const cepDigits = String(clienteObj.cep).replace(/\D/g, "");
+            clienteObj.cep = cepDigits.length === 8
               ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
-              : devedorObj.cep;
+              : clienteObj.cep;
           }
-          if (devedorObj.uf) {
-            devedorObj.uf = String(devedorObj.uf).trim().toUpperCase();
+          // Normalize UF
+          if (clienteObj.uf) {
+            clienteObj.uf = String(clienteObj.uf).trim().toUpperCase();
           }
-          if (devedorObj.nome) {
-            devedorObj.nome = String(devedorObj.nome).trim();
+          // Trim string fields
+          for (const field of ["nome", "bairro", "endereco", "cidade", "email"]) {
+            if (clienteObj[field]) {
+              clienteObj[field] = String(clienteObj[field]).trim();
+            }
           }
-          if (devedorObj.bairro) {
-            devedorObj.bairro = String(devedorObj.bairro).trim();
-          }
-          if (devedorObj.endereco) {
-            devedorObj.endereco = String(devedorObj.endereco).trim();
-          }
-          if (devedorObj.cidade) {
-            devedorObj.cidade = String(devedorObj.cidade).trim();
-          }
-          if (devedorObj.email) {
-            devedorObj.email = String(devedorObj.email).trim();
-          }
-          if (devedorObj.celular) {
-            let celular = String(devedorObj.celular).replace(/\D/g, "");
-            if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
-            devedorObj.celular = celular;
-          }
-          if (!devedorObj.celular && Array.isArray(devedorObj.telefones) && devedorObj.telefones.length > 0) {
-            let celular = String(devedorObj.telefones[0] ?? "").replace(/\D/g, "");
-            if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
-            devedorObj.celular = celular;
+          // Ensure numero and complemento exist
+          if (!clienteObj.numero && clienteObj.numero !== "") clienteObj.numero = "";
+          if (!clienteObj.complemento && clienteObj.complemento !== "") clienteObj.complemento = "";
+          
+          // Ensure razao_social exists (API may require it)
+          if (!clienteObj.razao_social && clienteObj.razao_social !== "") {
+            clienteObj.razao_social = "";
           }
 
-          delete devedorObj.telefones;
-          if (!devedorObj.numero && devedorObj.numero !== "") devedorObj.numero = "";
-          if (!devedorObj.complemento && devedorObj.complemento !== "") devedorObj.complemento = "";
-          cobrancaData.devedor = devedorObj;
-          delete cobrancaData.cliente;
+          // Handle telefones: if celular was sent instead of telefones, convert
+          if (!clienteObj.telefones && clienteObj.celular) {
+            let celular = String(clienteObj.celular).replace(/\D/g, "");
+            if (celular.length >= 12 && celular.startsWith("55")) celular = celular.slice(2);
+            clienteObj.telefones = [celular];
+            delete clienteObj.celular;
+          }
+          // Ensure telefones is an array
+          if (clienteObj.telefones && !Array.isArray(clienteObj.telefones)) {
+            clienteObj.telefones = [String(clienteObj.telefones)];
+          }
+
+          // Set as 'cliente' root key (boleto contract)
+          cobrancaData.cliente = clienteObj;
+          delete cobrancaData.devedor;
         }
 
         const parcelasArr = cobrancaData.parcelas as Array<Record<string, unknown>> | undefined;
@@ -191,11 +195,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (!("sandbox" in cobrancaData)) {
-          cobrancaData.sandbox = false;
-        }
+        // Remove sandbox for boleto endpoint (not part of the contract)
+        delete cobrancaData.sandbox;
 
-        console.log("[negociarie-proxy] nova-cobranca structured payload:", JSON.stringify(cobrancaData));
+        console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));
         result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
         break;
       }

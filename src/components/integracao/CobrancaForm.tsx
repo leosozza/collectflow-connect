@@ -134,15 +134,18 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
       let apiResult;
       if (tipo === "boleto") {
-        // Boleto uses flat payload
-        const flatPayload = {
-          documento, nome, cep, endereco, bairro, cidade, uf, email,
-          telefone: celular,
-          valor,
-          vencimento: form.vencimento,
-          descricao,
+        const boletoPayload = {
+          cliente: {
+            documento, nome, razao_social: "",
+            cep: cep.length === 8 ? `${cep.slice(0, 5)}-${cep.slice(5)}` : cep,
+            endereco, numero: "", complemento: "",
+            bairro, cidade, uf, email,
+            telefones: [celular],
+          },
+          id_geral: idGeral,
+          parcelas: [{ valor, data_vencimento: form.vencimento, descricao }],
         };
-        apiResult = await negociarieService.novaCobranca(flatPayload);
+        apiResult = await negociarieService.novaCobranca(boletoPayload);
       } else {
         // Pix and Cartão use nested payload
         const nestedPayload = {
@@ -160,7 +163,7 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
       const idGeral2 = apiResult.id_geral || apiResult.idGeral || idGeral;
       const parcela = apiResult.parcelas?.[0] || apiResult;
-      const linkBoleto = parcela.link_boleto || parcela.linkBoleto || parcela.url_boleto || apiResult.link_boleto || null;
+      const linkBoleto = parcela.link || parcela.link_boleto || parcela.linkBoleto || parcela.url_boleto || apiResult.link_boleto || null;
       const pixCopiaCola = parcela.pix_copia_cola || parcela.pixCopiaCola || apiResult.pix_copia_cola || null;
       const linkCartao = parcela.link_cartao || parcela.linkCartao || parcela.url_cartao || apiResult.link_cartao || null;
       const linhaDigitavel = parcela.linha_digitavel || parcela.linhaDigitavel || apiResult.linha_digitavel || null;
