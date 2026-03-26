@@ -3007,6 +3007,7 @@ export type Database = {
           id_geral: string
           id_parcela: string | null
           id_status: number | null
+          installment_key: string | null
           linha_digitavel: string | null
           link_boleto: string | null
           link_cartao: string | null
@@ -3027,6 +3028,7 @@ export type Database = {
           id_geral: string
           id_parcela?: string | null
           id_status?: number | null
+          installment_key?: string | null
           linha_digitavel?: string | null
           link_boleto?: string | null
           link_cartao?: string | null
@@ -3047,6 +3049,7 @@ export type Database = {
           id_geral?: string
           id_parcela?: string | null
           id_status?: number | null
+          installment_key?: string | null
           linha_digitavel?: string | null
           link_boleto?: string | null
           link_cartao?: string | null

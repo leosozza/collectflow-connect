@@ -7,7 +7,6 @@ import { formatCPFDisplay } from "@/lib/cpfUtils";
 /** Fetch client address trying CPF clean then formatted */
 async function fetchClientAddress(cpf: string) {
   const cleanCpf = cpf.replace(/[.\-]/g, "");
-  // Try with clean CPF first
   const { data } = await supabase
     .from("clients")
     .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
@@ -16,7 +15,6 @@ async function fetchClientAddress(cpf: string) {
     .maybeSingle();
   if (data) return data;
 
-  // Try formatted CPF
   const formatted = formatCPFDisplay(cleanCpf);
   const { data: data2 } = await supabase
     .from("clients")
@@ -36,6 +34,25 @@ function validateAddressFields(payload: Record<string, unknown>) {
     if (!val || placeholders.includes(val)) {
       throw new Error(`Preencha o endereço do devedor antes de gerar o boleto. Campo obrigatório ausente: ${field}`);
     }
+  }
+}
+
+/** Build installment_key from agreement_id and installment number */
+function buildInstallmentKey(agreementId: string, installmentNumber: number): string {
+  return `${agreementId}:${installmentNumber}`;
+}
+
+/** Mark previous unpaid boletos for same installment as substituido */
+async function markPreviousBoletosAsSubstituido(agreementId: string, installmentKey: string) {
+  try {
+    await supabase
+      .from("negociarie_cobrancas" as any)
+      .update({ status: "substituido" } as any)
+      .eq("agreement_id", agreementId)
+      .eq("installment_key", installmentKey)
+      .neq("status", "pago");
+  } catch (e) {
+    logger.error("negociarieService", "mark_previous_substituido", e);
   }
 }
 
@@ -100,6 +117,7 @@ export const negociarieService = {
 
   /**
    * Generate a single boleto for one installment of an agreement.
+   * Marks previous unpaid boletos for the same installment as substituido.
    */
   async generateSingleBoleto(
     agreement: { id: string; client_cpf: string; credor: string; tenant_id: string; client_name: string },
@@ -113,6 +131,7 @@ export const negociarieService = {
     }
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
+    const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
     const payload: Record<string, unknown> = {
       documento: cleanCpf,
@@ -133,7 +152,10 @@ export const negociarieService = {
 
     const apiResult = await this.novaCobranca(payload);
 
-    // Save to local DB
+    // Mark previous boletos for this installment as substituido
+    await markPreviousBoletosAsSubstituido(agreement.id, installmentKey);
+
+    // Save new cobranca as vigente
     const cobranca = await this.saveCobranca({
       tenant_id: agreement.tenant_id,
       agreement_id: agreement.id,
@@ -145,6 +167,7 @@ export const negociarieService = {
       linha_digitavel: apiResult?.linha_digitavel || null,
       pix_copia_cola: apiResult?.pix_copia_cola || null,
       callback_data: apiResult || null,
+      installment_key: installmentKey,
     });
 
     logger.info(MODULE, "single_boleto_generated", { agreement_id: agreement.id, installment: installment.number });
@@ -174,8 +197,6 @@ export const negociarieService = {
 
   /**
    * Generate boletos for each installment of an agreement.
-   * Fetches client address data and calls Negociarie API for each installment.
-   * Errors do NOT propagate — returns a summary result.
    */
   async generateAgreementBoletos(
     agreement: { id: string; client_cpf: string; credor: string; tenant_id: string; client_name: string },
@@ -194,6 +215,7 @@ export const negociarieService = {
 
     for (const inst of installments) {
       try {
+        const installmentKey = buildInstallmentKey(agreement.id, inst.number);
         const payload: Record<string, unknown> = {
           documento: cleanCpf,
           nome: clientData.nome_completo || agreement.client_name,
@@ -213,7 +235,9 @@ export const negociarieService = {
 
         const apiResult = await this.novaCobranca(payload);
 
-        // Save to local DB with agreement reference
+        // Mark previous boletos as substituido
+        await markPreviousBoletosAsSubstituido(agreement.id, installmentKey);
+
         try {
           await this.saveCobranca({
             tenant_id: agreement.tenant_id,
@@ -226,6 +250,7 @@ export const negociarieService = {
             linha_digitavel: apiResult?.linha_digitavel || null,
             pix_copia_cola: apiResult?.pix_copia_cola || null,
             callback_data: apiResult || null,
+            installment_key: installmentKey,
           });
         } catch (saveErr) {
           logger.error(MODULE, "save_cobranca_local", saveErr, { agreement_id: agreement.id, installment: inst.number });

@@ -1,0 +1,1 @@
+ALTER TABLE public.negociarie_cobrancas ADD COLUMN IF NOT EXISTS installment_key text;
