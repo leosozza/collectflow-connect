@@ -1,7 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { logger } from "@/lib/logger";
-import { addMonths } from "date-fns";
 import { formatCPFDisplay } from "@/lib/cpfUtils";
 
 /** Format CEP to XXXXX-XXX pattern expected by Negociarie API */
@@ -59,6 +58,36 @@ function validateAddressFields(payload: Record<string, unknown>) {
   }
 }
 
+function getTodayLocalIso(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatIsoDateForMessage(date: string): string {
+  const [year, month, day] = date.split("-");
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
+
+function validateDueDate(dueDate: string, installmentLabel: string): string {
+  const normalizedDueDate = String(dueDate || "").slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDueDate)) {
+    throw new Error(`Data de vencimento inválida para ${installmentLabel}. Informe uma data válida antes de gerar o boleto.`);
+  }
+
+  if (normalizedDueDate < getTodayLocalIso()) {
+    throw new Error(
+      `${installmentLabel} está com vencimento em ${formatIsoDateForMessage(normalizedDueDate)}. Edite a data para hoje ou uma data futura antes de gerar o boleto.`
+    );
+  }
+
+  return normalizedDueDate;
+}
+
 /** Build a Negociarie-compliant payload from client data */
 function buildNegociariePayload(
   cleanCpf: string,
@@ -77,7 +106,7 @@ function buildNegociariePayload(
     email: (clientData.email || "").trim(),
     telefone: (clientData.phone || "").replace(/\D/g, ""),
     valor: installment.value,
-    vencimento: installment.dueDate,
+    vencimento: String(installment.dueDate || "").slice(0, 10),
     descricao: installment.label,
   };
   return payload;
@@ -187,6 +216,7 @@ export const negociarieService = {
     });
 
     validateAddressFields(payload);
+    payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
     const apiResult = await this.novaCobranca(payload);
 
@@ -262,6 +292,7 @@ export const negociarieService = {
         });
 
         validateAddressFields(payload);
+        payload.vencimento = validateDueDate(String(payload.vencimento || ""), instLabel);
 
         const apiResult = await this.novaCobranca(payload);
 
