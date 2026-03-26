@@ -1,48 +1,40 @@
 
 
-# Plano: Alinhar payload ao teste Postman que funcionou
+# Plano: Corrigir 500 na geração de boleto — `id_geral` duplicado
 
-## O que o teste Postman provou
+## Diagnóstico
 
-O boleto foi gerado com sucesso com este payload exato:
+Comparei o payload final do proxy (logs) com o Postman lado a lado:
 
 ```text
-POSTMAN (SUCESSO)                      NOSSO CÓDIGO (FALHA)
-─────────────────                      ────────────────────
-cliente.bairro: "Centro" ✓            delete bairro ← REMOVEMOS!
-cliente.numero: "3000"                 numero: "" ou "SN" ← VAZIO!
-cliente.telefones: ["11999991111"]     telefones: ["11945542245"] ✓
-id_geral: "RIVO-TESTE-1001"           "53591244" ✓ (string ok)
-parcelas[0].id_parcela: "1001"         sem id_parcela ou "2" ← CONFLITO
+LOVABLE (500)                              POSTMAN (200)
+─────────                                  ──────────
+id_geral: "53591244"                       id_geral: "RIVO-TESTE-1001"
+valor: 11                                  valor: 10.0
+bairro: "Quitaúna" (acento)               bairro: "Centro"
+parcelas sem valor_mora_dia/multa          parcelas COM valor_mora_dia/multa
 ```
 
-## Problemas encontrados (3 bugs)
+A estrutura é **idêntica**. O problema não é o formato do payload — é o **dado**.
 
-1. **`bairro` deletado** (proxy linha 179): `delete clienteObj.bairro` remove o campo, mas o Postman provou que a API ACEITA `bairro`. Sem ele, a validação de endereço pode falhar.
+O `id_geral: "53591244"` foi enviado em **múltiplas tentativas** anteriores. Em tentativas passadas, a API retornou `400: "Já existe boleto gerado com o código 2"`. Agora com um `id_parcela` diferente (`"54231285"`), o servidor da Negociarie **crashou** (500) ao tentar adicionar uma parcela nova a um `id_geral` que já tem parcelas registradas com status conflitante.
 
-2. **`numero` vazio**: O service envia `""` ou `"SN"` quando não extrai do endereço. O Postman usou `"3000"`. Número vazio pode causar rejeição.
+O `id_geral` atual é gerado como hash numérico fixo a partir do `agreement_id` — ou seja, é **sempre o mesmo** para o mesmo acordo. Cada tentativa de gerar boleto reenvia o mesmo `id_geral`, causando conflito.
 
-3. **Payload flat no proxy**: Os logs mais recentes mostram que o proxy recebeu dados FLAT (sem `cliente` wrapper) e repassou assim para a API. Isso acontece quando `cobrancaData.cliente` e `cobrancaData.devedor` são ambos undefined -- o bloco `if (clienteObj)` não executa e os dados vão flat para `/cobranca/nova`.
-
-## Correções
-
-### `supabase/functions/negociarie-proxy/index.ts`
-1. **Remover `delete clienteObj.bairro`** -- bairro é aceito pela API
-2. **Adicionar fallback para payload flat**: se não existir `cliente` nem `devedor` mas existir `documento`/`nome` na raiz, montar automaticamente o objeto `cliente` + `parcelas` a partir dos campos flat
-3. Manter `numero` default como `"SN"` (melhor que vazio)
+## Correção
 
 ### `src/services/negociarieService.ts`
-1. **Incluir `bairro`** no objeto `cliente` do `buildBoletoPayload` (busca do DB já traz `bairro`)
-2. **`id_parcela`**: usar timestamp-based unique ID quando `installment.number === 0` em vez de string vazia (evitar omissão e conflito)
+1. Tornar `id_geral` único por tentativa: incluir timestamp ou contador para evitar colisão. Formato: `"RIVO-{agreementIdShort}-{timestamp}"` (ex: `"RIVO-535d-1774553000"`)
+2. Adicionar `valor_mora_dia: 0` e `valor_multa: 0` nas parcelas (campos presentes no Postman que funcionou)
 
-### `src/components/integracao/CobrancaForm.tsx`
-1. Já envia payload estruturado correto -- só precisa incluir `bairro` no objeto `cliente` (linha 142 está sem bairro)
+### `supabase/functions/negociarie-proxy/index.ts`
+1. Garantir que `valor` seja enviado como float com 2 casas decimais na serialização (usar `parseFloat(valor.toFixed(2))`)
+2. Log adicional: logar o `id_geral` sendo enviado para facilitar debug de duplicidade
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/negociarie-proxy/index.ts` | Manter `bairro`; fallback flat→estruturado |
-| `src/services/negociarieService.ts` | Incluir `bairro`; `id_parcela` nunca vazio |
-| `src/components/integracao/CobrancaForm.tsx` | Incluir `bairro` no `cliente` |
+| `src/services/negociarieService.ts` | `id_geral` único por tentativa; adicionar `valor_mora_dia`/`valor_multa` |
+| `supabase/functions/negociarie-proxy/index.ts` | Forçar float em `valor`; log do `id_geral` |
 
