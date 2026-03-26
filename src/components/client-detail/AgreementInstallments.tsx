@@ -291,7 +291,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             <TableHead>Vencimento</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-center">Status</TableHead>
-            <TableHead className="text-center w-[60px]">Ações</TableHead>
+            <TableHead className="text-center w-[140px]">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -300,15 +300,37 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
             const hasPix = inst.cobranca?.pix_copia_cola;
             const isPaid = inst.status === "pago";
+            const canEdit = !isPaid && inst.status !== "pending_confirmation";
 
             return (
               <TableRow key={idx}>
                 <TableCell className="font-medium text-xs">
                   {inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
                 </TableCell>
+
+                {/* Vencimento + pencil */}
                 <TableCell className="text-xs">
-                  {formatDate(inst.dueDate.toISOString().split("T")[0])}
+                  <span className="inline-flex items-center gap-1">
+                    {formatDate(inst.dueDate.toISOString().split("T")[0])}
+                    {canEdit && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => handleOpenDateEdit(inst)}
+                              className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
+                            >
+                              <Pencil className="w-3 h-3 text-muted-foreground" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Editar Data</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </span>
                 </TableCell>
+
+                {/* Valor + pencil */}
                 <TableCell className="text-right text-xs">
                   {editingValueIdx === idx ? (
                     <div className="flex items-center gap-1 justify-end">
@@ -325,9 +347,31 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                       </Button>
                     </div>
                   ) : (
-                    formatCurrency(Number(inst.value))
+                    <span className="inline-flex items-center gap-1">
+                      {formatCurrency(Number(inst.value))}
+                      {canEdit && (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => {
+                                  setEditingValueIdx(idx);
+                                  setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
+                                }}
+                                className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
+                              >
+                                <Pencil className="w-3 h-3 text-muted-foreground" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top"><p>Editar Valor</p></TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </span>
                   )}
                 </TableCell>
+
+                {/* Status */}
                 <TableCell className="text-center">
                   <Badge variant="outline" className={cn(
                     "gap-1 text-[10px]",
@@ -337,99 +381,122 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                     "bg-warning/10 text-warning border-warning/30"
                   )}>
                     {statusIcon(inst.status)}
-                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando Confirmação" : "Em Aberto"}
+                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                   </Badge>
                 </TableCell>
+
+                {/* Inline action icons */}
                 <TableCell className="text-center">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      {/* Generate / re-issue boleto */}
+                  <div className="flex items-center justify-center gap-0.5">
+                    <TooltipProvider delayDuration={200}>
+                      {/* Gerar/Reemitir Boleto */}
                       {!isPaid && (
-                        <DropdownMenuItem
-                          onClick={() => handleGenerateBoleto(inst, idx)}
-                          disabled={generatingIdx === idx}
-                        >
-                          {generatingIdx === idx ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          ) : (
-                            <Receipt className="w-4 h-4 mr-2" />
-                          )}
-                          {hasBoleto ? "Reemitir Boleto" : "Gerar Boleto"}
-                        </DropdownMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={generatingIdx === idx}
+                              onClick={() => handleGenerateBoleto(inst, idx)}
+                            >
+                              {generatingIdx === idx ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Receipt className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>{hasBoleto ? "Reemitir Boleto" : "Gerar Boleto"}</p></TooltipContent>
+                        </Tooltip>
                       )}
 
                       {/* Download boleto */}
                       {hasBoleto && (
-                        <DropdownMenuItem onClick={() => window.open(inst.cobranca.link_boleto, "_blank")}>
-                          <Download className="w-4 h-4 mr-2" />
-                          {isPaid ? "2ª Via Boleto" : "Baixar Boleto"}
-                        </DropdownMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => window.open(inst.cobranca.link_boleto, "_blank")}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Baixar Boleto"}</p></TooltipContent>
+                        </Tooltip>
                       )}
 
-                      {/* Copy linha digitavel */}
+                      {/* Copiar linha digitável */}
                       {hasLinhaDigitavel && (
-                        <DropdownMenuItem onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copiar Linha Digitável
-                        </DropdownMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Copiar Linha Digitável</p></TooltipContent>
+                        </Tooltip>
                       )}
 
-                      {/* Copy PIX */}
-                      {hasPix && (
-                        <DropdownMenuItem onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copiar PIX
-                        </DropdownMenuItem>
+                      {/* Copiar PIX */}
+                      {hasPix && !hasLinhaDigitavel && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Copiar PIX</p></TooltipContent>
+                        </Tooltip>
                       )}
 
-                      {(hasBoleto || hasLinhaDigitavel || hasPix) && !isPaid && <DropdownMenuSeparator />}
-
-                      {/* Edit date - opens dialog */}
-                      {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onClick={() => handleOpenDateEdit(inst)}>
-                          <CalendarIcon className="w-4 h-4 mr-2" />
-                          Editar Data
-                        </DropdownMenuItem>
+                      {/* Baixar manualmente */}
+                      {canEdit && tenantId && profile && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}
+                            >
+                              <HandCoins className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
+                        </Tooltip>
                       )}
 
-                      {/* Edit value */}
-                      {!isPaid && inst.status !== "pending_confirmation" && (
-                        <DropdownMenuItem onClick={() => {
-                          setTimeout(() => {
-                            setEditingValueIdx(idx);
-                            setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
-                          }, 150);
-                        }}>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Editar Valor
-                        </DropdownMenuItem>
-                      )}
-
-                      {/* Manual payment */}
-                      {!isPaid && inst.status !== "pending_confirmation" && tenantId && profile && (
-                        <DropdownMenuItem onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}>
-                          <HandCoins className="w-4 h-4 mr-2" />
-                          Baixar Manualmente
-                        </DropdownMenuItem>
-                      )}
-
-                      {/* Download receipt - only when paid */}
+                      {/* Baixar recibo */}
                       {isPaid && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDownloadReceipt(inst)}>
-                            <FileDown className="w-4 h-4 mr-2" />
-                            Baixar Recibo
-                          </DropdownMenuItem>
-                        </>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleDownloadReceipt(inst)}
+                            >
+                              <FileDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
+                        </Tooltip>
                       )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    </TooltipProvider>
+                  </div>
                 </TableCell>
               </TableRow>
             );
