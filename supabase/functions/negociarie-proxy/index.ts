@@ -202,16 +202,18 @@ Deno.serve(async (req) => {
         if (Array.isArray(parcelasArr)) {
           for (const p of parcelasArr) {
             if (typeof p.valor === "number") {
-              p.valor = Number(p.valor.toFixed(2));
+              p.valor = parseFloat(p.valor.toFixed(2));
             }
             // id_parcela must be a non-zero string per docs
             if (p.id_parcela !== undefined) {
               const strId = String(p.id_parcela);
               if (strId === "0" || strId === "") {
-                delete p.id_parcela;
+                p.id_parcela = String(Date.now()).slice(-8);
               } else {
                 p.id_parcela = strId;
               }
+            } else {
+              p.id_parcela = String(Date.now()).slice(-8);
             }
           }
         }
@@ -219,6 +221,7 @@ Deno.serve(async (req) => {
         // Remove sandbox (not part of /cobranca/nova contract)
         delete cobrancaData.sandbox;
 
+        console.log("[negociarie-proxy] nova-cobranca id_geral:", cobrancaData.id_geral);
         console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));
         result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
         break;
