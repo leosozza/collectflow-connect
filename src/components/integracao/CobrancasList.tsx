@@ -63,7 +63,7 @@ const CobrancasList = ({ tenantId, refreshKey }: CobrancasListProps) => {
           id_status: match.id_status || cobranca.id_status,
         };
         if (match.pix_copia_cola) updates.pix_copia_cola = match.pix_copia_cola;
-        if (match.link_boleto || match.url_boleto) updates.link_boleto = match.link_boleto || match.url_boleto;
+        if (match.link || match.link_boleto || match.url_boleto) updates.link_boleto = match.link || match.link_boleto || match.url_boleto;
         if (match.linha_digitavel) updates.linha_digitavel = match.linha_digitavel;
         if (match.link_cartao || match.url_cartao) updates.link_cartao = match.link_cartao || match.url_cartao;
         if (match.id_parcela) updates.id_parcela = String(match.id_parcela);
