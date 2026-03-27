@@ -1,29 +1,34 @@
 
 
-# Plano: Diferenciar "Acordo Vigente" de "Em dia"
+# Plano: Unificar visual do badge "Acordo Vigente" nos 3 locais
 
-## Contexto
+## Situação atual
 
-Hoje existem dois mapeamentos diferentes para o status `pending`:
-- `AgreementsList.tsx` (página /acordos): exibe **"Vigente"**
-- `ClientDetailPage.tsx` (perfil do cliente): exibe **"Em dia"**
+O texto "Acordo Vigente" já aparece corretamente nos 3 locais. O problema é que cada um renderiza o badge com estilo diferente:
 
-O pedido é padronizar:
-- Clientes **com acordo** e pagamento em dia → **"Acordo Vigente"**
-- Clientes **sem acordo** (status geral) → **"Em dia"**
+- `/acordos` → `bg-orange-100 text-orange-800` (cor de "pending")
+- `/carteira/{cpf}` → `variant="outline"` (badge outline cinza)
+- `/carteira` → cor dinâmica da tabela `tipos_status` (verde, conforme screenshot)
 
-## Análise
+O screenshot mostra que o visual desejado é o da carteira: **badge verde com borda**, como configurado no cadastro de status.
 
-O status `pending` na tabela `agreements` sempre se refere a um acordo. Portanto:
-- Na `AgreementsList.tsx` e no `ClientDetailPage.tsx` (onde exibe o badge do acordo), o label correto é **"Acordo Vigente"**
-- O "Em dia" ficaria reservado para contextos onde se fala do status geral do cliente (sem acordo)
+## Correção
 
-## Mudanças
+Alinhar os badges de `/acordos` e `/carteira/{cpf}` ao estilo verde usado na carteira.
 
+### 1. `src/components/acordos/AgreementsList.tsx`
+- Alterar `statusColors.pending` de `bg-orange-100 text-orange-800` para `bg-green-50 text-green-700 border border-green-300` (verde claro, consistente com o screenshot)
+
+### 2. `src/pages/ClientDetailPage.tsx`
+- Alterar `statusVariantMap.pending` para usar estilo customizado verde em vez de `variant="outline"` genérico
+- Aplicar a mesma cor verde: `bg-green-50 text-green-700 border border-green-300`
+
+### Resultado
+Os 3 locais exibirão "Acordo Vigente" com o mesmo visual verde, sem alterar lógica, nomenclaturas ou fontes de dados.
+
+### Arquivos afetados
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/ClientDetailPage.tsx` | Trocar `pending: "Em dia"` para `pending: "Acordo Vigente"` no `statusLabelsMap` |
-| `src/components/acordos/AgreementsList.tsx` | Trocar `pending: "Vigente"` para `pending: "Acordo Vigente"` no `statusLabels` |
-
-Apenas 2 linhas alteradas, sem impacto em lógica ou fluxo de boletos.
+| `src/components/acordos/AgreementsList.tsx` | Cor do badge `pending` → verde |
+| `src/pages/ClientDetailPage.tsx` | Estilo do badge `pending` → verde |
 
