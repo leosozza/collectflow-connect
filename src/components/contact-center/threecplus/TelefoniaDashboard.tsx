@@ -243,6 +243,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [unpausing, setUnpausing] = useState(false);
   const [reconnectingSip, setReconnectingSip] = useState(false);
   const hasRehydrated = useRef(false);
+  const modalClosedAtRef = useRef<number>(0);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
