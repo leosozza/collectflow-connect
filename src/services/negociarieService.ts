@@ -114,20 +114,30 @@ function buildBoletoPayload(
   // Reuse validation (same required fields, just check inside cliente)
   validateClienteFields(cliente);
 
-  const parcela: Record<string, unknown> = {
-    data_vencimento: validatedDueDate,
-    valor: parseFloat(installment.value.toFixed(2)),
-    valor_mora_dia: 0,
-    valor_multa: 0,
-  };
+  const CALLBACK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
 
   // id_parcela must be a non-zero string per Negociarie docs — never omit
+  let idParcela: string;
   if (installment.idParcela && installment.idParcela !== "0") {
-    parcela.id_parcela = String(installment.idParcela);
+    idParcela = String(installment.idParcela);
   } else {
-    // Generate a unique id_parcela to avoid omission (which causes 500) or conflict
-    parcela.id_parcela = String(Date.now()).slice(-8);
+    idParcela = String(Date.now()).slice(-8);
   }
+
+  // Build mensagem for boleto (max 40 chars per line)
+  const mensagemLine1 = `Acordo RIVO ${installment.label || ""}`.slice(0, 40);
+  const mensagemLine2 = `Venc: ${formatIsoDateForMessage(validatedDueDate)}`.slice(0, 40);
+  const mensagem = `${mensagemLine1}\n${mensagemLine2}`;
+
+  const parcela: Record<string, unknown> = {
+    id_parcela: idParcela,
+    data_vencimento: validatedDueDate,
+    valor: parseFloat(installment.value.toFixed(2)),
+    valor_mora_dia: 0.10,
+    valor_multa: 2.00,
+    mensagem,
+    callback_url: CALLBACK_URL,
+  };
 
   // Generate a UNIQUE id_geral per attempt to avoid 500 from duplicate id_geral
   const shortId = agreementId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 4);

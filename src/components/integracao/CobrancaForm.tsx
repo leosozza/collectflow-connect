@@ -132,18 +132,40 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
       const valor = parseCurrencyInput(form.valor);
       const descricao = form.descricao.trim() || `Cobrança ${tipo}`;
 
+      const CALLBACK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
+
       let apiResult;
       if (tipo === "boleto") {
+        // Extract numero from endereco if contains comma
+        let enderecoClean = endereco;
+        let numero = "SN";
+        if (endereco.includes(",")) {
+          const parts = endereco.split(",");
+          enderecoClean = parts[0].trim();
+          numero = (parts[1] || "").trim() || "SN";
+        }
+
+        const idParcela = String(Date.now()).slice(-8);
+        const mensagem = (descricao || `Cobranca ${idGeral}`).slice(0, 80);
+
         const boletoPayload = {
           cliente: {
             documento, nome, razao_social: "",
             cep: cep.length === 8 ? `${cep.slice(0, 5)}-${cep.slice(5)}` : cep,
-            endereco, numero: "", complemento: "",
+            endereco: enderecoClean, numero, complemento: "",
             bairro, cidade, uf, email,
             telefones: [celular],
           },
           id_geral: idGeral,
-          parcelas: [{ valor, data_vencimento: form.vencimento, descricao }],
+          parcelas: [{
+            id_parcela: idParcela,
+            data_vencimento: form.vencimento,
+            valor: parseFloat(valor.toFixed(2)),
+            valor_mora_dia: 0.10,
+            valor_multa: 2.00,
+            mensagem,
+            callback_url: CALLBACK_URL,
+          }],
         };
         apiResult = await negociarieService.novaCobranca(boletoPayload);
       } else {
