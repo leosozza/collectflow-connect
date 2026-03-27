@@ -237,8 +237,8 @@ const AnalyticsPage = () => {
   const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
   const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
-  // Portfolio conversion rate: agreements with payments > 0 vs total active
-  const totalAtivos = vigentes.length + pendentes.length + vencidos.length + acordosComPagamento.length;
+  // Portfolio conversion rate: agreements with payments > 0 vs total active (sem dupla contagem)
+  const totalAtivos = activeAgreements.length;
   const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
 
   // Evolution chart data based on agreements.created_at with real payments
@@ -265,8 +265,7 @@ const AnalyticsPage = () => {
   const statusPieData = useMemo(() => {
     const groups = [
       { name: "Pagos", value: pagos.length, color: STATUS_COLORS.completed },
-      { name: "Vigentes", value: vigentes.length, color: STATUS_COLORS.approved },
-      { name: "Pendentes", value: pendentes.length, color: STATUS_COLORS.pending },
+      { name: "Acordo Vigente", value: vigentes.length + pendentes.length, color: STATUS_COLORS.approved },
       { name: "Vencidos", value: vencidos.length, color: STATUS_COLORS.overdue },
       { name: "Cancelados", value: cancelados.length, color: STATUS_COLORS.cancelled },
     ];
