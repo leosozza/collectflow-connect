@@ -296,7 +296,7 @@ const CarteiraPage = () => {
     const aguardandoId = statusNameToId.get("Aguardando acionamento");
     const emDiaId = statusNameToId.get("Em dia");
 
-    // Derive correct status_cobranca_id based on actual record status
+    // Derive correct status_cobranca_id based on actual record status (deterministic)
     let filtered = clients.map(c => {
       let derivedStatusId = c.status_cobranca_id;
       const st = c.status as string;
@@ -307,15 +307,9 @@ const CarteiraPage = () => {
       } else if (st === "quebrado" && quebraAcordoId) {
         derivedStatusId = quebraAcordoId;
       } else if ((st === "pendente" || st === "vencido") && c.data_vencimento < today && aguardandoId) {
-        const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
-        if (!currentName || currentName === "Em dia") {
-          derivedStatusId = aguardandoId;
-        }
+        derivedStatusId = aguardandoId;
       } else if (st === "pendente" && c.data_vencimento >= today && emDiaId) {
-        const currentName = derivedStatusId ? statusMap.get(derivedStatusId)?.nome : null;
-        if (!currentName || currentName === "Aguardando acionamento") {
-          derivedStatusId = emDiaId;
-        }
+        derivedStatusId = emDiaId;
       }
       if (derivedStatusId !== c.status_cobranca_id) {
         return { ...c, status_cobranca_id: derivedStatusId };
