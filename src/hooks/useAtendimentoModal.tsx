@@ -218,11 +218,11 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       {state.isOpen && (
         <>
           {!isMinimized && !state.waitingForCall && (
-            <div className="fixed inset-0 bg-black/40 z-[9998] animate-in fade-in-0 duration-200" onClick={handleMinimize} />
+            <div className="fixed inset-0 bg-black/40 z-[39] animate-in fade-in-0 duration-200" onClick={handleMinimize} />
           )}
 
           <div
-            className={`fixed z-[9999] ${isMinimized
+            className={`fixed z-40 ${isMinimized
               ? "rounded-lg shadow-xl border border-border bg-card"
               : "rounded-xl shadow-2xl border border-border bg-background"
             }`}
