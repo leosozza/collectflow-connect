@@ -37,7 +37,7 @@ import { useTenant } from "@/hooks/useTenant";
 
 const statusLabelsMap: Record<string, string> = {
   approved: "Pago",
-  pending: "Vigente",
+  pending: "Em dia",
   pending_approval: "Aguardando Liberação",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
