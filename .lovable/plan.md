@@ -1,40 +1,149 @@
 
+Objetivo: alinhar o payload de boleto do RIVO ao contrato que a Negociarie confirmou para cada parcela e eliminar os campos/nomes divergentes.
 
-# Plano: Corrigir 500 na geração de boleto — `id_geral` duplicado
+Diagnóstico atual
 
-## Diagnóstico
+O RIVO está parcialmente correto, mas ainda incompleto para o contrato que você recebeu.
 
-Comparei o payload final do proxy (logs) com o Postman lado a lado:
+O que já está correto:
+- usa raiz `cliente` em `nova-cobranca`
+- envia `id_parcela`
+- envia `valor_mora_dia` e `valor_multa` no fluxo de acordos
+- existe callback global configurável em `src/components/integracao/SyncPanel.tsx`
+- o proxy aceita e normaliza `cliente.telefones`
 
+O que está errado ou incompleto:
+1. `mensagem` não está sendo enviada nas parcelas
+- Em `src/services/negociarieService.ts`, `buildBoletoPayload()` monta a parcela sem `mensagem` e sem `callback_url`.
+- Em `src/components/integracao/CobrancaForm.tsx`, o boleto manual envia `descricao`, mas a instrução da Negociarie fala em `mensagem`.
+
+2. `callback_url` não está sendo enviada por parcela
+- Hoje o sistema só tem a ação “Configurar Callback URL” via `/cobranca/atualizar-url-callback`.
+- Mas a instrução que você recebeu diz que o corpo da parcela também deve conter `callback_url`.
+- No payload atual de boleto, esse campo não existe.
+
+3. O boleto manual está mais desalinhado que o fluxo de acordos
+- `CobrancaForm.tsx` envia `parcelas: [{ valor, data_vencimento, descricao }]`
+- faltam: `id_parcela`, `valor_mora_dia`, `valor_multa`, `mensagem`, `callback_url`
+
+4. Extração de número do endereço ainda pode errar
+- No fluxo automático, `numero` só é extraído se o endereço vier com vírgula.
+- Se o cadastro já tiver logradouro sem número separado, ele cai em `"SN"`.
+- Isso pode continuar causando rejeições dependendo do cliente.
+
+O que precisamos fazer
+
+1. Padronizar o contrato da parcela no service
+Arquivo: `src/services/negociarieService.ts`
+
+Ajustar `buildBoletoPayload()` para que cada parcela de boleto seja montada assim:
 ```text
-LOVABLE (500)                              POSTMAN (200)
-─────────                                  ──────────
-id_geral: "53591244"                       id_geral: "RIVO-TESTE-1001"
-valor: 11                                  valor: 10.0
-bairro: "Quitaúna" (acento)               bairro: "Centro"
-parcelas sem valor_mora_dia/multa          parcelas COM valor_mora_dia/multa
+{
+  id_parcela,
+  data_vencimento,
+  valor,
+  valor_mora_dia,
+  valor_multa,
+  mensagem,
+  callback_url
+}
 ```
 
-A estrutura é **idêntica**. O problema não é o formato do payload — é o **dado**.
+Planejamento:
+- manter `id_parcela` obrigatório e string
+- manter `valor_mora_dia`/`valor_multa`
+- incluir `mensagem` padrão por boleto/parcela
+- incluir `callback_url` usando a URL da função `negociarie-callback`
 
-O `id_geral: "53591244"` foi enviado em **múltiplas tentativas** anteriores. Em tentativas passadas, a API retornou `400: "Já existe boleto gerado com o código 2"`. Agora com um `id_parcela` diferente (`"54231285"`), o servidor da Negociarie **crashou** (500) ao tentar adicionar uma parcela nova a um `id_geral` que já tem parcelas registradas com status conflitante.
+2. Corrigir o fluxo manual de cobrança
+Arquivo: `src/components/integracao/CobrancaForm.tsx`
 
-O `id_geral` atual é gerado como hash numérico fixo a partir do `agreement_id` — ou seja, é **sempre o mesmo** para o mesmo acordo. Cada tentativa de gerar boleto reenvia o mesmo `id_geral`, causando conflito.
+Hoje o form manual usa `descricao`; ele deve seguir o mesmo contrato do boleto real:
+- trocar `descricao` por `mensagem` no payload da parcela
+- incluir `id_parcela`
+- incluir `valor_mora_dia`
+- incluir `valor_multa`
+- incluir `callback_url`
 
-## Correção
+Também vale manter a descrição da UI, mas mapear corretamente para `mensagem` no envio.
 
-### `src/services/negociarieService.ts`
-1. Tornar `id_geral` único por tentativa: incluir timestamp ou contador para evitar colisão. Formato: `"RIVO-{agreementIdShort}-{timestamp}"` (ex: `"RIVO-535d-1774553000"`)
-2. Adicionar `valor_mora_dia: 0` e `valor_multa: 0` nas parcelas (campos presentes no Postman que funcionou)
+3. Centralizar a URL de callback
+Arquivos:
+- `src/services/negociarieService.ts`
+- possivelmente `src/components/integracao/SyncPanel.tsx`
 
-### `supabase/functions/negociarie-proxy/index.ts`
-1. Garantir que `valor` seja enviado como float com 2 casas decimais na serialização (usar `parseFloat(valor.toFixed(2))`)
-2. Log adicional: logar o `id_geral` sendo enviado para facilitar debug de duplicidade
+Criar uma única fonte para o callback:
+```text
+${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback
+```
 
-## Arquivos afetados
+Usar essa mesma URL:
+- no botão de configurar callback global
+- no `callback_url` de cada parcela enviada
 
-| Arquivo | Mudança |
-|---|---|
-| `src/services/negociarieService.ts` | `id_geral` único por tentativa; adicionar `valor_mora_dia`/`valor_multa` |
-| `supabase/functions/negociarie-proxy/index.ts` | Forçar float em `valor`; log do `id_geral` |
+Assim o contrato fica consistente.
 
+4. Melhorar a mensagem impressa no boleto
+Arquivo: `src/services/negociarieService.ts`
+
+Definir uma mensagem segura e curta para o boleto, por exemplo:
+```text
+Acordo RIVO parcela X
+Vencimento: DD/MM/AAAA
+```
+
+Se quiser depois, isso pode virar configurável por tenant, mas primeiro o foco deve ser aderir ao contrato.
+
+5. Endurecer a normalização no proxy
+Arquivo: `supabase/functions/negociarie-proxy/index.ts`
+
+O proxy já normaliza muita coisa, mas precisa passar a preservar/validar:
+- `mensagem`
+- `callback_url`
+- `valor_mora_dia`
+- `valor_multa`
+
+E evitar sobrescrever ou descartar esses campos por acidente.
+
+6. Revisar o número do endereço
+Arquivo: `src/services/negociarieService.ts`
+
+Ajustar a montagem do `cliente.numero` para priorizar:
+- número explícito, se existir separado
+- extração do final do logradouro
+- fallback `"SN"` apenas se realmente não houver número
+
+Isso reduz chance de erro cadastral.
+
+Resultado esperado
+
+Depois desses ajustes:
+- o payload do RIVO ficará aderente à instrução oficial da Negociarie
+- tanto boleto automático quanto boleto manual enviarão a parcela completa
+- o callback passará a existir também no corpo da parcela, não só na configuração global
+- a mensagem do boleto será impressa corretamente
+- o erro deixará de ser “payload incompleto” e, se ainda houver falha, ficará restrito a dados específicos do cliente/cadastro
+
+Arquivos principais afetados
+- `src/services/negociarieService.ts`
+- `src/components/integracao/CobrancaForm.tsx`
+- `supabase/functions/negociarie-proxy/index.ts`
+- `src/components/integracao/SyncPanel.tsx`
+
+Detalhe técnico importante
+
+Hoje o maior desalinhamento não está no objeto `cliente`, e sim no objeto `parcelas`.
+
+Comparação:
+```text
+NEGOCIARIE ESPERA           RIVO HOJE
+id_parcela                  parcial/às vezes ok
+data_vencimento             ok
+valor                       ok
+valor_mora_dia              ok em acordo, ausente no manual
+valor_multa                 ok em acordo, ausente no manual
+mensagem                    ausente
+callback_url                ausente
+```
+
+Ou seja: a correção principal agora deve focar na estrutura completa da parcela.
