@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -114,20 +115,15 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
-                <Select value={filters.statusCobrancaId || "todos"} onValueChange={(v) => update("statusCobrancaId", v === "todos" ? "" : v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {tiposStatus.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.cor || "#6b7280" }} />
-                          {t.nome}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={tiposStatus.map((t: any) => ({ value: t.id, label: t.nome }))}
+                  selected={filters.statusCobrancaId ? filters.statusCobrancaId.split(",") : []}
+                  onChange={(sel) => update("statusCobrancaId", sel.join(","))}
+                  placeholder="Todos"
+                  allLabel="Todos"
+                  searchable
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
