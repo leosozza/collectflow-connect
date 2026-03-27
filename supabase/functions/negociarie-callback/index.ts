@@ -26,6 +26,67 @@ async function sha1(text: string): Promise<string> {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Check if agreement is fully paid and mark as completed */
+async function checkAgreementCompletion(supabase: any, agreementId: string, tenantId: string, clientId: string, clientCpf: string) {
+  const { data: agreement } = await supabase
+    .from("agreements")
+    .select("id, proposed_total, status")
+    .eq("id", agreementId)
+    .single();
+
+  if (!agreement || agreement.status === "completed" || agreement.status === "cancelled") return;
+
+  // Sum all payments for this agreement from client_events
+  const { data: events } = await supabase
+    .from("client_events")
+    .select("metadata")
+    .eq("tenant_id", tenantId)
+    .eq("event_type", "payment_confirmed")
+    .eq("client_id", clientId);
+
+  let totalPaid = 0;
+  if (events) {
+    for (const ev of events) {
+      if (ev.metadata?.agreement_id === agreementId && ev.metadata?.valor_pago) {
+        totalPaid += Number(ev.metadata.valor_pago);
+      }
+    }
+  }
+
+  if (totalPaid >= Number(agreement.proposed_total)) {
+    // Mark agreement as completed
+    await supabase
+      .from("agreements")
+      .update({ status: "completed" })
+      .eq("id", agreementId);
+
+    // Set data_quitacao on client
+    const today = new Date().toISOString().split("T")[0];
+    await supabase
+      .from("clients")
+      .update({ data_quitacao: today, status: "pago" })
+      .eq("id", clientId);
+
+    // Register completion event
+    await supabase.from("client_events").insert({
+      tenant_id: tenantId,
+      client_id: clientId,
+      client_cpf: clientCpf,
+      event_type: "agreement_completed",
+      event_source: "system",
+      event_channel: "boleto",
+      event_value: `R$ ${totalPaid.toFixed(2)}`,
+      metadata: {
+        agreement_id: agreementId,
+        proposed_total: Number(agreement.proposed_total),
+        total_paid: totalPaid,
+      },
+    });
+
+    console.log(`Agreement ${agreementId} marked as completed (paid ${totalPaid} >= ${agreement.proposed_total})`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -62,7 +123,7 @@ Deno.serve(async (req) => {
 
         const newStatus = mapStatus(parcela.id_status, parcela.status);
 
-        // Find cobrança by id_parcela (NO join with clients — avoids FK issues)
+        // Find cobrança by id_parcela
         const { data: cobrancas, error: findErr } = await supabase
           .from("negociarie_cobrancas")
           .select("*")
@@ -98,7 +159,7 @@ Deno.serve(async (req) => {
         if (newStatus === "pago") {
           const valorPago = Number(parcela.valor_pago || parcela.valor || cobranca.valor || 0);
 
-          // Find client via agreement (no FK dependency)
+          // Find client via agreement
           if (cobranca.agreement_id) {
             const { data: agreement } = await supabase
               .from("agreements")
@@ -108,7 +169,6 @@ Deno.serve(async (req) => {
 
             if (agreement) {
               const cleanCpf = (agreement.client_cpf || "").replace(/[.\-]/g, "");
-              // Format CPF as XXX.XXX.XXX-XX for matching formatted records
               const fmtCpf = cleanCpf.length === 11
                 ? `${cleanCpf.slice(0,3)}.${cleanCpf.slice(3,6)}.${cleanCpf.slice(6,9)}-${cleanCpf.slice(9)}`
                 : cleanCpf;
@@ -146,6 +206,9 @@ Deno.serve(async (req) => {
                   },
                 });
 
+                // Check if agreement is fully paid
+                await checkAgreementCompletion(supabase, cobranca.agreement_id, agreement.tenant_id, client.id, client.cpf);
+
                 // Notification for operator
                 const operatorId = client.operator_id || agreement.created_by;
                 if (operatorId) {
@@ -162,7 +225,7 @@ Deno.serve(async (req) => {
               }
             }
           } else if (cobranca.tenant_id && cobranca.client_id) {
-            // Manual cobrança without agreement — find client by client_id
+            // Manual cobrança without agreement
             const { data: client } = await supabase
               .from("clients")
               .select("id, cpf, valor_pago, operator_id, tenant_id")
