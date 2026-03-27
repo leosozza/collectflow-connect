@@ -4,10 +4,8 @@ import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink } from "lucide-react";
-import { formatCurrency, formatCPF } from "@/lib/formatters";
-import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
-import { format } from "date-fns";
+import { Check, X } from "lucide-react";
+import { formatCPF } from "@/lib/formatters";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -53,6 +51,8 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
     navigate(`/clientes/${rawCpf}?tab=acordo`);
   };
 
+  const hasActions = isAdmin && showOperationalActions;
+
   return (
     <>
       <div className="rounded-md border">
@@ -63,51 +63,45 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
               <TableHead>CPF</TableHead>
               <TableHead>Credor</TableHead>
               <TableHead>Operador</TableHead>
-              <TableHead className="text-right">Original</TableHead>
-              <TableHead className="text-right">Proposto</TableHead>
-              <TableHead className="text-center">Parcelas</TableHead>
-              <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              {hasActions && <TableHead className="text-right">Ações</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {agreements.map((a) => (
               <TableRow key={a.id}>
-                <TableCell className="font-medium">{a.client_name}</TableCell>
+                <TableCell>
+                  <span
+                    className="font-medium cursor-pointer text-primary hover:underline"
+                    onClick={() => handleOpenProfile(a.client_cpf)}
+                  >
+                    {a.client_name}
+                  </span>
+                </TableCell>
                 <TableCell>{formatCPF(a.client_cpf)}</TableCell>
                 <TableCell>{a.credor}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {(a as any).creator_name || "—"}
                 </TableCell>
-                <TableCell className="text-right">{formatCurrency(a.original_total)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(getEffectiveAgreementSummary(a as any).effectiveTotal)}</TableCell>
-                <TableCell className="text-center">
-                  {getEffectiveAgreementSummary(a as any).label}
-                </TableCell>
-                <TableCell>{format(new Date(a.first_due_date + "T00:00:00"), "dd/MM/yyyy")}</TableCell>
                 <TableCell>
                   <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-1 justify-end">
-                    {/* Approve/Reject only for pending_approval (admin) */}
-                    {isAdmin && showOperationalActions && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
-                      <>
-                        <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
-                          <Check className="w-4 h-4 text-green-600" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => onReject(a.id)} title="Rejeitar">
-                          <X className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </>
-                    )}
-                    {/* Navigate to client profile */}
-                    <Button size="sm" variant="ghost" onClick={() => handleOpenProfile(a.client_cpf)} title="Ver Perfil">
-                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  </div>
-                </TableCell>
+                {hasActions && (
+                  <TableCell className="text-right">
+                    <div className="flex gap-1 justify-end">
+                      {(a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
+                            <Check className="w-4 h-4 text-green-600" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => onReject(a.id)} title="Rejeitar">
+                            <X className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

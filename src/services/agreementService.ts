@@ -129,10 +129,14 @@ export const createAgreement = async (
         updatePayload.status_cobranca_id = acordoStatus.id;
       }
 
+      const rawCpf = data.client_cpf.replace(/\D/g, "");
+      const fmtCpf = rawCpf.length === 11
+        ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+        : rawCpf;
       await supabase
         .from("clients")
         .update(updatePayload)
-        .eq("cpf", data.client_cpf)
+        .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
         .eq("credor", data.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
     } catch (e) {
@@ -361,10 +365,15 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           .eq("nome", "Aguardando acionamento")
           .single();
 
+        const rawCpf = agreement.client_cpf.replace(/\D/g, "");
+        const fmtCpf = rawCpf.length === 11
+          ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+          : rawCpf;
+
         await supabase
           .from("clients")
           .update({ status: "pendente" } as any)
-          .eq("cpf", agreement.client_cpf)
+          .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
           .eq("credor", agreement.credor)
           .eq("status", "em_acordo");
 
@@ -372,7 +381,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: emDiaStatus.id } as any)
-            .eq("cpf", agreement.client_cpf)
+            .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
             .gte("data_vencimento", today);
@@ -381,7 +390,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: aguardandoStatus.id } as any)
-            .eq("cpf", agreement.client_cpf)
+            .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
             .lt("data_vencimento", today);
