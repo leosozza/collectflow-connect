@@ -201,6 +201,7 @@ Deno.serve(async (req) => {
         const parcelasArr = cobrancaData.parcelas as Array<Record<string, unknown>> | undefined;
         if (Array.isArray(parcelasArr)) {
           for (const p of parcelasArr) {
+            // Ensure valor is a float with 2 decimal places
             if (typeof p.valor === "number") {
               p.valor = parseFloat(p.valor.toFixed(2));
             }
@@ -215,6 +216,10 @@ Deno.serve(async (req) => {
             } else {
               p.id_parcela = String(Date.now()).slice(-8);
             }
+            // Ensure valor_mora_dia and valor_multa default
+            if (p.valor_mora_dia === undefined) p.valor_mora_dia = 0.10;
+            if (p.valor_multa === undefined) p.valor_multa = 2.00;
+            // Preserve mensagem and callback_url (do not strip)
           }
         }
 
