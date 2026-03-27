@@ -8,6 +8,7 @@ interface Agreement {
   proposed_total: number;
   status: string;
   created_at: string;
+  total_pago?: number;
 }
 
 interface EvolutionChartProps {
@@ -28,8 +29,8 @@ const EvolutionChart = ({ agreements, year }: EvolutionChartProps) => {
         .filter((a) => a.status !== "cancelled" && a.status !== "rejected")
         .reduce((s, a) => s + Number(a.proposed_total), 0);
       const recebido = monthAgreements
-        .filter((a) => a.status === "completed")
-        .reduce((s, a) => s + Number(a.proposed_total), 0);
+        .filter((a) => a.status !== "cancelled")
+        .reduce((s, a) => s + Number(a.total_pago || 0), 0);
       const quebra = monthAgreements
         .filter((a) => a.status === "cancelled")
         .reduce((s, a) => s + Number(a.proposed_total), 0);
