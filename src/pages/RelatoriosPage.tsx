@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { parseISO } from "date-fns";
 import { useUrlState } from "@/hooks/useUrlState";
+import { fetchAllRows } from "@/lib/supabaseUtils";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Printer } from "lucide-react";
@@ -44,11 +45,15 @@ const RelatoriosPage = () => {
   const { data: agreements = [] } = useQuery({
     queryKey: ["agreements-report", tenant?.id],
     queryFn: async () => {
-      let query = supabase.from("agreements").select("*");
-      if (tenant?.id) query = query.eq("tenant_id", tenant.id);
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc("get_analytics_payments", { _tenant_id: tenant!.id });
       if (error) throw error;
-      return data || [];
+      return (data || []).map((r: any) => ({
+        ...r,
+        id: r.agreement_id,
+        client_cpf: "",
+        client_name: "",
+        total_pago: Number(r.total_pago || 0),
+      }));
     },
     enabled: !!tenant?.id,
   });
@@ -97,7 +102,7 @@ const RelatoriosPage = () => {
   // KPIs from agreements
   const activeAgreements = filteredAgreements.filter((a: any) => a.status !== "cancelled");
   const totalNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-  const totalRecebido = filteredAgreements.filter((a: any) => a.status === "completed").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+  const totalRecebido = filteredAgreements.filter((a: any) => a.status !== "cancelled").reduce((s: number, a: any) => s + Number(a.total_pago || 0), 0);
   const totalQuebra = filteredAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
   const totalPendente = activeAgreements.filter((a: any) => ["pending", "pending_approval", "approved", "overdue"].includes(a.status)).reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
 

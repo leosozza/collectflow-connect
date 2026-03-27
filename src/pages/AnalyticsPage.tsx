@@ -5,6 +5,7 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { formatCurrency } from "@/lib/formatters";
+import { fetchAllRows } from "@/lib/supabaseUtils";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -147,9 +148,8 @@ const AnalyticsPage = () => {
         .not("status", "in", "(rejected)");
       if (tenant?.id) query = query.eq("tenant_id", tenant.id);
       if (isOperator && profile?.id) query = query.eq("created_by", profile.id);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as AgreementRow[];
+      const data = await fetchAllRows(query);
+      return data as AgreementRow[];
     },
     enabled: !!tenant?.id,
   });
