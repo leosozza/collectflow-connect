@@ -32,7 +32,7 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  pending: "Vigente",
+  pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
   approved: "Pago",
   rejected: "Rejeitado",
