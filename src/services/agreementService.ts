@@ -63,9 +63,8 @@ export const fetchAgreements = async (filters?: {
       query = query.eq("created_by", filters.created_by);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
-    
+    const data = await fetchAllRows<any>(query);
+
     // Fetch creator profiles
     const creatorIds = [...new Set((data || []).map((a: any) => a.created_by).filter(Boolean))];
     let profilesMap: Record<string, string> = {};
