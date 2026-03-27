@@ -1,93 +1,60 @@
 
+# Plano: Corrigir fluxo de baixa automática — 3 problemas identificados
 
-# Plano: Corrigir callback para processar pagamento e baixar parcela
+## Diagnóstico
 
-## Escopo restrito
-- **NÃO** alterar o fluxo de geração de boleto (já funciona)
-- **NÃO** alterar nomenclaturas existentes
-- Apenas corrigir o callback de retorno e garantir que o `id_parcela` seja salvo para fazer o match
+Investiguei o banco de dados e os logs. Encontrei **3 problemas**:
 
-## Problema
-
-A Negociarie envia o callback assim:
+### Problema 1: `id_parcela` não foi salvo no registro existente
+O boleto do Raul foi gerado **antes** do deploy do código que salva `id_parcela`. Resultado:
 ```text
-{
-  "client_id": "...",
-  "token": "SHA1(client_id + client_secret)",
-  "parcelas": [
-    {
-      "id_parcela": "8723",
-      "status": "PAGA",
-      "id_status": 801,
-      "data_pagamento": "2020-01-12",
-      "valor": 100.00,
-      "valor_pago": 103.00,
-      ...
-    }
-  ]
-}
+negociarie_cobrancas.id_parcela = NULL
+callback_data.parcelas[0].id_parcela = "16053085"  ← está no JSON mas não na coluna
 ```
+Quando a Negociarie enviar o callback com `id_parcela: "16053085"`, o handler não vai encontrar nenhum registro porque a coluna está vazia.
 
-Mas o handler atual:
-1. Busca `body.id_geral` que **não existe** no callback → retorna 400
-2. Não salva `id_parcela` da API ao criar a cobrança → impossível fazer match
-3. Busca por `id_geral` em vez de `id_parcela`
+### Problema 2: Callback provavelmente nunca chegou
+Os logs do `negociarie-callback` estão **vazios** — nenhuma requisição foi recebida. Possíveis causas:
+- A Negociarie precisa ter a URL de callback configurada no painel deles
+- O `callback_url` no payload do boleto pode não estar sendo usado pela Negociarie para este boleto específico (pago via PIX direto)
+
+### Problema 3: O callback busca `clients` via FK que pode não existir
+A query faz `.select("*, clients(operator_id, tenant_id, cpf, id)")` — isso exige FK `client_id` na tabela `negociarie_cobrancas` apontando para `clients`. Se esse FK não existe, a query falha silenciosamente.
 
 ## Correções
 
-### 1. `src/services/negociarieService.ts` — Salvar `id_parcela` da resposta
-
-Nas funções `generateSingleBoleto` e `generateAgreementBoletos`, ao chamar `saveCobranca`, adicionar:
+### 1. Migration: Backfill `id_parcela` de registros existentes
+SQL para preencher `id_parcela` a partir do `callback_data` já salvo:
+```sql
+UPDATE negociarie_cobrancas 
+SET id_parcela = callback_data->'parcelas'->0->>'id_parcela'
+WHERE id_parcela IS NULL 
+  AND callback_data->'parcelas'->0->>'id_parcela' IS NOT NULL;
 ```
-id_parcela: parcelaResult?.id_parcela || payload.parcelas[0].id_parcela
-```
 
-Isso é a **única** mudança neste arquivo — adicionar 1 campo ao objeto de `saveCobranca`. Nenhuma outra alteração.
+### 2. `supabase/functions/negociarie-callback/index.ts` — Remover dependência de FK `clients`
+- Remover o join `clients(operator_id, tenant_id, cpf, id)` da query de busca
+- Buscar o `agreement` pela `agreement_id` da cobrança
+- A partir do agreement, buscar o client por CPF + tenant_id (como já faz no bloco de pagamento)
+- Isso elimina a dependência de FK que pode não existir
 
-### 2. `supabase/functions/negociarie-callback/index.ts` — Reescrever para estrutura real
-
-O handler precisa:
-- Aceitar `body.parcelas[]` (array) em vez de campos flat
-- Validar `body.token` via SHA1(`NEGOCIARIE_CLIENT_ID` + `NEGOCIARIE_CLIENT_SECRET`)
-- Para cada parcela no array:
-  - Buscar `negociarie_cobrancas` por `id_parcela` (não por `id_geral`)
-  - Mapear status: 801→pago, 800→registrado, 808/809→inadimplente, 810/812→baixado
-  - Atualizar a cobrança com `status`, `data_pagamento`, `valor_pago`
-  - Se pago (801):
-    - Buscar `agreement_id` da cobrança
-    - Atualizar `clients.valor_pago` (acumular, não substituir)
-    - Criar notificação para o operador
-    - Registrar `client_event` na timeline
-
-**Manter compatibilidade**: se `body.id_geral` vier (formato antigo), continuar funcionando como fallback.
-
-### 3. Fluxo de baixa automática
-
-```text
-Negociarie POST → /negociarie-callback
-  ├─ Valida token SHA1
-  ├─ Para cada parcela em body.parcelas[]:
-  │   ├─ Busca negociarie_cobrancas por id_parcela
-  │   ├─ Atualiza status + valor_pago + data_pagamento
-  │   ├─ Se 801 (PAGO):
-  │   │   ├─ clients.valor_pago += valor_pago
-  │   │   ├─ Cria notificação
-  │   │   └─ Registra client_event
-  │   └─ Salva callback_data
-  └─ Retorna { ok: true, processed: N }
+### 3. Testar manualmente o callback
+Após o deploy, usar `curl` para simular o callback da Negociarie e verificar se o fluxo funciona:
+```bash
+curl -X POST https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/negociarie-callback \
+  -H "Content-Type: application/json" \
+  -d '{"client_id":"...","token":"SHA1(...)","parcelas":[{"id_parcela":"16053085","id_status":801,"status":"PAGA","valor":11.00,"valor_pago":11.00,"data_pagamento":"2026-03-27"}]}'
 ```
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/negociarie-callback/index.ts` | Reescrever para ler `parcelas[]`, validar token SHA1, match por `id_parcela` |
-| `src/services/negociarieService.ts` | Adicionar `id_parcela` ao `saveCobranca` (1 linha em cada função) |
+| Migration SQL | Backfill `id_parcela` dos registros existentes |
+| `supabase/functions/negociarie-callback/index.ts` | Remover join com `clients`; buscar agreement e client separadamente |
 
 ## O que NÃO muda
-- Payload de geração do boleto (já funciona)
-- Nomenclaturas e nomes de campos internos
-- Proxy (`negociarie-proxy`)
-- `CobrancaForm.tsx`
-- Nenhum outro componente
-
+- Geração de boleto (já funciona)
+- Proxy (já funciona)
+- Nomenclaturas
+- `negociarieService.ts` (código novo já salva `id_parcela` corretamente)
