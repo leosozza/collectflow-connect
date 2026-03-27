@@ -94,11 +94,17 @@ Deno.serve(async (req) => {
 
         const expectedPaid = pastDueEntries[pastDueEntries.length - 1].cumulative;
 
+        // Normalize CPF for matching (DB may store with dots/dashes)
+        const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
+        const fmtCpf = rawCpf.length === 11
+          ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+          : rawCpf;
+
         const { data: clientRecords } = await supabase
           .from("clients")
           .select("valor_pago")
           .eq("tenant_id", a.tenant_id)
-          .eq("cpf", a.client_cpf)
+          .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf},cpf.eq.${a.client_cpf}`)
           .eq("status", "em_acordo");
 
         const totalPaid = (clientRecords || []).reduce((sum: number, c: any) => sum + (c.valor_pago || 0), 0);
