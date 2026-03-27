@@ -62,10 +62,10 @@ Deno.serve(async (req) => {
 
         const newStatus = mapStatus(parcela.id_status, parcela.status);
 
-        // Find cobrança by id_parcela
+        // Find cobrança by id_parcela (NO join with clients — avoids FK issues)
         const { data: cobrancas, error: findErr } = await supabase
           .from("negociarie_cobrancas")
-          .select("*, clients(operator_id, tenant_id, cpf, id)")
+          .select("*")
           .eq("id_parcela", idParcela);
 
         if (findErr || !cobrancas?.length) {
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         if (newStatus === "pago") {
           const valorPago = Number(parcela.valor_pago || parcela.valor || cobranca.valor || 0);
 
-          // Find client via agreement
+          // Find client via agreement (no FK dependency)
           if (cobranca.agreement_id) {
             const { data: agreement } = await supabase
               .from("agreements")
@@ -107,7 +107,6 @@ Deno.serve(async (req) => {
               .single();
 
             if (agreement) {
-              // Find client by CPF
               const cleanCpf = (agreement.client_cpf || "").replace(/[.\-]/g, "");
               const { data: client } = await supabase
                 .from("clients")
@@ -158,6 +157,54 @@ Deno.serve(async (req) => {
                 }
               }
             }
+          } else if (cobranca.tenant_id) {
+            // Manual cobrança without agreement — try to find client by CPF
+            const cleanCpf = (cobranca.cpf_devedor || "").replace(/[.\-]/g, "");
+            if (cleanCpf) {
+              const { data: client } = await supabase
+                .from("clients")
+                .select("id, cpf, valor_pago, operator_id, tenant_id")
+                .eq("tenant_id", cobranca.tenant_id)
+                .or(`cpf.eq.${cleanCpf},cpf.eq.${cobranca.cpf_devedor}`)
+                .limit(1)
+                .single();
+
+              if (client) {
+                const newValorPago = Number(client.valor_pago || 0) + valorPago;
+                await supabase
+                  .from("clients")
+                  .update({ valor_pago: newValorPago })
+                  .eq("id", client.id);
+
+                await supabase.from("client_events").insert({
+                  tenant_id: cobranca.tenant_id,
+                  client_id: client.id,
+                  client_cpf: client.cpf,
+                  event_type: "payment_confirmed",
+                  event_source: "negociarie",
+                  event_channel: "boleto",
+                  event_value: `R$ ${valorPago.toFixed(2)}`,
+                  metadata: {
+                    id_parcela: idParcela,
+                    id_status: parcela.id_status,
+                    valor_pago: valorPago,
+                    data_pagamento: parcela.data_pagamento,
+                  },
+                });
+
+                if (client.operator_id) {
+                  await supabase.rpc("create_notification", {
+                    _tenant_id: cobranca.tenant_id,
+                    _user_id: client.operator_id,
+                    _title: "Pagamento confirmado",
+                    _message: `Parcela de R$ ${valorPago.toFixed(2)} paga via boleto/PIX (ID: ${idParcela})`,
+                    _type: "success",
+                    _reference_type: "negociarie_cobranca",
+                    _reference_id: cobranca.id,
+                  });
+                }
+              }
+            }
           }
         }
 
@@ -184,7 +231,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from("negociarie_cobrancas")
-      .select("*, clients(operator_id, tenant_id)")
+      .select("*")
       .eq("id_geral", idGeral);
 
     if (idParcela) query = query.eq("id_parcela", idParcela);
@@ -222,23 +269,35 @@ Deno.serve(async (req) => {
 
     if (updateError) console.error("Error updating cobranca:", updateError);
 
-    if (newStatus === "pago" && cobranca.client_id) {
-      await supabase
-        .from("clients")
-        .update({ status: "pago", valor_pago: cobranca.valor })
-        .eq("id", cobranca.client_id);
+    if (newStatus === "pago" && cobranca.tenant_id) {
+      const cleanCpf = (cobranca.cpf_devedor || "").replace(/[.\-]/g, "");
+      if (cleanCpf) {
+        const { data: client } = await supabase
+          .from("clients")
+          .select("id, cpf, valor_pago, operator_id")
+          .eq("tenant_id", cobranca.tenant_id)
+          .or(`cpf.eq.${cleanCpf},cpf.eq.${cobranca.cpf_devedor}`)
+          .limit(1)
+          .single();
 
-      const client = cobranca.clients as any;
-      if (client?.operator_id && client?.tenant_id) {
-        await supabase.rpc("create_notification", {
-          _tenant_id: client.tenant_id,
-          _user_id: client.operator_id,
-          _title: "Pagamento confirmado",
-          _message: `Cobrança ${cobranca.tipo} de R$ ${cobranca.valor} foi paga (ID: ${idGeral})`,
-          _type: "success",
-          _reference_type: "negociarie_cobranca",
-          _reference_id: cobranca.id,
-        });
+        if (client) {
+          await supabase
+            .from("clients")
+            .update({ status: "pago", valor_pago: cobranca.valor })
+            .eq("id", client.id);
+
+          if (client.operator_id) {
+            await supabase.rpc("create_notification", {
+              _tenant_id: cobranca.tenant_id,
+              _user_id: client.operator_id,
+              _title: "Pagamento confirmado",
+              _message: `Cobrança ${cobranca.tipo} de R$ ${cobranca.valor} foi paga (ID: ${idGeral})`,
+              _type: "success",
+              _reference_type: "negociarie_cobranca",
+              _reference_id: cobranca.id,
+            });
+          }
+        }
       }
     }
 
