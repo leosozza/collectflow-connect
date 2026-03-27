@@ -339,9 +339,11 @@ Deno.serve(async (req) => {
         .single();
 
       if (client) {
+        const valorPago = Number(body.valor_pago || cobranca.valor || 0);
+        const newValorPago = Number(client.valor_pago || 0) + valorPago;
         await supabase
           .from("clients")
-          .update({ status: "pago", valor_pago: cobranca.valor })
+          .update({ status: "pago", valor_pago: newValorPago })
           .eq("id", client.id);
 
         if (client.operator_id) {
