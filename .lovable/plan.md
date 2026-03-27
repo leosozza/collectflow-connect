@@ -1,44 +1,32 @@
 
 
-# Plano: Corrigir RPCs do Dashboard para respeitar `custom_installment_values`
+# Plano: Corrigir card "Pendentes" para subtrair pagamentos confirmados
 
-## Problema raiz
+## Problema
 
-Quando o operador edita o valor de uma parcela (ex: entrada de R$5 → R$11), o sistema salva a mudança no campo JSON `custom_installment_values` (ex: `{"entrada": 11}`). Porém, as **RPCs SQL do dashboard** leem diretamente os campos originais `entrada_value` e `new_installment_value`, ignorando completamente as edições personalizadas.
+O card "Pendentes" mostra R$ 11,00 para o Raul, mas ele já pagou R$ 11,00. A RPC `get_dashboard_stats` soma todas as parcelas previstas no mês para acordos vigentes, mas **não subtrai os pagamentos já confirmados** (`_recebido`).
 
-Resultado: o dashboard continua mostrando R$5 (valor original) em vez de R$11 (valor editado).
-
-## Onde está o bug
-
-Ambas as RPCs usam `a.entrada_value` e `a.new_installment_value` diretamente:
-
-- **`get_dashboard_stats`**: Calcula Colchão, Primeira Parcela, Negociado no Mês, Quebra e Pendentes usando os valores originais
-- **`get_dashboard_vencimentos`**: Retorna `a.entrada_value` como `valor_parcela` para entradas e `a.new_installment_value` para parcelas regulares
+## Dados do Raul confirmados no banco
+- Acordo: entrada customizada = R$ 11 (original R$ 5), vencimento 23/03
+- Pagamento confirmado: R$ 11 via Negociarie (event_type = `payment_confirmed`)
+- `_recebido` já calcula R$ 11 corretamente
+- `_pendente` calcula R$ 11 (parcela prevista) mas não desconta o pagamento
 
 ## Correção
 
-Uma única migration SQL que reescreve ambas as RPCs para usar `COALESCE` com `custom_installment_values`:
+Uma migration SQL que reescreve `get_dashboard_stats` adicionando uma única linha após o cálculo de `_pendente`:
 
-```text
--- Para entrada:
-COALESCE((a.custom_installment_values->>'entrada')::numeric, a.entrada_value)
-
--- Para parcela regular (número i):
-COALESCE((a.custom_installment_values->>cast(num AS text))::numeric, a.new_installment_value)
+```sql
+_pendente := GREATEST(_pendente - _recebido, 0);
 ```
 
-### `get_dashboard_vencimentos`
-- Entrada: substituir `a.entrada_value AS valor_parcela` por `COALESCE((a.custom_installment_values->>'entrada')::numeric, a.entrada_value)`
-- Parcelas regulares: substituir `a.new_installment_value AS valor_parcela` por `COALESCE((a.custom_installment_values->>cast(numero AS text))::numeric, a.new_installment_value)` onde `numero` é o número efetivo da parcela
+Isso garante que "Pendentes" = parcelas previstas no mês **menos** pagamentos já confirmados no mês.
 
-### `get_dashboard_stats`
-- Aplicar a mesma lógica de COALESCE em todos os 5 cálculos que usam `entrada_value` / `new_installment_value`: Colchão, Primeira Parcela, Negociado Mês, Quebra e Pendentes
-
-## Arquivos afetados
+## Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| Migration SQL | Reescrever `get_dashboard_stats` e `get_dashboard_vencimentos` para usar `custom_installment_values` com fallback |
+| Migration SQL (`get_dashboard_stats`) | Adicionar subtração de `_recebido` do `_pendente` |
 
-Nenhuma mudança em frontend — o problema é 100% nas RPCs SQL.
+Nenhuma mudança em frontend.
 
