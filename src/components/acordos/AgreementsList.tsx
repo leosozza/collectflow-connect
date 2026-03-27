@@ -23,7 +23,7 @@ interface AgreementsListProps {
 }
 
 const statusColors: Record<string, string> = {
-  pending: "bg-orange-100 text-orange-800",
+  pending: "bg-green-50 text-green-700 border border-green-300",
   pending_approval: "bg-blue-100 text-blue-800",
   approved: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",

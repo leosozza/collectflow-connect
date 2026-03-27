@@ -297,7 +297,10 @@ const ClientDetailPage = () => {
                           Acordo — {new Date(agreement.created_at).toLocaleDateString("pt-BR")}
                         </h3>
                         <div className="flex items-center gap-2">
-                          <Badge variant={statusVariantMap[agreement.status] || "secondary"}>
+                          <Badge
+                            variant={agreement.status === "pending" ? undefined : (statusVariantMap[agreement.status] || "secondary")}
+                            className={agreement.status === "pending" ? "bg-green-50 text-green-700 border border-green-300" : ""}
+                          >
                             {statusLabelsMap[agreement.status] || agreement.status}
                           </Badge>
                           {activeStatuses.includes(agreement.status) && (
