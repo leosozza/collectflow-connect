@@ -5,6 +5,7 @@ import { autoCancelProtestsForCpf } from "@/services/protestoService";
 import { autoCancelSerasaForCpf } from "@/services/serasaService";
 import { logger } from "@/lib/logger";
 import { handleServiceError } from "@/lib/errorHandler";
+import { fetchAllRows } from "@/lib/supabaseUtils";
 
 export interface Agreement {
   id: string;
