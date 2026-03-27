@@ -5,6 +5,27 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+/** Map Negociarie id_status to internal status */
+function mapStatus(idStatus: number, statusText?: string): string {
+  switch (idStatus) {
+    case 801: return "pago";
+    case 800: return "registrado";
+    case 808:
+    case 809: return "inadimplente";
+    case 810:
+    case 812: return "baixado";
+    case 811: return "devolvido";
+    default: return (statusText || "desconhecido").toLowerCase();
+  }
+}
+
+/** SHA1 hex digest */
+async function sha1(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest("SHA-1", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -17,20 +38,150 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Extract relevant fields from callback
+    // ─── New format: body.parcelas[] ───
+    if (Array.isArray(body.parcelas) && body.parcelas.length > 0) {
+      // Validate token
+      const clientId = Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
+      const clientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
+      if (clientId && clientSecret && body.token) {
+        const expected = await sha1(clientId + clientSecret);
+        if (body.token !== expected) {
+          console.error("Token inválido no callback");
+          return new Response(JSON.stringify({ error: "Token inválido" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      let processed = 0;
+
+      for (const parcela of body.parcelas) {
+        const idParcela = String(parcela.id_parcela || "");
+        if (!idParcela) continue;
+
+        const newStatus = mapStatus(parcela.id_status, parcela.status);
+
+        // Find cobrança by id_parcela
+        const { data: cobrancas, error: findErr } = await supabase
+          .from("negociarie_cobrancas")
+          .select("*, clients(operator_id, tenant_id, cpf, id)")
+          .eq("id_parcela", idParcela);
+
+        if (findErr || !cobrancas?.length) {
+          console.log("Cobrança não encontrada para id_parcela:", idParcela);
+          continue;
+        }
+
+        const cobranca = cobrancas[0];
+
+        // Update cobrança
+        const updateData: Record<string, unknown> = {
+          status: newStatus,
+          id_status: parcela.id_status ?? cobranca.id_status,
+          callback_data: parcela,
+        };
+        if (parcela.valor_pago != null) updateData.valor_pago = parcela.valor_pago;
+        if (parcela.data_pagamento) updateData.data_pagamento = parcela.data_pagamento;
+
+        const { error: updateErr } = await supabase
+          .from("negociarie_cobrancas")
+          .update(updateData)
+          .eq("id", cobranca.id);
+
+        if (updateErr) {
+          console.error("Error updating cobranca:", updateErr);
+          continue;
+        }
+
+        // If paid (801), process payment effects
+        if (newStatus === "pago") {
+          const valorPago = Number(parcela.valor_pago || parcela.valor || cobranca.valor || 0);
+
+          // Find client via agreement
+          if (cobranca.agreement_id) {
+            const { data: agreement } = await supabase
+              .from("agreements")
+              .select("id, tenant_id, client_cpf, created_by")
+              .eq("id", cobranca.agreement_id)
+              .single();
+
+            if (agreement) {
+              // Find client by CPF
+              const cleanCpf = (agreement.client_cpf || "").replace(/[.\-]/g, "");
+              const { data: client } = await supabase
+                .from("clients")
+                .select("id, cpf, valor_pago, operator_id, tenant_id")
+                .eq("tenant_id", agreement.tenant_id)
+                .or(`cpf.eq.${cleanCpf},cpf.eq.${agreement.client_cpf}`)
+                .limit(1)
+                .single();
+
+              if (client) {
+                // Accumulate valor_pago
+                const newValorPago = Number(client.valor_pago || 0) + valorPago;
+                await supabase
+                  .from("clients")
+                  .update({ valor_pago: newValorPago })
+                  .eq("id", client.id);
+
+                // Register client_event
+                await supabase.from("client_events").insert({
+                  tenant_id: agreement.tenant_id,
+                  client_id: client.id,
+                  client_cpf: client.cpf,
+                  event_type: "payment_confirmed",
+                  event_source: "negociarie",
+                  event_channel: "boleto",
+                  event_value: `R$ ${valorPago.toFixed(2)}`,
+                  metadata: {
+                    agreement_id: cobranca.agreement_id,
+                    id_parcela: idParcela,
+                    id_status: parcela.id_status,
+                    valor_pago: valorPago,
+                    data_pagamento: parcela.data_pagamento,
+                  },
+                });
+
+                // Notification for operator
+                const operatorId = client.operator_id || agreement.created_by;
+                if (operatorId) {
+                  await supabase.rpc("create_notification", {
+                    _tenant_id: agreement.tenant_id,
+                    _user_id: operatorId,
+                    _title: "Pagamento confirmado",
+                    _message: `Parcela de R$ ${valorPago.toFixed(2)} paga via boleto/PIX (ID: ${idParcela})`,
+                    _type: "success",
+                    _reference_type: "negociarie_cobranca",
+                    _reference_id: cobranca.id,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        processed++;
+      }
+
+      return new Response(JSON.stringify({ ok: true, processed }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Legacy fallback: flat body with id_geral ───
     const idGeral = body.id_geral || body.idGeral;
     const idParcela = body.id_parcela || body.idParcela;
     const status = body.status;
     const idStatus = body.id_status || body.idStatus;
 
     if (!idGeral) {
-      return new Response(JSON.stringify({ error: "id_geral required" }), {
+      return new Response(JSON.stringify({ error: "Formato de callback não reconhecido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Find matching cobranca
     let query = supabase
       .from("negociarie_cobrancas")
       .select("*, clients(operator_id, tenant_id)")
@@ -49,7 +200,6 @@ Deno.serve(async (req) => {
 
     const cobranca = cobrancas[0];
 
-    // Map Negociarie status codes to internal status
     let newStatus = cobranca.status;
     if (idStatus === 801 || status === "pago" || status === "liquidado") {
       newStatus = "pago";
@@ -61,7 +211,6 @@ Deno.serve(async (req) => {
       newStatus = status;
     }
 
-    // Update cobranca
     const { error: updateError } = await supabase
       .from("negociarie_cobrancas")
       .update({
@@ -73,14 +222,12 @@ Deno.serve(async (req) => {
 
     if (updateError) console.error("Error updating cobranca:", updateError);
 
-    // If paid, update client status
     if (newStatus === "pago" && cobranca.client_id) {
       await supabase
         .from("clients")
         .update({ status: "pago", valor_pago: cobranca.valor })
         .eq("id", cobranca.client_id);
 
-      // Create notification for operator
       const client = cobranca.clients as any;
       if (client?.operator_id && client?.tenant_id) {
         await supabase.rpc("create_notification", {
