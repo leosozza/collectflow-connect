@@ -1,34 +1,38 @@
 
 
-# Plano: Unificar visual do badge "Acordo Vigente" nos 3 locais
+# Plano: Simplificar tabela de acordos + corrigir status do título
 
-## Situação atual
+## Parte 1 — Simplificar colunas da tabela `/acordos`
 
-O texto "Acordo Vigente" já aparece corretamente nos 3 locais. O problema é que cada um renderiza o badge com estilo diferente:
+Remover colunas: Original, Proposto, Parcelas, Vencimento, Ações (botão ExternalLink).
 
-- `/acordos` → `bg-orange-100 text-orange-800` (cor de "pending")
-- `/carteira/{cpf}` → `variant="outline"` (badge outline cinza)
-- `/carteira` → cor dinâmica da tabela `tipos_status` (verde, conforme screenshot)
+Colunas finais: **Cliente** (clicável → abre perfil), **CPF**, **Credor**, **Operador**, **Status**.
 
-O screenshot mostra que o visual desejado é o da carteira: **badge verde com borda**, como configurado no cadastro de status.
+### `src/components/acordos/AgreementsList.tsx`
+- Remover os `TableHead` e `TableCell` de Original, Proposto, Parcelas, Vencimento
+- Remover o botão ExternalLink da coluna Ações
+- Tornar o nome do cliente clicável: `<span className="cursor-pointer text-primary hover:underline" onClick={...}>`
+- Manter os botões de Aprovar/Rejeitar na coluna Ações (aparecem só quando `showOperationalActions`)
+- Se não há ações operacionais visíveis, esconder a coluna Ações inteira
+- Remover imports não usados (`formatCurrency`, `getEffectiveAgreementSummary`, `format`, `ExternalLink`)
 
-## Correção
+## Parte 2 — Corrigir CPF na atualização de status do título
 
-Alinhar os badges de `/acordos` e `/carteira/{cpf}` ao estilo verde usado na carteira.
+O problema: quando o acordo é criado, o código faz `.eq("cpf", data.client_cpf)` mas o CPF pode estar em formato diferente (com pontos/traço vs sem).
 
-### 1. `src/components/acordos/AgreementsList.tsx`
-- Alterar `statusColors.pending` de `bg-orange-100 text-orange-800` para `bg-green-50 text-green-700 border border-green-300` (verde claro, consistente com o screenshot)
+### `src/services/agreementService.ts`
+- Na função `createAgreement` (~linha 132-137): normalizar o CPF e usar `.or()` com ambos os formatos (raw e formatado) ao atualizar `clients.status` para `em_acordo`
+- Na função `cancelAgreement` (~linha 364-388): aplicar a mesma normalização de CPF
 
-### 2. `src/pages/ClientDetailPage.tsx`
-- Alterar `statusVariantMap.pending` para usar estilo customizado verde em vez de `variant="outline"` genérico
-- Aplicar a mesma cor verde: `bg-green-50 text-green-700 border border-green-300`
+## Parte 3 — Backfill do Raul via migration
 
-### Resultado
-Os 3 locais exibirão "Acordo Vigente" com o mesmo visual verde, sem alterar lógica, nomenclaturas ou fontes de dados.
+- SQL migration para atualizar `clients.status = 'em_acordo'` onde existe um acordo vigente (`agreements.status = 'pending'`) e o título ainda está como `vencido`/`pendente`
 
-### Arquivos afetados
+## Arquivos afetados
+
 | Arquivo | Mudança |
 |---|---|
-| `src/components/acordos/AgreementsList.tsx` | Cor do badge `pending` → verde |
-| `src/pages/ClientDetailPage.tsx` | Estilo do badge `pending` → verde |
+| `src/components/acordos/AgreementsList.tsx` | Simplificar colunas, nome clicável |
+| `src/services/agreementService.ts` | Normalizar CPF no create e cancel |
+| Migration SQL | Backfill status dos títulos com acordo vigente |
 
