@@ -157,17 +157,13 @@ Deno.serve(async (req) => {
                 }
               }
             }
-          } else if (cobranca.tenant_id) {
-            // Manual cobrança without agreement — try to find client by CPF
-            const cleanCpf = (cobranca.cpf_devedor || "").replace(/[.\-]/g, "");
-            if (cleanCpf) {
-              const { data: client } = await supabase
-                .from("clients")
-                .select("id, cpf, valor_pago, operator_id, tenant_id")
-                .eq("tenant_id", cobranca.tenant_id)
-                .or(`cpf.eq.${cleanCpf},cpf.eq.${cobranca.cpf_devedor}`)
-                .limit(1)
-                .single();
+          } else if (cobranca.tenant_id && cobranca.client_id) {
+            // Manual cobrança without agreement — find client by client_id
+            const { data: client } = await supabase
+              .from("clients")
+              .select("id, cpf, valor_pago, operator_id, tenant_id")
+              .eq("id", cobranca.client_id)
+              .single();
 
               if (client) {
                 const newValorPago = Number(client.valor_pago || 0) + valorPago;
