@@ -108,11 +108,15 @@ Deno.serve(async (req) => {
 
             if (agreement) {
               const cleanCpf = (agreement.client_cpf || "").replace(/[.\-]/g, "");
+              // Format CPF as XXX.XXX.XXX-XX for matching formatted records
+              const fmtCpf = cleanCpf.length === 11
+                ? `${cleanCpf.slice(0,3)}.${cleanCpf.slice(3,6)}.${cleanCpf.slice(6,9)}-${cleanCpf.slice(9)}`
+                : cleanCpf;
               const { data: client } = await supabase
                 .from("clients")
                 .select("id, cpf, valor_pago, operator_id, tenant_id")
                 .eq("tenant_id", agreement.tenant_id)
-                .or(`cpf.eq.${cleanCpf},cpf.eq.${agreement.client_cpf}`)
+                .or(`cpf.eq.${cleanCpf},cpf.eq.${agreement.client_cpf},cpf.eq.${fmtCpf}`)
                 .limit(1)
                 .single();
 
