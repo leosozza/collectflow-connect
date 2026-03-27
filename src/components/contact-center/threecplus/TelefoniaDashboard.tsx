@@ -49,7 +49,7 @@ const TelefoniaAtendimentoWrapper = ({
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
-  // Query by CPF when available
+  // Query by CPF when available — run in parallel (no clientDbId exclusion)
   const { data: clientByCpf, isLoading: cpfLoading } = useQuery({
     queryKey: ["client-by-cpf", cleanCpf],
     queryFn: async () => {
@@ -62,7 +62,7 @@ const TelefoniaAtendimentoWrapper = ({
       if (error) throw error;
       return data;
     },
-    enabled: !!cleanCpf && cleanCpf.length >= 11 && !clientDbId,
+    enabled: !!cleanCpf && cleanCpf.length >= 11,
   });
 
   // Determine resolved client: priority ID > CPF > phone
@@ -891,7 +891,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         sessionStorage.removeItem("3cp_last_call_id");
         sessionStorage.removeItem("3cp_qualified_from_disposition");
         sessionStorage.removeItem("3cp_active_pause_name");
-        fetchAll();
+        // Optimistic update + immediate refresh
+        await fetchAll();
+        setTimeout(() => fetchAll(), 1500);
       };
       setOnFinishDisposition(finishFn);
     } else {
@@ -950,7 +952,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause;
+  // Suppress ACW for 5s after modal closes to avoid race condition
+  const modalJustClosed = (Date.now() - modalClosedAtRef.current) < 5000;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause && !modalJustClosed;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
