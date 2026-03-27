@@ -48,7 +48,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
 
   const handleOpenProfile = (cpf: string) => {
     const rawCpf = cpf.replace(/\D/g, "");
-    navigate(`/clientes/${rawCpf}?tab=acordo`);
+    navigate(`/carteira/${rawCpf}?tab=acordo`);
   };
 
   const hasActions = isAdmin && showOperationalActions;
