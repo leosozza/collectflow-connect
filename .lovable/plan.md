@@ -1,32 +1,35 @@
 
 
-# Plano: Corrigir card "Pendentes" para subtrair pagamentos confirmados
+# Plano: Corrigir tooltips do Analytics que não abrem
 
 ## Problema
 
-O card "Pendentes" mostra R$ 11,00 para o Raul, mas ele já pagou R$ 11,00. A RPC `get_dashboard_stats` soma todas as parcelas previstas no mês para acordos vigentes, mas **não subtrai os pagamentos já confirmados** (`_recebido`).
-
-## Dados do Raul confirmados no banco
-- Acordo: entrada customizada = R$ 11 (original R$ 5), vencimento 23/03
-- Pagamento confirmado: R$ 11 via Negociarie (event_type = `payment_confirmed`)
-- `_recebido` já calcula R$ 11 corretamente
-- `_pendente` calcula R$ 11 (parcela prevista) mas não desconta o pagamento
+O componente `InfoTooltip` usa `asChild` no `TooltipTrigger` passando diretamente um SVG (`MessageCircle`). Elementos SVG não recebem eventos de pointer de forma confiável como elementos HTML. Além disso, `cursor-default` remove a indicação visual de que o ícone é interativo.
 
 ## Correção
 
-Uma migration SQL que reescreve `get_dashboard_stats` adicionando uma única linha após o cálculo de `_pendente`:
+Envolver o ícone em um `<button>` para garantir que o trigger funcione como elemento HTML interativo:
 
-```sql
-_pendente := GREATEST(_pendente - _recebido, 0);
+```tsx
+const InfoTooltip = ({ text }: { text: string }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" className="inline-flex items-center justify-center">
+        <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-[220px] text-xs">
+      {text}
+    </TooltipContent>
+  </Tooltip>
+);
 ```
 
-Isso garante que "Pendentes" = parcelas previstas no mês **menos** pagamentos já confirmados no mês.
+Mudanças: `cursor-default` → `cursor-help`, SVG envolto em `<button>`.
 
 ## Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| Migration SQL (`get_dashboard_stats`) | Adicionar subtração de `_recebido` do `_pendente` |
-
-Nenhuma mudança em frontend.
+| `src/pages/AnalyticsPage.tsx` | Linha 75-84: envolver ícone em `<button>` no `InfoTooltip` |
 
