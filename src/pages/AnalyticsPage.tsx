@@ -75,7 +75,9 @@ const generateYearOptions = () => {
 const InfoTooltip = ({ text }: { text: string }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-default transition-colors" />
+      <button type="button" className="inline-flex items-center justify-center">
+        <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
+      </button>
     </TooltipTrigger>
     <TooltipContent side="top" className="max-w-[220px] text-xs">
       {text}
