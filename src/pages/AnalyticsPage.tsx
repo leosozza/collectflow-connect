@@ -367,9 +367,9 @@ const AnalyticsPage = () => {
           ) : (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do saldo devedor de toda a carteira cadastrada com status pendente." /></div>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor total em aberto na carteira do credor disponível para negociação." /></div>
                 <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Pendente</p>
+                <p className="text-xs text-muted-foreground">Total Inadimplência</p>
                 <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
