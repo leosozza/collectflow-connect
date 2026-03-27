@@ -265,34 +265,29 @@ Deno.serve(async (req) => {
 
     if (updateError) console.error("Error updating cobranca:", updateError);
 
-    if (newStatus === "pago" && cobranca.tenant_id) {
-      const cleanCpf = (cobranca.cpf_devedor || "").replace(/[.\-]/g, "");
-      if (cleanCpf) {
-        const { data: client } = await supabase
+    if (newStatus === "pago" && cobranca.tenant_id && cobranca.client_id) {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("id, cpf, valor_pago, operator_id")
+        .eq("id", cobranca.client_id)
+        .single();
+
+      if (client) {
+        await supabase
           .from("clients")
-          .select("id, cpf, valor_pago, operator_id")
-          .eq("tenant_id", cobranca.tenant_id)
-          .or(`cpf.eq.${cleanCpf},cpf.eq.${cobranca.cpf_devedor}`)
-          .limit(1)
-          .single();
+          .update({ status: "pago", valor_pago: cobranca.valor })
+          .eq("id", client.id);
 
-        if (client) {
-          await supabase
-            .from("clients")
-            .update({ status: "pago", valor_pago: cobranca.valor })
-            .eq("id", client.id);
-
-          if (client.operator_id) {
-            await supabase.rpc("create_notification", {
-              _tenant_id: cobranca.tenant_id,
-              _user_id: client.operator_id,
-              _title: "Pagamento confirmado",
-              _message: `Cobrança ${cobranca.tipo} de R$ ${cobranca.valor} foi paga (ID: ${idGeral})`,
-              _type: "success",
-              _reference_type: "negociarie_cobranca",
-              _reference_id: cobranca.id,
-            });
-          }
+        if (client.operator_id) {
+          await supabase.rpc("create_notification", {
+            _tenant_id: cobranca.tenant_id,
+            _user_id: client.operator_id,
+            _title: "Pagamento confirmado",
+            _message: `Cobrança ${cobranca.tipo} de R$ ${cobranca.valor} foi paga (ID: ${idGeral})`,
+            _type: "success",
+            _reference_type: "negociarie_cobranca",
+            _reference_id: cobranca.id,
+          });
         }
       }
     }
