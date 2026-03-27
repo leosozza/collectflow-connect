@@ -464,7 +464,10 @@ const ClientDetailPage = () => {
             <div className="flex items-center justify-between gap-2">
               <DialogTitle>Editar Acordo</DialogTitle>
               {editingAgreement && (
-                <Badge variant={statusVariantMap[editingAgreement.status] || "secondary"}>
+                <Badge
+                  variant={editingAgreement.status === "pending" ? undefined : (statusVariantMap[editingAgreement.status] || "secondary")}
+                  className={editingAgreement.status === "pending" ? "bg-green-50 text-green-700 border border-green-300" : ""}
+                >
                   {statusLabelsMap[editingAgreement.status] || editingAgreement.status}
                 </Badge>
               )}
