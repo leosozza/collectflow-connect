@@ -419,9 +419,11 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
-                              onClick={() => window.open(inst.cobranca.link_boleto, "_blank")}
+                              asChild
                             >
-                              <ExternalLink className="w-4 h-4" />
+                              <a href={inst.cobranca.link_boleto} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Abrir Boleto"}</p></TooltipContent>
