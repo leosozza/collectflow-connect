@@ -205,11 +205,15 @@ Deno.serve(async (req) => {
           if (quebraId) {
             updateData.status_cobranca_id = quebraId;
           }
+          const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
+          const fmtCpf = rawCpf.length === 11
+            ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+            : rawCpf;
           await supabase
             .from("clients")
             .update(updateData)
             .eq("status", "em_acordo")
-            .eq("cpf", a.client_cpf)
+            .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf},cpf.eq.${a.client_cpf}`)
             .eq("tenant_id", a.tenant_id);
         }
 
