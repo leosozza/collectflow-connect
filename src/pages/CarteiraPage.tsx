@@ -378,7 +378,8 @@ const CarteiraPage = () => {
       filtered = filtered.filter((c: any) => c.tipo_divida_id === filters.tipoDividaId);
     }
     if (filters.statusCobrancaId) {
-      filtered = filtered.filter((c: any) => c.status_cobranca_id === filters.statusCobrancaId);
+      const selectedIds = filters.statusCobrancaId.split(",");
+      filtered = filtered.filter((c: any) => selectedIds.includes(c.status_cobranca_id));
     }
     if (filters.cadastroDe) {
       filtered = filtered.filter(c => c.created_at >= filters.cadastroDe);
