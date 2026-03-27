@@ -3002,6 +3002,7 @@ export type Database = {
           callback_data: Json | null
           client_id: string | null
           created_at: string
+          data_pagamento: string | null
           data_vencimento: string
           id: string
           id_geral: string
@@ -3017,12 +3018,14 @@ export type Database = {
           tipo: string
           updated_at: string
           valor: number
+          valor_pago: number | null
         }
         Insert: {
           agreement_id?: string | null
           callback_data?: Json | null
           client_id?: string | null
           created_at?: string
+          data_pagamento?: string | null
           data_vencimento: string
           id?: string
           id_geral: string
@@ -3038,12 +3041,14 @@ export type Database = {
           tipo?: string
           updated_at?: string
           valor: number
+          valor_pago?: number | null
         }
         Update: {
           agreement_id?: string | null
           callback_data?: Json | null
           client_id?: string | null
           created_at?: string
+          data_pagamento?: string | null
           data_vencimento?: string
           id?: string
           id_geral?: string
@@ -3059,6 +3064,7 @@ export type Database = {
           tipo?: string
           updated_at?: string
           valor?: number
+          valor_pago?: number | null
         }
         Relationships: [
           {
