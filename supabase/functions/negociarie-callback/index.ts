@@ -165,40 +165,39 @@ Deno.serve(async (req) => {
               .eq("id", cobranca.client_id)
               .single();
 
-              if (client) {
-                const newValorPago = Number(client.valor_pago || 0) + valorPago;
-                await supabase
-                  .from("clients")
-                  .update({ valor_pago: newValorPago })
-                  .eq("id", client.id);
+            if (client) {
+              const newValorPago = Number(client.valor_pago || 0) + valorPago;
+              await supabase
+                .from("clients")
+                .update({ valor_pago: newValorPago })
+                .eq("id", client.id);
 
-                await supabase.from("client_events").insert({
-                  tenant_id: cobranca.tenant_id,
-                  client_id: client.id,
-                  client_cpf: client.cpf,
-                  event_type: "payment_confirmed",
-                  event_source: "negociarie",
-                  event_channel: "boleto",
-                  event_value: `R$ ${valorPago.toFixed(2)}`,
-                  metadata: {
-                    id_parcela: idParcela,
-                    id_status: parcela.id_status,
-                    valor_pago: valorPago,
-                    data_pagamento: parcela.data_pagamento,
-                  },
+              await supabase.from("client_events").insert({
+                tenant_id: cobranca.tenant_id,
+                client_id: client.id,
+                client_cpf: client.cpf,
+                event_type: "payment_confirmed",
+                event_source: "negociarie",
+                event_channel: "boleto",
+                event_value: `R$ ${valorPago.toFixed(2)}`,
+                metadata: {
+                  id_parcela: idParcela,
+                  id_status: parcela.id_status,
+                  valor_pago: valorPago,
+                  data_pagamento: parcela.data_pagamento,
+                },
+              });
+
+              if (client.operator_id) {
+                await supabase.rpc("create_notification", {
+                  _tenant_id: cobranca.tenant_id,
+                  _user_id: client.operator_id,
+                  _title: "Pagamento confirmado",
+                  _message: `Parcela de R$ ${valorPago.toFixed(2)} paga via boleto/PIX (ID: ${idParcela})`,
+                  _type: "success",
+                  _reference_type: "negociarie_cobranca",
+                  _reference_id: cobranca.id,
                 });
-
-                if (client.operator_id) {
-                  await supabase.rpc("create_notification", {
-                    _tenant_id: cobranca.tenant_id,
-                    _user_id: client.operator_id,
-                    _title: "Pagamento confirmado",
-                    _message: `Parcela de R$ ${valorPago.toFixed(2)} paga via boleto/PIX (ID: ${idParcela})`,
-                    _type: "success",
-                    _reference_type: "negociarie_cobranca",
-                    _reference_id: cobranca.id,
-                  });
-                }
               }
             }
           }
