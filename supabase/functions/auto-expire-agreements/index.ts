@@ -104,8 +104,7 @@ Deno.serve(async (req) => {
           .from("clients")
           .select("valor_pago")
           .eq("tenant_id", a.tenant_id)
-          .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf},cpf.eq.${a.client_cpf}`)
-          .eq("status", "em_acordo");
+          .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf},cpf.eq.${a.client_cpf}`);
 
         const totalPaid = (clientRecords || []).reduce((sum: number, c: any) => sum + (c.valor_pago || 0), 0);
 
