@@ -754,7 +754,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         setLastCallPhone("");
         sessionStorage.removeItem("3cp_last_call_id");
       }
-      fetchAll();
+      await fetchAll();
+      setTimeout(() => fetchAll(), 1500);
     } catch (err: any) {
       console.error("[Telefonia] handleQualifyCall error:", err);
       toast.error(err?.message || "Erro ao tabular chamada");
