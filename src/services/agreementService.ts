@@ -129,10 +129,14 @@ export const createAgreement = async (
         updatePayload.status_cobranca_id = acordoStatus.id;
       }
 
+      const rawCpf = data.client_cpf.replace(/\D/g, "");
+      const fmtCpf = rawCpf.length === 11
+        ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+        : rawCpf;
       await supabase
         .from("clients")
         .update(updatePayload)
-        .eq("cpf", data.client_cpf)
+        .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
         .eq("credor", data.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
     } catch (e) {
