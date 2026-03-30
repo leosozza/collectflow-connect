@@ -721,25 +721,24 @@ Implementação:
   },
   {
     id: "whatsapp-meta",
-    title: "WhatsApp Business API (Meta Oficial)",
-    description: "Integração direta com a API oficial do Meta para envio de templates aprovados.",
-    status: "future",
-    progress: 0,
+    title: "WhatsApp Fase 2 — API Oficial Meta + IA",
+    description: "Integração direta com a API oficial do Meta para envio de templates aprovados, webhooks de status e agente IA com handoff automático. Base estrutural (provider_category, templates dedicados) já implementada na Fase 1.",
+    status: "planned",
+    progress: 10,
     category: "Integrações",
-    lovablePrompt: `Implementar integração com a API oficial do WhatsApp Business (Meta) para envio de mensagens em escala.
+    lovablePrompt: `Implementar a Fase 2 do WhatsApp: API oficial Meta + agente IA.
 
-Funcionalidades:
-1. Gerenciar Phone Number IDs do Meta
-2. Enviar templates aprovados (HSM) para clientes
-3. Receber respostas via webhook e criar conversas no sistema
-4. Relatório de mensagens entregues/lidas/respondidas
+Base já pronta (Fase 1):
+- provider_category official/unofficial nas instâncias
+- Tabela whatsapp_templates com categorias e variáveis
+- Round-robin e campanhas persistidas
 
-Implementação:
-1. Criar edge function supabase/functions/meta-whatsapp-proxy/
-2. Webhook: supabase/functions/meta-whatsapp-webhook/
-3. Adicionar configuração na tab WhatsApp da IntegracaoPage
-4. Secrets necessários: META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
-5. Integrar com o sistema de automação existente como canal adicional`,
+O que falta:
+1. Criar edge function supabase/functions/meta-whatsapp-proxy/ para envio via API oficial
+2. Webhook: supabase/functions/meta-whatsapp-webhook/ para status de entrega
+3. Secrets: META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
+4. Agente IA autônomo com handoff para operador humano
+5. Relatório de mensagens entregues/lidas/respondidas`,
   },
 
   // ──────────────────────────────────────────────────
