@@ -1,54 +1,75 @@
 
 
-# Plano: Identificação visual de conversas sem cliente vinculado + ações para números externos
+# Plano: Tabulações de Atendimento (Chamadas + WhatsApp)
 
 ## Resumo
 
-Adicionar indicador visual na lista de conversas para contatos sem cliente vinculado, e incluir opção "Ignorar" no menu de contexto (além do "Excluir" já existente para admins).
+Adicionar coluna `channel` à tabela `call_disposition_types`, renomear o menu para "Tabulações de Atendimento", criar sub-abas (Chamadas / WhatsApp), seed de 10 tabulações WhatsApp padrão, e transformar a aba Etiquetas do WhatsApp em visualização somente-leitura.
 
 ---
 
-## 1. Indicador visual na lista de conversas
+## 1. Migração: coluna `channel`
 
-**Arquivo**: `src/components/contact-center/whatsapp/ConversationList.tsx`
+```sql
+ALTER TABLE call_disposition_types 
+  ADD COLUMN channel text NOT NULL DEFAULT 'call' 
+  CHECK (channel IN ('call', 'whatsapp'));
+```
 
-No avatar da conversa, quando `conv.client_id` for `null`:
-- Adicionar um pequeno ícone de alerta (Link2Off ou AlertTriangle) no canto do avatar
-- Aplicar borda amarela/laranja no avatar para destacar visualmente
-- Adicionar tooltip: "Cliente não vinculado"
-
-No nome da conversa, quando `conv.client_id` for `null`:
-- Exibir badge discreto "Não vinculado" ao lado do nome
+Registros existentes ficam com `channel = 'call'`. O unique constraint `(tenant_id, key)` já existe — as keys WhatsApp serão distintas (prefixo `wa_`).
 
 ---
 
-## 2. Filtro por vinculação
+## 2. Seed de tabulações WhatsApp padrão
 
-**Arquivo**: `src/components/contact-center/whatsapp/ConversationList.tsx`
+Adicionar em `dispositionService.ts`:
 
-Adicionar novo filtro na área de filtros:
-- Select com opções: "Todos" / "Vinculados" / "Não vinculados"
-- Default: "Todos"
-- Filtrar por `conv.client_id !== null` (vinculados) ou `conv.client_id === null` (não vinculados)
+| Key | Label | Impacto |
+|---|---|---|
+| wa_cpc | CPC - Contato Pessoa Certa | positivo |
+| wa_cpe | CPE - Contato Pessoa Errada | negativo |
+| wa_acordo_formalizado | Acordo Formalizado | positivo |
+| wa_risco_processo | Risco de Processo | negativo |
+| wa_sem_contato | Sem Contato | negativo |
+| wa_em_negociacao | Em Negociação | positivo |
+| wa_em_dia | Em Dia | positivo |
+| wa_quitado | Quitado | positivo |
+| wa_sem_interesse_produto | Sem Interesse Produto | negativo |
+| wa_sem_interesse_financeiro | Sem Interesse Financeiro | negativo |
 
----
-
-## 3. Opção "Ignorar" no menu de contexto
-
-**Arquivo**: `src/components/contact-center/whatsapp/ConversationList.tsx`
-
-No ContextMenu, adicionar item "Ignorar conversa" que:
-- Muda o status da conversa para `"closed"` via `onStatusChange`
-- Disponível para todos os operadores (não apenas admins)
-- Ícone: `EyeOff` ou `BanIcon`
-
-O "Excluir" já existe e é restrito a admins — permanece como está.
+Nova função `seedDefaultWhatsAppDispositionTypes(tenantId)` com auto-seed no componente.
 
 ---
 
-## 4. Garantir que props estão disponíveis
+## 3. Renomear menu + sub-abas
 
-O campo `client_id` já faz parte da interface `Conversation` e é retornado pelo `fetchConversations`. Nenhuma mudança no service ou banco.
+**CadastrosPage.tsx**:
+- `"Tabulação de Chamada"` → `"Tabulações de Atendimento"`
+- Key: `tabulacoes` (redirecionar `tabulacao_chamada` para compatibilidade)
+- Renderizar novo wrapper `DispositionTabsWrapper`
+
+**Novo**: `src/components/cadastros/DispositionTabsWrapper.tsx`
+- Tabs com "Chamadas" e "WhatsApp"
+- Cada aba renderiza `CallDispositionTypesTab` com prop `channel`
+
+---
+
+## 4. Filtrar por channel no CallDispositionTypesTab
+
+- Aceitar prop `channel: 'call' | 'whatsapp'` (default `'call'`)
+- Filtrar query com `.eq("channel", channel)`
+- Seed automático usa lista correta conforme channel
+- Create inclui `channel` no payload
+- Para WhatsApp: esconder colunas de chamada (Comportamento, flags de discagem)
+
+---
+
+## 5. Aba Etiquetas do WhatsApp → somente leitura
+
+**TagsManagementTab.tsx**:
+- Ler `call_disposition_types` filtrado por `channel = 'whatsapp'`
+- Exibir como lista visual (cor + nome + impacto), sem edição
+- Adicionar link "Gerenciar em Cadastros > Tabulações"
 
 ---
 
@@ -56,10 +77,15 @@ O campo `client_id` já faz parte da interface `Conversation` e é retornado pel
 
 | Arquivo | Mudança |
 |---|---|
-| `ConversationList.tsx` | Indicador visual no avatar, badge "Não vinculado", filtro de vinculação, item "Ignorar" no context menu |
+| Migração SQL | Adicionar coluna `channel` |
+| `dispositionService.ts` | Lista WhatsApp, seed function, channel no create |
+| `CadastrosPage.tsx` | Renomear nav, usar wrapper |
+| `DispositionTabsWrapper.tsx` | **Novo**: sub-abas Chamadas/WhatsApp |
+| `CallDispositionTypesTab.tsx` | Prop `channel`, filtrar query, adaptar colunas |
+| `TagsManagementTab.tsx` | Somente leitura das tabulações WhatsApp |
 
 ## O que NÃO muda
-- Banco de dados (sem migrações)
-- ContactSidebar (vinculação de cliente permanece igual)
-- ChatPanel, serviços, edge functions
+- Tabela `conversation_tags` (preservada, apenas desvinculada da UI)
+- Sync 3CPlus (continua apenas para channel=call)
+- Tabulação na ficha de atendimento
 
