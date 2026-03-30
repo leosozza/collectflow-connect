@@ -332,6 +332,17 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     </div>
   );
 
+  const getCampaignStatusBadge = () => {
+    if (!result?.finalStatus) return null;
+    const map: Record<string, { label: string; variant: "default" | "destructive" | "secondary" | "outline" }> = {
+      completed: { label: "Concluída", variant: "default" },
+      completed_with_errors: { label: "Concluída com falhas", variant: "secondary" },
+      failed: { label: "Falhou", variant: "destructive" },
+    };
+    const info = map[result.finalStatus] || { label: result.finalStatus, variant: "outline" as const };
+    return <Badge variant={info.variant} className="text-sm px-3 py-1">{info.label}</Badge>;
+  };
+
   const renderStep4 = () => (
     <div className="space-y-4 py-4">
       {sending ? (
@@ -342,9 +353,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         </div>
       ) : result ? (
         <>
-          <div className="text-center space-y-2">
-            <div className="flex justify-center gap-6">
-              <div className="flex items-center gap-2 text-green-600">
+          <div className="text-center space-y-3">
+            {getCampaignStatusBadge()}
+            <div className="flex justify-center gap-6 mt-2">
+              <div className="flex items-center gap-2 text-primary">
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="text-lg font-semibold">{result.sent} enviados</span>
               </div>
@@ -355,6 +367,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                 </div>
               )}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Total processado: {result.sent + result.failed} destinatário(s)
+            </p>
           </div>
           {result.errors.length > 0 && (
             <div className="bg-muted rounded-lg p-3 max-h-32 overflow-y-auto">
