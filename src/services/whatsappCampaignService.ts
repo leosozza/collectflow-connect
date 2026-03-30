@@ -86,31 +86,17 @@ export function deduplicateClients(clients: Client[]): {
   let excludedCount = 0;
 
   for (const client of clients) {
-    // Try phone, phone2, phone3 in order
-    const phones = [client.phone, client.phone2, client.phone3];
-    let found = false;
-
-    for (const rawPhone of phones) {
-      const normalized = normalizePhone(rawPhone);
-      if (isValidPhone(normalized) && !phoneMap.has(normalized)) {
-        phoneMap.set(normalized, {
-          clientId: client.id,
-          name: client.nome_completo,
-        });
-        found = true;
-        break;
-      }
+    const normalized = normalizePhone(client.phone);
+    if (!isValidPhone(normalized)) {
+      excludedCount++;
+      continue;
     }
-
-    if (!found) {
-      // Check if ANY phone was already mapped (dedup)
-      const anyMapped = phones.some((p) => {
-        const n = normalizePhone(p);
-        return n && phoneMap.has(n);
+    // Dedup: first client with this phone wins
+    if (!phoneMap.has(normalized)) {
+      phoneMap.set(normalized, {
+        clientId: client.id,
+        name: client.nome_completo,
       });
-      if (!anyMapped) {
-        excludedCount++;
-      }
     }
   }
 
