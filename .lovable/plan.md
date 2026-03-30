@@ -1,129 +1,172 @@
 
 
-# Plano: Refatoração — Eliminar Widget Flutuante e Centralizar Atendimento na Ficha
+# Plano: Refinar e Corrigir o Módulo /contact-center/telefonia
 
 ## Resumo
 
-Remover o modal/widget flutuante de telefonia (`useAtendimentoModal`) como mecanismo de atendimento. O operador continuará no `TelefoniaDashboard` e, quando uma chamada chegar, será navegado diretamente para `/atendimento/:clientId` (rota já existente). Toda a gestão 3CPlus (campanhas, pausas, monitoramento, administração) permanece intacta.
+Correção cirúrgica em 10 frentes: normalizar parsing de respostas 3CPlus, corrigir campanhas no Dashboard, adicionar filtros de período nos Gráficos e Produtividade, limpar aba Mailing, remover aba Histórico (redundante), transformar Usuários/Equipes em consulta, e corrigir bugs pontuais.
 
-## Arquitetura Atual vs. Nova
+---
 
-```text
-ATUAL:
-  TelefoniaDashboard → detecta chamada → abre widget flutuante (overlay z-40)
-                                          ↓
-                                   AtendimentoPage (embedded=true dentro do widget)
-                                          ↓
-                                   tabulação → callback finishDisposition → widget fecha
+## Etapa 0: Helper de normalização de respostas 3CPlus
 
-NOVA:
-  TelefoniaDashboard → detecta chamada → navigate("/atendimento/:clientId?agentId=X&callId=Y")
-                                          ↓
-                                   AtendimentoPage (standalone, rota completa)
-                                          ↓
-                                   tabulação → navigate(-1) volta ao dashboard
+Criar `src/lib/threecplusUtils.ts` com:
+
+```typescript
+/** Extrai array de qualquer formato de resposta 3CPlus */
+export function extractList(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (data?.data?.data && Array.isArray(data.data.data)) return data.data.data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+/** Normaliza status de campanha */
+export function normalizeCampaignStatus(c: any): {
+  isRunning: boolean; isPaused: boolean; statusLabel: string;
+  progress: number; total: number; worked: number; aggressiveness: number;
+} { ... }
 ```
 
-## Etapas de Implementação
+Aplicar em **todos** os componentes que hoje fazem parsing inline (`CampaignsPanel`, `CampaignOverview`, `CallsChart`, `AgentsReportPanel`, `CallHistoryPanel`, `UsersPanel`, `TeamsPanel`, `TelefoniaDashboard`).
 
-### Etapa 1: Reescrever `useAtendimentoModal.tsx`
+---
 
-**Eliminar**: Todo o JSX do modal flutuante (backdrop, drag, minimize, timer, pause controls, header).
+## Etapa 1: Dashboard > Visão Geral — Campanhas
 
-**Manter**: O contexto `AtendimentoModalContext` e o provider, mas simplificado — agora ele apenas coordena estado leve entre TelefoniaDashboard e AtendimentoPage:
-- `agentStatus` — o dashboard seta, a ficha lê para exibir o banner de status
-- `setAgentStatus` — chamado pelo dashboard
-- `isOpen` — removido (sem modal)
-- `openAtendimento` → removido (substituído por `navigate`)
-- `openWaiting` → removido
-- `updateAtendimento` → removido
-- `closeAtendimento` → removido
-- `setPauseControls` → removido (controles de pausa ficam no dashboard)
-- `setOnFinishDisposition` / `onFinishDisposition` → **mantido** — o dashboard registra a função de cleanup (qualify + unpause), a ficha chama após tabular
+**Arquivo**: `CampaignOverview.tsx`
 
-O provider vira ~30 linhas (context + state simples), sem render de JSX de overlay.
+- Substituir parsing inline por `extractList` + `normalizeCampaignStatus`
+- Corrigir botão play/pause: usar `isPaused` da normalização (não `c.status === "running"`)
+- Corrigir progresso: buscar `statistics.total_records` / `statistics.worked_records` como fallback além de `completed/total`
+- Adicionar coluna de expansão (ChevronDown) — ao expandir, exibir resumo: status, total registros, trabalhados, agentes, agressividade, qualificações vinculadas
+- Agressividade: buscar de `c.aggressiveness || c.power || c.dialer_settings?.aggressiveness`
 
-### Etapa 2: Reescrever `TelefoniaAtendimentoWrapper`
+---
 
-**Atual**: Resolve o cliente e chama `updateAtendimento()` para abrir o widget.
+## Etapa 2: Gráficos — Filtro de Período
 
-**Novo**: Resolve o cliente e navega via `navigate(`/atendimento/${resolvedId}?agentId=${agentId}&callId=${callId}`)`. Remove a dependência de `useAtendimentoModalSafe`.
+**Arquivo**: `CallsChart.tsx`
 
-### Etapa 3: Simplificar `TelefoniaDashboard.tsx`
+- Adicionar inputs `startDate` e `endDate` (como em AgentsReportPanel)
+- Remover cálculo fixo `const today = new Date()...`
+- Passar datas selecionadas para `campaign_graphic_metrics`
+- Exibir mensagem clara quando `chartData` vazio: "Sem dados para o período selecionado"
+- Atualizar descrição de "hoje" para "período selecionado"
 
-**Remover**:
-- Chamadas a `openWaiting`, `setPauseControls`, `setOnFinishDisposition`, `closeAtendimento`
-- Lógica de rehydrate do widget (`hasRehydrated`)
-- Feed de `pauseControls` para o widget flutuante (efeito linhas 806-821)
-- Tracking de `modalIsOpen` / `modalClosedAtRef` / `prevModalOpen`
-- Guard de 5s `modalJustClosed`
+---
 
-**Manter**:
-- Polling, `fetchAll`, campanhas, login/logout
-- Pause/unpause no dashboard
-- ACW detection e tela de tabulação fallback (para quando o operador não tabulou na ficha)
-- `handleQualifyCall` (tabulação direta no dashboard como fallback)
-- KPIs, `OperatorCallHistory`, admin view
+## Etapa 3: Produtividade — Corrigir Leitura
 
-**Ajustar**:
-- Quando `isOnCall`, renderizar `TelefoniaAtendimentoWrapper` que agora navega para a rota
-- Após campaign login, NÃO chamar `openWaiting` — ficar no dashboard aguardando
-- `handleCampaignLogout` não precisa chamar `closeAtendimento`
-- `effectiveACW` não depende mais de `modalIsOpen` — simplificar para `(isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause`
+**Arquivo**: `AgentsReportPanel.tsx`
 
-### Etapa 4: Adaptar `AtendimentoPage.tsx`
+- Substituir parsing por `extractList(data)`
+- Melhorar mensagens de vazio: diferenciar "clique para buscar" vs "sem dados no período" vs "erro de integração"
+- Adicionar tratamento de erro com mensagem específica
+- Adicionar mais fallbacks de campo: `total_calls`, `calls`, `call_count`
 
-**Ajustar**:
-- Ler `agentId`, `callId`, `sessionId`, `channel` de query params quando não recebidos como props
-- Remover referência a `closeAtendimento` — após tabulação, fazer `navigate(-1)` ou `navigate("/contact-center")` para voltar ao dashboard
-- Manter o banner de status 3CPlus (usa `agentStatus` do contexto)
-- Manter `onFinishDisposition` do contexto — após tabulação, chamar para limpar estado na 3CPlus e depois navegar de volta
-- Manter `embedded` prop para uso futuro (WhatsApp chat panel etc.)
+---
 
-### Etapa 5: Limpar sessionStorage
+## Etapa 4: Remover aba Mailing
 
-**Remover chaves que existiam só para o widget**:
-- Nenhuma chave é exclusiva do widget — todas são de integração 3CPlus (`3cp_last_call_id`, `3cp_qualified_from_disposition`, `3cp_active_pause_name`, `3cp_campaign_id`)
-- Manter todas essas, pois são necessárias para sincronização de tabulação e continuidade de pausa
+**Arquivo**: `ThreeCPlusPanel.tsx`
 
-### Etapa 6: Cache no `threecplus-proxy`
+- Remover import de `MailingPanel`
+- Remover `{ value: "mailing", label: "Mailing", icon: ListOrdered }` do grupo "Campanhas"
+- Remover `mailing: <MailingPanel />` do contentMap
+- Não deletar `MailingPanel.tsx` (pode ser útil dentro da gestão de campanha futuramente)
 
-**Ajustar**: Adicionar cache em memória para `resolveAgentToken` por `agentId+domain` durante a vida da função (Map simples no escopo do módulo). Isso evita chamadas repetidas a `/users` para cada ação do mesmo agente numa mesma invocação.
+---
 
-### Etapa 7: Atualizar referências em outros arquivos
+## Etapa 5: Remover aba Histórico
 
-- `src/App.tsx`: Manter `AtendimentoModalProvider` (agora leve) — ainda necessário para compartilhar `agentStatus` e `onFinishDisposition`
-- `src/components/contact-center/whatsapp/ChatPanel.tsx`: Já usa `navigate("/atendimento/...")` — sem mudança
-- `src/components/carteira/*`: Já usa `navigate("/atendimento/...")` — sem mudança
+A aba Histórico é redundante — Produtividade cobre métricas agregadas e o histórico do cliente cobre chamadas individuais.
+
+**Arquivo**: `ThreeCPlusPanel.tsx`
+
+- Remover `{ value: "history", label: "Histórico", icon: PhoneCall }` do grupo "Chamadas"
+- Remover `history: <CallHistoryPanel />` do contentMap
+- Remover import de `CallHistoryPanel`
+- Manter `CallHistoryPanel.tsx` no projeto (pode ser reaproveitado)
+
+---
+
+## Etapa 6: Usuários — Painel de Consulta
+
+**Arquivo**: `UsersPanel.tsx`
+
+- Remover botão "Novo Usuário" e dialog de criação/edição
+- Remover botão de desativar
+- Adicionar banner: "Usuários devem ser gerenciados no 3C Plus. Este painel é apenas para consulta."
+- Corrigir parsing: usar `extractList(data)`
+- Corrigir status: verificar `u.active`, `u.is_active`, `u.status === "active"`, `u.deleted_at === null`
+- Adicionar filtro visual: Ativos / Inativos / Todos (Select)
+
+---
+
+## Etapa 7: Equipes — Painel de Consulta
+
+**Arquivo**: `TeamsPanel.tsx`
+
+- Remover botão "Nova Equipe" e dialog de criação/edição
+- Adicionar banner: "Equipes devem ser gerenciadas no 3C Plus. Este painel é apenas para consulta."
+- Corrigir parsing: usar `extractList(data)`
+- Manter visualização de detalhes (Eye)
+
+---
+
+## Etapa 8: CampaignsPanel — Corrigir Detalhes
+
+**Arquivo**: `CampaignsPanel.tsx`
+
+- Aplicar `extractList` em todas as chamadas de detalhe
+- Corrigir aba Qualificações dentro da campanha expandida: separar lista de qualificações vinculadas (items da qualification_list) de estatísticas por qualificação (se existirem)
+- Se a 3CPlus não retornar distribuição estatística, não simular dados
+- Corrigir leitura de agressividade: `c.aggressiveness || c.power || c.dialer_settings?.aggressiveness`
+- Adicionar botão "Atualizar" dentro da campanha expandida que chama `loadCampaignDetails`
+- Corrigir `CallHistoryPanel` bug: `useState(() => { loadCampaigns(); })` — trocar por `useEffect`
+
+---
+
+## Etapa 9: Reorganizar Navegação
+
+**Arquivo**: `ThreeCPlusPanel.tsx`
+
+Estrutura final das abas:
+
+```text
+Dashboard: Visão Geral | Gráficos | Produtividade
+Campanhas: Campanhas | Rotas
+Chamadas: Receptivo | Agendamentos | Bloqueio
+Controle: Usuários | Equipes | Intervalos | Horários | Qualificações
+```
+
+Removidos: Mailing, Histórico.
+
+---
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/useAtendimentoModal.tsx` | Reescrever: remover modal/widget JSX, manter contexto leve |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Remover dependências do widget, simplificar ACW, manter tudo mais |
-| `src/pages/AtendimentoPage.tsx` | Ler params da URL, `navigate(-1)` após tabulação |
-| `src/App.tsx` | Manter provider (agora leve) |
-| `supabase/functions/threecplus-proxy/index.ts` | Cache de `resolveAgentToken` |
+| `src/lib/threecplusUtils.ts` | **Novo** — helper de normalização |
+| `src/components/contact-center/threecplus/ThreeCPlusPanel.tsx` | Remover Mailing + Histórico, reorganizar abas |
+| `src/components/contact-center/threecplus/CampaignOverview.tsx` | Normalizar parsing, expandir, corrigir play/pause |
+| `src/components/contact-center/threecplus/CallsChart.tsx` | Adicionar filtro de período |
+| `src/components/contact-center/threecplus/AgentsReportPanel.tsx` | Normalizar parsing, melhorar mensagens |
+| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Normalizar parsing, corrigir qualificações, refresh |
+| `src/components/contact-center/threecplus/UsersPanel.tsx` | Transformar em consulta, filtro status, banner |
+| `src/components/contact-center/threecplus/TeamsPanel.tsx` | Transformar em consulta, banner |
 
 ## O que NÃO muda
 
-- Criação/gestão de campanhas
+- Criação/gestão de campanhas no CampaignsPanel
 - Login/logout de campanha
 - Pause/unpause
-- Monitoramento de agentes (admin view)
-- Tabulação na ficha (DispositionPanel)
-- Sincronização de tabulação com 3CPlus (qualifyOn3CPlus)
-- Score, histórico, observações, acordos, gravações
-- Mailing, click-to-call
-- Tela de ACW fallback no dashboard (para emergências)
-- Admin view do TelefoniaDashboard
-
-## Riscos e Mitigações
-
-| Risco | Mitigação |
-|---|---|
-| Operador perde contexto ao navegar | Query params preservam `agentId`, `callId`, `channel` na URL |
-| Polling para no dashboard quando navega | O dashboard desmonta ao navegar — ao voltar, remonta e retoma polling automaticamente |
-| ACW fallback no dashboard não detecta retorno | `3cp_qualified_from_disposition` no sessionStorage persiste entre navegações |
+- Monitoramento de agentes (TelefoniaDashboard)
+- Tabulação na ficha
+- Navegação direta para ficha do cliente
+- Mailing como funcionalidade (apenas remove a aba dedicada)
+- threecplus-proxy (sem mudanças nesta etapa)
 
