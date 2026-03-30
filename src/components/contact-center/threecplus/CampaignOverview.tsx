@@ -87,7 +87,13 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-foreground">Campanhas ({campaigns.length})</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Campanhas ({campaigns.length})</h3>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCollapsed((p) => !p)}>
+          {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+        </Button>
+      </div>
+      {!collapsed && (
       <div className="rounded-lg border border-border/60 overflow-hidden">
         <Table>
           <TableHeader>
@@ -99,9 +105,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
               <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
               <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
-              <TableHead className="text-xs h-9 w-10 cursor-pointer" onClick={toggleAll}>
-                {allExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-              </TableHead>
+              <TableHead className="text-xs h-9 w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
