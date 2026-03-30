@@ -1049,9 +1049,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State: ACW (After Call Work) → show disposition screen
-    // But ONLY if the ficha (modal) is NOT already open — the ficha handles TPA directly
-    if (effectiveACW && (isPaused || isTPAStatus) && !modalIsOpen) {
+    // State: ACW (After Call Work) → show disposition screen (fallback when operator didn't dispose in the client file)
+    if (effectiveACW && (isPaused || isTPAStatus)) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
