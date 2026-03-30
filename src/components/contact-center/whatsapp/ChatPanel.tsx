@@ -51,6 +51,8 @@ const ChatPanel = ({
   quickReplies,
   slaDeadline,
   operatorName,
+  dispositionAssignments = [],
+  dispositionTypes = [],
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
