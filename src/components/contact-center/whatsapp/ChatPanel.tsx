@@ -31,6 +31,8 @@ interface ChatPanelProps {
   quickReplies?: any[];
   slaDeadline?: string | null;
   operatorName?: string;
+  dispositionAssignments?: { conversation_id: string; disposition_type_id: string }[];
+  dispositionTypes?: { id: string; label: string; color: string; key: string }[];
 }
 
 const ChatPanel = ({
@@ -49,6 +51,8 @@ const ChatPanel = ({
   quickReplies,
   slaDeadline,
   operatorName,
+  dispositionAssignments = [],
+  dispositionTypes = [],
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -129,6 +133,22 @@ const ChatPanel = ({
           <div>
             <div className="font-medium text-[15px] flex items-center gap-2 text-foreground">
               {conversation.remote_name || conversation.remote_phone}
+              {(() => {
+                const convDisps = dispositionAssignments.filter(a => a.conversation_id === conversation.id);
+                return convDisps.map(a => {
+                  const dt = dispositionTypes.find(d => d.id === a.disposition_type_id);
+                  if (!dt) return null;
+                  return (
+                    <Badge
+                      key={dt.id}
+                      className="text-[10px] h-4 px-1.5 border-0 text-white shrink-0"
+                      style={{ backgroundColor: dt.color || 'hsl(var(--muted))' }}
+                    >
+                      {dt.label}
+                    </Badge>
+                  );
+                });
+              })()}
               {slaDeadline && new Date(slaDeadline) < new Date() && (
                 <TooltipProvider>
                   <Tooltip>
