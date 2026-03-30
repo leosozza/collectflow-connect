@@ -263,6 +263,17 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
 
         {/* Row 4: Tag + Instance filters */}
         <div className="flex gap-1.5">
+          <Select value={linkFilter} onValueChange={setLinkFilter}>
+            <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
+              <Link2Off className="w-3 h-3 mr-1 shrink-0" />
+              <SelectValue placeholder="Vínculo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="linked">Vinculados</SelectItem>
+              <SelectItem value="unlinked">Não vinculados</SelectItem>
+            </SelectContent>
+          </Select>
           {tags.length > 0 && (
             <Select value={tagFilter} onValueChange={setTagFilter}>
               <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
