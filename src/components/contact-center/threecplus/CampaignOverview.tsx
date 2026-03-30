@@ -223,9 +223,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
             })}
           </TableBody>
         </Table>
-      </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
