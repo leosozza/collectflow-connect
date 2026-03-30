@@ -15,7 +15,16 @@ function buildUrl(baseUrl: string, path: string, authParam: string, queryParams?
   return url;
 }
 
+// In-memory cache for resolveAgentToken (per invocation lifetime)
+const agentTokenCache = new Map<string, any>();
+
 async function resolveAgentToken(baseUrl: string, authParam: string, agentId: number | string): Promise<any | null> {
+  const cacheKey = `${baseUrl}:${agentId}`;
+  if (agentTokenCache.has(cacheKey)) {
+    console.log(`resolveAgentToken: Cache hit for agent ${agentId}`);
+    return agentTokenCache.get(cacheKey);
+  }
+
   const url = buildUrl(baseUrl, 'users', authParam, { per_page: '500' });
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
   if (!res.ok) {
@@ -23,11 +32,16 @@ async function resolveAgentToken(baseUrl: string, authParam: string, agentId: nu
     return null;
   }
   const raw = await res.json();
-  // Support paginated { data: { data: [...] } }, flat { data: [...] }, or raw [...]
   const list = (raw?.data?.data && Array.isArray(raw.data.data))
     ? raw.data.data
     : Array.isArray(raw?.data) ? raw.data
     : Array.isArray(raw) ? raw : [];
+
+  // Cache ALL agents from this response
+  for (const user of list) {
+    agentTokenCache.set(`${baseUrl}:${user.id}`, user);
+  }
+
   const numId = Number(agentId);
   const agent = list.find((u: any) => u.id === numId || Number(u.id) === numId) || null;
   if (agent) {
