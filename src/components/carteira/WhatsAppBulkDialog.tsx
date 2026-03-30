@@ -176,6 +176,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         sent: data?.sent || 0,
         failed: data?.failed || 0,
         errors: data?.errors || [],
+        finalStatus: data?.finalStatus || undefined,
       });
 
       if (data?.sent > 0) toast.success(`${data.sent} mensagens enviadas!`);
