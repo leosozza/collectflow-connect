@@ -20,7 +20,22 @@ interface CampaignOverviewProps {
 
 const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: CampaignOverviewProps) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const allExpanded = campaigns.length > 0 && expandedIds.size === campaigns.length;
+
+  const toggleOne = (id: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allExpanded) setExpandedIds(new Set());
+    else setExpandedIds(new Set(campaigns.map((c) => c.id)));
+  };
 
   const handlePauseResume = async (campaignId: number, isPaused: boolean) => {
     const action = isPaused ? "resume_campaign" : "pause_campaign";
