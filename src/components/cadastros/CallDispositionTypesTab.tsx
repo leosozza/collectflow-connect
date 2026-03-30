@@ -363,13 +363,13 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
                       {t.impact === "positivo" ? "Positivo" : "Negativo"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{getBehaviorLabel(t.behavior)}</TableCell>
+                  {!isWhatsApp && <TableCell className="text-sm">{getBehaviorLabel(t.behavior)}</TableCell>}
                   <TableCell className="text-center"><BoolIcon value={t.is_conversion || false} /></TableCell>
                   <TableCell className="text-center"><BoolIcon value={t.is_cpc || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_unknown || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_callback || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_schedule || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_blocklist || false} /></TableCell>
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_unknown || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_callback || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_schedule || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_blocklist || false} /></TableCell>}
                   <TableCell>
                     <Badge variant={t.active ? "default" : "secondary"}>
                       {t.active ? "Sim" : "Não"}
