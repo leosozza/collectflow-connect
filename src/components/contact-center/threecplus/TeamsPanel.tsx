@@ -112,8 +112,10 @@ const TeamsPanel = () => {
             <div className="p-4 space-y-2">
               {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : teams.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">Nenhuma equipe encontrada</p>
+          ) : filteredTeams.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {teams.length === 0 ? "Nenhuma equipe encontrada" : "Nenhuma equipe com o filtro selecionado"}
+            </p>
           ) : (
             <Table>
               <TableHeader>
