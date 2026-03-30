@@ -3,21 +3,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface BaylersInstanceFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { name: string }) => void;
+  onSave: (data: { name: string; providerCategory: string }) => void;
   saving: boolean;
   tenantName: string;
 }
 
 const BaylersInstanceForm = ({ open, onClose, onSave, saving, tenantName }: BaylersInstanceFormProps) => {
   const [name, setName] = useState("");
+  const [providerCategory, setProviderCategory] = useState("unofficial");
 
   useEffect(() => {
     if (open) {
       setName("");
+      setProviderCategory("unofficial");
     }
   }, [open]);
 
@@ -39,6 +42,19 @@ const BaylersInstanceForm = ({ open, onClose, onSave, saving, tenantName }: Bayl
               autoFocus
             />
           </div>
+          <div className="space-y-2">
+            <Label>Categoria do Provedor</Label>
+            <Select value={providerCategory} onValueChange={setProviderCategory}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unofficial">Não-oficial</SelectItem>
+                <SelectItem value="official_meta">Oficial Meta</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Define se a instância usa API oficial Meta ou não-oficial</p>
+          </div>
           {instanceNamePreview && (
             <div className="rounded-md bg-muted p-3">
               <p className="text-xs text-muted-foreground mb-1">Nome na Evolution API:</p>
@@ -50,7 +66,7 @@ const BaylersInstanceForm = ({ open, onClose, onSave, saving, tenantName }: Bayl
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             disabled={!name.trim() || saving}
-            onClick={() => onSave({ name: name.trim() })}
+            onClick={() => onSave({ name: name.trim(), providerCategory })}
           >
             {saving ? "Criando..." : "Criar"}
           </Button>

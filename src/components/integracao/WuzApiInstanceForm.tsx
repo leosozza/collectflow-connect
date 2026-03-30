@@ -3,12 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, EyeOff } from "lucide-react";
 
 interface WuzApiInstanceFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; serverUrl: string; userToken: string }) => void;
+  onSave: (data: { name: string; serverUrl: string; userToken: string; providerCategory: string }) => void;
   saving: boolean;
 }
 
@@ -17,6 +18,7 @@ const WuzApiInstanceForm = ({ open, onClose, onSave, saving }: WuzApiInstanceFor
   const [serverUrl, setServerUrl] = useState("");
   const [userToken, setUserToken] = useState("");
   const [showToken, setShowToken] = useState(false);
+  const [providerCategory, setProviderCategory] = useState("unofficial");
 
   useEffect(() => {
     if (open) {
@@ -24,6 +26,7 @@ const WuzApiInstanceForm = ({ open, onClose, onSave, saving }: WuzApiInstanceFor
       setServerUrl("");
       setUserToken("");
       setShowToken(false);
+      setProviderCategory("unofficial");
     }
   }, [open]);
 
@@ -73,12 +76,25 @@ const WuzApiInstanceForm = ({ open, onClose, onSave, saving }: WuzApiInstanceFor
             </div>
             <p className="text-xs text-muted-foreground">Header "Token" para autenticação na API</p>
           </div>
+          <div className="space-y-2">
+            <Label>Categoria do Provedor</Label>
+            <Select value={providerCategory} onValueChange={setProviderCategory}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unofficial">Não-oficial</SelectItem>
+                <SelectItem value="official_meta">Oficial Meta</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Define se a instância usa API oficial Meta ou não-oficial</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             disabled={!isValid || saving}
-            onClick={() => onSave({ name: name.trim(), serverUrl: serverUrl.trim(), userToken: userToken.trim() })}
+            onClick={() => onSave({ name: name.trim(), serverUrl: serverUrl.trim(), userToken: userToken.trim(), providerCategory })}
           >
             {saving ? "Criando..." : "Criar"}
           </Button>
