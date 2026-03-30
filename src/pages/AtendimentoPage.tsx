@@ -47,7 +47,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   ai_voice: "IA Voz",
 };
 
-const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, sessionId: propSessionId, channel: propChannel }: AtendimentoPageProps) => {
+const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId: propCallId, embedded, sessionId: propSessionId, channel: propChannel }: AtendimentoPageProps) => {
   const { clientId: paramClientId } = useParams<{ clientId: string }>();
   const [searchParams] = useSearchParams();
   const id = propClientId || paramClientId || searchParams.get("clientId");
@@ -56,15 +56,20 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const { trackAction } = useActivityTracker();
-  const { agentStatus, onFinishDisposition, closeAtendimento } = useAtendimentoModalSafe();
+  const { agentStatus, onFinishDisposition } = useAtendimentoModalSafe();
+
+  // Read agentId/callId/channel from URL params when not provided as props
+  const agentId = propAgentId || (searchParams.get("agentId") ? Number(searchParams.get("agentId")) : undefined);
+  const callId = propCallId || searchParams.get("callId") || undefined;
+  const activeChannel = propChannel || (searchParams.get("channel") as SessionChannel | undefined) || (callId ? "call" : undefined);
+
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [callingPhone, setCallingPhone] = useState(false);
   const [hangingUp, setHangingUp] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [finishingDisposition, setFinishingDisposition] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || searchParams.get("sessionId") || null);
   const [callHungUp, setCallHungUp] = useState(false);
-  const activeChannel = propChannel || (callId ? "call" : undefined);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
 
@@ -365,20 +370,21 @@ const AtendimentoPage = ({ clientId: propClientId, agentId, callId, embedded, se
     return null;
   };
 
-  const statusConfig = embedded && agentId ? getStatusConfig() : null;
+  // Show status banner when agentId is present (telephony context)
+  const statusConfig = agentId ? getStatusConfig() : null;
   // Show "Finalizar Tabulação" only for TPA (status 4) or status 3 without manual pause name (ACW)
-  // NOT for manual pause (status 3 with pause name)
   const isTPA = Number(agentStatus) === 4 || (Number(agentStatus) === 3 && !sessionStorage.getItem("3cp_active_pause_name"));
-  const showFinishButton = embedded && onFinishDisposition && isTPA;
+  const showFinishButton = onFinishDisposition && isTPA;
 
   const handleFinishDisposition = async () => {
     setFinishingDisposition(true);
     try {
-      // Set flag BEFORE closing modal to prevent TelefoniaDashboard from showing ACW screen
+      // Set flag BEFORE navigating back to prevent TelefoniaDashboard from showing ACW screen
       sessionStorage.setItem("3cp_qualified_from_disposition", "true");
       if (onFinishDisposition) await onFinishDisposition();
-      closeAtendimento();
       toast.success("Tabulação finalizada — retornando à fila");
+      // Navigate back to the dashboard
+      navigate(-1);
     } catch (e) {
       console.error("[Atendimento] Erro ao finalizar tabulação:", e);
       toast.error("Erro ao finalizar. Tente novamente.");

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAtendimentoModal, useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
+import { useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +45,6 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModalSafe();
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
@@ -71,14 +70,18 @@ const TelefoniaAtendimentoWrapper = ({
 
   console.log("[3CPlus] resolved — clientDbId:", clientDbId, "cpfResult:", clientByCpf?.id, "phoneResult:", clientByPhone?.id, "final:", resolvedId, "isLoading:", isLoading);
 
-  // Open atendimento modal when client is resolved
+  // Navigate to client file when client is resolved
   useEffect(() => {
     if (resolvedId && !hasOpened.current) {
       hasOpened.current = true;
-      console.log("[Telefonia] Cliente encontrado, atualizando widget para", resolvedId);
-      updateAtendimento(resolvedId, agentId, callId);
+      console.log("[Telefonia] Cliente encontrado, navegando para ficha:", resolvedId);
+      const params = new URLSearchParams();
+      if (agentId) params.set("agentId", String(agentId));
+      if (callId) params.set("callId", String(callId));
+      params.set("channel", "call");
+      navigate(`/atendimento/${resolvedId}?${params.toString()}`);
     }
-  }, [resolvedId, updateAtendimento, agentId, callId]);
+  }, [resolvedId, navigate, agentId, callId]);
 
   // Reset flag when inputs change
   useEffect(() => {
@@ -242,8 +245,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
   const [reconnectingSip, setReconnectingSip] = useState(false);
-  const hasRehydrated = useRef(false);
-  const modalClosedAtRef = useRef<number>(0);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -517,16 +518,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
-
-  // Track when modal closes to suppress ACW for 5 seconds (race condition guard)
-  const prevModalOpen = useRef(modalIsOpen);
-  useEffect(() => {
-    if (prevModalOpen.current && !modalIsOpen) {
-      modalClosedAtRef.current = Date.now();
-    }
-    prevModalOpen.current = modalIsOpen;
-  }, [modalIsOpen]);
+  const { setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
 
   // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
@@ -564,9 +556,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       } else {
         // Persist campaign_id in sessionStorage for interval loading
         sessionStorage.setItem("3cp_campaign_id", selectedCampaign);
-
-        // Open widget in waiting mode immediately
-        openWaiting(operatorAgentId);
 
         // Load pause intervals and qualifications for this campaign
         loadPauseIntervals(Number(selectedCampaign));
@@ -608,7 +597,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
-        closeAtendimento();
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
         sessionStorage.removeItem("3cp_campaign_id");
@@ -790,35 +778,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
 
-  // Rehydrate widget when operator is already online after page refresh
-  useEffect(() => {
-    if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
-      hasRehydrated.current = true;
-      openWaiting(operatorAgentId);
-    }
-  }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
+  // No longer needed — widget was removed
 
   // Derived telephony state: distinguish TPA from manual pause
   const isManualPause = (myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break") && (!!activePauseName || myAgent?.status === 6);
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
-  // Feed pause controls into the floating widget
-  useEffect(() => {
-    if (isOperatorView && isAgentOnline) {
-      setPauseControls({
-        intervals: pauseIntervals,
-        isPaused: isPausedStatus,
-        pausingWith,
-        unpausing,
-        onPause: handlePause,
-        onUnpause: handleUnpause,
-        agentStatus: myAgent?.status,
-        agentName: myAgent?.name,
-      });
-    } else {
-      setPauseControls(null);
-    }
-  }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls, myAgent?.status, myAgent?.name]);
+  // No longer needed — pause controls were part of the widget
 
   // Feed agent status into the modal context
   useEffect(() => {
@@ -953,9 +919,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  // Suppress ACW for 5s after modal closes to avoid race condition
-  const modalJustClosed = (Date.now() - modalClosedAtRef.current) < 5000;
-  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause && !modalJustClosed;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
@@ -1081,9 +1045,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State: ACW (After Call Work) → show disposition screen
-    // But ONLY if the ficha (modal) is NOT already open — the ficha handles TPA directly
-    if (effectiveACW && (isPaused || isTPAStatus) && !modalIsOpen) {
+    // State: ACW (After Call Work) → show disposition screen (fallback when operator didn't dispose in the client file)
+    if (effectiveACW && (isPaused || isTPAStatus)) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
