@@ -559,9 +559,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         // Persist campaign_id in sessionStorage for interval loading
         sessionStorage.setItem("3cp_campaign_id", selectedCampaign);
 
-        // Open widget in waiting mode immediately
-        openWaiting(operatorAgentId);
-
         // Load pause intervals and qualifications for this campaign
         loadPauseIntervals(Number(selectedCampaign));
         loadCampaignQualifications(Number(selectedCampaign));
@@ -602,7 +599,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         toast.error(result.detail || result.message || "Erro ao sair da campanha");
       } else {
         toast.success("Deslogado da campanha");
-        closeAtendimento();
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
         sessionStorage.removeItem("3cp_campaign_id");
@@ -784,35 +780,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
 
-  // Rehydrate widget when operator is already online after page refresh
-  useEffect(() => {
-    if (isOperatorView && isAgentOnline && operatorAgentId && !hasRehydrated.current) {
-      hasRehydrated.current = true;
-      openWaiting(operatorAgentId);
-    }
-  }, [isOperatorView, isAgentOnline, operatorAgentId, openWaiting]);
+  // No longer needed — widget was removed
 
   // Derived telephony state: distinguish TPA from manual pause
   const isManualPause = (myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break") && (!!activePauseName || myAgent?.status === 6);
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
-  // Feed pause controls into the floating widget
-  useEffect(() => {
-    if (isOperatorView && isAgentOnline) {
-      setPauseControls({
-        intervals: pauseIntervals,
-        isPaused: isPausedStatus,
-        pausingWith,
-        unpausing,
-        onPause: handlePause,
-        onUnpause: handleUnpause,
-        agentStatus: myAgent?.status,
-        agentName: myAgent?.name,
-      });
-    } else {
-      setPauseControls(null);
-    }
-  }, [isOperatorView, isAgentOnline, pauseIntervals, isPausedStatus, pausingWith, unpausing, setPauseControls, myAgent?.status, myAgent?.name]);
+  // No longer needed — pause controls were part of the widget
 
   // Feed agent status into the modal context
   useEffect(() => {
