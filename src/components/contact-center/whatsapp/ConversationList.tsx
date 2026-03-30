@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, MessageSquare } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, MessageSquare, EyeOff, Link2Off } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -90,20 +90,51 @@ const SYSTEM_NAME = "temis connect pay";
 function ConversationAvatar({ conv }: { conv: Conversation }) {
   const displayName = conv.client_name || conv.remote_name;
   const isSystemName = displayName?.toLowerCase() === SYSTEM_NAME;
+  const isUnlinked = !conv.client_id;
+
+  const borderClass = isUnlinked ? "ring-2 ring-yellow-500" : "";
 
   if (displayName && !isSystemName) {
     const initials = getInitials(displayName);
     const colorClass = stringToColor(displayName);
     return (
-      <div className={`w-[49px] h-[49px] rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
-        <span className="text-white font-semibold text-[15px]">{initials}</span>
+      <div className="relative shrink-0">
+        <div className={`w-[49px] h-[49px] rounded-full ${colorClass} ${borderClass} flex items-center justify-center`}>
+          <span className="text-white font-semibold text-[15px]">{initials}</span>
+        </div>
+        {isUnlinked && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                  <Link2Off className="w-3 h-3 text-white" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>Cliente não vinculado</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="w-[49px] h-[49px] rounded-full bg-muted flex items-center justify-center shrink-0">
-      <User className="w-6 h-6 text-muted-foreground" />
+    <div className="relative shrink-0">
+      <div className={`w-[49px] h-[49px] rounded-full bg-muted ${borderClass} flex items-center justify-center`}>
+        <User className="w-6 h-6 text-muted-foreground" />
+      </div>
+      {isUnlinked && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                <Link2Off className="w-3 h-3 text-white" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent><p>Cliente não vinculado</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
@@ -120,6 +151,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
+  const [linkFilter, setLinkFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Build a set of conversation IDs that have the selected tag
@@ -149,7 +181,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
     const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
-    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator;
+    const matchLink = linkFilter === "all" || (linkFilter === "linked" ? !!c.client_id : !c.client_id);
+    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator && matchLink;
   });
 
   const statusColors: Record<string, string> = {
@@ -230,6 +263,17 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
 
         {/* Row 4: Tag + Instance filters */}
         <div className="flex gap-1.5">
+          <Select value={linkFilter} onValueChange={setLinkFilter}>
+            <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
+              <Link2Off className="w-3 h-3 mr-1 shrink-0" />
+              <SelectValue placeholder="Vínculo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="linked">Vinculados</SelectItem>
+              <SelectItem value="unlinked">Não vinculados</SelectItem>
+            </SelectContent>
+          </Select>
           {tags.length > 0 && (
             <Select value={tagFilter} onValueChange={setTagFilter}>
               <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
@@ -289,9 +333,16 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                       <ConversationAvatar conv={conv} />
                       <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
-                            {displayName}
-                          </span>
+                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                            <span className="font-normal text-[15px] text-foreground truncate">
+                              {displayName}
+                            </span>
+                            {!conv.client_id && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-yellow-500 text-yellow-600 dark:text-yellow-400 shrink-0">
+                                Não vinculado
+                              </Badge>
+                            )}
+                          </div>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
                             {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                           </span>
@@ -366,9 +417,17 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                       {conv.status === s && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
                     </ContextMenuItem>
                   ))}
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    disabled={conv.status === "closed"}
+                    onClick={() => onStatusChange?.(conv.id, "closed")}
+                    className="gap-2"
+                  >
+                    <EyeOff className="w-4 h-4" />
+                    Ignorar conversa
+                  </ContextMenuItem>
                   {isAdmin && onDelete && (
                     <>
-                      <ContextMenuSeparator />
                       <ContextMenuItem
                         onClick={() => setDeleteTarget(conv.id)}
                         className="text-destructive focus:text-destructive gap-2"
