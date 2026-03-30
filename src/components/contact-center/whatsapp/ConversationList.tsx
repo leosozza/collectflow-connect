@@ -90,20 +90,51 @@ const SYSTEM_NAME = "temis connect pay";
 function ConversationAvatar({ conv }: { conv: Conversation }) {
   const displayName = conv.client_name || conv.remote_name;
   const isSystemName = displayName?.toLowerCase() === SYSTEM_NAME;
+  const isUnlinked = !conv.client_id;
+
+  const borderClass = isUnlinked ? "ring-2 ring-yellow-500" : "";
 
   if (displayName && !isSystemName) {
     const initials = getInitials(displayName);
     const colorClass = stringToColor(displayName);
     return (
-      <div className={`w-[49px] h-[49px] rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
-        <span className="text-white font-semibold text-[15px]">{initials}</span>
+      <div className="relative shrink-0">
+        <div className={`w-[49px] h-[49px] rounded-full ${colorClass} ${borderClass} flex items-center justify-center`}>
+          <span className="text-white font-semibold text-[15px]">{initials}</span>
+        </div>
+        {isUnlinked && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                  <Link2Off className="w-3 h-3 text-white" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>Cliente não vinculado</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="w-[49px] h-[49px] rounded-full bg-muted flex items-center justify-center shrink-0">
-      <User className="w-6 h-6 text-muted-foreground" />
+    <div className="relative shrink-0">
+      <div className={`w-[49px] h-[49px] rounded-full bg-muted ${borderClass} flex items-center justify-center`}>
+        <User className="w-6 h-6 text-muted-foreground" />
+      </div>
+      {isUnlinked && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                <Link2Off className="w-3 h-3 text-white" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent><p>Cliente não vinculado</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
