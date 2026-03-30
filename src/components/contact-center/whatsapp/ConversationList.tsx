@@ -36,6 +36,18 @@ interface TagAssignment {
   tag_id: string;
 }
 
+interface DispositionAssignment {
+  conversation_id: string;
+  disposition_type_id: string;
+}
+
+interface DispositionType {
+  id: string;
+  label: string;
+  color: string;
+  key: string;
+}
+
 interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
@@ -47,6 +59,8 @@ interface ConversationListProps {
   tagAssignments?: TagAssignment[];
   operators?: { id: string; name: string }[];
   isAdmin?: boolean;
+  dispositionAssignments?: DispositionAssignment[];
+  dispositionTypes?: DispositionType[];
 }
 
 function formatCompactTime(dateStr: string): string {
