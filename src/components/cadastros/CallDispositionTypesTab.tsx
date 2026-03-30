@@ -304,7 +304,7 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
     if (form.id) {
       updateMut.mutate({ id: form.id, ...payload });
     } else {
-      createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), ...payload });
+      createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), channel, ...payload } as any);
     }
   };
 
