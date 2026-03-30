@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAtendimentoModal, useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
+import { useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +45,6 @@ const TelefoniaAtendimentoWrapper = ({
   console.log("[3CPlus] TelefoniaAtendimentoWrapper rendered — clientPhone:", clientPhone, "clientCpf:", cleanCpf, "clientDbId:", clientDbId, "agentId:", agentId, "callId:", callId);
 
   const { client: clientByPhone, isLoading: phoneLoading } = useClientByPhone(clientPhone);
-  const { updateAtendimento, isOpen: modalIsOpen } = useAtendimentoModalSafe();
   const navigate = useNavigate();
   const hasOpened = useRef(false);
 
@@ -71,14 +70,18 @@ const TelefoniaAtendimentoWrapper = ({
 
   console.log("[3CPlus] resolved — clientDbId:", clientDbId, "cpfResult:", clientByCpf?.id, "phoneResult:", clientByPhone?.id, "final:", resolvedId, "isLoading:", isLoading);
 
-  // Open atendimento modal when client is resolved
+  // Navigate to client file when client is resolved
   useEffect(() => {
     if (resolvedId && !hasOpened.current) {
       hasOpened.current = true;
-      console.log("[Telefonia] Cliente encontrado, atualizando widget para", resolvedId);
-      updateAtendimento(resolvedId, agentId, callId);
+      console.log("[Telefonia] Cliente encontrado, navegando para ficha:", resolvedId);
+      const params = new URLSearchParams();
+      if (agentId) params.set("agentId", String(agentId));
+      if (callId) params.set("callId", String(callId));
+      params.set("channel", "call");
+      navigate(`/atendimento/${resolvedId}?${params.toString()}`);
     }
-  }, [resolvedId, updateAtendimento, agentId, callId]);
+  }, [resolvedId, navigate, agentId, callId]);
 
   // Reset flag when inputs change
   useEffect(() => {
