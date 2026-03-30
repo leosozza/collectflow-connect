@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -94,9 +94,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               const isExpanded = expandedId === c.id;
 
               return (
-                <>
+                <Fragment key={c.id}>
                   <TableRow
-                    key={c.id}
                     className={`cursor-pointer ${!n.isRunning && !n.isPaused ? "opacity-60" : ""}`}
                     onClick={() => setExpandedId(isExpanded ? null : c.id)}
                   >
@@ -157,7 +156,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                     </TableCell>
                   </TableRow>
                   {isExpanded && (
-                    <TableRow key={`${c.id}-detail`} className="bg-muted/30 hover:bg-muted/30">
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableCell colSpan={8} className="py-3 px-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                           <div>
@@ -196,7 +195,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </TableBody>
