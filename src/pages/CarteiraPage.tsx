@@ -592,6 +592,16 @@ const CarteiraPage = () => {
   const selectedClients = clients.filter((c) => selectedIds.has(c.id));
   const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
+  // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
+  const uniqueSelectedClients = useMemo(() => {
+    const cpfMap = new Map<string, Client>();
+    for (const c of selectedClients) {
+      const cpf = c.cpf.replace(/\D/g, "");
+      if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
+    }
+    return Array.from(cpfMap.values());
+  }, [selectedClients]);
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -842,7 +852,7 @@ const CarteiraPage = () => {
       <WhatsAppBulkDialog
         open={whatsappOpen}
         onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients}
+        selectedClients={uniqueSelectedClients}
       />
 
       {/* Assign operator dialog */}
