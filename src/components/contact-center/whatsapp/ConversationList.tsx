@@ -333,9 +333,16 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                       <ConversationAvatar conv={conv} />
                       <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="font-normal text-[15px] text-foreground truncate flex-1 min-w-0">
-                            {displayName}
-                          </span>
+                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                            <span className="font-normal text-[15px] text-foreground truncate">
+                              {displayName}
+                            </span>
+                            {!conv.client_id && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-yellow-500 text-yellow-600 dark:text-yellow-400 shrink-0">
+                                Não vinculado
+                              </Badge>
+                            )}
+                          </div>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
                             {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                           </span>
