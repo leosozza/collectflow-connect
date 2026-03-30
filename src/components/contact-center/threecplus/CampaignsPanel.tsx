@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { extractList, normalizeCampaignStatus } from "@/lib/threecplusUtils";
+import { extractList, extractObject, normalizeCampaignStatus } from "@/lib/threecplusUtils";
 
 /* ─── Sub-components ─── */
 
