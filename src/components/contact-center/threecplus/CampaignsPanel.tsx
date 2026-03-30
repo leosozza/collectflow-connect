@@ -398,7 +398,7 @@ const CampaignsPanel = () => {
           {campaigns.map((c: any) => {
             const cid = String(c.id);
             const isExpanded = expandedCampaign === cid;
-            const isPaused = c.status === "paused" || c.status === "stopped";
+            const n = normalizeCampaignStatus(c);
             return (
               <Card key={c.id} className="overflow-hidden">
                 <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => toggleExpand(cid)}>
