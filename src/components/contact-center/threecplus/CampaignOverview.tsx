@@ -195,7 +195,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </TableBody>
