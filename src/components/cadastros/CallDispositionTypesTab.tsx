@@ -318,7 +318,7 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
             : "Carregando tabulações..."}
         </p>
         <div className="flex gap-2">
-          {has3CPlus && (
+          {has3CPlus && !isWhatsApp && (
             <Button size="sm" variant="outline" onClick={triggerSync} disabled={syncing}>
               {syncing ? "Sincronizando..." : "🔄 Sincronizar 3CPlus"}
             </Button>
