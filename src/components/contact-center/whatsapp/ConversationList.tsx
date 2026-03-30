@@ -417,9 +417,17 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                       {conv.status === s && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
                     </ContextMenuItem>
                   ))}
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    disabled={conv.status === "closed"}
+                    onClick={() => onStatusChange?.(conv.id, "closed")}
+                    className="gap-2"
+                  >
+                    <EyeOff className="w-4 h-4" />
+                    Ignorar conversa
+                  </ContextMenuItem>
                   {isAdmin && onDelete && (
                     <>
-                      <ContextMenuSeparator />
                       <ContextMenuItem
                         onClick={() => setDeleteTarget(conv.id)}
                         className="text-destructive focus:text-destructive gap-2"
