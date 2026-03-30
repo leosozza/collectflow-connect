@@ -151,23 +151,12 @@ const CampaignsPanel = () => {
         invoke("campaign_qualifications", { campaign_id: campaignId }).catch(() => null),
       ]);
 
-      const lists = Array.isArray(listsRes) ? listsRes : listsRes?.data || [];
-      setCampaignLists(prev => ({ ...prev, [campaignId]: lists }));
-
-      const agents = Array.isArray(agentsRes) ? agentsRes : agentsRes?.data || [];
-      setCampaignAgents(prev => ({ ...prev, [campaignId]: agents }));
-
-    if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
-
-      // Webhook status is now manual — no automatic check needed
-      const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
-      setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
-
-      const am = agentsMetricsRes ? (Array.isArray(agentsMetricsRes) ? agentsMetricsRes : agentsMetricsRes?.data || []) : [];
-      setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: am }));
-
-      const qs = qualsRes ? (Array.isArray(qualsRes) ? qualsRes : qualsRes?.data || []) : [];
-      setCampaignQualifications(prev => ({ ...prev, [campaignId]: qs }));
+      setCampaignLists(prev => ({ ...prev, [campaignId]: extractList(listsRes) }));
+      setCampaignAgents(prev => ({ ...prev, [campaignId]: extractList(agentsRes) }));
+      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+      setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
+      setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
+      setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
     } catch {
       toast.error("Erro ao carregar detalhes da campanha");
     } finally {
