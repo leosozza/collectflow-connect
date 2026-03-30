@@ -8,6 +8,7 @@ import {
   seedDefaultDispositionTypes,
   syncDispositionsTo3CPlus,
   DEFAULT_DISPOSITION_LIST,
+  DEFAULT_WA_DISPOSITION_LIST,
   type DbDispositionType,
 } from "@/services/dispositionService";
 import { supabase } from "@/integrations/supabase/client";
@@ -142,7 +143,8 @@ const SwitchCard = ({
   </div>
 );
 
-const CallDispositionTypesTab = () => {
+const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "whatsapp" }) => {
+  const isWhatsApp = channel === "whatsapp";
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const queryClient = useQueryClient();
@@ -154,30 +156,33 @@ const CallDispositionTypesTab = () => {
   const [syncing, setSyncing] = useState(false);
 
   const { data: types = [], isLoading } = useQuery({
-    queryKey: ["call-disposition-types", tenantId],
+    queryKey: ["call-disposition-types", tenantId, channel],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const query = supabase
         .from("call_disposition_types")
         .select("*")
         .eq("tenant_id", tenantId!)
         .order("sort_order", { ascending: true });
+      (query as any).eq("channel", channel);
+      const { data, error } = await query;
       if (error) throw error;
-      return (data || []) as DbDispositionType[];
+      return (data || []).filter((d: any) => d.channel === channel) as DbDispositionType[];
     },
     enabled: !!tenantId,
   });
 
   const seedMut = useMutation({
-    mutationFn: () => seedDefaultDispositionTypes(tenantId!),
+    mutationFn: () => seedDefaultDispositionTypes(tenantId!, channel),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
+      queryClient.invalidateQueries({ queryKey: ["call-disposition-types", tenantId, channel] });
       setSeeded(true);
     },
   });
 
   useEffect(() => {
     if (!isLoading && tenantId && !seeded && !seedMut.isPending) {
-      const missingDefaults = DEFAULT_DISPOSITION_LIST.some(
+      const defaultList = isWhatsApp ? DEFAULT_WA_DISPOSITION_LIST : DEFAULT_DISPOSITION_LIST;
+      const missingDefaults = defaultList.some(
         d => !types.find(t => t.key === d.key)
       );
       if (missingDefaults) seedMut.mutate();
@@ -300,7 +305,7 @@ const CallDispositionTypesTab = () => {
     if (form.id) {
       updateMut.mutate({ id: form.id, ...payload });
     } else {
-      createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), ...payload });
+      createMut.mutate({ tenant_id: tenantId!, key: slugify(form.label), channel, ...payload } as any);
     }
   };
 
@@ -313,7 +318,7 @@ const CallDispositionTypesTab = () => {
             : "Carregando tabulações..."}
         </p>
         <div className="flex gap-2">
-          {has3CPlus && (
+          {has3CPlus && !isWhatsApp && (
             <Button size="sm" variant="outline" onClick={triggerSync} disabled={syncing}>
               {syncing ? "Sincronizando..." : "🔄 Sincronizar 3CPlus"}
             </Button>
@@ -332,13 +337,13 @@ const CallDispositionTypesTab = () => {
                 <TableHead className="w-10">Cor</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Impacto</TableHead>
-                <TableHead>Comportamento</TableHead>
+                {!isWhatsApp && <TableHead>Comportamento</TableHead>}
                 <TableHead className="text-center">Conversão</TableHead>
                 <TableHead className="text-center">CPC</TableHead>
-                <TableHead className="text-center">Desconhece</TableHead>
-                <TableHead className="text-center">Callback</TableHead>
-                <TableHead className="text-center">Agenda</TableHead>
-                <TableHead className="text-center">Bloqueio</TableHead>
+                {!isWhatsApp && <TableHead className="text-center">Desconhece</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Callback</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Agenda</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Bloqueio</TableHead>}
                 <TableHead>Ativo</TableHead>
                 <TableHead className="w-20">Ações</TableHead>
               </TableRow>
@@ -358,13 +363,13 @@ const CallDispositionTypesTab = () => {
                       {t.impact === "positivo" ? "Positivo" : "Negativo"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{getBehaviorLabel(t.behavior)}</TableCell>
+                  {!isWhatsApp && <TableCell className="text-sm">{getBehaviorLabel(t.behavior)}</TableCell>}
                   <TableCell className="text-center"><BoolIcon value={t.is_conversion || false} /></TableCell>
                   <TableCell className="text-center"><BoolIcon value={t.is_cpc || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_unknown || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_callback || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_schedule || false} /></TableCell>
-                  <TableCell className="text-center"><BoolIcon value={t.is_blocklist || false} /></TableCell>
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_unknown || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_callback || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_schedule || false} /></TableCell>}
+                  {!isWhatsApp && <TableCell className="text-center"><BoolIcon value={t.is_blocklist || false} /></TableCell>}
                   <TableCell>
                     <Badge variant={t.active ? "default" : "secondary"}>
                       {t.active ? "Sim" : "Não"}
