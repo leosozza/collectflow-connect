@@ -78,8 +78,9 @@ export const DEFAULT_WA_DISPOSITION_LIST = [
   { key: "wa_sem_interesse_financeiro", label: "Sem Interesse Financeiro", group_name: "resultado", sort_order: 9, color: "#663300", impact: "negativo", behavior: "repetir", is_conversion: false, is_cpc: true, is_unknown: false, is_callback: false, is_schedule: false, is_blocklist: false, schedule_allow_other_number: false, schedule_days_limit: 7, blocklist_mode: "indeterminate", blocklist_days: 0 },
 ];
 
-export const seedDefaultDispositionTypes = async (tenantId: string): Promise<DbDispositionType[]> => {
-  const rows = DEFAULT_DISPOSITION_LIST.map(d => ({ ...d, tenant_id: tenantId }));
+export const seedDefaultDispositionTypes = async (tenantId: string, channel: 'call' | 'whatsapp' = 'call'): Promise<DbDispositionType[]> => {
+  const list = channel === 'whatsapp' ? DEFAULT_WA_DISPOSITION_LIST : DEFAULT_DISPOSITION_LIST;
+  const rows = list.map(d => ({ ...d, tenant_id: tenantId, channel }));
   const { data, error } = await supabase
     .from("call_disposition_types")
     .upsert(rows as any, { onConflict: "tenant_id,key" })
