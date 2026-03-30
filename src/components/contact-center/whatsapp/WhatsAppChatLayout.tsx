@@ -37,6 +37,8 @@ const WhatsAppChatLayout = () => {
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
+  const [dispositionAssignments, setDispositionAssignments] = useState<{ conversation_id: string; disposition_type_id: string }[]>([]);
+  const [dispositionTypes, setDispositionTypes] = useState<{ id: string; label: string; color: string; key: string }[]>([]);
 
   // Track known waiting conversation IDs to avoid duplicate notifications
   const knownWaitingRef = useRef<Set<string>>(new Set());
