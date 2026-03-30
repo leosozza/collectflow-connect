@@ -171,9 +171,9 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
   });
 
   const seedMut = useMutation({
-    mutationFn: () => seedDefaultDispositionTypes(tenantId!),
+    mutationFn: () => seedDefaultDispositionTypes(tenantId!, channel),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["call-disposition-types"] });
+      queryClient.invalidateQueries({ queryKey: ["call-disposition-types", tenantId, channel] });
       setSeeded(true);
     },
   });
