@@ -72,12 +72,22 @@ const WhatsAppChatLayout = () => {
       });
   }, [tenantId]);
 
-  // Load conversations
+  // Load conversations + disposition assignments
   const loadConversations = useCallback(async () => {
     if (!tenantId) return;
     try {
       const data = await fetchConversations(tenantId);
       setConversations(data);
+
+      // Load disposition assignments for all conversations
+      const convIds = data.map((c) => c.id);
+      if (convIds.length > 0) {
+        const { data: assignments } = await supabase
+          .from("conversation_disposition_assignments" as any)
+          .select("conversation_id, disposition_type_id")
+          .in("conversation_id", convIds);
+        if (assignments) setDispositionAssignments(assignments as any);
+      }
 
       // Initialize known waiting set on first load
       if (knownWaitingRef.current.size === 0) {
