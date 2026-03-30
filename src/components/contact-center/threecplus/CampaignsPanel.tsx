@@ -663,24 +663,26 @@ const CampaignsPanel = () => {
                               );
                             })()}
 
-                            <p className="text-sm font-medium text-foreground">Distribuição de Qualificações</p>
+                            <p className="text-sm font-medium text-foreground">Qualificações Vinculadas</p>
                             {(campaignQualifications[cid] || []).length === 0 ? (
-                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação registrada</p>
+                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação encontrada nesta campanha</p>
                             ) : (
                               <div className="space-y-1.5">
                                 {(campaignQualifications[cid] || []).map((q: any, i: number) => {
-                                  const total = (campaignQualifications[cid] || []).reduce((sum: number, x: any) => sum + (Number(x.count || x.total) || 0), 0);
+                                  const hasStats = (q.count != null || q.total != null) && (Number(q.count || q.total) > 0);
+                                  const total = hasStats
+                                    ? (campaignQualifications[cid] || []).reduce((sum: number, x: any) => sum + (Number(x.count || x.total) || 0), 0)
+                                    : 0;
                                   const count = Number(q.count || q.total) || 0;
                                   const pct = total > 0 ? (count / total * 100) : 0;
                                   return (
-                                    <div key={q.id || i} className="space-y-1">
-                                      <div className="flex items-center justify-between text-sm">
-                                        <span>{q.name || q.qualification_name || `#${q.id}`}</span>
+                                    <div key={q.id || i} className="flex items-center justify-between p-2 rounded-lg bg-muted/40 text-sm">
+                                      <span className="font-medium">{q.name || q.qualification_name || `#${q.id}`}</span>
+                                      {hasStats ? (
                                         <span className="text-xs text-muted-foreground">{count} ({pct.toFixed(1)}%)</span>
-                                      </div>
-                                      <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
-                                      </div>
+                                      ) : (
+                                        <Badge variant="outline" className="text-[10px]">Vinculada</Badge>
+                                      )}
                                     </div>
                                   );
                                 })}
