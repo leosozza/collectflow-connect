@@ -219,23 +219,13 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
           </CardContent>
         </Card>
 
-        {/* Tags */}
-        <Card className="mb-3">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-xs flex items-center gap-1">
-              <Tag className="w-3 h-3" />
-              Etiquetas
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-1">
-            <TagManager
-              conversationId={conversation.id}
-              assignedTags={assignedTags}
-              onTagsChanged={loadTags}
-              isAdmin={isTenantAdmin}
-            />
-          </CardContent>
-        </Card>
+        {/* Tabulação WhatsApp */}
+        {conversation && (
+          <DispositionSelector
+            conversationId={conversation.id}
+            tenantId={conversation.tenant_id || ""}
+          />
+        )}
 
         {/* Linked client */}
         {linkedClient ? (
