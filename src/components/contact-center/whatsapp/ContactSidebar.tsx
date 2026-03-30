@@ -76,34 +76,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       });
   }, [conversation?.client_id]);
 
-  // Fetch assigned tags
-  const loadTags = async () => {
-    if (!conversation) {
-      setAssignedTags([]);
-      return;
-    }
-    const { data } = await supabase
-      .from("conversation_tag_assignments" as any)
-      .select("tag_id")
-      .eq("conversation_id", conversation.id);
-
-    if (!data || data.length === 0) {
-      setAssignedTags([]);
-      return;
-    }
-
-    const tagIds = (data as any[]).map((d: any) => d.tag_id);
-    const { data: tags } = await supabase
-      .from("conversation_tags" as any)
-      .select("*")
-      .in("id", tagIds);
-
-    setAssignedTags((tags || []) as unknown as ConversationTag[]);
-  };
-
-  useEffect(() => {
-    loadTags();
-  }, [conversation?.id]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
