@@ -21,6 +21,7 @@ interface CampaignOverviewProps {
 const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: CampaignOverviewProps) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [collapsed, setCollapsed] = useState(false);
   const allExpanded = campaigns.length > 0 && expandedIds.size === campaigns.length;
 
   const toggleOne = (id: number) => {
