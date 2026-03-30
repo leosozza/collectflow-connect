@@ -1,99 +1,70 @@
 
 
-# Plano: Corrigir Leitura de Metricas de Campanha 3CPlus
+# Plano: Simplificação Operacional do Módulo Telefonia
 
-## Causa Raiz
+## Resumo
 
-O proxy retorna `{ ...data, status: 200, success: true }`. Quando a 3CPlus retorna `{ data: { total_dialed: 100 } }`, o proxy devolve `{ data: { total_dialed: 100 }, status: 200, success: true }`. O frontend salva esse objeto inteiro em `campaignMetrics[cid]` e depois tenta ler `m.total_dialed` — mas o valor real está em `m.data.total_dialed`. O mesmo problema afeta `campaignListsMetrics`, `campaignAgentsMetrics` e `campaignQualifications`.
+5 correções cirúrgicas: colapsar seções por padrão, remover aba Receptivo, filtrar apenas ativos em Usuários/Equipes, e manter click2call já funcional na ficha.
 
-## Correções
+---
 
-### 1. Helper de extração de objeto único (`threecplusUtils.ts`)
+## 1. Iniciar Campanhas e Operadores colapsados
 
-Adicionar `extractObject(data)` que desempacota respostas de objeto único:
-```typescript
-export function extractObject(data: any): Record<string, any> {
-  if (!data || typeof data !== 'object') return {};
-  // Se tem .data e .data é objeto (não array), desempacota
-  if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-    // Pode ter data.data.data (3CPlus inconsistente)
-    if (data.data.data && typeof data.data.data === 'object' && !Array.isArray(data.data.data)) {
-      return data.data.data;
-    }
-    return data.data;
-  }
-  // Remove campos do proxy (status, success) e retorna o resto
-  const { status, success, ...rest } = data;
-  return rest;
-}
-```
+**AgentStatusTable.tsx** (linha 75): Mudar `useState(true)` → `useState(false)`
 
-### 2. CampaignsPanel.tsx — Corrigir `loadCampaignDetails`
+**CampaignOverview.tsx** (linha 25): Mudar `useState(false)` → `useState(true)` (nota: `collapsed=true` = seção fechada)
 
-- `totalMetrics`: usar `extractObject(totalMetrics)` antes de salvar em `campaignMetrics`
-- `listsMetrics`: já usa `extractList` — OK
-- `agentsMetricsRes`: já usa `extractList` — OK
-- `qualsRes`: já usa `extractList` — OK
+---
 
-Na aba **Visão Geral** (linha 525-538), aplicar fallbacks robustos nos campos:
-```typescript
-const m = campaignMetrics[cid] || {};
-const dialed = m.total_dialed ?? m.dialed ?? m.total_calls ?? m.total ?? 0;
-const answered = m.answered ?? m.connected ?? m.delivered ?? 0;
-const abandoned = m.abandoned ?? m.dropped ?? 0;
-const asr = m.asr ?? (dialed > 0 ? (answered / dialed * 100) : null);
-const talkTime = m.average_talk_time ?? m.avg_talk_time ?? m.talk_time_avg ?? 0;
-const inQueue = m.in_queue ?? m.pending ?? m.queue ?? 0;
-const completed = m.completed ?? m.completion ?? 0;
-const noAnswer = m.no_answer ?? m.unanswered ?? 0;
-```
+## 2. Remover aba Receptivo
 
-### 3. CampaignOverview.tsx (Dashboard) — Mesma correção
+**ThreeCPlusPanel.tsx**:
+- Remover import de `ReceptiveQueuesPanel` (linha 16)
+- Remover `PhoneIncoming` do import de ícones (linha 2)
+- No grupo "chamadas" (linhas 38-44), remover `{ value: "receptive", label: "Receptivo", icon: PhoneIncoming }`
+- Remover `receptive: <ReceptiveQueuesPanel />` do contentMap (linha 107)
 
-Na `TelefoniaDashboard`, as campanhas são enriquecidas com `statistics` via `campaign_statistics`. O mesmo problema: `c.statistics` pode conter `{ data: {...}, status, success }`. Aplicar `extractObject` ao resultado antes de mesclar:
-```typescript
-const stats = await invoke("campaign_statistics", { campaign_id: c.id });
-return { ...c, statistics: extractObject(stats) };
-```
+O arquivo `ReceptiveQueuesPanel.tsx` será mantido no codebase (sem delete), apenas desvinculado da navegação.
 
-Depois em `normalizeCampaignStatus`, os campos já buscam de `c.statistics?.total_records` etc — com o unwrap correto, passarão a funcionar.
+---
 
-### 4. Proxy — Melhorar logs diagnósticos
+## 3. Ligação direta pelo Atendimento (click2call)
 
-Na resposta final (linha 1199-1208), adicionar log da shape:
-```typescript
-const shape = Array.isArray(data) ? `array[${data.length}]` 
-  : data?.data ? (Array.isArray(data.data) ? `{data:array[${data.data.length}]}` : `{data:object}`)
-  : 'object';
-console.log(`3CPlus response: ${response.status} shape=${shape}`);
-```
+O fluxo já existe e funciona em `AtendimentoPage.tsx` (linhas 293-316). O `handleCall` usa `click2call` via proxy, com validações de `agentId`, domínio/token e tratamento de erros. Não há dependência de fila receptiva.
 
-### 5. Qualificações — Separar configuração de estatística
+**Nenhuma mudança necessária** — o fluxo já está implementado corretamente.
 
-Na aba Qualificações, o endpoint `campaign_qualifications` retorna os items da lista de qualificação (configuração), não resultados estatísticos. Adicionar nota visual: "Lista de qualificações configuradas. Resultados quantitativos disponíveis em Produtividade." Remover a tentativa de calcular percentual quando `q.count` é null.
+---
 
-### 6. Barra de progresso no `normalizeCampaignStatus`
+## 4. Usuários: mostrar apenas ativos por padrão
 
-Após o unwrap, os campos `statistics.total_records` e `statistics.worked_records` serão lidos corretamente. Adicionar fallbacks extras:
-```typescript
-const total = c.statistics?.total_records ?? c.statistics?.total 
-  ?? c.total_records ?? c.total ?? c.statistics?.mailing_total ?? 0;
-const worked = c.statistics?.worked_records ?? c.statistics?.completed 
-  ?? c.worked_records ?? c.completed ?? c.statistics?.mailing_worked ?? 0;
-```
+**UsersPanel.tsx** (linha 20): Mudar `useState("all")` → `useState("active")`
 
-## Arquivos Afetados
+O filtro e a lógica `isUserActive` já existem. Apenas muda o valor inicial do select.
+
+---
+
+## 5. Equipes: mostrar apenas ativas por padrão
+
+**TeamsPanel.tsx**: Adicionar filtro de status ativo similar ao UsersPanel.
+
+A API retorna `status` ou `active` nos objetos de equipe. Filtrar equipes onde `team.active !== false && team.status !== 'inactive'` antes de renderizar. Adicionar Select de filtro (Ativas/Todas) com default "active".
+
+---
+
+## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/lib/threecplusUtils.ts` | Adicionar `extractObject` + fallbacks em `normalizeCampaignStatus` |
-| `src/components/contact-center/threecplus/CampaignsPanel.tsx` | Usar `extractObject` no totalMetrics, fallbacks nos MetricCards |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Usar `extractObject` ao enriquecer campanhas com statistics |
-| `supabase/functions/threecplus-proxy/index.ts` | Log de shape da resposta |
+| `AgentStatusTable.tsx` | `useState(true)` → `useState(false)` |
+| `CampaignOverview.tsx` | `useState(false)` → `useState(true)` |
+| `ThreeCPlusPanel.tsx` | Remover aba Receptivo da navegação |
+| `UsersPanel.tsx` | Default filter "active" |
+| `TeamsPanel.tsx` | Adicionar filtro ativo, default "active" |
 
 ## O que NÃO muda
-- Endpoints do proxy (mesmas URLs)
-- Criação/gestão de campanhas
-- Tabulação, login/logout de agentes
-- Mailing, agentes vinculados
+- Click2call na ficha (já funciona)
+- Gestão de campanhas
+- Tabulação, monitoramento, histórico
+- ReceptiveQueuesPanel.tsx (arquivo preservado, apenas desvinculado)
 
