@@ -178,11 +178,11 @@ const CampaignsPanel = () => {
 
   const handlePauseResume = async (campaign: any) => {
     const id = String(campaign.id);
-    const isPaused = campaign.status === "paused" || campaign.status === "stopped";
+    const n = normalizeCampaignStatus(campaign);
     setTogglingStatus(id);
     try {
-      await invoke(isPaused ? "resume_campaign" : "pause_campaign", { campaign_id: id });
-      toast.success(isPaused ? "Campanha retomada!" : "Campanha pausada!");
+      await invoke(n.isPaused ? "resume_campaign" : "pause_campaign", { campaign_id: id });
+      toast.success(n.isPaused ? "Campanha retomada!" : "Campanha pausada!");
       loadCampaigns();
     } catch {
       toast.error("Erro ao alterar status da campanha");
