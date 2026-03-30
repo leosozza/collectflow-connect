@@ -21,6 +21,21 @@ const TeamsPanel = () => {
   const [loading, setLoading] = useState(false);
   const [viewTeam, setViewTeam] = useState<any>(null);
   const [viewLoading, setViewLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("active");
+
+  const isTeamActive = (t: any) => {
+    if (typeof t.active === "boolean") return t.active;
+    if (typeof t.status === "string") return t.status !== "inactive" && t.status !== "disabled";
+    return true;
+  };
+
+  const filteredTeams = useMemo(() => {
+    if (statusFilter === "all") return teams;
+    return teams.filter((t) => {
+      const active = isTeamActive(t);
+      return statusFilter === "active" ? active : !active;
+    });
+  }, [teams, statusFilter]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
