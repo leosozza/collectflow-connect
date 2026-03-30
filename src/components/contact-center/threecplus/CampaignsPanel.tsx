@@ -121,13 +121,13 @@ const CampaignsPanel = () => {
     setLoading(true);
     try {
       const data = await invoke("list_campaigns");
-      const list = Array.isArray(data) ? data : data?.data || [];
+      const list = extractList(data);
       setCampaigns(list);
-      // Set initial aggressiveness and work break group
       const aggrMap: Record<string, number> = {};
       const wbgMap: Record<string, string> = {};
       list.forEach((c: any) => {
-        aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1;
+        const n = normalizeCampaignStatus(c);
+        aggrMap[String(c.id)] = n.aggressiveness;
         if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
       });
       setAggressiveness(prev => ({ ...prev, ...aggrMap }));
