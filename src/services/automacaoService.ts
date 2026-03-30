@@ -9,6 +9,7 @@ export interface CollectionRule {
   days_offset: number;
   message_template: string;
   is_active: boolean;
+  instance_id: string | null;
   created_at: string;
   updated_at: string;
 }

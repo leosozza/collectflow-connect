@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCollectionRules } from "@/services/automacaoService";
+import { fetchTemplates, WhatsAppTemplate } from "@/services/whatsappTemplateService";
 import { Client } from "@/services/clientService";
 import {
   deduplicateClients,
@@ -67,9 +67,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[] } | null>(null);
 
-  const { data: rules = [] } = useQuery({
-    queryKey: ["collection-rules", tenant?.id],
-    queryFn: () => fetchCollectionRules(tenant!.id),
+  const { data: templates = [] } = useQuery({
+    queryKey: ["whatsapp-templates", tenant?.id],
+    queryFn: () => fetchTemplates(tenant!.id),
     enabled: !!tenant?.id && open,
   });
 
@@ -100,8 +100,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
   const getMessageTemplate = (): string => {
     if (useCustom) return customMessage;
-    const rule = rules.find((r) => r.id === selectedTemplate);
-    return rule?.message_template || "";
+    const tpl = templates.find((t) => t.id === selectedTemplate);
+    return tpl?.message_body || "";
   };
 
   const getPreview = (): string => {
@@ -227,8 +227,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             <SelectValue placeholder="Selecione um template" />
           </SelectTrigger>
           <SelectContent>
-            {rules.map((r) => (
-              <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+            {templates.filter(t => t.is_active).map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -324,7 +324,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       </div>
 
       <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
-        <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : rules.find(r => r.id === selectedTemplate)?.name || "—"}</p>
+        <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
         <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
         <p><strong>Modo:</strong> Round-robin automático</p>
       </div>

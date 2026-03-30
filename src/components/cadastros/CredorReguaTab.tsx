@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Clock, MessageSquare, Mail, ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { Plus, Pencil, Trash2, Clock, MessageSquare, Mail, ArrowDown, ArrowUp, Minus, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import {
   deleteCollectionRule,
   CollectionRule,
 } from "@/services/automacaoService";
+import { fetchEligibleInstances, EligibleInstance } from "@/services/whatsappCampaignService";
 
 interface CredorReguaTabProps {
   credorId: string | undefined;
@@ -36,6 +37,7 @@ const channelLabel: Record<string, string> = { whatsapp: "WhatsApp", email: "Ema
 const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const { tenant } = useTenant();
   const [rules, setRules] = useState<CollectionRule[]>([]);
+  const [instances, setInstances] = useState<EligibleInstance[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<CollectionRule | null>(null);
@@ -45,16 +47,21 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("whatsapp");
   const [daysOffset, setDaysOffset] = useState("0");
+  const [instanceId, setInstanceId] = useState<string>("none");
   const [template, setTemplate] = useState(
     "Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar."
   );
 
-  const loadRules = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!tenant || !credorId) return;
     setLoading(true);
     try {
-      const data = await fetchCollectionRules(tenant.id, credorId);
-      setRules(data);
+      const [rulesData, instancesData] = await Promise.all([
+        fetchCollectionRules(tenant.id, credorId),
+        fetchEligibleInstances(tenant.id),
+      ]);
+      setRules(rulesData);
+      setInstances(instancesData);
     } catch {
       toast.error("Erro ao carregar régua de cobrança");
     } finally {
@@ -62,12 +69,13 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     }
   }, [tenant, credorId]);
 
-  useEffect(() => { loadRules(); }, [loadRules]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const resetForm = () => {
     setName("");
     setChannel("whatsapp");
     setDaysOffset("0");
+    setInstanceId("none");
     setTemplate("Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar.");
     setEditingRule(null);
     setShowForm(false);
@@ -77,6 +85,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setName(rule.name);
     setChannel(rule.channel);
     setDaysOffset(rule.days_offset.toString());
+    setInstanceId(rule.instance_id || "none");
     setTemplate(rule.message_template);
     setEditingRule(rule);
     setShowForm(true);
@@ -86,7 +95,13 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     if (!tenant || !credorId || !name.trim()) return;
     setSaving(true);
     try {
-      const payload = { name, channel, days_offset: parseInt(daysOffset), message_template: template };
+      const payload = {
+        name,
+        channel,
+        days_offset: parseInt(daysOffset),
+        message_template: template,
+        instance_id: instanceId === "none" ? null : instanceId,
+      };
       if (editingRule) {
         await updateCollectionRule(editingRule.id, payload as any);
         toast.success("Regra atualizada!");
@@ -95,7 +110,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         toast.success("Regra criada!");
       }
       resetForm();
-      await loadRules();
+      await loadData();
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar regra");
     } finally {
@@ -106,7 +121,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const handleToggle = async (rule: CollectionRule) => {
     try {
       await updateCollectionRule(rule.id, { is_active: !rule.is_active });
-      await loadRules();
+      await loadData();
     } catch { toast.error("Erro ao alterar status"); }
   };
 
@@ -115,7 +130,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     try {
       await deleteCollectionRule(rule.id);
       toast.success("Regra excluída!");
-      await loadRules();
+      await loadData();
     } catch { toast.error("Erro ao excluir"); }
   };
 
@@ -135,6 +150,13 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     (text, v) => text.split(v).join(SAMPLE_DATA[v] || v),
     template
   );
+
+  const getInstanceName = (id: string | null) => {
+    if (!id) return null;
+    return instances.find((i) => i.id === id)?.name || null;
+  };
+
+  const showInstanceSelect = channel === "whatsapp" || channel === "both";
 
   if (!credorId) {
     return (
@@ -170,10 +192,31 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Dias em relação ao vencimento</Label>
-          <Input type="number" value={daysOffset} onChange={e => setDaysOffset(e.target.value)} min={-30} max={90} className="h-9 w-32" />
-          <p className="text-xs text-muted-foreground">{daysLabel(parseInt(daysOffset) || 0)}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Dias em relação ao vencimento</Label>
+            <Input type="number" value={daysOffset} onChange={e => setDaysOffset(e.target.value)} min={-30} max={90} className="h-9 w-32" />
+            <p className="text-xs text-muted-foreground">{daysLabel(parseInt(daysOffset) || 0)}</p>
+          </div>
+          {showInstanceSelect && (
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1">
+                <Smartphone className="w-3 h-3" /> Instância WhatsApp
+              </Label>
+              <Select value={instanceId} onValueChange={setInstanceId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar instância" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma (padrão)</SelectItem>
+                  {instances.map((inst) => (
+                    <SelectItem key={inst.id} value={inst.id}>
+                      {inst.name} ({inst.provider_category === "unofficial" ? "Não oficial" : "Oficial"})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Instância que executará o disparo desta regra</p>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -216,7 +259,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
       {/* Visual timeline */}
       {rules.length > 0 && (
         <div className="relative flex items-end gap-1 py-4 px-2 bg-muted/30 rounded-lg overflow-x-auto">
-          {rules.sort((a, b) => a.days_offset - b.days_offset).map((rule, i) => (
+          {rules.sort((a, b) => a.days_offset - b.days_offset).map((rule) => (
             <div key={rule.id} className="flex flex-col items-center min-w-[60px] flex-shrink-0">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                 rule.is_active ? (rule.days_offset < 0 ? "bg-blue-100 text-blue-700" : rule.days_offset === 0 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700") : "bg-muted text-muted-foreground"
@@ -248,6 +291,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
               <TableHead>Disparo</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Canal</TableHead>
+              <TableHead>Instância</TableHead>
               <TableHead>Ativo</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -263,6 +307,16 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                 </TableCell>
                 <TableCell className="text-sm font-medium">{rule.name}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{channelLabel[rule.channel] || rule.channel}</Badge></TableCell>
+                <TableCell>
+                  {getInstanceName(rule.instance_id) ? (
+                    <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                      <Smartphone className="w-3 h-3" />
+                      {getInstanceName(rule.instance_id)}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell><Switch checked={rule.is_active} onCheckedChange={() => handleToggle(rule)} /></TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
@@ -275,7 +329,6 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           </TableBody>
         </Table>
       )}
-
     </div>
   );
 };

@@ -1462,6 +1462,7 @@ export type Database = {
           credor_id: string | null
           days_offset: number
           id: string
+          instance_id: string | null
           is_active: boolean | null
           message_template: string
           name: string
@@ -1474,6 +1475,7 @@ export type Database = {
           credor_id?: string | null
           days_offset?: number
           id?: string
+          instance_id?: string | null
           is_active?: boolean | null
           message_template: string
           name: string
@@ -1486,6 +1488,7 @@ export type Database = {
           credor_id?: string | null
           days_offset?: number
           id?: string
+          instance_id?: string | null
           is_active?: boolean | null
           message_template?: string
           name?: string
@@ -1498,6 +1501,13 @@ export type Database = {
             columns: ["credor_id"]
             isOneToOne: false
             referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_rules_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
             referencedColumns: ["id"]
           },
           {
@@ -5383,6 +5393,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "whatsapp_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_templates: {
+        Row: {
+          category: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          message_body: string
+          name: string
+          tenant_id: string
+          updated_at: string | null
+          variables: string[] | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message_body: string
+          name: string
+          tenant_id: string
+          updated_at?: string | null
+          variables?: string[] | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message_body?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string | null
+          variables?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_templates_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
