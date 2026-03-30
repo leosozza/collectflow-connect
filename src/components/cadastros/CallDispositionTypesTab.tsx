@@ -8,6 +8,7 @@ import {
   seedDefaultDispositionTypes,
   syncDispositionsTo3CPlus,
   DEFAULT_DISPOSITION_LIST,
+  DEFAULT_WA_DISPOSITION_LIST,
   type DbDispositionType,
 } from "@/services/dispositionService";
 import { supabase } from "@/integrations/supabase/client";
