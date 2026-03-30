@@ -3,21 +3,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface BaylersInstanceFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { name: string }) => void;
+  onSave: (data: { name: string; providerCategory: string }) => void;
   saving: boolean;
   tenantName: string;
 }
 
 const BaylersInstanceForm = ({ open, onClose, onSave, saving, tenantName }: BaylersInstanceFormProps) => {
   const [name, setName] = useState("");
+  const [providerCategory, setProviderCategory] = useState("unofficial");
 
   useEffect(() => {
     if (open) {
       setName("");
+      setProviderCategory("unofficial");
     }
   }, [open]);
 
