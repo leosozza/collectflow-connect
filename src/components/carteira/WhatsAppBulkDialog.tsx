@@ -324,7 +324,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       </div>
 
       <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
-        <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : rules.find(r => r.id === selectedTemplate)?.name || "—"}</p>
+        <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
         <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
         <p><strong>Modo:</strong> Round-robin automático</p>
       </div>
