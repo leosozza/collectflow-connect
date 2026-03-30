@@ -5148,6 +5148,177 @@ export type Database = {
           },
         ]
       }
+      whatsapp_campaign_recipients: {
+        Row: {
+          assigned_instance_id: string | null
+          campaign_id: string
+          created_at: string
+          delivered_at: string | null
+          error_message: string | null
+          id: string
+          message_body_snapshot: string | null
+          phone: string
+          provider_message_id: string | null
+          read_at: string | null
+          recipient_name: string
+          representative_client_id: string
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_instance_id?: string | null
+          campaign_id: string
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          message_body_snapshot?: string | null
+          phone: string
+          provider_message_id?: string | null
+          read_at?: string | null
+          recipient_name?: string
+          representative_client_id: string
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_instance_id?: string | null
+          campaign_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          message_body_snapshot?: string | null
+          phone?: string
+          provider_message_id?: string | null
+          read_at?: string | null
+          recipient_name?: string
+          representative_client_id?: string
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_assigned_instance_id_fkey"
+            columns: ["assigned_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_campaigns: {
+        Row: {
+          allowed_operator_ids: string[] | null
+          campaign_type: string
+          channel_type: string
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          delivered_count: number
+          failed_count: number
+          id: string
+          message_body: string | null
+          message_mode: string
+          provider_category: string
+          read_count: number
+          routing_mode: string | null
+          selected_instance_ids: string[]
+          sent_count: number
+          source: string
+          started_at: string | null
+          status: string
+          team_id: string | null
+          template_id: string | null
+          tenant_id: string
+          total_selected: number
+          total_unique_recipients: number
+          updated_at: string
+        }
+        Insert: {
+          allowed_operator_ids?: string[] | null
+          campaign_type?: string
+          channel_type?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          delivered_count?: number
+          failed_count?: number
+          id?: string
+          message_body?: string | null
+          message_mode?: string
+          provider_category?: string
+          read_count?: number
+          routing_mode?: string | null
+          selected_instance_ids?: string[]
+          sent_count?: number
+          source?: string
+          started_at?: string | null
+          status?: string
+          team_id?: string | null
+          template_id?: string | null
+          tenant_id: string
+          total_selected?: number
+          total_unique_recipients?: number
+          updated_at?: string
+        }
+        Update: {
+          allowed_operator_ids?: string[] | null
+          campaign_type?: string
+          channel_type?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          delivered_count?: number
+          failed_count?: number
+          id?: string
+          message_body?: string | null
+          message_mode?: string
+          provider_category?: string
+          read_count?: number
+          routing_mode?: string | null
+          selected_instance_ids?: string[]
+          sent_count?: number
+          source?: string
+          started_at?: string | null
+          status?: string
+          team_id?: string | null
+          template_id?: string | null
+          tenant_id?: string
+          total_selected?: number
+          total_unique_recipients?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           api_key: string
@@ -5159,7 +5330,13 @@ export type Database = {
           name: string
           phone_number: string | null
           provider: string
+          provider_category: string
           status: string
+          supports_ai_agent: boolean
+          supports_campaign_rotation: boolean
+          supports_human_queue: boolean
+          supports_manual_bulk: boolean
+          supports_templates: boolean
           tenant_id: string
           updated_at: string
         }
@@ -5173,7 +5350,13 @@ export type Database = {
           name?: string
           phone_number?: string | null
           provider?: string
+          provider_category?: string
           status?: string
+          supports_ai_agent?: boolean
+          supports_campaign_rotation?: boolean
+          supports_human_queue?: boolean
+          supports_manual_bulk?: boolean
+          supports_templates?: boolean
           tenant_id: string
           updated_at?: string
         }
@@ -5187,7 +5370,13 @@ export type Database = {
           name?: string
           phone_number?: string | null
           provider?: string
+          provider_category?: string
           status?: string
+          supports_ai_agent?: boolean
+          supports_campaign_rotation?: boolean
+          supports_human_queue?: boolean
+          supports_manual_bulk?: boolean
+          supports_templates?: boolean
           tenant_id?: string
           updated_at?: string
         }
