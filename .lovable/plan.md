@@ -1,70 +1,28 @@
 
 
-# Plano: Simplificação Operacional do Módulo Telefonia
+# Plano: Corrigir filtro de usuários ativos
 
-## Resumo
+## Causa raiz
 
-5 correções cirúrgicas: colapsar seções por padrão, remover aba Receptivo, filtrar apenas ativos em Usuários/Equipes, e manter click2call já funcional na ficha.
+A API 3CPlus retorna `"active": 1` (ativo) e `"active": 0` (inativo) — valores numéricos. A função `isUserActive` usa comparação estrita (`u.active === false`), que não captura `0` como falso.
 
----
+Exemplo: Camila tem `"active": 0` mas `0 === false` retorna `false` em JavaScript, então a função retorna `true` e ela aparece como "Ativa".
 
-## 1. Iniciar Campanhas e Operadores colapsados
+## Correção
 
-**AgentStatusTable.tsx** (linha 75): Mudar `useState(true)` → `useState(false)`
+**Arquivo**: `src/lib/threecplusUtils.ts`
 
-**CampaignOverview.tsx** (linha 25): Mudar `useState(false)` → `useState(true)` (nota: `collapsed=true` = seção fechada)
+Alterar `isUserActive` para tratar valores numéricos:
 
----
+```typescript
+export function isUserActive(u: any): boolean {
+  if (u.active === false || u.active === 0) return false;
+  if (u.is_active === false || u.is_active === 0) return false;
+  if (u.status === "inactive" || u.status === "disabled") return false;
+  if (u.deleted_at != null) return false;
+  return true;
+}
+```
 
-## 2. Remover aba Receptivo
-
-**ThreeCPlusPanel.tsx**:
-- Remover import de `ReceptiveQueuesPanel` (linha 16)
-- Remover `PhoneIncoming` do import de ícones (linha 2)
-- No grupo "chamadas" (linhas 38-44), remover `{ value: "receptive", label: "Receptivo", icon: PhoneIncoming }`
-- Remover `receptive: <ReceptiveQueuesPanel />` do contentMap (linha 107)
-
-O arquivo `ReceptiveQueuesPanel.tsx` será mantido no codebase (sem delete), apenas desvinculado da navegação.
-
----
-
-## 3. Ligação direta pelo Atendimento (click2call)
-
-O fluxo já existe e funciona em `AtendimentoPage.tsx` (linhas 293-316). O `handleCall` usa `click2call` via proxy, com validações de `agentId`, domínio/token e tratamento de erros. Não há dependência de fila receptiva.
-
-**Nenhuma mudança necessária** — o fluxo já está implementado corretamente.
-
----
-
-## 4. Usuários: mostrar apenas ativos por padrão
-
-**UsersPanel.tsx** (linha 20): Mudar `useState("all")` → `useState("active")`
-
-O filtro e a lógica `isUserActive` já existem. Apenas muda o valor inicial do select.
-
----
-
-## 5. Equipes: mostrar apenas ativas por padrão
-
-**TeamsPanel.tsx**: Adicionar filtro de status ativo similar ao UsersPanel.
-
-A API retorna `status` ou `active` nos objetos de equipe. Filtrar equipes onde `team.active !== false && team.status !== 'inactive'` antes de renderizar. Adicionar Select de filtro (Ativas/Todas) com default "active".
-
----
-
-## Arquivos afetados
-
-| Arquivo | Mudança |
-|---|---|
-| `AgentStatusTable.tsx` | `useState(true)` → `useState(false)` |
-| `CampaignOverview.tsx` | `useState(false)` → `useState(true)` |
-| `ThreeCPlusPanel.tsx` | Remover aba Receptivo da navegação |
-| `UsersPanel.tsx` | Default filter "active" |
-| `TeamsPanel.tsx` | Adicionar filtro ativo, default "active" |
-
-## O que NÃO muda
-- Click2call na ficha (já funciona)
-- Gestão de campanhas
-- Tabulação, monitoramento, histórico
-- ReceptiveQueuesPanel.tsx (arquivo preservado, apenas desvinculado)
+Uma mudança de 2 linhas. Nenhum outro arquivo precisa ser alterado.
 
