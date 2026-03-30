@@ -65,7 +65,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [useCustom, setUseCustom] = useState(false);
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ sent: number; failed: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
 
   const { data: templates = [] } = useQuery({
     queryKey: ["whatsapp-templates", tenant?.id],

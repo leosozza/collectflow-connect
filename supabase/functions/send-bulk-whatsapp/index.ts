@@ -100,10 +100,10 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   // Update campaign status to sending
   await supabase
     .from("whatsapp_campaigns")
-    .update({ status: "sending", started_at: new Date().toISOString() })
+    .update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", campaignId);
 
-  // Load pending recipients
+  // Load ONLY pending recipients
   const { data: recipients, error: rErr } = await supabase
     .from("whatsapp_campaign_recipients")
     .select("*")
@@ -133,121 +133,149 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   let failed = 0;
   const errors: string[] = [];
 
-  for (const recipient of recipients || []) {
-    const inst = instanceMap.get(recipient.assigned_instance_id);
-    if (!inst) {
-      await supabase
-        .from("whatsapp_campaign_recipients")
-        .update({ status: "failed", error_message: "Instância não encontrada", updated_at: new Date().toISOString() })
-        .eq("id", recipient.id);
-      failed++;
-      errors.push(`${recipient.recipient_name}: instância não encontrada`);
-      continue;
-    }
-
-    // Load client data for template resolution
-    const { data: client } = await supabase
-      .from("clients")
-      .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
-      .eq("id", recipient.representative_client_id)
-      .single();
-
-    // Resolve template variables
-    let message = recipient.message_body_snapshot || campaign.message_body || "";
-    if (client) {
-      message = message
-        .replace(/\{\{nome\}\}/g, client.nome_completo || "")
-        .replace(/\{\{cpf\}\}/g, client.cpf || "")
-        .replace(/\{\{valor_parcela\}\}/g,
-          new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(client.valor_parcela || 0)
-        )
-        .replace(/\{\{data_vencimento\}\}/g,
-          client.data_vencimento
-            ? new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-            : ""
-        )
-        .replace(/\{\{credor\}\}/g, client.credor || "");
-    }
-
-    const instanceUrl = inst.instance_url || evolutionUrl;
-    const instanceKey = inst.api_key || evolutionKey;
-
-    try {
-      const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
-        method: "POST",
-        headers: {
-          apikey: instanceKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ number: recipient.phone, text: message }),
-      });
-
-      const result = await resp.json();
-      const status = resp.ok ? "sent" : "failed";
-      const providerMessageId = result?.key?.id || result?.messageId || null;
-
-      await supabase
-        .from("whatsapp_campaign_recipients")
-        .update({
-          status,
-          sent_at: status === "sent" ? new Date().toISOString() : null,
-          error_message: status === "failed" ? JSON.stringify(result) : null,
-          provider_message_id: providerMessageId,
-          message_body_snapshot: message,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", recipient.id);
-
-      // Log to message_logs for compatibility
-      await supabase.from("message_logs").insert({
-        tenant_id: tenantId,
-        client_id: recipient.representative_client_id,
-        channel: "whatsapp",
-        status,
-        phone: recipient.phone,
-        message_body: message,
-        error_message: status === "failed" ? JSON.stringify(result) : null,
-        sent_at: status === "sent" ? new Date().toISOString() : null,
-      });
-
-      if (status === "sent") sent++;
-      else {
+  // Wrap entire processing in try/catch to guarantee campaign always gets a final status
+  try {
+    for (const recipient of recipients || []) {
+      const inst = instanceMap.get(recipient.assigned_instance_id);
+      if (!inst) {
+        await supabase
+          .from("whatsapp_campaign_recipients")
+          .update({ status: "failed", error_message: "Instância não encontrada", updated_at: new Date().toISOString() })
+          .eq("id", recipient.id);
         failed++;
-        errors.push(`${recipient.recipient_name}: envio falhou`);
+        errors.push(`${recipient.recipient_name}: instância não encontrada`);
+        continue;
       }
-    } catch (err: any) {
-      await supabase
-        .from("whatsapp_campaign_recipients")
-        .update({
+
+      // Load client data for template resolution and traceability
+      const { data: client } = await supabase
+        .from("clients")
+        .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
+        .eq("id", recipient.representative_client_id)
+        .single();
+
+      // Resolve template variables
+      let message = recipient.message_body_snapshot || campaign.message_body || "";
+      if (client) {
+        message = message
+          .replace(/\{\{nome\}\}/g, client.nome_completo || "")
+          .replace(/\{\{cpf\}\}/g, client.cpf || "")
+          .replace(/\{\{valor_parcela\}\}/g,
+            new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(client.valor_parcela || 0)
+          )
+          .replace(/\{\{data_vencimento\}\}/g,
+            client.data_vencimento
+              ? new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
+              : ""
+          )
+          .replace(/\{\{credor\}\}/g, client.credor || "");
+      }
+
+      const instanceUrl = inst.instance_url || evolutionUrl;
+      const instanceKey = inst.api_key || evolutionKey;
+
+      try {
+        const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
+          method: "POST",
+          headers: {
+            apikey: instanceKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ number: recipient.phone, text: message }),
+        });
+
+        const result = await resp.json();
+        const status = resp.ok ? "sent" : "failed";
+        const providerMessageId = result?.key?.id || result?.messageId || null;
+
+        await supabase
+          .from("whatsapp_campaign_recipients")
+          .update({
+            status,
+            sent_at: status === "sent" ? new Date().toISOString() : null,
+            error_message: status === "failed" ? JSON.stringify(result) : null,
+            provider_message_id: providerMessageId,
+            message_body_snapshot: message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", recipient.id);
+
+        // Log to message_logs with traceability metadata
+        await supabase.from("message_logs").insert({
+          tenant_id: tenantId,
+          client_id: recipient.representative_client_id,
+          client_cpf: client?.cpf || null,
+          channel: "whatsapp",
+          status,
+          phone: recipient.phone,
+          message_body: message,
+          error_message: status === "failed" ? JSON.stringify(result) : null,
+          sent_at: status === "sent" ? new Date().toISOString() : null,
+          metadata: {
+            campaign_id: campaignId,
+            instance_id: recipient.assigned_instance_id,
+            instance_name: inst.instance_name,
+            provider_message_id: providerMessageId,
+          },
+        });
+
+        if (status === "sent") sent++;
+        else {
+          failed++;
+          errors.push(`${recipient.recipient_name}: envio falhou`);
+        }
+      } catch (err: any) {
+        await supabase
+          .from("whatsapp_campaign_recipients")
+          .update({
+            status: "failed",
+            error_message: err.message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", recipient.id);
+
+        await supabase.from("message_logs").insert({
+          tenant_id: tenantId,
+          client_id: recipient.representative_client_id,
+          client_cpf: client?.cpf || null,
+          channel: "whatsapp",
           status: "failed",
+          phone: recipient.phone,
+          message_body: message,
           error_message: err.message,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", recipient.id);
+          metadata: {
+            campaign_id: campaignId,
+            instance_id: recipient.assigned_instance_id,
+            instance_name: inst.instance_name,
+          },
+        });
 
-      await supabase.from("message_logs").insert({
-        tenant_id: tenantId,
-        client_id: recipient.representative_client_id,
-        channel: "whatsapp",
-        status: "failed",
-        phone: recipient.phone,
-        message_body: message,
-        error_message: err.message,
-      });
+        failed++;
+        errors.push(`${recipient.recipient_name}: ${err.message}`);
+      }
 
-      failed++;
-      errors.push(`${recipient.recipient_name}: ${err.message}`);
+      // Throttle: 200ms between messages
+      await new Promise((r) => setTimeout(r, 200));
     }
-
-    // Throttle: 200ms between messages
-    await new Promise((r) => setTimeout(r, 200));
+  } catch (globalErr: any) {
+    // If the loop itself throws unexpectedly, mark remaining as context error
+    console.error("Campaign processing global error:", globalErr);
+    errors.push(`Erro global no processamento: ${globalErr.message}`);
   }
 
-  // Update campaign counters
+  // Determine intelligent final status
+  let finalStatus = "completed";
+  if (sent === 0 && failed > 0) finalStatus = "failed";
+  else if (sent > 0 && failed > 0) finalStatus = "completed_with_errors";
+  // If sent === 0 && failed === 0, campaign had no recipients — still "completed"
+
+  // Update campaign with final counters
+  // NOTE: delivered_count and read_count remain at 0 — they depend on
+  // future webhook-based delivery/read tracking (Phase 2)
   await supabase
     .from("whatsapp_campaigns")
     .update({
-      status: "completed",
+      status: finalStatus,
       sent_count: sent,
       failed_count: failed,
       completed_at: new Date().toISOString(),
@@ -256,7 +284,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     .eq("id", campaignId);
 
   return new Response(
-    JSON.stringify({ success: true, sent, failed, total: (recipients || []).length, errors }),
+    JSON.stringify({ success: true, sent, failed, total: (recipients || []).length, errors, finalStatus }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }
