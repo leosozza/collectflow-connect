@@ -32,12 +32,6 @@ interface SimpleClient {
   status_cobranca_id: string | null;
 }
 
-interface ConversationTag {
-  id: string;
-  name: string;
-  color: string;
-  tenant_id: string;
-}
 
 const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSidebarProps) => {
   const navigate = useNavigate();
