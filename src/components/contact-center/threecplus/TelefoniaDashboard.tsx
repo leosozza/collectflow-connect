@@ -245,8 +245,6 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [pausingWith, setPausingWith] = useState<number | null>(null);
   const [unpausing, setUnpausing] = useState(false);
   const [reconnectingSip, setReconnectingSip] = useState(false);
-  const hasRehydrated = useRef(false);
-  const modalClosedAtRef = useRef<number>(0);
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -921,9 +919,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  // Suppress ACW for 5s after modal closes to avoid race condition
-  const modalJustClosed = (Date.now() - modalClosedAtRef.current) < 5000;
-  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause && !modalJustClosed;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
