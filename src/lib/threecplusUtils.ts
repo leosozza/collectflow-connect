@@ -76,8 +76,8 @@ export function normalizeCampaignStatus(c: any): {
 
 /** Determine user active status from multiple possible field names */
 export function isUserActive(u: any): boolean {
-  if (u.active === false) return false;
-  if (u.is_active === false) return false;
+  if (u.active === false || u.active === 0) return false;
+  if (u.is_active === false || u.is_active === 0) return false;
   if (u.status === "inactive" || u.status === "disabled") return false;
   if (u.deleted_at != null) return false;
   return true;
