@@ -414,9 +414,9 @@ const CampaignsPanel = () => {
                       variant="ghost" size="icon" className="h-8 w-8"
                       disabled={togglingStatus === cid}
                       onClick={(e) => { e.stopPropagation(); handlePauseResume(c); }}
-                      title={isPaused ? "Retomar" : "Pausar"}
+                      title={n.isPaused ? "Retomar" : "Pausar"}
                     >
-                      {togglingStatus === cid ? <Loader2 className="w-4 h-4 animate-spin" /> : isPaused ? <Play className="w-4 h-4 text-green-600" /> : <Pause className="w-4 h-4 text-yellow-600" />}
+                      {togglingStatus === cid ? <Loader2 className="w-4 h-4 animate-spin" /> : n.isPaused ? <Play className="w-4 h-4 text-green-600" /> : <Pause className="w-4 h-4 text-yellow-600" />}
                     </Button>
                     {/* Delete */}
                     <Button
