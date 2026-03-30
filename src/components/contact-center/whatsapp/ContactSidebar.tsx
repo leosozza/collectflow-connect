@@ -42,7 +42,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
-  const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
   const [aiLinking, setAiLinking] = useState(false);
   const [aiCandidates, setAiCandidates] = useState<SimpleClient[]>([]);
   const [showAiResults, setShowAiResults] = useState(false);

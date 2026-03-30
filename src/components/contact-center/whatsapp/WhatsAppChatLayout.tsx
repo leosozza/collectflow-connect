@@ -47,19 +47,6 @@ const WhatsAppChatLayout = () => {
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
     fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
 
-    // Load tags
-    supabase
-      .from("conversation_tags")
-      .select("id, name, color")
-      .eq("tenant_id", tenantId)
-      .then(({ data }) => setTags((data as ConversationTag[]) || []));
-
-    // Load tag assignments
-    supabase
-      .from("conversation_tag_assignments")
-      .select("conversation_id, tag_id")
-      .then(({ data }) => setTagAssignments((data as TagAssignment[]) || []));
-
     // Load operators for admin filter
     supabase
       .from("profiles")
