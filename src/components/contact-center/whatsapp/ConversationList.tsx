@@ -159,7 +159,7 @@ const statusLabels: Record<string, string> = {
   closed: "Fechada",
 };
 
-const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false }: ConversationListProps) => {
+const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false, dispositionAssignments = [], dispositionTypes = [] }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
