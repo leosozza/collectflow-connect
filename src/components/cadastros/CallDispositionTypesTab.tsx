@@ -156,12 +156,13 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
   const [syncing, setSyncing] = useState(false);
 
   const { data: types = [], isLoading } = useQuery({
-    queryKey: ["call-disposition-types", tenantId],
+    queryKey: ["call-disposition-types", tenantId, channel],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("call_disposition_types")
         .select("*")
         .eq("tenant_id", tenantId!)
+        .eq("channel" as any, channel)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as DbDispositionType[];
