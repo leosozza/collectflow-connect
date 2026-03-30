@@ -23,17 +23,6 @@ import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
 import GlobalSearch from "./GlobalSearch";
 
-interface ConversationTag {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface TagAssignment {
-  conversation_id: string;
-  tag_id: string;
-}
-
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
@@ -47,8 +36,6 @@ const WhatsAppChatLayout = () => {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [tags, setTags] = useState<ConversationTag[]>([]);
-  const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
   const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
 
   // Track known waiting conversation IDs to avoid duplicate notifications
