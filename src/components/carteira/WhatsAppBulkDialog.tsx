@@ -67,9 +67,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[] } | null>(null);
 
-  const { data: rules = [] } = useQuery({
-    queryKey: ["collection-rules", tenant?.id],
-    queryFn: () => fetchCollectionRules(tenant!.id),
+  const { data: templates = [] } = useQuery({
+    queryKey: ["whatsapp-templates", tenant?.id],
+    queryFn: () => fetchTemplates(tenant!.id),
     enabled: !!tenant?.id && open,
   });
 
