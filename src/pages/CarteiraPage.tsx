@@ -852,7 +852,7 @@ const CarteiraPage = () => {
       <WhatsAppBulkDialog
         open={whatsappOpen}
         onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients}
+        selectedClients={uniqueSelectedClients}
       />
 
       {/* Assign operator dialog */}
