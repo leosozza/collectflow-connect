@@ -8,7 +8,7 @@ import TipoDividaList from "@/components/cadastros/TipoDividaList";
 import TipoStatusList from "@/components/cadastros/TipoStatusList";
 
 
-import CallDispositionTypesTab from "@/components/cadastros/CallDispositionTypesTab";
+import DispositionTabsWrapper from "@/components/cadastros/DispositionTabsWrapper";
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
