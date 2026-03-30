@@ -1,75 +1,67 @@
 
 
-# Plano: Tabulações de Atendimento (Chamadas + WhatsApp)
+# Plano: Substituir Etiquetas por Tabulações WhatsApp no sidebar de conversa
 
 ## Resumo
 
-Adicionar coluna `channel` à tabela `call_disposition_types`, renomear o menu para "Tabulações de Atendimento", criar sub-abas (Chamadas / WhatsApp), seed de 10 tabulações WhatsApp padrão, e transformar a aba Etiquetas do WhatsApp em visualização somente-leitura.
+Remover o sistema de etiquetas (TagManager) do sidebar direito da conversa e substituir por um seletor de tabulações WhatsApp (`call_disposition_types` com `channel='whatsapp'`). CPC e CPE aparecem primeiro e são mutuamente exclusivos. Demais tabulações podem ser selecionadas livremente.
 
 ---
 
-## 1. Migração: coluna `channel`
+## 1. Migração: tabela `conversation_disposition_assignments`
 
 ```sql
-ALTER TABLE call_disposition_types 
-  ADD COLUMN channel text NOT NULL DEFAULT 'call' 
-  CHECK (channel IN ('call', 'whatsapp'));
+CREATE TABLE public.conversation_disposition_assignments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  disposition_type_id uuid NOT NULL REFERENCES call_disposition_types(id) ON DELETE CASCADE,
+  assigned_by uuid REFERENCES auth.users(id),
+  assigned_at timestamptz DEFAULT now(),
+  UNIQUE(conversation_id, disposition_type_id)
+);
+ALTER TABLE public.conversation_disposition_assignments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated manage disposition assignments"
+  ON public.conversation_disposition_assignments FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
 ```
 
-Registros existentes ficam com `channel = 'call'`. O unique constraint `(tenant_id, key)` já existe — as keys WhatsApp serão distintas (prefixo `wa_`).
+---
+
+## 2. Novo componente: `DispositionSelector.tsx`
+
+**Arquivo**: `src/components/contact-center/whatsapp/DispositionSelector.tsx`
+
+- Busca `call_disposition_types` onde `channel='whatsapp'` e `active=true`, ordenado por `sort_order`
+- Busca `conversation_disposition_assignments` para a conversa atual
+- Exibe as tabulações como lista de botões/badges clicáveis
+- **CPC e CPE aparecem no topo**, separados visualmente (seção "Identificação do Contato")
+- **Regra de exclusividade**: ao selecionar CPC, remove CPE automaticamente (e vice-versa)
+- Demais tabulações (Acordo Formalizado, Em Negociação, etc.) ficam abaixo, sem restrição
+- Toggle: clique para atribuir, clique novamente para remover
+- Cores vêm do campo `color` da `call_disposition_types`
 
 ---
 
-## 2. Seed de tabulações WhatsApp padrão
+## 3. Atualizar ContactSidebar
 
-Adicionar em `dispositionService.ts`:
+**Arquivo**: `src/components/contact-center/whatsapp/ContactSidebar.tsx`
 
-| Key | Label | Impacto |
-|---|---|---|
-| wa_cpc | CPC - Contato Pessoa Certa | positivo |
-| wa_cpe | CPE - Contato Pessoa Errada | negativo |
-| wa_acordo_formalizado | Acordo Formalizado | positivo |
-| wa_risco_processo | Risco de Processo | negativo |
-| wa_sem_contato | Sem Contato | negativo |
-| wa_em_negociacao | Em Negociação | positivo |
-| wa_em_dia | Em Dia | positivo |
-| wa_quitado | Quitado | positivo |
-| wa_sem_interesse_produto | Sem Interesse Produto | negativo |
-| wa_sem_interesse_financeiro | Sem Interesse Financeiro | negativo |
-
-Nova função `seedDefaultWhatsAppDispositionTypes(tenantId)` com auto-seed no componente.
+- Remover import do `TagManager`
+- Remover state `assignedTags` e função `loadTags`
+- Remover o Card "Etiquetas" inteiro (linhas 256-272)
+- Adicionar o novo `DispositionSelector` no mesmo local, com título "Tabulação"
+- Props: `conversationId`, `tenantId`
 
 ---
 
-## 3. Renomear menu + sub-abas
+## 4. Limpar WhatsAppChatLayout
 
-**CadastrosPage.tsx**:
-- `"Tabulação de Chamada"` → `"Tabulações de Atendimento"`
-- Key: `tabulacoes` (redirecionar `tabulacao_chamada` para compatibilidade)
-- Renderizar novo wrapper `DispositionTabsWrapper`
+**Arquivo**: `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`
 
-**Novo**: `src/components/cadastros/DispositionTabsWrapper.tsx`
-- Tabs com "Chamadas" e "WhatsApp"
-- Cada aba renderiza `CallDispositionTypesTab` com prop `channel`
-
----
-
-## 4. Filtrar por channel no CallDispositionTypesTab
-
-- Aceitar prop `channel: 'call' | 'whatsapp'` (default `'call'`)
-- Filtrar query com `.eq("channel", channel)`
-- Seed automático usa lista correta conforme channel
-- Create inclui `channel` no payload
-- Para WhatsApp: esconder colunas de chamada (Comportamento, flags de discagem)
-
----
-
-## 5. Aba Etiquetas do WhatsApp → somente leitura
-
-**TagsManagementTab.tsx**:
-- Ler `call_disposition_types` filtrado por `channel = 'whatsapp'`
-- Exibir como lista visual (cor + nome + impacto), sem edição
-- Adicionar link "Gerenciar em Cadastros > Tabulações"
+- Remover carregamento de `conversation_tags` e `conversation_tag_assignments` (linhas 63-74)
+- Remover states `tags` e `tagAssignments`
+- Remover passagem de `tags`/`tagAssignments` como props para `ConversationList`
+- ConversationList continua funcionando — filtro de etiquetas na lista será removido ou adaptado em task futura
 
 ---
 
@@ -77,15 +69,14 @@ Nova função `seedDefaultWhatsAppDispositionTypes(tenantId)` com auto-seed no c
 
 | Arquivo | Mudança |
 |---|---|
-| Migração SQL | Adicionar coluna `channel` |
-| `dispositionService.ts` | Lista WhatsApp, seed function, channel no create |
-| `CadastrosPage.tsx` | Renomear nav, usar wrapper |
-| `DispositionTabsWrapper.tsx` | **Novo**: sub-abas Chamadas/WhatsApp |
-| `CallDispositionTypesTab.tsx` | Prop `channel`, filtrar query, adaptar colunas |
-| `TagsManagementTab.tsx` | Somente leitura das tabulações WhatsApp |
+| Migração SQL | Nova tabela `conversation_disposition_assignments` |
+| `DispositionSelector.tsx` | **Novo**: seletor de tabulações com exclusividade CPC/CPE |
+| `ContactSidebar.tsx` | Remover TagManager, usar DispositionSelector |
+| `WhatsAppChatLayout.tsx` | Remover carregamento de conversation_tags |
 
 ## O que NÃO muda
-- Tabela `conversation_tags` (preservada, apenas desvinculada da UI)
-- Sync 3CPlus (continua apenas para channel=call)
-- Tabulação na ficha de atendimento
+- `TagManager.tsx` (preservado no código, apenas desvinculado)
+- `conversation_tags` / `conversation_tag_assignments` (tabelas preservadas)
+- `CallDispositionTypesTab.tsx` e `DispositionTabsWrapper.tsx`
+- Filtro de etiquetas no ConversationList (será adaptado separadamente)
 
