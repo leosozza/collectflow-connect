@@ -81,7 +81,7 @@ const CadastrosPage = () => {
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
         { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
-        { key: "tabulacao_chamada", label: "Tabulação de Chamada", icon: Headset },
+        { key: "tabulacoes", label: "Tabulações de Atendimento", icon: Headset },
       ],
     },
   ];
