@@ -283,9 +283,9 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               </div>
             </CardHeader>
             <CardContent className="p-3 pt-1 space-y-1.5">
-              <div className="text-sm font-medium">{linkedClient.nome_completo}</div>
-              <div className="text-xs text-muted-foreground">CPF: {linkedClient.cpf}</div>
-              <div className="text-xs text-muted-foreground">Credor: {linkedClient.credor}</div>
+              <div className="text-sm font-medium break-words">{linkedClient.nome_completo}</div>
+              <div className="text-xs text-muted-foreground break-all">CPF: {linkedClient.cpf}</div>
+              <div className="text-xs text-muted-foreground break-words">Credor: {linkedClient.credor}</div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-[10px]">
                   {statusLabels[linkedClient.status] || linkedClient.status}
@@ -302,7 +302,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                   Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas}
                 </span>
               </div>
-              <div className="text-xs">
+              <div className="text-xs break-words">
                 Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
               </div>
               <Button

@@ -43,7 +43,7 @@ const WhatsAppChatLayout = () => {
   // Track known waiting conversation IDs to avoid duplicate notifications
   const knownWaitingRef = useRef<Set<string>>(new Set());
 
-  // Load instances + quick replies + tags + operators
+  // Load instances + quick replies + operators + disposition types
   useEffect(() => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
@@ -58,6 +58,17 @@ const WhatsAppChatLayout = () => {
         if (data) {
           setOperators(data.map((p: any) => ({ id: p.user_id, name: p.full_name || "" })));
         }
+      });
+
+    // Load whatsapp disposition types
+    supabase
+      .from("call_disposition_types")
+      .select("id, label, color, key")
+      .eq("tenant_id", tenantId)
+      .eq("channel", "whatsapp")
+      .eq("active", true)
+      .then(({ data }) => {
+        if (data) setDispositionTypes(data);
       });
   }, [tenantId]);
 
