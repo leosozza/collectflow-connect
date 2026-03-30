@@ -227,8 +227,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             <SelectValue placeholder="Selecione um template" />
           </SelectTrigger>
           <SelectContent>
-            {rules.map((r) => (
-              <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+            {templates.filter(t => t.is_active).map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
