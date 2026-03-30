@@ -100,8 +100,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
   const getMessageTemplate = (): string => {
     if (useCustom) return customMessage;
-    const rule = rules.find((r) => r.id === selectedTemplate);
-    return rule?.message_template || "";
+    const tpl = templates.find((t) => t.id === selectedTemplate);
+    return tpl?.message_body || "";
   };
 
   const getPreview = (): string => {
