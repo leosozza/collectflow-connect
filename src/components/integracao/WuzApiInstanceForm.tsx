@@ -76,12 +76,25 @@ const WuzApiInstanceForm = ({ open, onClose, onSave, saving }: WuzApiInstanceFor
             </div>
             <p className="text-xs text-muted-foreground">Header "Token" para autenticação na API</p>
           </div>
+          <div className="space-y-2">
+            <Label>Categoria do Provedor</Label>
+            <Select value={providerCategory} onValueChange={setProviderCategory}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unofficial">Não-oficial</SelectItem>
+                <SelectItem value="official_meta">Oficial Meta</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Define se a instância usa API oficial Meta ou não-oficial</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             disabled={!isValid || saving}
-            onClick={() => onSave({ name: name.trim(), serverUrl: serverUrl.trim(), userToken: userToken.trim() })}
+            onClick={() => onSave({ name: name.trim(), serverUrl: serverUrl.trim(), userToken: userToken.trim(), providerCategory })}
           >
             {saving ? "Criando..." : "Criar"}
           </Button>

@@ -99,10 +99,11 @@ const WuzApiInstancesList = () => {
     enabled: !!tenant?.id,
   });
 
-  const handleCreate = async (data: { name: string; serverUrl: string; userToken: string }) => {
+  const handleCreate = async (data: { name: string; serverUrl: string; userToken: string; providerCategory: string }) => {
     if (!tenant) return;
     setSaving(true);
     try {
+      const isUnofficial = data.providerCategory === "unofficial";
       await createWhatsAppInstance({
         name: data.name,
         instance_name: data.name,
@@ -112,6 +113,11 @@ const WuzApiInstancesList = () => {
         is_default: instances.length === 0,
         status: "active",
         phone_number: null,
+        provider: "wuzapi",
+        provider_category: data.providerCategory,
+        supports_manual_bulk: isUnofficial,
+        supports_campaign_rotation: isUnofficial,
+        supports_human_queue: true,
       } as any);
 
       if (instances.length === 0) {

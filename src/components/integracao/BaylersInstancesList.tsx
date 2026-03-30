@@ -100,7 +100,7 @@ const BaylersInstancesList = () => {
     enabled: !!tenant?.id,
   });
 
-  const handleCreate = async (data: { name: string }) => {
+  const handleCreate = async (data: { name: string; providerCategory: string }) => {
     if (!tenant) return;
     setSaving(true);
     try {
@@ -109,6 +109,7 @@ const BaylersInstancesList = () => {
 
       const hash = result?.hash?.apikey || "";
       const isFirst = instances.length === 0;
+      const isUnofficial = data.providerCategory === "unofficial";
 
       await createWhatsAppInstance({
         name: data.name,
@@ -120,7 +121,11 @@ const BaylersInstancesList = () => {
         status: "active",
         phone_number: null,
         provider: "evolution",
-      });
+        provider_category: data.providerCategory,
+        supports_manual_bulk: isUnofficial,
+        supports_campaign_rotation: isUnofficial,
+        supports_human_queue: true,
+      } as any);
 
       if (isFirst) {
         await updateTenant(tenant.id, {

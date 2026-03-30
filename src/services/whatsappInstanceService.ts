@@ -11,6 +11,10 @@ export interface WhatsAppInstance {
   status: string;
   phone_number: string | null;
   provider: string;
+  provider_category: string;
+  supports_manual_bulk: boolean;
+  supports_campaign_rotation: boolean;
+  supports_human_queue: boolean;
   created_at: string;
   updated_at: string;
 }
