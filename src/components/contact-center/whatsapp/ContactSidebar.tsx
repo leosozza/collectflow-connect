@@ -189,6 +189,48 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     }
   };
 
+  // Auto-assign "Em Dia" or "Quitado" disposition based on collection status
+  useEffect(() => {
+    if (!conversation || !linkedClient?.status_cobranca_id || !statusCobranca) return;
+    const statusName = statusCobranca.nome?.toLowerCase() || "";
+    let targetKey: string | null = null;
+    if (statusName.includes("em dia")) targetKey = "em_dia";
+    else if (statusName.includes("quitado")) targetKey = "quitado";
+    if (!targetKey) return;
+
+    const autoAssign = async () => {
+      try {
+        const { data: dispType } = await supabase
+          .from("call_disposition_types")
+          .select("id")
+          .eq("tenant_id", conversation.tenant_id)
+          .eq("channel", "whatsapp")
+          .eq("key", targetKey!)
+          .eq("active", true)
+          .maybeSingle();
+        if (!dispType) return;
+
+        const { data: existing } = await supabase
+          .from("conversation_disposition_assignments" as any)
+          .select("id")
+          .eq("conversation_id", conversation.id)
+          .eq("disposition_type_id", dispType.id)
+          .maybeSingle();
+        if (existing) return;
+
+        await supabase
+          .from("conversation_disposition_assignments" as any)
+          .insert({
+            conversation_id: conversation.id,
+            disposition_type_id: dispType.id,
+          } as any);
+      } catch (err) {
+        console.error("Auto-assign disposition error:", err);
+      }
+    };
+    autoAssign();
+  }, [conversation?.id, linkedClient?.status_cobranca_id, statusCobranca]);
+
   if (!conversation) return null;
 
   const statusLabels: Record<string, string> = {
@@ -198,11 +240,11 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
   };
 
   return (
-    <div className="w-[320px] border-l border-border bg-card flex flex-col h-full">
+    <div className="w-[340px] border-l border-border bg-card flex flex-col h-full overflow-hidden">
       <div className="p-3 border-b border-border">
         <h3 className="font-semibold text-sm">Contato</h3>
       </div>
-      <ScrollArea className="flex-1 p-3">
+      <ScrollArea className="flex-1 p-3 overflow-x-hidden">
         {/* Contact info */}
         <Card className="mb-3">
           <CardContent className="p-3">
@@ -238,9 +280,9 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               </div>
             </CardHeader>
             <CardContent className="p-3 pt-1 space-y-1.5">
-              <div className="text-sm font-medium">{linkedClient.nome_completo}</div>
-              <div className="text-xs text-muted-foreground">CPF: {linkedClient.cpf}</div>
-              <div className="text-xs text-muted-foreground">Credor: {linkedClient.credor}</div>
+              <div className="text-sm font-medium break-words">{linkedClient.nome_completo}</div>
+              <div className="text-xs text-muted-foreground break-all">CPF: {linkedClient.cpf}</div>
+              <div className="text-xs text-muted-foreground break-words">Credor: {linkedClient.credor}</div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-[10px]">
                   {statusLabels[linkedClient.status] || linkedClient.status}
@@ -257,7 +299,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                   Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas}
                 </span>
               </div>
-              <div className="text-xs">
+              <div className="text-xs break-words">
                 Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
               </div>
               <Button

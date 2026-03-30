@@ -36,6 +36,18 @@ interface TagAssignment {
   tag_id: string;
 }
 
+interface DispositionAssignment {
+  conversation_id: string;
+  disposition_type_id: string;
+}
+
+interface DispositionType {
+  id: string;
+  label: string;
+  color: string;
+  key: string;
+}
+
 interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
@@ -47,6 +59,8 @@ interface ConversationListProps {
   tagAssignments?: TagAssignment[];
   operators?: { id: string; name: string }[];
   isAdmin?: boolean;
+  dispositionAssignments?: DispositionAssignment[];
+  dispositionTypes?: DispositionType[];
 }
 
 function formatCompactTime(dateStr: string): string {
@@ -145,7 +159,7 @@ const statusLabels: Record<string, string> = {
   closed: "Fechada",
 };
 
-const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false }: ConversationListProps) => {
+const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false, dispositionAssignments = [], dispositionTypes = [] }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
@@ -399,6 +413,28 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                             )}
                           </div>
                         </div>
+                        {/* Disposition badges */}
+                        {(() => {
+                          const convDisps = dispositionAssignments.filter((a) => a.conversation_id === conv.id);
+                          if (convDisps.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {convDisps.map((a) => {
+                                const dt = dispositionTypes.find((d) => d.id === a.disposition_type_id);
+                                if (!dt) return null;
+                                return (
+                                  <span
+                                    key={dt.id}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white"
+                                    style={{ backgroundColor: dt.color || "hsl(var(--primary))" }}
+                                  >
+                                    {dt.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </button>

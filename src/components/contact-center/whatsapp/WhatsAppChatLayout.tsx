@@ -37,11 +37,13 @@ const WhatsAppChatLayout = () => {
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
+  const [dispositionAssignments, setDispositionAssignments] = useState<{ conversation_id: string; disposition_type_id: string }[]>([]);
+  const [dispositionTypes, setDispositionTypes] = useState<{ id: string; label: string; color: string; key: string }[]>([]);
 
   // Track known waiting conversation IDs to avoid duplicate notifications
   const knownWaitingRef = useRef<Set<string>>(new Set());
 
-  // Load instances + quick replies + tags + operators
+  // Load instances + quick replies + operators + disposition types
   useEffect(() => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
@@ -57,14 +59,35 @@ const WhatsAppChatLayout = () => {
           setOperators(data.map((p: any) => ({ id: p.user_id, name: p.full_name || "" })));
         }
       });
+
+    // Load whatsapp disposition types
+    supabase
+      .from("call_disposition_types")
+      .select("id, label, color, key")
+      .eq("tenant_id", tenantId)
+      .eq("channel", "whatsapp")
+      .eq("active", true)
+      .then(({ data }) => {
+        if (data) setDispositionTypes(data);
+      });
   }, [tenantId]);
 
-  // Load conversations
+  // Load conversations + disposition assignments
   const loadConversations = useCallback(async () => {
     if (!tenantId) return;
     try {
       const data = await fetchConversations(tenantId);
       setConversations(data);
+
+      // Load disposition assignments for all conversations
+      const convIds = data.map((c) => c.id);
+      if (convIds.length > 0) {
+        const { data: assignments } = await supabase
+          .from("conversation_disposition_assignments" as any)
+          .select("conversation_id, disposition_type_id")
+          .in("conversation_id", convIds);
+        if (assignments) setDispositionAssignments(assignments as any);
+      }
 
       // Initialize known waiting set on first load
       if (knownWaitingRef.current.size === 0) {
@@ -344,6 +367,8 @@ const WhatsAppChatLayout = () => {
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}
+            dispositionAssignments={dispositionAssignments}
+            dispositionTypes={dispositionTypes}
           />
         </div>
         <ChatPanel
