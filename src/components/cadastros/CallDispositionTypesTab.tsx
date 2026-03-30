@@ -180,7 +180,8 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
 
   useEffect(() => {
     if (!isLoading && tenantId && !seeded && !seedMut.isPending) {
-      const missingDefaults = DEFAULT_DISPOSITION_LIST.some(
+      const defaultList = isWhatsApp ? DEFAULT_WA_DISPOSITION_LIST : DEFAULT_DISPOSITION_LIST;
+      const missingDefaults = defaultList.some(
         d => !types.find(t => t.key === d.key)
       );
       if (missingDefaults) seedMut.mutate();
