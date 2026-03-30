@@ -379,6 +379,43 @@ Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama
     lovablePrompt: "Propensão implementada em supabase/functions/calculate-propensity/ e src/components/carteira/PropensityBadge.tsx. Score salvo em clients.propensity_score.",
   },
 
+  {
+    id: "whatsapp-fase1",
+    title: "WhatsApp Fase 1 — Disparo Não Oficial",
+    description: "Disparo em massa da carteira com múltiplas instâncias não oficiais, campanhas persistidas, deduplicação por CPF/telefone, round-robin, templates dedicados e logs por recipient.",
+    status: "done",
+    progress: 100,
+    category: "Contact Center",
+    lovablePrompt: "WhatsApp Fase 1 implementado: WhatsAppBulkDialog com round-robin multi-instância, whatsapp_campaigns e whatsapp_campaign_recipients no banco, deduplicação por CPF na CarteiraPage, send-bulk-whatsapp edge function.",
+  },
+  {
+    id: "whatsapp-templates",
+    title: "Gestão de Templates WhatsApp",
+    description: "Tabela dedicada de templates com categorias (cobrança, lembrete, acordo, geral), variáveis dinâmicas, preview e integração com disparo em massa.",
+    status: "done",
+    progress: 100,
+    category: "Automação",
+    lovablePrompt: "Templates WhatsApp implementados em src/components/automacao/WhatsAppTemplatesTab.tsx e src/services/whatsappTemplateService.ts. Tabela whatsapp_templates no banco.",
+  },
+  {
+    id: "whatsapp-instance-category",
+    title: "Instâncias WhatsApp — Oficial/Não Oficial",
+    description: "Seletor de categoria (oficial Meta / não oficial) na criação de instâncias, flags de capacidade e vinculação à régua de cobrança.",
+    status: "done",
+    progress: 100,
+    category: "Integrações",
+    lovablePrompt: "Seletor de provider_category (official/unofficial) adicionado em BaylersInstanceForm e WuzApiInstanceForm. Colunas provider_category, supports_manual_bulk, supports_campaign, supports_regua na tabela whatsapp_instances.",
+  },
+  {
+    id: "regua-instance-link",
+    title: "Vinculação de Instância à Régua",
+    description: "Seletor de instância WhatsApp no formulário da régua de cobrança, com badge visual na timeline.",
+    status: "done",
+    progress: 100,
+    category: "Automação",
+    lovablePrompt: "Seletor de instância implementado em CredorReguaTab.tsx via coluna instance_id na tabela collection_rules. Badge com nome da instância exibido na timeline da régua.",
+  },
+
   // IN PROGRESS
   {
     id: "serasa",
