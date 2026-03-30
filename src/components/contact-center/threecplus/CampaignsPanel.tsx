@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { extractList, normalizeCampaignStatus } from "@/lib/threecplusUtils";
 
 /* ─── Sub-components ─── */
 
@@ -92,8 +93,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-users-list", domain],
     queryFn: async () => {
       const data = await invoke("list_users");
-      const list = data?.data?.data || data?.data || (Array.isArray(data) ? data : []);
-      return Array.isArray(list) ? list : [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
@@ -102,7 +102,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-qualification-lists", domain],
     queryFn: async () => {
       const data = await invoke("list_qualification_lists");
-      return Array.isArray(data) ? data : data?.data || [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
@@ -111,7 +111,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-work-break-groups", domain],
     queryFn: async () => {
       const data = await invoke("list_work_break_groups");
-      return Array.isArray(data) ? data : data?.data || [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
@@ -121,13 +121,13 @@ const CampaignsPanel = () => {
     setLoading(true);
     try {
       const data = await invoke("list_campaigns");
-      const list = Array.isArray(data) ? data : data?.data || [];
+      const list = extractList(data);
       setCampaigns(list);
-      // Set initial aggressiveness and work break group
       const aggrMap: Record<string, number> = {};
       const wbgMap: Record<string, string> = {};
       list.forEach((c: any) => {
-        aggrMap[String(c.id)] = c.aggressiveness ?? c.power ?? 1;
+        const n = normalizeCampaignStatus(c);
+        aggrMap[String(c.id)] = n.aggressiveness;
         if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
       });
       setAggressiveness(prev => ({ ...prev, ...aggrMap }));
@@ -151,23 +151,12 @@ const CampaignsPanel = () => {
         invoke("campaign_qualifications", { campaign_id: campaignId }).catch(() => null),
       ]);
 
-      const lists = Array.isArray(listsRes) ? listsRes : listsRes?.data || [];
-      setCampaignLists(prev => ({ ...prev, [campaignId]: lists }));
-
-      const agents = Array.isArray(agentsRes) ? agentsRes : agentsRes?.data || [];
-      setCampaignAgents(prev => ({ ...prev, [campaignId]: agents }));
-
-    if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
-
-      // Webhook status is now manual — no automatic check needed
-      const lm = listsMetrics ? (Array.isArray(listsMetrics) ? listsMetrics : listsMetrics?.data || []) : [];
-      setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: lm }));
-
-      const am = agentsMetricsRes ? (Array.isArray(agentsMetricsRes) ? agentsMetricsRes : agentsMetricsRes?.data || []) : [];
-      setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: am }));
-
-      const qs = qualsRes ? (Array.isArray(qualsRes) ? qualsRes : qualsRes?.data || []) : [];
-      setCampaignQualifications(prev => ({ ...prev, [campaignId]: qs }));
+      setCampaignLists(prev => ({ ...prev, [campaignId]: extractList(listsRes) }));
+      setCampaignAgents(prev => ({ ...prev, [campaignId]: extractList(agentsRes) }));
+      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+      setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
+      setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
+      setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
     } catch {
       toast.error("Erro ao carregar detalhes da campanha");
     } finally {
@@ -189,11 +178,11 @@ const CampaignsPanel = () => {
 
   const handlePauseResume = async (campaign: any) => {
     const id = String(campaign.id);
-    const isPaused = campaign.status === "paused" || campaign.status === "stopped";
+    const n = normalizeCampaignStatus(campaign);
     setTogglingStatus(id);
     try {
-      await invoke(isPaused ? "resume_campaign" : "pause_campaign", { campaign_id: id });
-      toast.success(isPaused ? "Campanha retomada!" : "Campanha pausada!");
+      await invoke(n.isPaused ? "resume_campaign" : "pause_campaign", { campaign_id: id });
+      toast.success(n.isPaused ? "Campanha retomada!" : "Campanha pausada!");
       loadCampaigns();
     } catch {
       toast.error("Erro ao alterar status da campanha");
@@ -409,7 +398,7 @@ const CampaignsPanel = () => {
           {campaigns.map((c: any) => {
             const cid = String(c.id);
             const isExpanded = expandedCampaign === cid;
-            const isPaused = c.status === "paused" || c.status === "stopped";
+            const n = normalizeCampaignStatus(c);
             return (
               <Card key={c.id} className="overflow-hidden">
                 <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => toggleExpand(cid)}>
@@ -425,9 +414,9 @@ const CampaignsPanel = () => {
                       variant="ghost" size="icon" className="h-8 w-8"
                       disabled={togglingStatus === cid}
                       onClick={(e) => { e.stopPropagation(); handlePauseResume(c); }}
-                      title={isPaused ? "Retomar" : "Pausar"}
+                      title={n.isPaused ? "Retomar" : "Pausar"}
                     >
-                      {togglingStatus === cid ? <Loader2 className="w-4 h-4 animate-spin" /> : isPaused ? <Play className="w-4 h-4 text-green-600" /> : <Pause className="w-4 h-4 text-yellow-600" />}
+                      {togglingStatus === cid ? <Loader2 className="w-4 h-4 animate-spin" /> : n.isPaused ? <Play className="w-4 h-4 text-green-600" /> : <Pause className="w-4 h-4 text-yellow-600" />}
                     </Button>
                     {/* Delete */}
                     <Button
@@ -437,7 +426,12 @@ const CampaignsPanel = () => {
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
-                    {getStatusBadge(c.status)}
+                    <Badge
+                      variant={n.isRunning ? "default" : n.isPaused ? "secondary" : "outline"}
+                      className={n.isPaused ? "bg-yellow-500/20 text-yellow-700" : ""}
+                    >
+                      {n.statusLabel}
+                    </Badge>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                   </div>
                 </div>
@@ -450,6 +444,12 @@ const CampaignsPanel = () => {
                       </div>
                     ) : (
                       <>
+                        {/* Refresh button */}
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm" onClick={() => loadCampaignDetails(cid)} className="gap-2 text-xs">
+                            <RefreshCw className="w-3.5 h-3.5" /> Atualizar Detalhes
+                          </Button>
+                        </div>
                         {/* Aggressiveness Slider */}
                         <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
                           <Gauge className="w-5 h-5 text-primary shrink-0" />
@@ -663,24 +663,26 @@ const CampaignsPanel = () => {
                               );
                             })()}
 
-                            <p className="text-sm font-medium text-foreground">Distribuição de Qualificações</p>
+                            <p className="text-sm font-medium text-foreground">Qualificações Vinculadas</p>
                             {(campaignQualifications[cid] || []).length === 0 ? (
-                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação registrada</p>
+                              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação encontrada nesta campanha</p>
                             ) : (
                               <div className="space-y-1.5">
                                 {(campaignQualifications[cid] || []).map((q: any, i: number) => {
-                                  const total = (campaignQualifications[cid] || []).reduce((sum: number, x: any) => sum + (Number(x.count || x.total) || 0), 0);
+                                  const hasStats = (q.count != null || q.total != null) && (Number(q.count || q.total) > 0);
+                                  const total = hasStats
+                                    ? (campaignQualifications[cid] || []).reduce((sum: number, x: any) => sum + (Number(x.count || x.total) || 0), 0)
+                                    : 0;
                                   const count = Number(q.count || q.total) || 0;
                                   const pct = total > 0 ? (count / total * 100) : 0;
                                   return (
-                                    <div key={q.id || i} className="space-y-1">
-                                      <div className="flex items-center justify-between text-sm">
-                                        <span>{q.name || q.qualification_name || `#${q.id}`}</span>
+                                    <div key={q.id || i} className="flex items-center justify-between p-2 rounded-lg bg-muted/40 text-sm">
+                                      <span className="font-medium">{q.name || q.qualification_name || `#${q.id}`}</span>
+                                      {hasStats ? (
                                         <span className="text-xs text-muted-foreground">{count} ({pct.toFixed(1)}%)</span>
-                                      </div>
-                                      <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
-                                      </div>
+                                      ) : (
+                                        <Badge variant="outline" className="text-[10px]">Vinculada</Badge>
+                                      )}
                                     </div>
                                   );
                                 })}

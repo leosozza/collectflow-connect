@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, ListOrdered, Route, PhoneIncoming, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan } from "lucide-react";
+import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, Route, PhoneIncoming, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import CampaignsPanel from "./CampaignsPanel";
-import MailingPanel from "./MailingPanel";
-import CallHistoryPanel from "./CallHistoryPanel";
 import TelefoniaDashboard from "./TelefoniaDashboard";
 import CallsChart from "./CallsChart";
 import AgentsReportPanel from "./AgentsReportPanel";
@@ -33,14 +31,12 @@ const groups = [
     id: "campanhas", label: "Campanhas", icon: Megaphone,
     tabs: [
       { value: "campaigns", label: "Campanhas", icon: Megaphone },
-      { value: "mailing", label: "Mailing", icon: ListOrdered },
       { value: "routes", label: "Rotas", icon: Route },
     ],
   },
   {
     id: "chamadas", label: "Chamadas", icon: PhoneCall,
     tabs: [
-      { value: "history", label: "Histórico", icon: PhoneCall },
       { value: "receptive", label: "Receptivo", icon: PhoneIncoming },
       { value: "schedules", label: "Agendamentos", icon: CalendarClock },
       { value: "blocklist", label: "Bloqueio", icon: ShieldBan },
@@ -50,10 +46,10 @@ const groups = [
     id: "controle", label: "Controle", icon: Settings,
     tabs: [
       { value: "users", label: "Usuários", icon: UserCog },
+      { value: "teams", label: "Equipes", icon: UsersRound },
       { value: "intervals", label: "Intervalos", icon: Timer },
       { value: "office-hours", label: "Horários", icon: Clock },
       { value: "qualifications", label: "Qualificações", icon: Award },
-      { value: "teams", label: "Equipes", icon: UsersRound },
     ],
   },
 ] as const;
@@ -100,8 +96,6 @@ const ThreeCPlusPanel = () => {
   const contentMap: Record<string, JSX.Element> = {
     dashboard: <TelefoniaDashboard />,
     campaigns: <CampaignsPanel />,
-    mailing: <MailingPanel />,
-    history: <CallHistoryPanel />,
     chart: <CallsChart />,
     "agents-report": <AgentsReportPanel />,
     qualifications: <QualificationsPanel />,
@@ -117,7 +111,6 @@ const ThreeCPlusPanel = () => {
 
   return (
     <div className="space-y-4">
-
       {/* Level 1 — Group navigation */}
       <div className="flex items-center gap-6 border-b border-border">
         {groups.map((g) => {
