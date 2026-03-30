@@ -3,37 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Pause, Play, Settings2 } from "lucide-react";
+import { Loader2, Pause, Play, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-interface Campaign {
-  id: number;
-  name: string;
-  status?: string;
-  paused?: boolean;
-  is_on_active_time?: boolean;
-  start_time?: string;
-  end_time?: string;
-  dialer_settings?: {
-    aggressiveness?: number;
-    [key: string]: any;
-  };
-  agents_count?: number;
-  active_calls?: number;
-  statistics?: {
-    completed?: number;
-    abandoned?: number;
-    no_answer?: number;
-    total?: number;
-    avg_idle_time?: number;
-  };
-}
+import { normalizeCampaignStatus } from "@/lib/threecplusUtils";
 
 interface CampaignOverviewProps {
-  campaigns: Campaign[];
+  campaigns: any[];
   loading: boolean;
   domain: string;
   apiToken: string;
@@ -42,16 +20,17 @@ interface CampaignOverviewProps {
 
 const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: CampaignOverviewProps) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const handlePauseResume = async (campaignId: number, currentStatus: string) => {
-    const action = currentStatus === "running" ? "pause_campaign" : "resume_campaign";
+  const handlePauseResume = async (campaignId: number, isPaused: boolean) => {
+    const action = isPaused ? "resume_campaign" : "pause_campaign";
     setActionLoading(`${action}_${campaignId}`);
     try {
       const { error } = await supabase.functions.invoke("threecplus-proxy", {
         body: { action, domain, api_token: apiToken, campaign_id: campaignId },
       });
       if (error) throw error;
-      toast.success(action === "pause_campaign" ? "Campanha pausada" : "Campanha retomada");
+      toast.success(isPaused ? "Campanha retomada" : "Campanha pausada");
       onRefresh();
     } catch {
       toast.error("Erro ao alterar status da campanha");
@@ -97,76 +76,125 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
+              <TableHead className="text-xs h-9 w-8" />
               <TableHead className="text-xs h-9">Campanha</TableHead>
               <TableHead className="text-xs h-9">Status</TableHead>
               <TableHead className="text-xs h-9 w-[180px]">Progresso</TableHead>
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
-              <TableHead className="text-xs h-9 text-center">Completadas</TableHead>
+              <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
               <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
               <TableHead className="text-xs h-9 w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {campaigns.map((c) => {
-              const isRunning = c.status === "running" || (!c.paused && c.is_on_active_time);
-              const statusLabel = c.paused ? "Pausada" : (c.is_on_active_time || c.status === "running") ? "Ativa" : "Inativa";
-              const aggr = c.dialer_settings?.aggressiveness ?? 1;
-              const total = c.statistics?.total || 0;
-              const completed = c.statistics?.completed || 0;
-              const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              const n = normalizeCampaignStatus(c);
+              const isExpanded = expandedId === c.id;
 
               return (
-                <TableRow key={c.id} className={!isRunning ? "opacity-60" : ""}>
-                  <TableCell className="py-2 text-sm font-medium">{c.name}</TableCell>
-                  <TableCell className="py-2">
-                    <Badge variant={isRunning ? "default" : c.paused ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
-                      {statusLabel}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <div className="flex items-center gap-2">
-                      <Progress value={pct} className="h-2 flex-1" />
-                      <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 text-center text-sm font-semibold">
-                    {c.agents_count ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-2 text-center text-sm font-semibold">
-                    {completed || "—"}
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold w-4 text-center">{aggr}</span>
-                      <Slider
-                        min={1}
-                        max={10}
-                        step={1}
-                        defaultValue={[aggr]}
-                        onValueCommit={(v) => handleAggressiveness(c.id, v[0])}
-                        disabled={actionLoading === `aggr_${c.id}`}
-                        className="flex-1"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <Button
-                      variant={isRunning ? "ghost" : "ghost"}
-                      size="icon"
-                      className={`h-7 w-7 ${isRunning ? "text-muted-foreground hover:text-destructive" : "text-muted-foreground hover:text-primary"}`}
-                      onClick={() => handlePauseResume(c.id, c.status)}
-                      disabled={!!actionLoading}
-                    >
-                      {actionLoading === `${isRunning ? "pause" : "resume"}_campaign_${c.id}` ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : isRunning ? (
-                        <Pause className="w-3.5 h-3.5" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5" />
-                      )}
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow
+                    key={c.id}
+                    className={`cursor-pointer ${!n.isRunning && !n.isPaused ? "opacity-60" : ""}`}
+                    onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                  >
+                    <TableCell className="py-2 w-8">
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                    </TableCell>
+                    <TableCell className="py-2 text-sm font-medium">{c.name}</TableCell>
+                    <TableCell className="py-2">
+                      <Badge
+                        variant={n.isRunning ? "default" : n.isPaused ? "secondary" : "outline"}
+                        className={`text-[10px] px-1.5 py-0 ${n.isPaused ? "bg-yellow-500/20 text-yellow-700" : ""}`}
+                      >
+                        {n.statusLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-2">
+                        <Progress value={n.progress} className="h-2 flex-1" />
+                        <span className="text-[10px] text-muted-foreground w-8 text-right">{n.progress}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 text-center text-sm font-semibold">
+                      {c.agents_count ?? c.active_agents ?? "—"}
+                    </TableCell>
+                    <TableCell className="py-2 text-center text-sm font-semibold">
+                      {n.worked || "—"}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-xs font-semibold w-4 text-center">{n.aggressiveness}</span>
+                        <Slider
+                          min={1}
+                          max={10}
+                          step={1}
+                          defaultValue={[n.aggressiveness]}
+                          onValueCommit={(v) => handleAggressiveness(c.id, v[0])}
+                          disabled={actionLoading === `aggr_${c.id}`}
+                          className="flex-1"
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-7 w-7 ${n.isRunning ? "text-muted-foreground hover:text-destructive" : "text-muted-foreground hover:text-primary"}`}
+                        onClick={() => handlePauseResume(c.id, n.isPaused)}
+                        disabled={!!actionLoading}
+                      >
+                        {actionLoading?.includes(`_${c.id}`) ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : n.isPaused ? (
+                          <Play className="w-3.5 h-3.5" />
+                        ) : (
+                          <Pause className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  {isExpanded && (
+                    <TableRow key={`${c.id}-detail`} className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={8} className="py-3 px-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Status</p>
+                            <p className="font-medium">{n.statusLabel}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total Registros</p>
+                            <p className="font-medium">{n.total.toLocaleString("pt-BR")}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Trabalhados</p>
+                            <p className="font-medium">{n.worked.toLocaleString("pt-BR")}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Agressividade</p>
+                            <p className="font-medium">{n.aggressiveness}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Agentes</p>
+                            <p className="font-medium">{c.agents_count ?? c.active_agents ?? "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Horário</p>
+                            <p className="font-medium">{c.start_time || "—"} — {c.end_time || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Abandonadas</p>
+                            <p className="font-medium">{c.statistics?.abandoned ?? c.statistics?.dropped ?? "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Sem Atendimento</p>
+                            <p className="font-medium">{c.statistics?.no_answer ?? "—"}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               );
             })}
           </TableBody>

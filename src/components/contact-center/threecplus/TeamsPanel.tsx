@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, RefreshCw, Eye, Edit, UsersRound } from "lucide-react";
+import { Loader2, RefreshCw, Eye, UsersRound, Info } from "lucide-react";
 import { toast } from "sonner";
+import { extractList } from "@/lib/threecplusUtils";
 
 const TeamsPanel = () => {
   const { tenant } = useTenant();
@@ -20,10 +18,6 @@ const TeamsPanel = () => {
 
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
   const [viewTeam, setViewTeam] = useState<any>(null);
   const [viewLoading, setViewLoading] = useState(false);
 
@@ -41,7 +35,7 @@ const TeamsPanel = () => {
     try {
       const data = await invoke("list_teams");
       if (data?.status === 404) { setTeams([]); return; }
-      setTeams(Array.isArray(data) ? data : data?.data || []);
+      setTeams(extractList(data));
     } catch {
       toast.error("Erro ao carregar equipes");
     } finally {
@@ -63,44 +57,25 @@ const TeamsPanel = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) { toast.error("Informe o nome"); return; }
-    setSaving(true);
-    try {
-      if (editing) {
-        await invoke("update_team", { team_id: editing.id, team_data: { name: name.trim() } });
-        toast.success("Equipe atualizada");
-      } else {
-        await invoke("create_team", { team_data: { name: name.trim() } });
-        toast.success("Equipe criada");
-      }
-      setDialogOpen(false);
-      setEditing(null);
-      setName("");
-      fetchTeams();
-    } catch {
-      toast.error("Erro ao salvar equipe");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="mt-4 space-y-4">
+      {/* Banner */}
+      <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+        <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Equipes devem ser gerenciadas preferencialmente no <strong>3C Plus</strong>. Este painel é apenas para consulta.
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <UsersRound className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Equipes</h3>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Atualizar
-          </Button>
-          <Button size="sm" onClick={() => { setEditing(null); setName(""); setDialogOpen(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Nova Equipe
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Atualizar
+        </Button>
       </div>
 
       <Card>
@@ -129,12 +104,9 @@ const TeamsPanel = () => {
                     <TableCell>
                       <Badge variant="secondary">{t.agents_count ?? t.agents?.length ?? "—"}</Badge>
                     </TableCell>
-                    <TableCell className="text-right space-x-1">
+                    <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleView(t.id)}>
                         <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => { setEditing(t); setName(t.name); setDialogOpen(true); }}>
-                        <Edit className="w-4 h-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -184,25 +156,6 @@ const TeamsPanel = () => {
           </CardContent>
         </Card>
       )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Equipe" : "Nova Equipe"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Label>Nome</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Equipe Cobrança" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Salvar" : "Criar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

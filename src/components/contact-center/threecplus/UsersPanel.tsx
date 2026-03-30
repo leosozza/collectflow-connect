@@ -1,17 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, RefreshCw, Edit, UserX, Users2 } from "lucide-react";
+import { Loader2, RefreshCw, Users2, Info } from "lucide-react";
 import { toast } from "sonner";
+import { extractList, isUserActive } from "@/lib/threecplusUtils";
 
 const UsersPanel = () => {
   const { tenant } = useTenant();
@@ -21,10 +19,7 @@ const UsersPanel = () => {
 
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [formData, setFormData] = useState({ name: "", email: "", password: "", role: "agent" });
-  const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -40,7 +35,7 @@ const UsersPanel = () => {
     try {
       const data = await invoke("list_users");
       if (data?.status === 404) { setUsers([]); return; }
-      setUsers(Array.isArray(data) ? data : data?.data || []);
+      setUsers(extractList(data));
     } catch {
       toast.error("Erro ao carregar usuários");
     } finally {
@@ -50,76 +45,49 @@ const UsersPanel = () => {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const handleSave = async () => {
-    if (!formData.name.trim()) { toast.error("Informe o nome"); return; }
-    setSaving(true);
-    try {
-      if (editing) {
-        await invoke("update_user", {
-          user_id: editing.id,
-          user_data: { name: formData.name.trim(), role: formData.role },
-        });
-        toast.success("Usuário atualizado");
-      } else {
-        if (!formData.email.trim() || !formData.password.trim()) {
-          toast.error("E-mail e senha são obrigatórios para criar usuário");
-          setSaving(false);
-          return;
-        }
-        await invoke("create_user", {
-          user_data: {
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            password: formData.password,
-            role: formData.role,
-          },
-        });
-        toast.success("Usuário criado");
-      }
-      setDialogOpen(false);
-      setEditing(null);
-      setFormData({ name: "", email: "", password: "", role: "agent" });
-      fetchUsers();
-    } catch {
-      toast.error("Erro ao salvar usuário");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const filteredUsers = useMemo(() => {
+    if (statusFilter === "all") return users;
+    return users.filter((u) => {
+      const active = isUserActive(u);
+      return statusFilter === "active" ? active : !active;
+    });
+  }, [users, statusFilter]);
 
-  const handleDeactivate = async (userId: number) => {
-    try {
-      await invoke("deactivate_user", { user_id: userId });
-      toast.success("Usuário desativado");
-      fetchUsers();
-    } catch {
-      toast.error("Erro ao desativar usuário");
-    }
-  };
-
-  const roleLabel = (role: string) => {
+  const roleLabel = (role: string | any) => {
+    if (typeof role === "object" && role !== null) return role.readable_name || role.name || "—";
     const map: Record<string, string> = { admin: "Admin", supervisor: "Supervisor", agent: "Agente" };
-    return map[role] || role;
+    return map[role] || role || "—";
   };
 
   return (
     <div className="mt-4 space-y-4">
+      {/* Banner */}
+      <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+        <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Usuários e equipes devem ser gerenciados preferencialmente no <strong>3C Plus</strong>. Este painel é apenas para consulta e visualização.
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users2 className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-semibold">Gestão de Usuários 3CPlus</h3>
+          <h3 className="text-lg font-semibold">Usuários 3CPlus</h3>
         </div>
         <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="active">Ativos</SelectItem>
+              <SelectItem value="inactive">Inativos</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Atualizar
-          </Button>
-          <Button size="sm" onClick={() => {
-            setEditing(null);
-            setFormData({ name: "", email: "", password: "", role: "agent" });
-            setDialogOpen(true);
-          }} className="gap-2">
-            <Plus className="w-4 h-4" /> Novo Usuário
           </Button>
         </div>
       </div>
@@ -130,8 +98,10 @@ const UsersPanel = () => {
             <div className="p-4 space-y-2">
               {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : users.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">Nenhum usuário encontrado</p>
+          ) : filteredUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {users.length === 0 ? "Nenhum usuário encontrado" : "Nenhum usuário com o filtro selecionado"}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -141,91 +111,32 @@ const UsersPanel = () => {
                   <TableHead>E-mail</TableHead>
                   <TableHead>Perfil</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u: any) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="text-sm text-muted-foreground">{u.id}</TableCell>
-                    <TableCell className="font-medium">{u.name}</TableCell>
-                    <TableCell className="text-sm">{u.email || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {typeof u.role === "object" && u.role !== null
-                          ? (u.role.readable_name || u.role.name || "—")
-                          : roleLabel(u.role || u.type || "")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={u.active === false || u.status === "inactive" ? "destructive" : "default"}>
-                        {u.active === false || u.status === "inactive" ? "Inativo" : "Ativo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => {
-                        setEditing(u);
-                        setFormData({ name: u.name, email: u.email || "", password: "", role: u.role || "agent" });
-                        setDialogOpen(true);
-                      }}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDeactivate(u.id)}
-                        title="Desativar">
-                        <UserX className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredUsers.map((u: any) => {
+                  const active = isUserActive(u);
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell className="text-sm text-muted-foreground">{u.id}</TableCell>
+                      <TableCell className="font-medium">{u.name}</TableCell>
+                      <TableCell className="text-sm">{u.email || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{roleLabel(u.role || u.type)}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={active ? "default" : "destructive"}>
+                          {active ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Usuário" : "Novo Usuário"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome</Label>
-              <Input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
-            </div>
-            {!editing && (
-              <>
-                <div>
-                  <Label>E-mail</Label>
-                  <Input type="email" value={formData.email} onChange={(e) => setFormData(p => ({ ...p, email: e.target.value }))} />
-                </div>
-                <div>
-                  <Label>Senha</Label>
-                  <Input type="password" value={formData.password} onChange={(e) => setFormData(p => ({ ...p, password: e.target.value }))} />
-                </div>
-              </>
-            )}
-            <div>
-              <Label>Perfil</Label>
-              <Select value={formData.role} onValueChange={(v) => setFormData(p => ({ ...p, role: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="agent">Agente</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editing ? "Salvar" : "Criar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

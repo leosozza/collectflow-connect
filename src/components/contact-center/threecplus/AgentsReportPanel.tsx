@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Search, Users } from "lucide-react";
+import { Loader2, Search, Users, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { extractList } from "@/lib/threecplusUtils";
 
 const AgentsReportPanel = () => {
   const { tenant } = useTenant();
@@ -18,6 +19,8 @@ const AgentsReportPanel = () => {
 
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
 
@@ -31,14 +34,20 @@ const AgentsReportPanel = () => {
 
   const fetchReport = async () => {
     setLoading(true);
+    setSearched(true);
+    setErrorMsg(null);
     try {
       const data = await invoke("agents_report", {
         startDate: `${startDate} 00:00:00`,
         endDate: `${endDate} 23:59:59`,
       });
-      const list = Array.isArray(data) ? data : data?.data || [];
+      const list = extractList(data);
       setAgents(list);
-    } catch {
+      if (list.length === 0) {
+        setErrorMsg("Sem dados de produtividade para o período selecionado");
+      }
+    } catch (err: any) {
+      setErrorMsg("Erro de integração ao buscar relatório de agentes");
       toast.error("Erro ao buscar relatório de agentes");
     } finally {
       setLoading(false);
@@ -47,10 +56,11 @@ const AgentsReportPanel = () => {
 
   const formatTime = (seconds: number | undefined) => {
     if (!seconds) return "00:00:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    const s = Math.floor(Number(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
   return (
@@ -61,7 +71,7 @@ const AgentsReportPanel = () => {
             <Users className="w-5 h-5 text-primary" />
             Relatório de Produtividade
           </CardTitle>
-          <CardDescription>Métricas de tempo e desempenho dos agentes</CardDescription>
+          <CardDescription>Métricas de tempo e desempenho dos agentes por período</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3 items-end">
@@ -88,9 +98,18 @@ const AgentsReportPanel = () => {
               {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : agents.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              Clique em "Buscar" para gerar o relatório
-            </p>
+            <div className="text-center py-12 space-y-2">
+              {errorMsg ? (
+                <div className="flex flex-col items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">{errorMsg}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {searched ? "Sem dados para o período selecionado" : "Clique em \"Buscar\" para gerar o relatório"}
+                </p>
+              )}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -107,14 +126,14 @@ const AgentsReportPanel = () => {
                 </TableHeader>
                 <TableBody>
                   {agents.map((agent: any) => (
-                    <TableRow key={agent.id || agent.agent_id}>
-                      <TableCell className="font-medium">{agent.name || agent.agent_name || `Agente ${agent.id}`}</TableCell>
-                      <TableCell className="font-mono text-sm">{formatTime(agent.logged_time || agent.login_time)}</TableCell>
-                      <TableCell className="font-mono text-sm">{formatTime(agent.pause_time || agent.paused_time)}</TableCell>
-                      <TableCell className="font-mono text-sm">{formatTime(agent.call_time || agent.talking_time)}</TableCell>
-                      <TableCell className="text-center">{agent.calls_count ?? agent.total_calls ?? "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{formatTime(agent.average_call_time || agent.aht)}</TableCell>
-                      <TableCell className="font-mono text-sm">{formatTime(agent.idle_time || agent.wait_time)}</TableCell>
+                    <TableRow key={agent.id || agent.agent_id || agent.user_id}>
+                      <TableCell className="font-medium">{agent.name || agent.agent_name || agent.user_name || `Agente ${agent.id}`}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatTime(agent.logged_time || agent.login_time || agent.online_time)}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatTime(agent.pause_time || agent.paused_time || agent.break_time)}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatTime(agent.call_time || agent.talking_time || agent.talk_time)}</TableCell>
+                      <TableCell className="text-center">{agent.calls_count ?? agent.total_calls ?? agent.calls ?? agent.call_count ?? "—"}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatTime(agent.average_call_time || agent.aht || agent.avg_talk_time)}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatTime(agent.idle_time || agent.wait_time || agent.available_time)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
