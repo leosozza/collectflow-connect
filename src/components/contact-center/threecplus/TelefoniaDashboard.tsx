@@ -520,16 +520,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { openWaiting, setPauseControls, closeAtendimento, setAgentStatus, setOnFinishDisposition, isOpen: modalIsOpen } = useAtendimentoModalSafe();
-
-  // Track when modal closes to suppress ACW for 5 seconds (race condition guard)
-  const prevModalOpen = useRef(modalIsOpen);
-  useEffect(() => {
-    if (prevModalOpen.current && !modalIsOpen) {
-      modalClosedAtRef.current = Date.now();
-    }
-    prevModalOpen.current = modalIsOpen;
-  }, [modalIsOpen]);
+  const { setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
 
   // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
