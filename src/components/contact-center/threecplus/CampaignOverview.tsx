@@ -83,7 +83,9 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
               <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
               <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
-              <TableHead className="text-xs h-9 w-10" />
+              <TableHead className="text-xs h-9 w-10">
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
