@@ -189,14 +189,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     }
   };
 
-  if (!conversation) return null;
-
-  const statusLabels: Record<string, string> = {
-    pendente: "Pendente",
-    pago: "Pago",
-    quebrado: "Quebrado",
-  };
-
   // Auto-assign "Em Dia" or "Quitado" disposition based on collection status
   useEffect(() => {
     if (!conversation || !linkedClient?.status_cobranca_id || !statusCobranca) return;
@@ -208,7 +200,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
 
     const autoAssign = async () => {
       try {
-        // Find the matching whatsapp disposition type
         const { data: dispType } = await supabase
           .from("call_disposition_types")
           .select("id")
@@ -219,7 +210,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
           .maybeSingle();
         if (!dispType) return;
 
-        // Check if already assigned
         const { data: existing } = await supabase
           .from("conversation_disposition_assignments" as any)
           .select("id")
@@ -228,7 +218,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
           .maybeSingle();
         if (existing) return;
 
-        // Insert auto assignment
         await supabase
           .from("conversation_disposition_assignments" as any)
           .insert({
@@ -241,6 +230,14 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     };
     autoAssign();
   }, [conversation?.id, linkedClient?.status_cobranca_id, statusCobranca]);
+
+  if (!conversation) return null;
+
+  const statusLabels: Record<string, string> = {
+    pendente: "Pendente",
+    pago: "Pago",
+    quebrado: "Quebrado",
+  };
 
   return (
     <div className="w-[340px] border-l border-border bg-card flex flex-col h-full overflow-hidden">
