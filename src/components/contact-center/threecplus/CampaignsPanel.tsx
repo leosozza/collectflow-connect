@@ -671,7 +671,8 @@ const CampaignsPanel = () => {
                               );
                             })()}
 
-                            <p className="text-sm font-medium text-foreground">Qualificações Vinculadas</p>
+                            <p className="text-sm font-medium text-foreground">Qualificações Configuradas</p>
+                            <p className="text-xs text-muted-foreground mb-2">Lista de qualificações vinculadas à campanha. Resultados quantitativos disponíveis na aba Produtividade.</p>
                             {(campaignQualifications[cid] || []).length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma qualificação encontrada nesta campanha</p>
                             ) : (

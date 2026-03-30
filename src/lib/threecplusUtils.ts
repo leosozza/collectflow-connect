@@ -51,6 +51,7 @@ export function normalizeCampaignStatus(c: any): {
     c.statistics?.total ??
     c.total_records ??
     c.total ??
+    c.statistics?.mailing_total ??
     0;
 
   const worked =
@@ -58,6 +59,7 @@ export function normalizeCampaignStatus(c: any): {
     c.statistics?.completed ??
     c.worked_records ??
     c.completed ??
+    c.statistics?.mailing_worked ??
     0;
 
   const progress = total > 0 ? Math.round((worked / total) * 100) : 0;

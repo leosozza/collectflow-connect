@@ -417,8 +417,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             })
             .map(async (c: any) => {
               try {
+                const { extractObject } = await import("@/lib/threecplusUtils");
                 const stats = await invoke("campaign_statistics", { campaign_id: c.id });
-                return { ...c, statistics: stats };
+                return { ...c, statistics: extractObject(stats) };
               } catch {
                 return c;
               }
