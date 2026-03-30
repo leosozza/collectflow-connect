@@ -367,6 +367,8 @@ const WhatsAppChatLayout = () => {
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}
+            dispositionAssignments={dispositionAssignments}
+            dispositionTypes={dispositionTypes}
           />
         </div>
         <ChatPanel
