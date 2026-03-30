@@ -387,6 +387,8 @@ const WhatsAppChatLayout = () => {
           quickReplies={quickReplies}
           slaDeadline={(selectedConv as any)?.sla_deadline_at}
           operatorName={profile?.full_name}
+          dispositionAssignments={dispositionAssignments}
+          dispositionTypes={dispositionTypes}
         />
         {sidebarOpen && (
           <ContactSidebar
