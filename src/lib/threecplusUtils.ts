@@ -13,6 +13,22 @@ export function extractList(data: any): any[] {
   return [];
 }
 
+/** Extract a single object from any 3CPlus response shape (unwraps proxy wrapper + nested data) */
+export function extractObject(data: any): Record<string, any> {
+  if (!data || typeof data !== 'object') return {};
+  // If has .data and .data is an object (not array), unwrap
+  if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+    // Could have data.data.data (3CPlus inconsistency)
+    if (data.data.data && typeof data.data.data === 'object' && !Array.isArray(data.data.data)) {
+      return data.data.data;
+    }
+    return data.data;
+  }
+  // Remove proxy-added fields (status, success) and return the rest
+  const { status, success, ...rest } = data;
+  return rest;
+}
+
 /** Normalize campaign status into a predictable shape */
 export function normalizeCampaignStatus(c: any): {
   isRunning: boolean;
@@ -35,6 +51,7 @@ export function normalizeCampaignStatus(c: any): {
     c.statistics?.total ??
     c.total_records ??
     c.total ??
+    c.statistics?.mailing_total ??
     0;
 
   const worked =
@@ -42,6 +59,7 @@ export function normalizeCampaignStatus(c: any): {
     c.statistics?.completed ??
     c.worked_records ??
     c.completed ??
+    c.statistics?.mailing_worked ??
     0;
 
   const progress = total > 0 ? Math.round((worked / total) * 100) : 0;
