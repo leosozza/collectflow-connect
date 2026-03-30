@@ -20,7 +20,22 @@ interface CampaignOverviewProps {
 
 const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: CampaignOverviewProps) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const allExpanded = campaigns.length > 0 && expandedIds.size === campaigns.length;
+
+  const toggleOne = (id: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allExpanded) setExpandedIds(new Set());
+    else setExpandedIds(new Set(campaigns.map((c) => c.id)));
+  };
 
   const handlePauseResume = async (campaignId: number, isPaused: boolean) => {
     const action = isPaused ? "resume_campaign" : "pause_campaign";
@@ -83,21 +98,21 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
               <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
               <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
-              <TableHead className="text-xs h-9 w-10">
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              <TableHead className="text-xs h-9 w-10 cursor-pointer" onClick={toggleAll}>
+                {allExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {campaigns.map((c) => {
               const n = normalizeCampaignStatus(c);
-              const isExpanded = expandedId === c.id;
+              const isExpanded = expandedIds.has(c.id);
 
               return (
                 <Fragment key={c.id}>
                   <TableRow
                     className={`cursor-pointer ${!n.isRunning && !n.isPaused ? "opacity-60" : ""}`}
-                    onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                    onClick={() => toggleOne(c.id)}
                   >
                     <TableCell className="py-2 w-8">
                       {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
