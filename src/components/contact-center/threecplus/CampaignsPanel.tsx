@@ -523,16 +523,24 @@ const CampaignsPanel = () => {
                           <TabsContent value="overview" className="mt-3">
                             {(() => {
                               const m = campaignMetrics[cid] || {};
+                              const dialed = m.total_dialed ?? m.dialed ?? m.total_calls ?? m.total ?? 0;
+                              const answered = m.answered ?? m.connected ?? m.delivered ?? 0;
+                              const abandoned = m.abandoned ?? m.dropped ?? 0;
+                              const asr = m.asr ?? (dialed > 0 ? (answered / dialed * 100) : null);
+                              const talkTime = m.average_talk_time ?? m.avg_talk_time ?? m.talk_time_avg ?? 0;
+                              const inQueue = m.in_queue ?? m.pending ?? m.queue ?? 0;
+                              const completed = m.completed ?? m.completion ?? 0;
+                              const noAnswer = m.no_answer ?? m.unanswered ?? 0;
                               return (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                  <MetricCard label="Total Discado" value={fmt(m.total_dialed || m.dialed)} />
-                                  <MetricCard label="Atendidas" value={fmt(m.answered)} sub={m.total_dialed ? fmtPct((m.answered / m.total_dialed) * 100) : undefined} />
-                                  <MetricCard label="Abandonadas" value={fmt(m.abandoned || m.dropped)} />
-                                  <MetricCard label="ASR" value={fmtPct(m.asr)} />
-                                  <MetricCard label="Tempo Médio" value={fmtTime(m.average_talk_time || m.avg_talk_time)} />
-                                  <MetricCard label="Na Fila" value={fmt(m.in_queue || m.pending)} />
-                                  <MetricCard label="Completados" value={fmt(m.completed)} />
-                                  <MetricCard label="Sem Atender" value={fmt(m.no_answer)} />
+                                  <MetricCard label="Total Discado" value={fmt(dialed)} />
+                                  <MetricCard label="Atendidas" value={fmt(answered)} sub={dialed > 0 ? fmtPct((answered / dialed) * 100) : undefined} />
+                                  <MetricCard label="Abandonadas" value={fmt(abandoned)} />
+                                  <MetricCard label="ASR" value={fmtPct(asr)} />
+                                  <MetricCard label="Tempo Médio" value={fmtTime(talkTime)} />
+                                  <MetricCard label="Na Fila" value={fmt(inQueue)} />
+                                  <MetricCard label="Completados" value={fmt(completed)} />
+                                  <MetricCard label="Sem Atender" value={fmt(noAnswer)} />
                                 </div>
                               );
                             })()}
