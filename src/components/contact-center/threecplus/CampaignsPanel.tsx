@@ -153,7 +153,7 @@ const CampaignsPanel = () => {
 
       setCampaignLists(prev => ({ ...prev, [campaignId]: extractList(listsRes) }));
       setCampaignAgents(prev => ({ ...prev, [campaignId]: extractList(agentsRes) }));
-      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: totalMetrics }));
+      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: extractObject(totalMetrics) }));
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
       setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
       setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
