@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCollectionRules } from "@/services/automacaoService";
+import { fetchTemplates, WhatsAppTemplate } from "@/services/whatsappTemplateService";
 import { Client } from "@/services/clientService";
 import {
   deduplicateClients,
