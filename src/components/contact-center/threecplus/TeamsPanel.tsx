@@ -127,7 +127,7 @@ const TeamsPanel = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {teams.map((t: any) => (
+                {filteredTeams.map((t: any) => (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm text-muted-foreground">{t.id}</TableCell>
                     <TableCell className="font-medium">{t.name}</TableCell>

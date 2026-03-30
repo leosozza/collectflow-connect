@@ -103,7 +103,7 @@ const ThreeCPlusPanel = () => {
     teams: <TeamsPanel />,
     schedules: <SchedulesPanel />,
     users: <UsersPanel />,
-    receptive: <ReceptiveQueuesPanel />,
+    
     routes: <RoutesPanel />,
     "office-hours": <OfficeHoursPanel />,
   };
