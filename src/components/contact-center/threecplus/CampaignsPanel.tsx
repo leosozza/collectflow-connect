@@ -93,8 +93,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-users-list", domain],
     queryFn: async () => {
       const data = await invoke("list_users");
-      const list = data?.data?.data || data?.data || (Array.isArray(data) ? data : []);
-      return Array.isArray(list) ? list : [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
@@ -103,7 +102,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-qualification-lists", domain],
     queryFn: async () => {
       const data = await invoke("list_qualification_lists");
-      return Array.isArray(data) ? data : data?.data || [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
@@ -112,7 +111,7 @@ const CampaignsPanel = () => {
     queryKey: ["3cp-work-break-groups", domain],
     queryFn: async () => {
       const data = await invoke("list_work_break_groups");
-      return Array.isArray(data) ? data : data?.data || [];
+      return extractList(data);
     },
     enabled: hasCredentials,
   });
