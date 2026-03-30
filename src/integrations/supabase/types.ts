@@ -1544,6 +1544,45 @@ export type Database = {
           },
         ]
       }
+      conversation_disposition_assignments: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          conversation_id: string
+          disposition_type_id: string
+          id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          conversation_id: string
+          disposition_type_id: string
+          id?: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          conversation_id?: string
+          disposition_type_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_disposition_assignments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_disposition_assignments_disposition_type_id_fkey"
+            columns: ["disposition_type_id"]
+            isOneToOne: false
+            referencedRelation: "call_disposition_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_tag_assignments: {
         Row: {
           conversation_id: string

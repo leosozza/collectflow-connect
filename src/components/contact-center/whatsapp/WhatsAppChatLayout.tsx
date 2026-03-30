@@ -23,17 +23,6 @@ import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
 import GlobalSearch from "./GlobalSearch";
 
-interface ConversationTag {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface TagAssignment {
-  conversation_id: string;
-  tag_id: string;
-}
-
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
@@ -47,8 +36,6 @@ const WhatsAppChatLayout = () => {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [tags, setTags] = useState<ConversationTag[]>([]);
-  const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
   const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
 
   // Track known waiting conversation IDs to avoid duplicate notifications
@@ -59,19 +46,6 @@ const WhatsAppChatLayout = () => {
     if (!tenantId) return;
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
     fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
-
-    // Load tags
-    supabase
-      .from("conversation_tags")
-      .select("id, name, color")
-      .eq("tenant_id", tenantId)
-      .then(({ data }) => setTags((data as ConversationTag[]) || []));
-
-    // Load tag assignments
-    supabase
-      .from("conversation_tag_assignments")
-      .select("conversation_id, tag_id")
-      .then(({ data }) => setTagAssignments((data as TagAssignment[]) || []));
 
     // Load operators for admin filter
     supabase
@@ -368,8 +342,6 @@ const WhatsAppChatLayout = () => {
             onStatusChange={handleStatusChangeFromList}
             onDelete={handleDeleteConversation}
             instances={instances.map((i) => ({ id: i.id, name: i.name }))}
-            tags={tags}
-            tagAssignments={tagAssignments}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}
           />
