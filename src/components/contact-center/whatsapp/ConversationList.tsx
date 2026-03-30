@@ -181,7 +181,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
     const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
-    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator;
+    const matchLink = linkFilter === "all" || (linkFilter === "linked" ? !!c.client_id : !c.client_id);
+    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator && matchLink;
   });
 
   const statusColors: Record<string, string> = {
