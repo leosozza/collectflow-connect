@@ -84,9 +84,13 @@ export const fetchClients = async (filters?: {
       const term = filters.search.trim();
       const cleanTerm = term.replace(/\D/g, "");
       if (cleanTerm.length > 0 && cleanTerm === term.replace(/[.\-\/\s]/g, "")) {
-        query = query.or(`nome_completo.ilike.%${term}%,cpf.ilike.%${cleanTerm}%`);
+        query = query.or(
+          `nome_completo.ilike.%${term}%,cpf.ilike.%${cleanTerm}%,phone.ilike.%${cleanTerm}%,phone2.ilike.%${cleanTerm}%,phone3.ilike.%${cleanTerm}%,email.ilike.%${term}%`
+        );
       } else {
-        query = query.or(`nome_completo.ilike.%${term}%,cpf.ilike.%${term}%`);
+        query = query.or(
+          `nome_completo.ilike.%${term}%,cpf.ilike.%${term}%,phone.ilike.%${term}%,phone2.ilike.%${term}%,phone3.ilike.%${term}%,email.ilike.%${term}%`
+        );
       }
     }
 
