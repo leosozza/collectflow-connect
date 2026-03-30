@@ -13,7 +13,7 @@ import BlockListPanel from "./BlockListPanel";
 import TeamsPanel from "./TeamsPanel";
 import SchedulesPanel from "./SchedulesPanel";
 import UsersPanel from "./UsersPanel";
-import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
+
 import RoutesPanel from "./RoutesPanel";
 import OfficeHoursPanel from "./OfficeHoursPanel";
 import WorkBreakIntervalsPanel from "./WorkBreakIntervalsPanel";
