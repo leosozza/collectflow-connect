@@ -156,7 +156,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                     </TableCell>
                   </TableRow>
                   {isExpanded && (
-                    <TableRow key={`${c.id}-detail`} className="bg-muted/30 hover:bg-muted/30">
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableCell colSpan={8} className="py-3 px-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                           <div>
