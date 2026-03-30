@@ -98,21 +98,21 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
               <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
               <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
-              <TableHead className="text-xs h-9 w-10">
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              <TableHead className="text-xs h-9 w-10 cursor-pointer" onClick={toggleAll}>
+                {allExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {campaigns.map((c) => {
               const n = normalizeCampaignStatus(c);
-              const isExpanded = expandedId === c.id;
+              const isExpanded = expandedIds.has(c.id);
 
               return (
                 <Fragment key={c.id}>
                   <TableRow
                     className={`cursor-pointer ${!n.isRunning && !n.isPaused ? "opacity-60" : ""}`}
-                    onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                    onClick={() => toggleOne(c.id)}
                   >
                     <TableCell className="py-2 w-8">
                       {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
