@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Pause, Play, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { normalizeCampaignStatus } from "@/lib/threecplusUtils";
@@ -86,14 +87,15 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Campanhas ({campaigns.length})</h3>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCollapsed((p) => !p)}>
-          {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
-        </Button>
-      </div>
-      {!collapsed && (
+    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+      <CollapsibleTrigger className="flex items-center justify-between w-full rounded-lg border border-border/60 bg-card px-4 py-3 hover:bg-accent/30 transition-colors cursor-pointer">
+        <span className="text-sm font-semibold text-foreground">
+          Campanhas ({campaigns.length})
+        </span>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${!collapsed ? "rotate-180" : ""}`} />
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="mt-2">
       <div className="rounded-lg border border-border/60 overflow-hidden">
         <Table>
           <TableHeader>
@@ -221,8 +223,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
           </TableBody>
         </Table>
       </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
