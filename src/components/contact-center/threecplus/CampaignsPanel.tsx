@@ -426,7 +426,12 @@ const CampaignsPanel = () => {
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
-                    {getStatusBadge(c.status)}
+                    <Badge
+                      variant={n.isRunning ? "default" : n.isPaused ? "secondary" : "outline"}
+                      className={n.isPaused ? "bg-yellow-500/20 text-yellow-700" : ""}
+                    >
+                      {n.statusLabel}
+                    </Badge>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                   </div>
                 </div>
@@ -439,6 +444,12 @@ const CampaignsPanel = () => {
                       </div>
                     ) : (
                       <>
+                        {/* Refresh button */}
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm" onClick={() => loadCampaignDetails(cid)} className="gap-2 text-xs">
+                            <RefreshCw className="w-3.5 h-3.5" /> Atualizar Detalhes
+                          </Button>
+                        </div>
                         {/* Aggressiveness Slider */}
                         <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
                           <Gauge className="w-5 h-5 text-primary shrink-0" />
