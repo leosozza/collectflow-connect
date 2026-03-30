@@ -37,7 +37,6 @@ const groups = [
   {
     id: "chamadas", label: "Chamadas", icon: PhoneCall,
     tabs: [
-      { value: "receptive", label: "Receptivo", icon: PhoneIncoming },
       { value: "schedules", label: "Agendamentos", icon: CalendarClock },
       { value: "blocklist", label: "Bloqueio", icon: ShieldBan },
     ],
