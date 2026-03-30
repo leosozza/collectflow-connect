@@ -151,6 +151,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
+  const [linkFilter, setLinkFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Build a set of conversation IDs that have the selected tag
