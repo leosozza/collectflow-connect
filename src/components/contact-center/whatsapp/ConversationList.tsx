@@ -413,6 +413,28 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                             )}
                           </div>
                         </div>
+                        {/* Disposition badges */}
+                        {(() => {
+                          const convDisps = dispositionAssignments.filter((a) => a.conversation_id === conv.id);
+                          if (convDisps.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {convDisps.map((a) => {
+                                const dt = dispositionTypes.find((d) => d.id === a.disposition_type_id);
+                                if (!dt) return null;
+                                return (
+                                  <span
+                                    key={dt.id}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white"
+                                    style={{ backgroundColor: dt.color || "hsl(var(--primary))" }}
+                                  >
+                                    {dt.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </button>
