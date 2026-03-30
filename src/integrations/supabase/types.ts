@@ -697,6 +697,7 @@ export type Database = {
           behavior: string
           blocklist_days: number
           blocklist_mode: string
+          channel: string
           color: string
           created_at: string
           group_name: string
@@ -721,6 +722,7 @@ export type Database = {
           behavior?: string
           blocklist_days?: number
           blocklist_mode?: string
+          channel?: string
           color?: string
           created_at?: string
           group_name?: string
@@ -745,6 +747,7 @@ export type Database = {
           behavior?: string
           blocklist_days?: number
           blocklist_mode?: string
+          channel?: string
           color?: string
           created_at?: string
           group_name?: string
