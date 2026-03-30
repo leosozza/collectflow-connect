@@ -94,9 +94,8 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               const isExpanded = expandedId === c.id;
 
               return (
-                <>
+                <Fragment key={c.id}>
                   <TableRow
-                    key={c.id}
                     className={`cursor-pointer ${!n.isRunning && !n.isPaused ? "opacity-60" : ""}`}
                     onClick={() => setExpandedId(isExpanded ? null : c.id)}
                   >
