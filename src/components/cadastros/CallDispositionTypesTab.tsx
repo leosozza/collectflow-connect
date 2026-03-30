@@ -337,13 +337,13 @@ const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "wha
                 <TableHead className="w-10">Cor</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Impacto</TableHead>
-                <TableHead>Comportamento</TableHead>
+                {!isWhatsApp && <TableHead>Comportamento</TableHead>}
                 <TableHead className="text-center">Conversão</TableHead>
                 <TableHead className="text-center">CPC</TableHead>
-                <TableHead className="text-center">Desconhece</TableHead>
-                <TableHead className="text-center">Callback</TableHead>
-                <TableHead className="text-center">Agenda</TableHead>
-                <TableHead className="text-center">Bloqueio</TableHead>
+                {!isWhatsApp && <TableHead className="text-center">Desconhece</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Callback</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Agenda</TableHead>}
+                {!isWhatsApp && <TableHead className="text-center">Bloqueio</TableHead>}
                 <TableHead>Ativo</TableHead>
                 <TableHead className="w-20">Ações</TableHead>
               </TableRow>
