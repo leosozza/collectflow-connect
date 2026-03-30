@@ -88,10 +88,22 @@ const TeamsPanel = () => {
           <UsersRound className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Equipes</h3>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="active">Ativas</SelectItem>
+              <SelectItem value="inactive">Inativas</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <Card>
