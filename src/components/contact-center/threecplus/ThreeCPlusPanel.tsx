@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, Route, PhoneIncoming, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan } from "lucide-react";
+import { AlertTriangle, LayoutDashboard, Megaphone, PhoneCall, Settings, BarChart3, Users2, Route, CalendarClock, UserCog, Timer, Clock, Award, UsersRound, ShieldBan } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import BlockListPanel from "./BlockListPanel";
 import TeamsPanel from "./TeamsPanel";
 import SchedulesPanel from "./SchedulesPanel";
 import UsersPanel from "./UsersPanel";
-import ReceptiveQueuesPanel from "./ReceptiveQueuesPanel";
+
 import RoutesPanel from "./RoutesPanel";
 import OfficeHoursPanel from "./OfficeHoursPanel";
 import WorkBreakIntervalsPanel from "./WorkBreakIntervalsPanel";
@@ -37,7 +37,6 @@ const groups = [
   {
     id: "chamadas", label: "Chamadas", icon: PhoneCall,
     tabs: [
-      { value: "receptive", label: "Receptivo", icon: PhoneIncoming },
       { value: "schedules", label: "Agendamentos", icon: CalendarClock },
       { value: "blocklist", label: "Bloqueio", icon: ShieldBan },
     ],
@@ -104,7 +103,7 @@ const ThreeCPlusPanel = () => {
     teams: <TeamsPanel />,
     schedules: <SchedulesPanel />,
     users: <UsersPanel />,
-    receptive: <ReceptiveQueuesPanel />,
+    
     routes: <RoutesPanel />,
     "office-hours": <OfficeHoursPanel />,
   };

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,21 @@ const TeamsPanel = () => {
   const [loading, setLoading] = useState(false);
   const [viewTeam, setViewTeam] = useState<any>(null);
   const [viewLoading, setViewLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("active");
+
+  const isTeamActive = (t: any) => {
+    if (typeof t.active === "boolean") return t.active;
+    if (typeof t.status === "string") return t.status !== "inactive" && t.status !== "disabled";
+    return true;
+  };
+
+  const filteredTeams = useMemo(() => {
+    if (statusFilter === "all") return teams;
+    return teams.filter((t) => {
+      const active = isTeamActive(t);
+      return statusFilter === "active" ? active : !active;
+    });
+  }, [teams, statusFilter]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
@@ -72,10 +88,22 @@ const TeamsPanel = () => {
           <UsersRound className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">Equipes</h3>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="active">Ativas</SelectItem>
+              <SelectItem value="inactive">Inativas</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -84,8 +112,10 @@ const TeamsPanel = () => {
             <div className="p-4 space-y-2">
               {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : teams.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">Nenhuma equipe encontrada</p>
+          ) : filteredTeams.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {teams.length === 0 ? "Nenhuma equipe encontrada" : "Nenhuma equipe com o filtro selecionado"}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -97,7 +127,7 @@ const TeamsPanel = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {teams.map((t: any) => (
+                {filteredTeams.map((t: any) => (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm text-muted-foreground">{t.id}</TableCell>
                     <TableCell className="font-medium">{t.name}</TableCell>
