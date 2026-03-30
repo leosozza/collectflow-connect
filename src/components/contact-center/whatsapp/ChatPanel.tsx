@@ -31,6 +31,8 @@ interface ChatPanelProps {
   quickReplies?: any[];
   slaDeadline?: string | null;
   operatorName?: string;
+  dispositionAssignments?: { conversation_id: string; disposition_type_id: string }[];
+  dispositionTypes?: { id: string; label: string; color: string; key: string }[];
 }
 
 const ChatPanel = ({
