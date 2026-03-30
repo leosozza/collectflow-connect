@@ -143,7 +143,8 @@ const SwitchCard = ({
   </div>
 );
 
-const CallDispositionTypesTab = () => {
+const CallDispositionTypesTab = ({ channel = "call" }: { channel?: "call" | "whatsapp" }) => {
+  const isWhatsApp = channel === "whatsapp";
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const queryClient = useQueryClient();
