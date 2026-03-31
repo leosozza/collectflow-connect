@@ -151,7 +151,16 @@ const SuperAdminLayout = () => {
   const location = useLocation();
   const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sa-sidebar-collapsed") === "true";
+    } catch { return false; }
+  });
+
+  const toggleCollapsed = (val: boolean) => {
+    setCollapsed(val);
+    try { localStorage.setItem("sa-sidebar-collapsed", String(val)); } catch {};
+  };
 
   // Filter nav items based on permissions
   const filteredGroups = useMemo(() => {
