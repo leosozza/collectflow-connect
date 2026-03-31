@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useUrlState } from "@/hooks/useUrlState";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAuditLogs, AuditLog } from "@/services/auditService";
 import { supabase } from "@/integrations/supabase/client";
