@@ -24,6 +24,8 @@ const PAGE_SIZE = 100;
 
 const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const originUrl = location.pathname + location.search;
   const [pages, setPages] = useState<Record<string, number>>({});
 
   if (loading) {
