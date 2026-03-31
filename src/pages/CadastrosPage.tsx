@@ -33,6 +33,7 @@ interface NavGroup {
 }
 
 const CadastrosPage = () => {
+  useScrollRestore();
   const { tab } = useParams();
   const navigate = useNavigate();
   const active = tab || "credores";

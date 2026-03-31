@@ -53,10 +53,11 @@ const entityLabels: Record<string, string> = {
 
 /* ─── Logs Tab (existing content) ─── */
 const LogsTab = () => {
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [actionFilter, setActionFilter] = useState("todos");
-  const [entityFilter, setEntityFilter] = useState("todos");
+  useScrollRestore();
+  const [dateFrom, setDateFrom] = useUrlState("dateFrom", "");
+  const [dateTo, setDateTo] = useUrlState("dateTo", "");
+  const [actionFilter, setActionFilter] = useUrlState("action", "todos");
+  const [entityFilter, setEntityFilter] = useUrlState("entity", "todos");
 
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ["audit-logs", dateFrom, dateTo, actionFilter, entityFilter],

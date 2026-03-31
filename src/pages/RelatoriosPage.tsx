@@ -18,6 +18,7 @@ import AgingReport from "@/components/relatorios/AgingReport";
 import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
+  useScrollRestore();
   const now = new Date();
   const { tenant } = useTenant();
   const [selectedYear, setSelectedYear] = useUrlState("year", now.getFullYear().toString());
