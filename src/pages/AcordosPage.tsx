@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { supabase } from "@/integrations/supabase/client";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
