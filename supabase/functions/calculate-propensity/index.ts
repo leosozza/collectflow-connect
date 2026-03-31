@@ -224,9 +224,12 @@ function calculateScore(
   const reasons: string[] = [];
   if (events.length < 3) reasons.push("Histórico limitado");
   if (contactScore >= 20) reasons.push("Contato recente");
-  if (engagementScore >= 25) reasons.push("Bom engajamento");
+  if (engagementScore >= 20) reasons.push("Bom engajamento");
+  if (whatsappInbound > 0 && engagementScore < 20) reasons.push("Respondeu no WhatsApp");
   if (paymentScore >= 25) reasons.push("Pagamentos em dia");
+  if (partialPayment && paymentScore < 25) reasons.push("Pagamento parcial realizado");
   if (paymentScore <= -20) reasons.push("Quebra de acordo");
+  if (paymentScore === -5) reasons.push("Acordo criado sem formalização");
   if (profileScore <= -10) reasons.push(`Perfil: ${profile}`);
   if (delayScore <= -10) reasons.push("Atraso prolongado");
   const score_reason = reasons.length > 0 ? reasons.slice(0, 3).join("; ") : "Score calculado com base no histórico";
