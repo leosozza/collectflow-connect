@@ -229,13 +229,6 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
-                  checked={filters.quitados || false}
-                  onCheckedChange={(checked) => update("quitados", !!checked)}
-                />
-                <span className="text-sm text-foreground">Quitados</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox
                   checked={filters.semContato || false}
                   onCheckedChange={(checked) => update("semContato", !!checked)}
                 />
