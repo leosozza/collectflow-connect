@@ -154,7 +154,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
                           className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/atendimento/${client.id}`);
+                            navigate(`/atendimento/${client.id}`, { state: { from: originUrl } });
                           }}
                           title="Atender"
                         >

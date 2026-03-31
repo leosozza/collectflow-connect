@@ -824,7 +824,7 @@ const CarteiraPage = () => {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8 text-primary hover:text-primary"
-                            onClick={() => navigate(`/atendimento/${client.id}`)}
+                            onClick={() => navigateWithOrigin(`/atendimento/${client.id}`)}
                             title="Atender"
                           >
                             <Headset className="w-4 h-4" />
