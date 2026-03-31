@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
+import { useNavigateWithOrigin } from "@/hooks/useNavigateWithOrigin";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";

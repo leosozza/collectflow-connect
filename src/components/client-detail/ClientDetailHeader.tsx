@@ -269,7 +269,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       <Card className="p-4">
         {/* Linha 1: Nome + Ações */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/carteira")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(backTo || "/carteira")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-2xl font-bold text-foreground flex-1">{client.nome_completo}</h1>
