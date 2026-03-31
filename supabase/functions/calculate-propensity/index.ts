@@ -134,15 +134,22 @@ function calculateScore(
     else contactScore = 10;
   }
 
-  // ── DIM 2: Engajamento (0 to +25) ──
+  // ── DIM 2: Engajamento (0 to +30) — sinais reais de propensão ──
   let engagementScore = 0;
-  if (totalOutreach > 0) {
-    const responseRatio = totalResponses / totalOutreach;
-    if (responseRatio >= 0.4) engagementScore = 25;
-    else if (responseRatio >= 0.15) engagementScore = 10;
-  } else if (whatsappInbound > 0) {
-    engagementScore = 25;
-  }
+  // Respondeu no WhatsApp (+5 por mensagem, max +10)
+  engagementScore += Math.min(whatsappInbound * 5, 10);
+  // Contato efetivo por ligação/disposition (+5)
+  if (lastContactDays >= 0) engagementScore += 5;
+  // Formalizou intenção de negociação (+5)
+  if (agreementsCreated > 0) engagementScore += 5;
+  // Formalizou negociação (+5)
+  if (agreementsSigned > 0) engagementScore += 5;
+  // Pagamento parcial/entrada (+5)
+  if (partialPayment) engagementScore += 5;
+  // Pagamento confirmado (+10)
+  if (paymentConfirmed) engagementScore += 10;
+  // Cap at 30
+  engagementScore = Math.min(engagementScore, 30);
 
   // ── DIM 3: Histórico de pagamento (-20 to +25) ──
   let paymentScore = 0;
