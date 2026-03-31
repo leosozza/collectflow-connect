@@ -128,6 +128,7 @@ const CarteiraPage = () => {
     tipoDevedorId: "", tipoDividaId: "", statusCobrancaId: "", semAcordo: false,
     cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
     valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
+    scoreRange: "", debtorProfile: "",
   }), []);
 
   const setFilters = useCallback(
