@@ -371,10 +371,27 @@ const CarteiraPage = () => {
       filtered = filtered.filter(c => (c as any).enrichment_data != null);
     }
     if (filters.tipoDevedorId) {
-      filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
+      const ids = filters.tipoDevedorId.split(",");
+      filtered = filtered.filter((c: any) => ids.includes(c.tipo_devedor_id));
     }
     if (filters.tipoDividaId) {
-      filtered = filtered.filter((c: any) => c.tipo_divida_id === filters.tipoDividaId);
+      const ids = filters.tipoDividaId.split(",");
+      filtered = filtered.filter((c: any) => ids.includes(c.tipo_divida_id));
+    }
+    if (filters.debtorProfile) {
+      const profiles = filters.debtorProfile.split(",");
+      filtered = filtered.filter((c: any) => profiles.includes(c.debtor_profile));
+    }
+    if (filters.scoreRange) {
+      const ranges = filters.scoreRange.split(",");
+      filtered = filtered.filter((c: any) => {
+        const s = c.propensity_score;
+        if (s == null) return false;
+        if (ranges.includes("bom") && s >= 75) return true;
+        if (ranges.includes("medio") && s >= 50 && s < 75) return true;
+        if (ranges.includes("ruim") && s < 50) return true;
+        return false;
+      });
     }
     if (filters.statusCobrancaId) {
       const selectedIds = filters.statusCobrancaId.split(",");
