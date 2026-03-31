@@ -56,6 +56,8 @@ const ClientsPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
+  const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
 
   const filters = useMemo(() => ({
     status: urlStatus,
@@ -75,7 +77,9 @@ const ClientsPage = () => {
     semContato: urlSemContato,
     emDia: urlEmDia,
     higienizados: urlHigienizados,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
+    scoreRange: urlScoreRange,
+    debtorProfile: urlDebtorProfile,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlScoreRange, urlDebtorProfile]);
 
   const setFilters = useMemo(() => {
     return (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
