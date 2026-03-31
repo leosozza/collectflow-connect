@@ -40,10 +40,10 @@ function calculateScore(
   if (events.length === 0) {
     return {
       cpf: "",
-      score: 30,
+      score: 0,
       preferred_channel: "unknown",
       suggested_queue: "low_history",
-      score_reason: "Sem histórico suficiente para classificação",
+      score_reason: "Sem histórico de interação",
       score_confidence: "low",
       suggested_profile: null,
     };
