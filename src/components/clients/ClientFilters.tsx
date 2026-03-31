@@ -19,10 +19,10 @@ import { useTenant } from "@/hooks/useTenant";
 import { fetchCredores, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
 
 const DEBTOR_PROFILE_OPTIONS = [
-  { value: "ocasional", label: "Ocasional" },
-  { value: "recorrente", label: "Recorrente" },
-  { value: "resistente", label: "Resistente" },
-  { value: "insatisfeito", label: "Insatisfeito" },
+  { value: "ocasional", label: "Ocasional", title: "Atrasou, mas paga" },
+  { value: "recorrente", label: "Recorrente", title: "Sempre atrasa" },
+  { value: "resistente", label: "Resistente", title: "Não quer pagar" },
+  { value: "insatisfeito", label: "Insatisfeito", title: "Não paga por insatisfação" },
 ];
 
 const SCORE_RANGE_OPTIONS = [
