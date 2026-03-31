@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { Headset, ChevronLeft, ChevronRight } from "lucide-react";
