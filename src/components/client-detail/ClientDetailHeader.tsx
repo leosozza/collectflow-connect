@@ -47,7 +47,7 @@ const InfoItem = ({ label, value, className }: { label: string; value: React.Rea
   </div>
 );
 
-const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcordo }: ClientDetailHeaderProps) => {
+const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcordo, backTo }: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
