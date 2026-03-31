@@ -1,101 +1,144 @@
 
 
-# Plano: Score de Propensão Comportamental (sem nova dimensão)
+# Plano: Preservação de Contexto de Navegação
 
 ## Resumo
 
-Ajustar a edge function `calculate-propensity` para que o score represente propensão real de fechamento de acordo, baseado exclusivamente em comportamento observado. Cliente sem histórico começa em 0. Sem nova dimensão, sem score financeiro separado, sem alteração de banco.
+Implementar persistência completa de estado de navegação em todo o sistema, garantindo que filtros, busca, paginação, abas, view mode, scroll e origem sejam preservados ao navegar entre telas. Sem alterar layout, sem criar telas novas, sem mudar arquitetura.
 
-## Alterações no arquivo `supabase/functions/calculate-propensity/index.ts`
+## Estado Atual
 
-### 1. Score 0 para clientes sem histórico (linha 40-49)
+- **CarteiraPage**: Já usa `useUrlState` para todos os filtros, sort, viewMode — funciona bem
+- **AcordosPage, RelatoriosPage, GamificacaoPage, FinanceiroPage**: Já usam `useUrlState` parcialmente
+- **ClientDetailPage**: Usa `useState("titulos")` para aba ativa, só lê `?tab=acordo` via useEffect — não persiste outras abas
+- **AtendimentoPage**: Botão "Voltar" usa `navigate(-1)` — funciona mas não garante retorno com filtros
+- **ClientDetailHeader**: Botão voltar hardcoded para `/carteira` — perde filtros
+- **useUrlState**: Já persiste em sessionStorage por rota — infraestrutura sólida
+- **Scroll**: Nenhuma persistência implementada
 
-Alterar o bloco `if (events.length === 0)` para retornar `score: 0` e `score_reason: "Sem histórico de interação"`.
+## Alterações
 
-### 2. Remover base fixa +10 do cálculo (linha 181)
+### 1. Hook `useScrollRestore` (novo arquivo)
 
-Alterar de:
+Criar `src/hooks/useScrollRestore.ts`:
+- Salva posição de scroll no sessionStorage ao sair da rota (keyed por pathname)
+- Restaura scroll ao retornar, após breve delay para renderização
+- Usa `useEffect` com cleanup para capturar scroll antes do unmount
+- Key: `scroll:${pathname}`
+
+### 2. Hook `useNavigateWithOrigin` (novo arquivo)
+
+Criar `src/hooks/useNavigateWithOrigin.ts`:
+- Wrapper sobre `useNavigate` que automaticamente inclui `{ state: { from: pathname + search } }`
+- Export helper `useOriginBack(fallback)` que lê `location.state?.from` e faz `navigate(from || fallback)`
+
+### 3. CarteiraPage — scroll restore + origin na navegação
+
+- Importar `useScrollRestore` e ativar
+- Nas navegações para `/carteira/:cpf` e `/atendimento/:id`, passar `state: { from: pathname + search }`
+- Não precisa mudar filtros (já usam useUrlState)
+
+### 4. CarteiraKanban — origin na navegação
+
+- Nos `navigate()` para `/carteira/:cpf` e `/atendimento/:id`, passar `state: { from }` usando `useLocation`
+
+### 5. ClientDetailPage — persistir aba ativa em URL
+
+- Trocar `useState("titulos")` para `useUrlState("tab", "titulos")`
+- Remover o useEffect que lê `?tab=acordo` (useUrlState já cobre isso)
+- Botão "Voltar" (no ClientDetailHeader): usar `location.state?.from || "/carteira"` em vez de `/carteira` hardcoded
+
+### 6. ClientDetailHeader — back com origin
+
+- Receber `backTo` prop (string) do ClientDetailPage
+- ClientDetailPage passa `location.state?.from || "/carteira"` como `backTo`
+- Botão ArrowLeft navega para `backTo`
+
+### 7. AtendimentoPage — back com origin
+
+- O botão voltar já usa `navigate(-1)` que é ok para fluxo normal
+- No fallback "Cliente não encontrado", usar `location.state?.from || "/carteira"` em vez de `/carteira` hardcoded
+
+### 8. AcordosPage — scroll restore
+
+- Importar e ativar `useScrollRestore`
+
+### 9. ClientsPage (se existir listagem separada) — scroll restore
+
+- Importar e ativar `useScrollRestore`
+
+### 10. Páginas com abas via useState que devem usar useUrlState
+
+- **AuditoriaPage**: Filtros `dateFrom`, `actionFilter`, `entityFilter` → migrar para `useUrlState`
+- Outras páginas menores com filtros locais: avaliar caso a caso, priorizar rotas operacionais
+
+### 11. Aplicar scroll restore nas listagens principais
+
+Páginas que receberão `useScrollRestore`:
+- CarteiraPage
+- ClientsPage  
+- AcordosPage
+- RelatoriosPage
+- CadastrosPage
+
+## Detalhes Técnicos
+
+### useScrollRestore
+
+```typescript
+// Salva scroll ao unmount, restaura ao mount
+export function useScrollRestore() {
+  const { pathname } = useLocation();
+  const key = `scroll:${pathname}`;
+  
+  useEffect(() => {
+    const saved = sessionStorage.getItem(key);
+    if (saved) {
+      requestAnimationFrame(() => window.scrollTo(0, parseInt(saved)));
+      sessionStorage.removeItem(key);
+    }
+    return () => {
+      sessionStorage.setItem(key, String(window.scrollY));
+    };
+  }, [key]);
+}
 ```
-rawScore = 10 + contactScore + engagementScore + paymentScore + profileScore + delayScore
-```
-Para:
-```
-rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore
-```
 
-### 3. Redefinir Dimensão 2 (Engajamento) para valorizar sinais reais de propensão (linhas 137-145)
+### Navigate com origin
 
-A lógica atual só usa `responseRatio` (respostas / outreach). Trocar por um modelo aditivo dentro da mesma dimensão (0 a +30, expandido de 25):
+```typescript
+// Em CarteiraPage
+const location = useLocation();
+const originUrl = location.pathname + location.search;
 
-```
-let engagementScore = 0;
-// Respondeu no WhatsApp (+5 por mensagem, max +10)
-engagementScore += Math.min(whatsappInbound * 5, 10);
-// Contato efetivo por ligação/disposition (+5)
-if (lastContactDays >= 0) engagementScore += 5;
-// Formalizou intenção de negociação (+5)
-if (agreementsCreated > 0) engagementScore += 5;
-// Formalizou negociação (+5, acima do created)
-if (agreementsSigned > 0) engagementScore += 5;
-// Pagamento parcial/entrada (+5)
-if (partialPayment) engagementScore += 5;
-// Pagamento confirmado (+10)
-if (paymentConfirmed) engagementScore += 10;
-// Cap at 30
-engagementScore = Math.min(engagementScore, 30);
+// Ao clicar no nome do cliente:
+navigate(`/carteira/${cpf}`, { state: { from: originUrl } });
+
+// Em ClientDetailHeader:
+const from = location.state?.from || "/carteira";
+<Button onClick={() => navigate(from)}>
 ```
 
-Isso permite que um cliente que respondeu, negociou e pagou chegue a +30, enquanto um que só respondeu no WhatsApp fica em +10.
-
-### 4. Ajustar Dimensão 3 (Histórico de Pagamento) para penalizar mais quebra (linhas 147-155)
-
-Manter estrutura, mas refinar:
-- `paymentConfirmed && agreementsCancelled === 0` → +25 (mantém)
-- `partialPayment` → +15 (sobe de 10, valoriza entrada/parcial)
-- `paymentConfirmed && agreementsCancelled > 0` → +5 (pagou mas quebrou antes)
-- `agreementsCancelled > 0 && !paymentConfirmed` → -20 (mantém)
-- `agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed` → -5 (criou mas nunca fechou)
-
-### 5. Ajustar score_reason para refletir novos sinais (linhas 214-222)
-
-Adicionar razões:
-- `agreementsCreated > 0 && agreementsSigned === 0` → "Acordo criado sem formalização"
-- `whatsappInbound > 0` → "Respondeu no WhatsApp"
-- `partialPayment` → "Pagamento parcial realizado"
-
-### 6. Nenhuma outra alteração
-
-- Dimensão 1 (Contato), Dimensão 4 (Perfil), Dimensão 5 (Atraso) — preservadas intactas
-- Faixas 75/50 — preservadas
-- PropensityBadge — intacto
-- Banco, layout, telas — intactos
-
-## Simulação de cenários
-
-```text
-Cenário                              | Score esperado
-─────────────────────────────────────|──────────────
-Sem eventos                          | 0
-Só outbound sem resposta, 60d atraso | ~0-5
-Respondeu WhatsApp, contato recente  | ~45
-Respondeu + acordo criado            | ~55
-Respondeu + acordo assinado          | ~65
-Acordo assinado + pagamento parcial  | ~80
-Acordo assinado + pago + perfil bom  | ~95-100
-Quebrou acordo, sem resposta         | ~-15 → 0
-```
-
-## Arquivo afetado
+## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/calculate-propensity/index.ts` | Score 0 sem histórico, remover base +10, engajamento aditivo com sinais reais, pagamento refinado, reasons atualizadas |
+| `src/hooks/useScrollRestore.ts` | Novo hook — persistir/restaurar scroll |
+| `src/pages/CarteiraPage.tsx` | scroll restore + origin nas navegações |
+| `src/components/carteira/CarteiraKanban.tsx` | origin nas navegações |
+| `src/pages/ClientDetailPage.tsx` | aba via useUrlState + back com origin |
+| `src/components/client-detail/ClientDetailHeader.tsx` | back prop dinâmico |
+| `src/pages/AtendimentoPage.tsx` | fallback back com origin |
+| `src/pages/AcordosPage.tsx` | scroll restore |
+| `src/pages/ClientsPage.tsx` | scroll restore |
+| `src/pages/RelatoriosPage.tsx` | scroll restore |
+| `src/pages/CadastrosPage.tsx` | scroll restore |
+| `src/pages/AuditoriaPage.tsx` | filtros migrados para useUrlState |
 
 ## O que NÃO muda
-- Nenhuma nova dimensão criada
-- Nenhum score financeiro separado
-- Banco, tabelas, migrações — intactos
-- Layout, telas, componentes — intactos
-- PropensityBadge thresholds (75/50) — intactos
-- Contact Center, chat, atendimento — intactos
+- Layout, design, componentes visuais — intactos
+- Arquitetura de rotas — intacta
+- Contact Center, chat — intactos
+- Banco de dados — intacto
+- Fluxos operacionais — preservados
 
