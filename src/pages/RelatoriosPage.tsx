@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery } from "@tanstack/react-query";
 import { fetchClients } from "@/services/clientService";
 import { supabase } from "@/integrations/supabase/client";
