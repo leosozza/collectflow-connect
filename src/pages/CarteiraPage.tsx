@@ -71,6 +71,8 @@ const CarteiraPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
+  const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
   const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
   const [sortField, setSortField] = useUrlState("sort", "created_at");
   const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
