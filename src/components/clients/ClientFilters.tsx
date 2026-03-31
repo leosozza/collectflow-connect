@@ -16,7 +16,20 @@ import {
 } from "@/components/ui/select";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTenant } from "@/hooks/useTenant";
-import { fetchCredores, fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
+import { fetchCredores, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
+
+const DEBTOR_PROFILE_OPTIONS = [
+  { value: "ocasional", label: "Ocasional" },
+  { value: "recorrente", label: "Recorrente" },
+  { value: "resistente", label: "Resistente" },
+  { value: "insatisfeito", label: "Insatisfeito" },
+];
+
+const SCORE_RANGE_OPTIONS = [
+  { value: "bom", label: "Bom (75-100)" },
+  { value: "medio", label: "Médio (50-74)" },
+  { value: "ruim", label: "Ruim (<50)" },
+];
 
 interface Filters {
   status: string;
@@ -36,6 +49,8 @@ interface Filters {
   semContato: boolean;
   emDia: boolean;
   higienizados: boolean;
+  scoreRange: string;
+  debtorProfile: string;
 }
 
 interface ClientFiltersProps {
@@ -52,12 +67,6 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
   const { data: credores = [] } = useQuery({
     queryKey: ["credores", tenant?.id],
     queryFn: () => fetchCredores(tenant!.id),
-    enabled: !!tenant?.id,
-  });
-
-  const { data: tiposDevedor = [] } = useQuery({
-    queryKey: ["tipos_devedor", tenant?.id],
-    queryFn: () => fetchTiposDevedor(tenant!.id),
     enabled: !!tenant?.id,
   });
 
@@ -82,9 +91,9 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
       {/* Level 1: Always visible */}
       <div className="flex items-end gap-2">
         <div className="flex-1 max-w-sm space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Buscar por nome ou CPF</Label>
+          <Label className="text-xs text-muted-foreground">Buscar</Label>
           <Input
-            placeholder="Nome ou CPF..."
+            placeholder="Buscar por nome, CPF, telefone ou e-mail..."
             value={filters.search}
             onChange={(e) => update("search", e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch?.()}
@@ -112,7 +121,7 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
         <CollapsibleContent>
           <div className="space-y-4 pt-3 border-t border-border">
             {/* Linha 1: Selects */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Status de Carteira</Label>
                 <MultiSelect
@@ -141,28 +150,39 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Perfil do Devedor</Label>
-                <Select value={filters.tipoDevedorId || "todos"} onValueChange={(v) => update("tipoDevedorId", v === "todos" ? "" : v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {tiposDevedor.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={DEBTOR_PROFILE_OPTIONS}
+                  selected={filters.debtorProfile ? filters.debtorProfile.split(",") : []}
+                  onChange={(sel) => update("debtorProfile", sel.join(","))}
+                  placeholder="Todos"
+                  allLabel="Todos"
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Tipo de Dívida</Label>
-                <Select value={filters.tipoDividaId || "todos"} onValueChange={(v) => update("tipoDividaId", v === "todos" ? "" : v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {tiposDivida.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={tiposDivida.map((t: any) => ({ value: t.id, label: t.nome }))}
+                  selected={filters.tipoDividaId ? filters.tipoDividaId.split(",") : []}
+                  onChange={(sel) => update("tipoDividaId", sel.join(","))}
+                  placeholder="Todos"
+                  allLabel="Todos"
+                  searchable
+                  className="w-full"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Faixa de Score</Label>
+                <MultiSelect
+                  options={SCORE_RANGE_OPTIONS}
+                  selected={filters.scoreRange ? filters.scoreRange.split(",") : []}
+                  onChange={(sel) => update("scoreRange", sel.join(","))}
+                  placeholder="Todos"
+                  allLabel="Todos"
+                  className="w-full"
+                />
               </div>
             </div>
 
