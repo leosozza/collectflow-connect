@@ -136,7 +136,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
                       key={client.id}
                       className="bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                       onClick={() =>
-                        navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)
+                        navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`, { state: { from: originUrl } })
                       }
                     >
                       <div className="flex items-start justify-between gap-2">
