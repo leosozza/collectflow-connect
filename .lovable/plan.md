@@ -1,108 +1,122 @@
 
 
-# Plano: Finalizar Fase 1 — Robustez Operacional do Disparo WhatsApp
+# Plano: Perfil de Devedor, Score Inteligente e Melhorias Operacionais
+
+## Resumo
+
+Reestruturar o sistema de perfil de devedor com 4 perfis fixos, redesenhar o score operacional com novo modelo de 5 dimensões, adicionar filtros de score na carteira, converter filtros para multiselect, melhorar busca global e preparar classificação automática.
+
+## Escopo dividido em 8 blocos
+
+### Bloco 1 — Perfis fixos de devedor (migração + UI)
+
+**Migração SQL:**
+- Criar enum `debtor_profile_type` com valores: `ocasional`, `recorrente`, `resistente`, `insatisfeito`
+- Adicionar coluna `debtor_profile` (tipo enum, nullable) na tabela `clients`
+- Backfill: mapear tipos existentes da `tipos_devedor` para os novos valores onde possível
+- A tabela `tipos_devedor` continua existindo mas deixa de ser usada nos filtros (backward compat)
+
+**UI `TipoDevedorList.tsx`:**
+- Substituir CRUD dinâmico por lista fixa de 4 perfis (read-only)
+- Adicionar tooltip com descrição ao hover:
+  - Ocasional: "Atrasou, mas paga"
+  - Recorrente: "Sempre atrasa"  
+  - Resistente: "Não quer pagar"
+  - Insatisfeito: "Não paga por insatisfação"
+
+### Bloco 2 — Novo modelo de Score (Edge Function)
+
+Reescrever `calculate-propensity/index.ts` com 5 dimensões aditivas (0-100):
+
+| Dimensão | Range | Lógica |
+|---|---|---|
+| Contato | 0 a +30 | Recência do último contato (7d=30, 8-30d=20, >30d=10, sem=0) |
+| Engajamento | 0 a +25 | Frequência de resposta (frequente=25, pouco=10, nada=0) |
+| Histórico pgto | -20 a +25 | Pagou acordos=+25, parcial=+10, nunca=0, quebrou=-20 |
+| Perfil devedor | -25 a +20 | Ocasional=+20, Recorrente=+5, Resistente=-25, Insatisfeito=-10 |
+| Tempo atraso | -20 a +10 | <30d=+10, 30-90d=0, 90-180d=-10, >180d=-20 |
+
+Score final = soma das dimensões, clamp 0-100.
+
+Classificação: 75-100 = bom, 50-74 = médio, <50 = ruim.
+
+O perfil do devedor será lido diretamente da coluna `debtor_profile` do cliente.
+
+### Bloco 3 — PropensityBadge atualizado
+
+Atualizar thresholds no `PropensityBadge.tsx`:
+- >= 75: verde "Bom"
+- 50-74: amarelo "Médio"  
+- < 50: vermelho "Ruim"
+
+### Bloco 4 — Filtros de Score na Carteira
+
+**`ClientFilters.tsx`:**
+- Adicionar filtro "Faixa de Score" com MultiSelect: "Bom (75-100)", "Médio (50-74)", "Ruim (<50)"
+
+**`CarteiraPage.tsx`:**
+- Adicionar URL state `scoreRange`
+- Aplicar filtro client-side (propensity_score já vem nos dados)
+
+**`clientService.ts`:**
+- Não precisa mudar query (score já está nos clients)
+
+### Bloco 5 — MultiSelect para Perfil Devedor e Tipo Dívida
+
+**`ClientFilters.tsx`:**
+- Converter "Perfil do Devedor" de Select para MultiSelect (igual Status de Carteira)
+- Converter "Tipo de Dívida" de Select para MultiSelect
+
+**`clientService.ts`:**
+- Ajustar filtro `tipoDevedorId` e `tipoDividaId` para suportar lista separada por vírgula (`.in()` em vez de `.eq()`)
+
+### Bloco 6 — Busca Global melhorada
+
+**`ClientFilters.tsx`:**
+- Placeholder: "Buscar por nome, CPF, telefone ou e-mail..."
+
+**`clientService.ts`:**
+- A busca já pesquisa nome, CPF, phone, phone2, phone3, email
+- Garantir normalização: se input é numérico, buscar sem máscara no CPF e telefones
+- Já está implementado (linhas 83-95) — apenas ajustar placeholder
+
+### Bloco 7 — Classificação automática de perfil
+
+**Edge Function `calculate-propensity`:**
+- Após calcular score, gerar `suggested_profile`:
+  - Ocasional: pagou acordos + atraso < 90 dias
+  - Recorrente: atrasos frequentes (>2 eventos overdue)
+  - Resistente: nunca pagou + não responde + score < 50
+  - Insatisfeito: possui eventos de reclamação
+
+- Salvar `suggested_profile` no client (nova coluna)
+- Operador pode alterar manualmente (registra em `client_events`)
+
+### Bloco 8 — Priorização automática (metadados)
+
+Já existe `suggested_queue` no score. Ajustar lógica:
+- Score 75-100: queue `priority_high` (oferta direta)
+- Score 50-74: queue `priority_medium` (negociação guiada)
+- Score < 50: queue `priority_low` (cobrança firme)
+
+Esses metadados ficam nos clients para uso futuro pelo discador e WhatsApp.
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Status final inteligente, contadores coerentes, only pending, try/catch robusto, metadados de rastreabilidade |
-| `src/services/whatsappCampaignService.ts` | Relaxar filtro `fetchEligibleInstances` (aceitar `active` OR `connected`), remover `supports_manual_bulk` |
-| `src/components/carteira/WhatsAppBulkDialog.tsx` | Exibir status final com badge (completed/completed_with_errors/failed), melhorar resumo Step 4 |
-
-## Detalhes técnicos
-
-### 1. Edge Function — Status final inteligente + contadores
-
-Substituir o bloco final (linhas 247-256) da `handleCampaignFlow`:
-
-```typescript
-// Determine final status
-let finalStatus = "completed";
-if (sent === 0 && failed > 0) finalStatus = "failed";
-else if (sent > 0 && failed > 0) finalStatus = "completed_with_errors";
-
-await supabase
-  .from("whatsapp_campaigns")
-  .update({
-    status: finalStatus,
-    sent_count: sent,
-    failed_count: failed,
-    // delivered_count and read_count depend on future webhook tracking (Phase 2)
-    // They remain at 0 until external delivery/read status is implemented
-    completed_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", campaignId);
-```
-
-### 2. Edge Function — Robustez do processamento
-
-- Envolver todo o loop de recipients num try/catch global para garantir que a campanha SEMPRE finalize com status coerente, mesmo em exceção inesperada
-- Adicionar `client_cpf` ao insert de `message_logs` para rastreabilidade
-- Garantir que o filtro já busca apenas `status = 'pending'` (já faz, confirmar)
-- No catch individual, garantir `updated_at` sempre preenchido (já faz)
-
-### 3. Filtro de instâncias elegíveis
-
-Em `fetchEligibleInstances`, o filtro `.eq("supports_manual_bulk", true)` pode excluir instâncias legadas. Ajustar para:
-
-```typescript
-export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
-  const { data, error } = await supabase
-    .from("whatsapp_instances" as any)
-    .select("id, name, instance_name, phone_number, provider, status, provider_category")
-    .eq("tenant_id", tenantId)
-    .in("status", ["active", "connected"])
-    .eq("provider_category", "unofficial");
-    // supports_manual_bulk removido — todas as instâncias não oficiais ativas são elegíveis
-
-  if (error) throw error;
-  return (data || []) as unknown as EligibleInstance[];
-}
-```
-
-### 4. Rastreabilidade — metadados no message_logs
-
-Adicionar `metadata` (JSONB) ao insert de `message_logs` com `campaign_id`, `instance_id`, `provider_message_id`:
-
-```typescript
-await supabase.from("message_logs").insert({
-  tenant_id: tenantId,
-  client_id: recipient.representative_client_id,
-  client_cpf: client?.cpf || null,
-  channel: "whatsapp",
-  status,
-  phone: recipient.phone,
-  message_body: message,
-  error_message: status === "failed" ? JSON.stringify(result) : null,
-  sent_at: status === "sent" ? new Date().toISOString() : null,
-  metadata: { campaign_id: campaignId, instance_id: recipient.assigned_instance_id, provider_message_id: providerMessageId },
-});
-```
-
-### 5. UX Step 4 — Resultado com status da campanha
-
-No `renderStep4`, após o resultado, mostrar badge com status final:
-- `completed` → badge verde "Concluída"
-- `completed_with_errors` → badge amarela "Concluída com falhas"
-- `failed` → badge vermelha "Falhou"
-
-Retornar `finalStatus` na resposta da edge function e exibi-lo no modal.
-
-### 6. Deduplicação e distribuição
-
-Já implementadas corretamente:
-- CPF dedup na `CarteiraPage` (via `uniqueSelectedClients`)
-- Phone dedup no `deduplicateClients`
-- Round-robin no `distributeRoundRobin`
-
-Nenhuma mudança necessária — apenas validação de que está funcionando.
+| Migração SQL | Enum `debtor_profile_type`, coluna `debtor_profile` e `suggested_profile` em clients |
+| `TipoDevedorList.tsx` | Lista fixa com tooltips (read-only) |
+| `calculate-propensity/index.ts` | Novo modelo de 5 dimensões + sugestão de perfil |
+| `PropensityBadge.tsx` | Novos thresholds (75/50) |
+| `ClientFilters.tsx` | MultiSelect para perfil/dívida, filtro score, placeholder busca |
+| `CarteiraPage.tsx` | URL state para scoreRange, passar filtros |
+| `clientService.ts` | Suportar multi-value para tipoDevedor/tipoDivida com `.in()` |
 
 ## O que NÃO muda
-- Contact Center, chat, conversations, chat_messages — intactos
-- whatsapp-webhook — intacto
-- /atendimento — intacto
-- Legacy flow na edge function — preservado
-- Nenhuma tabela nova ou migração necessária
+- Layout geral da carteira
+- Nenhuma tela nova criada
+- Arquitetura existente preservada
+- Contact Center, chat, atendimento — intactos
+- Fluxos e automação — intactos
 
