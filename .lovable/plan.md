@@ -1,57 +1,101 @@
 
 
-# Plano: Correção de Filtros, Score e Carteira
+# Plano: Score de Propensão Comportamental (sem nova dimensão)
 
-## 8 alterações pontuais
+## Resumo
 
-### 1. `hasActiveFilters` — adicionar scoreRange e debtorProfile (CarteiraPage.tsx, linha 102-122)
-Adicionar ao `useMemo`:
+Ajustar a edge function `calculate-propensity` para que o score represente propensão real de fechamento de acordo, baseado exclusivamente em comportamento observado. Cliente sem histórico começa em 0. Sem nova dimensão, sem score financeiro separado, sem alteração de banco.
+
+## Alterações no arquivo `supabase/functions/calculate-propensity/index.ts`
+
+### 1. Score 0 para clientes sem histórico (linha 40-49)
+
+Alterar o bloco `if (events.length === 0)` para retornar `score: 0` e `score_reason: "Sem histórico de interação"`.
+
+### 2. Remover base fixa +10 do cálculo (linha 181)
+
+Alterar de:
 ```
-filters.scoreRange !== "" ||
-filters.debtorProfile !== ""
+rawScore = 10 + contactScore + engagementScore + paymentScore + profileScore + delayScore
+```
+Para:
+```
+rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore
 ```
 
-### 2. `displayClients` dependências — adicionar filtros faltantes (CarteiraPage.tsx, linha 456)
-Adicionar `filters.debtorProfile` e `filters.scoreRange` ao array de dependências do `useMemo`.
+### 3. Redefinir Dimensão 2 (Engajamento) para valorizar sinais reais de propensão (linhas 137-145)
 
-### 3. Tooltips nos perfis de devedor (ClientFilters.tsx, linha 21-26)
-Alterar `DEBTOR_PROFILE_OPTIONS` para incluir descrição em cada opção:
-- Ocasional → "Atrasou, mas paga"
-- Recorrente → "Sempre atrasa"
-- Resistente → "Não quer pagar"
-- Insatisfeito → "Não paga por insatisfação"
+A lógica atual só usa `responseRatio` (respostas / outreach). Trocar por um modelo aditivo dentro da mesma dimensão (0 a +30, expandido de 25):
 
-O MultiSelect usa `title` nativo no option label para tooltip simples sem alterar layout.
+```
+let engagementScore = 0;
+// Respondeu no WhatsApp (+5 por mensagem, max +10)
+engagementScore += Math.min(whatsappInbound * 5, 10);
+// Contato efetivo por ligação/disposition (+5)
+if (lastContactDays >= 0) engagementScore += 5;
+// Formalizou intenção de negociação (+5)
+if (agreementsCreated > 0) engagementScore += 5;
+// Formalizou negociação (+5, acima do created)
+if (agreementsSigned > 0) engagementScore += 5;
+// Pagamento parcial/entrada (+5)
+if (partialPayment) engagementScore += 5;
+// Pagamento confirmado (+10)
+if (paymentConfirmed) engagementScore += 10;
+// Cap at 30
+engagementScore = Math.min(engagementScore, 30);
+```
 
-### 4. Colunas Telefone e E-mail na tabela (CarteiraPage.tsx)
-- Adicionar `<TableHead>Telefone</TableHead>` e `<TableHead>E-mail</TableHead>` no header (após CPF)
-- Adicionar `<TableCell>` correspondentes no body, com mascaramento condicional:
-  - `canSeeFullData(client) ? client.phone : maskPhone(client.phone)`
-  - `canSeeFullData(client) ? client.email : maskEmail(client.email)`
-- `maskPhone` e `maskEmail` já existem em `formatters.ts`
+Isso permite que um cliente que respondeu, negociou e pagou chegue a +30, enquanto um que só respondeu no WhatsApp fica em +10.
 
-### 5. Score sem histórico = 30 (calculate-propensity/index.ts, linha 43)
-Alterar `score: 50` para `score: 30` no bloco `if (events.length === 0)`.
+### 4. Ajustar Dimensão 3 (Histórico de Pagamento) para penalizar mais quebra (linhas 147-155)
 
-### 6. Validar faixas de score
-Já coerente no código atual: PropensityBadge usa ≥75/50-74/<50. Nenhuma alteração necessária.
+Manter estrutura, mas refinar:
+- `paymentConfirmed && agreementsCancelled === 0` → +25 (mantém)
+- `partialPayment` → +15 (sobe de 10, valoriza entrada/parcial)
+- `paymentConfirmed && agreementsCancelled > 0` → +5 (pagou mas quebrou antes)
+- `agreementsCancelled > 0 && !paymentConfirmed` → -20 (mantém)
+- `agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed` → -5 (criou mas nunca fechou)
 
-### 7. Nomenclatura "Sem acordo formalizado" (ClientFilters.tsx, linha 228)
-Alterar label de "Nunca Formalizou Acordo" para "Sem acordo formalizado".
+### 5. Ajustar score_reason para refletir novos sinais (linhas 214-222)
 
-### 8. Validação final
-Todos os filtros (scoreRange, debtorProfile) passam a ativar `hasActiveFilters` e estão nas dependências do `useMemo`, garantindo reatividade.
+Adicionar razões:
+- `agreementsCreated > 0 && agreementsSigned === 0` → "Acordo criado sem formalização"
+- `whatsappInbound > 0` → "Respondeu no WhatsApp"
+- `partialPayment` → "Pagamento parcial realizado"
 
-## Arquivos afetados
+### 6. Nenhuma outra alteração
+
+- Dimensão 1 (Contato), Dimensão 4 (Perfil), Dimensão 5 (Atraso) — preservadas intactas
+- Faixas 75/50 — preservadas
+- PropensityBadge — intacto
+- Banco, layout, telas — intactos
+
+## Simulação de cenários
+
+```text
+Cenário                              | Score esperado
+─────────────────────────────────────|──────────────
+Sem eventos                          | 0
+Só outbound sem resposta, 60d atraso | ~0-5
+Respondeu WhatsApp, contato recente  | ~45
+Respondeu + acordo criado            | ~55
+Respondeu + acordo assinado          | ~65
+Acordo assinado + pagamento parcial  | ~80
+Acordo assinado + pago + perfil bom  | ~95-100
+Quebrou acordo, sem resposta         | ~-15 → 0
+```
+
+## Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/CarteiraPage.tsx` | hasActiveFilters + deps do useMemo + colunas telefone/email |
-| `src/components/clients/ClientFilters.tsx` | Tooltips nos perfis + label "Sem acordo formalizado" |
-| `supabase/functions/calculate-propensity/index.ts` | Score default 50→30 |
+| `supabase/functions/calculate-propensity/index.ts` | Score 0 sem histórico, remover base +10, engajamento aditivo com sinais reais, pagamento refinado, reasons atualizadas |
 
 ## O que NÃO muda
-- Layout geral, nenhuma tela nova, arquitetura preservada
+- Nenhuma nova dimensão criada
+- Nenhum score financeiro separado
+- Banco, tabelas, migrações — intactos
+- Layout, telas, componentes — intactos
+- PropensityBadge thresholds (75/50) — intactos
 - Contact Center, chat, atendimento — intactos
-- Estrutura de banco — intacta
 
