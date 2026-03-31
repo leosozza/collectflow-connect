@@ -47,7 +47,16 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   useActivityTracker();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar-collapsed") === "true";
+    } catch { return false; }
+  });
+
+  const toggleCollapsed = (val: boolean) => {
+    setCollapsed(val);
+    try { localStorage.setItem("sidebar-collapsed", String(val)); } catch {}
+  };
 
   const ROLE_LABEL: Record<string, string> = {
     super_admin: "Super Admin",
