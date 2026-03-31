@@ -117,7 +117,9 @@ const CarteiraPage = () => {
       (filters.valorAbertoAte as number) > 0 ||
       filters.semContato === true ||
       filters.emDia === true ||
-      filters.higienizados === true
+      filters.higienizados === true ||
+      filters.scoreRange !== "" ||
+      filters.debtorProfile !== ""
     );
   }, [filters]);
 
@@ -453,7 +455,7 @@ const CarteiraPage = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.higienizados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
+  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.higienizados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, filters.debtorProfile, filters.scoreRange, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
@@ -749,6 +751,8 @@ const CarteiraPage = () => {
                       </button>
                     </TableHead>
                     <TableHead>CPF</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>E-mail</TableHead>
                     <TableHead>Credor</TableHead>
                     <TableHead>
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("data_vencimento")}>
@@ -785,6 +789,8 @@ const CarteiraPage = () => {
                         </button>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
+                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
+                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
                       <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                       
