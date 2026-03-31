@@ -225,7 +225,7 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
                   checked={filters.semAcordo || false}
                   onCheckedChange={(checked) => update("semAcordo", !!checked)}
                 />
-                <span className="text-sm text-foreground">Nunca Formalizou Acordo</span>
+                <span className="text-sm text-foreground">Sem acordo formalizado</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox

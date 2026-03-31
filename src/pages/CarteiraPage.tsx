@@ -789,6 +789,8 @@ const CarteiraPage = () => {
                         </button>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
+                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
+                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
                       <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                       
