@@ -31,6 +31,7 @@ interface ClientDetailHeaderProps {
   cpf: string;
   agreements: any[];
   onFormalizarAcordo: () => void;
+  backTo?: string;
 }
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
