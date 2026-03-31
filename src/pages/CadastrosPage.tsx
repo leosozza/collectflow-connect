@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useParams, useNavigate } from "react-router-dom";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
