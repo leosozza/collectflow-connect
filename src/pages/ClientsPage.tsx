@@ -101,8 +101,10 @@ const ClientsPage = () => {
       setUrlSemContato(resolved.semContato);
       setUrlEmDia(resolved.emDia);
       setUrlHigienizados(resolved.higienizados);
+      setUrlScoreRange(resolved.scoreRange);
+      setUrlDebtorProfile(resolved.debtorProfile);
     };
-  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados]);
+  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados, setUrlScoreRange, setUrlDebtorProfile]);
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
