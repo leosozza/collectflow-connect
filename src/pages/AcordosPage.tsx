@@ -30,6 +30,7 @@ const statusFilterConfig: { key: StatusFilter; label: string; color: string; sel
 ];
 
 const AcordosPage = () => {
+  useScrollRestore();
   const { trackAction } = useActivityTracker();
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
