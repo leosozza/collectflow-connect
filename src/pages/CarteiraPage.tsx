@@ -117,7 +117,9 @@ const CarteiraPage = () => {
       (filters.valorAbertoAte as number) > 0 ||
       filters.semContato === true ||
       filters.emDia === true ||
-      filters.higienizados === true
+      filters.higienizados === true ||
+      filters.scoreRange !== "" ||
+      filters.debtorProfile !== ""
     );
   }, [filters]);
 
