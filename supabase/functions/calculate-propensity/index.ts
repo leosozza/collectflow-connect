@@ -40,10 +40,10 @@ function calculateScore(
   if (events.length === 0) {
     return {
       cpf: "",
-      score: 30,
+      score: 0,
       preferred_channel: "unknown",
       suggested_queue: "low_history",
-      score_reason: "Sem histórico suficiente para classificação",
+      score_reason: "Sem histórico de interação",
       score_confidence: "low",
       suggested_profile: null,
     };
@@ -134,26 +134,36 @@ function calculateScore(
     else contactScore = 10;
   }
 
-  // ── DIM 2: Engajamento (0 to +25) ──
+  // ── DIM 2: Engajamento (0 to +30) — sinais reais de propensão ──
   let engagementScore = 0;
-  if (totalOutreach > 0) {
-    const responseRatio = totalResponses / totalOutreach;
-    if (responseRatio >= 0.4) engagementScore = 25;
-    else if (responseRatio >= 0.15) engagementScore = 10;
-  } else if (whatsappInbound > 0) {
-    engagementScore = 25;
-  }
+  // Respondeu no WhatsApp (+5 por mensagem, max +10)
+  engagementScore += Math.min(whatsappInbound * 5, 10);
+  // Contato efetivo por ligação/disposition (+5)
+  if (lastContactDays >= 0) engagementScore += 5;
+  // Formalizou intenção de negociação (+5)
+  if (agreementsCreated > 0) engagementScore += 5;
+  // Formalizou negociação (+5)
+  if (agreementsSigned > 0) engagementScore += 5;
+  // Pagamento parcial/entrada (+5)
+  if (partialPayment) engagementScore += 5;
+  // Pagamento confirmado (+10)
+  if (paymentConfirmed) engagementScore += 10;
+  // Cap at 30
+  engagementScore = Math.min(engagementScore, 30);
 
   // ── DIM 3: Histórico de pagamento (-20 to +25) ──
   let paymentScore = 0;
-  if (paymentConfirmed && agreementsSigned > 0 && agreementsCancelled === 0) {
+  if (paymentConfirmed && agreementsCancelled === 0) {
     paymentScore = 25;
-  } else if (partialPayment || (paymentConfirmed && agreementsCancelled > 0)) {
-    paymentScore = 10;
-  } else if (agreementsCancelled > 0) {
+  } else if (partialPayment && agreementsCancelled === 0) {
+    paymentScore = 15;
+  } else if (paymentConfirmed && agreementsCancelled > 0) {
+    paymentScore = 5;
+  } else if (agreementsCancelled > 0 && !paymentConfirmed) {
     paymentScore = -20;
+  } else if (agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed) {
+    paymentScore = -5;
   }
-  // Never paid = 0
 
   // ── DIM 4: Perfil do devedor (-25 to +20) ──
   let profileScore = 0;
@@ -178,7 +188,7 @@ function calculateScore(
 
   // ── Final score (sum, clamp 0-100) ──
   // Base offset: 10 (so a client with no signals at all gets ~10, not 0)
-  const rawScore = 10 + contactScore + engagementScore + paymentScore + profileScore + delayScore;
+  const rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   // ── preferred_channel ──
@@ -214,9 +224,12 @@ function calculateScore(
   const reasons: string[] = [];
   if (events.length < 3) reasons.push("Histórico limitado");
   if (contactScore >= 20) reasons.push("Contato recente");
-  if (engagementScore >= 25) reasons.push("Bom engajamento");
+  if (engagementScore >= 20) reasons.push("Bom engajamento");
+  if (whatsappInbound > 0 && engagementScore < 20) reasons.push("Respondeu no WhatsApp");
   if (paymentScore >= 25) reasons.push("Pagamentos em dia");
+  if (partialPayment && paymentScore < 25) reasons.push("Pagamento parcial realizado");
   if (paymentScore <= -20) reasons.push("Quebra de acordo");
+  if (paymentScore === -5) reasons.push("Acordo criado sem formalização");
   if (profileScore <= -10) reasons.push(`Perfil: ${profile}`);
   if (delayScore <= -10) reasons.push("Atraso prolongado");
   const score_reason = reasons.length > 0 ? reasons.slice(0, 3).join("; ") : "Score calculado com base no histórico";
