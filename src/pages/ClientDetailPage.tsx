@@ -62,21 +62,16 @@ const activeStatuses = ["pending", "pending_approval", "approved"];
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { tenant } = useTenant();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState("titulos");
+  const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
 
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "acordo") {
-      setActiveTab("acordo");
-    }
-  }, [searchParams]);
+  const backTo = (location.state as any)?.from || "/carteira";
 
   const { data: clients = [], isLoading, refetch } = useQuery({
     queryKey: ["client-detail", cpf],
