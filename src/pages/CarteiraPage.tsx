@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const CarteiraPage = () => {
+  useScrollRestore();
+  const navigateWithOrigin = useNavigateWithOrigin();
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const permissions = usePermissions();
