@@ -188,7 +188,7 @@ function calculateScore(
 
   // ── Final score (sum, clamp 0-100) ──
   // Base offset: 10 (so a client with no signals at all gets ~10, not 0)
-  const rawScore = 10 + contactScore + engagementScore + paymentScore + profileScore + delayScore;
+  const rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   // ── preferred_channel ──
