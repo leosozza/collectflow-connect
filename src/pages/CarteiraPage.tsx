@@ -751,6 +751,8 @@ const CarteiraPage = () => {
                       </button>
                     </TableHead>
                     <TableHead>CPF</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>E-mail</TableHead>
                     <TableHead>Credor</TableHead>
                     <TableHead>
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("data_vencimento")}>
