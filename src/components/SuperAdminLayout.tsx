@@ -316,7 +316,7 @@ const SuperAdminLayout = () => {
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
               <Menu className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="hidden lg:flex" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Expandir menu" : "Recolher menu"}>
+            <Button variant="ghost" size="icon" className="hidden lg:flex" onClick={() => toggleCollapsed(!collapsed)} title={collapsed ? "Expandir menu" : "Recolher menu"}>
               {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
             </Button>
             <h1 className="text-lg font-semibold text-foreground">
