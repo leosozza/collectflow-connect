@@ -279,7 +279,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
               variant="ghost"
               size="icon"
               className="hidden lg:flex h-8 w-8"
-              onClick={() => setCollapsed(!collapsed)}
+              onClick={() => toggleCollapsed(!collapsed)}
               title={collapsed ? "Expandir menu" : "Recolher menu"}
             >
               {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
