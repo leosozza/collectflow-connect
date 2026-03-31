@@ -153,14 +153,17 @@ function calculateScore(
 
   // ── DIM 3: Histórico de pagamento (-20 to +25) ──
   let paymentScore = 0;
-  if (paymentConfirmed && agreementsSigned > 0 && agreementsCancelled === 0) {
+  if (paymentConfirmed && agreementsCancelled === 0) {
     paymentScore = 25;
-  } else if (partialPayment || (paymentConfirmed && agreementsCancelled > 0)) {
-    paymentScore = 10;
-  } else if (agreementsCancelled > 0) {
+  } else if (partialPayment && agreementsCancelled === 0) {
+    paymentScore = 15;
+  } else if (paymentConfirmed && agreementsCancelled > 0) {
+    paymentScore = 5;
+  } else if (agreementsCancelled > 0 && !paymentConfirmed) {
     paymentScore = -20;
+  } else if (agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed) {
+    paymentScore = -5;
   }
-  // Never paid = 0
 
   // ── DIM 4: Perfil do devedor (-25 to +20) ──
   let profileScore = 0;
