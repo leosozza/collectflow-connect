@@ -5,33 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Dimension weights ──
-const W_CONTACT = 0.25;
-const W_ENGAGEMENT = 0.20;
-const W_CONVERSION = 0.35;
-const W_CREDIBILITY = 0.20;
-
-// ── Source weights (applied within each dimension) ──
-const SRC_OPERATOR = 0.45;
-const SRC_SYSTEM = 0.35;
-const SRC_PREVENTION = 0.20;
-
-// ── Recency multiplier ──
-function recencyWeight(daysAgo: number): number {
-  if (daysAgo <= 7) return 1.0;
-  if (daysAgo <= 30) return 0.7;
-  return 0.4;
-}
-
-function daysBetween(d1: Date, d2: Date): number {
-  return Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / 86400000));
-}
-
-function sourceWeight(source: string): number {
-  if (source === "operator") return SRC_OPERATOR;
-  if (source === "prevention") return SRC_PREVENTION;
-  return SRC_SYSTEM;
-}
+// ── New 5-dimension additive model (0-100) ──
 
 interface ClientEvent {
   event_type: string;
@@ -49,164 +23,163 @@ interface ScoreResult {
   suggested_queue: string;
   score_reason: string;
   score_confidence: string;
+  suggested_profile: string | null;
 }
 
-// ── Positive contact event types ──
-const POSITIVE_CONTACT = new Set(["cpc", "answered", "completed", "connected"]);
-const NEGATIVE_CONTACT = new Set(["no_answer", "busy", "voicemail", "wrong_person", "failed", "abandoned"]);
+function daysBetween(d1: Date, d2: Date): number {
+  return Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / 86400000));
+}
 
-function calculateScore(events: ClientEvent[], now: Date): ScoreResult {
+const POSITIVE_CONTACT = new Set(["cpc", "answered", "completed", "connected"]);
+
+function calculateScore(
+  events: ClientEvent[],
+  now: Date,
+  clientData: { debtor_profile: string | null; data_vencimento: string | null }
+): ScoreResult {
   if (events.length === 0) {
-    return { cpf: "", score: 50, preferred_channel: "unknown", suggested_queue: "low_history", score_reason: "Sem histórico suficiente para classificação", score_confidence: "low" };
+    return {
+      cpf: "",
+      score: 50,
+      preferred_channel: "unknown",
+      suggested_queue: "low_history",
+      score_reason: "Sem histórico suficiente para classificação",
+      score_confidence: "low",
+      suggested_profile: null,
+    };
   }
 
-  // ── Counters ──
-  let contactPos = 0, contactNeg = 0, contactTotal = 0;
-  let engagePos = 0, engageNeg = 0, engageTotal = 0;
-  let conversionPos = 0, conversionNeg = 0, conversionTotal = 0;
-  let agreementsCreated = 0, agreementsCancelled = 0, agreementsSigned = 0;
+  // ── 1. CONTATO (0 a +30) — recency of last contact ──
+  let lastContactDays = -1;
   let callEvents = 0, whatsappEvents = 0;
   let whatsappInbound = 0, whatsappOutbound = 0;
+  let totalResponses = 0, totalOutreach = 0;
+  let agreementsCreated = 0, agreementsCancelled = 0, agreementsSigned = 0;
+  let paymentConfirmed = false, partialPayment = false;
+  let overdueEvents = 0;
+  let hasComplaints = false;
 
   for (const ev of events) {
     const daysAgo = daysBetween(new Date(ev.created_at), now);
-    const rw = recencyWeight(daysAgo);
-    const sw = sourceWeight(ev.event_source);
-    const weight = rw * sw;
 
-    // Channel tracking
-    if (ev.event_channel === "call") callEvents += rw;
-    if (ev.event_channel === "whatsapp") whatsappEvents += rw;
+    // Track channel
+    if (ev.event_channel === "call") callEvents++;
+    if (ev.event_channel === "whatsapp") whatsappEvents++;
 
     switch (ev.event_type) {
       case "disposition": {
-        contactTotal += weight;
         const val = (ev.event_value || "").toLowerCase();
         if (POSITIVE_CONTACT.has(val) || val.includes("cpc") || val.includes("contato")) {
-          contactPos += weight;
-        } else if (NEGATIVE_CONTACT.has(val)) {
-          contactNeg += weight;
+          if (lastContactDays < 0 || daysAgo < lastContactDays) lastContactDays = daysAgo;
         }
-        // Callback scheduled = engagement positive
-        if (ev.metadata?.scheduled_callback) {
-          engagePos += weight;
-          engageTotal += weight;
-        }
+        totalOutreach++;
         break;
       }
       case "call": {
-        contactTotal += weight;
         const val = (ev.event_value || "").toLowerCase();
         if (val === "answered" || val === "completed" || val === "connected") {
-          contactPos += weight;
-        } else {
-          contactNeg += weight;
+          if (lastContactDays < 0 || daysAgo < lastContactDays) lastContactDays = daysAgo;
         }
+        totalOutreach++;
         break;
       }
       case "whatsapp_inbound": {
         whatsappInbound++;
-        contactPos += weight;
-        contactTotal += weight;
-        engagePos += weight;
-        engageTotal += weight;
+        totalResponses++;
+        if (lastContactDays < 0 || daysAgo < lastContactDays) lastContactDays = daysAgo;
         break;
       }
       case "whatsapp_outbound": {
         whatsappOutbound++;
-        engageTotal += weight;
+        totalOutreach++;
         break;
       }
       case "agreement_created": {
         agreementsCreated++;
-        conversionPos += weight * 0.5;
-        conversionTotal += weight;
         break;
       }
+      case "agreement_signed":
       case "agreement_approved": {
-        conversionPos += weight;
-        conversionTotal += weight;
-        break;
-      }
-      case "agreement_signed": {
         agreementsSigned++;
-        conversionPos += weight * 1.5;
-        conversionTotal += weight;
         break;
       }
       case "agreement_cancelled":
       case "agreement_overdue": {
         agreementsCancelled++;
-        conversionNeg += weight * 0.5;
-        conversionTotal += weight;
+        if (ev.event_type === "agreement_overdue") overdueEvents++;
+        break;
+      }
+      case "payment_confirmed": {
+        paymentConfirmed = true;
+        const valor = Number(ev.metadata?.valor_pago || 0);
+        const total = Number(ev.metadata?.valor_total || 0);
+        if (valor > 0 && total > 0 && valor < total) partialPayment = true;
         break;
       }
       case "message_sent": {
-        // Prevention/rule-based messages
-        engageTotal += weight;
-        break;
-      }
-      case "debtor_category": {
-        // Operator classified the debtor profile — engagement signal
-        engageTotal += weight;
-        if ((ev.event_value || "").toLowerCase() !== "removed") {
-          engagePos += weight;
-        }
+        totalOutreach++;
         break;
       }
       default:
+        if ((ev.event_value || "").toLowerCase().includes("reclama")) hasComplaints = true;
         break;
     }
   }
 
-  // ── CONTATO dimension (0-100) ──
-  let contactScore = 50;
-  if (contactTotal > 0) {
-    const ratio = (contactPos - contactNeg * 0.5) / contactTotal;
-    contactScore = Math.max(0, Math.min(100, 50 + ratio * 50));
+  // ── DIM 1: Contato (0 to +30) ──
+  let contactScore = 0;
+  if (lastContactDays >= 0) {
+    if (lastContactDays <= 7) contactScore = 30;
+    else if (lastContactDays <= 30) contactScore = 20;
+    else contactScore = 10;
   }
 
-  // ── ENGAJAMENTO dimension (0-100) ──
-  let engagementScore = 50;
-  if (engageTotal > 0) {
-    const ratio = engagePos / engageTotal;
-    engagementScore = Math.max(0, Math.min(100, ratio * 100));
-  }
-  // WhatsApp response ratio boosts engagement
-  if (whatsappOutbound > 0 && whatsappInbound > 0) {
-    const responseRatio = Math.min(whatsappInbound / whatsappOutbound, 1);
-    engagementScore = Math.min(100, engagementScore + responseRatio * 20);
+  // ── DIM 2: Engajamento (0 to +25) ──
+  let engagementScore = 0;
+  if (totalOutreach > 0) {
+    const responseRatio = totalResponses / totalOutreach;
+    if (responseRatio >= 0.4) engagementScore = 25;
+    else if (responseRatio >= 0.15) engagementScore = 10;
+  } else if (whatsappInbound > 0) {
+    engagementScore = 25;
   }
 
-  // ── CONVERSÃO dimension (0-100) ──
-  let conversionScore = 30; // baseline lower — no conversion yet
-  if (conversionTotal > 0) {
-    const ratio = (conversionPos - conversionNeg * 0.3) / conversionTotal;
-    conversionScore = Math.max(0, Math.min(100, 30 + ratio * 70));
+  // ── DIM 3: Histórico de pagamento (-20 to +25) ──
+  let paymentScore = 0;
+  if (paymentConfirmed && agreementsSigned > 0 && agreementsCancelled === 0) {
+    paymentScore = 25;
+  } else if (partialPayment || (paymentConfirmed && agreementsCancelled > 0)) {
+    paymentScore = 10;
+  } else if (agreementsCancelled > 0) {
+    paymentScore = -20;
   }
-  if (agreementsSigned > 0) {
-    conversionScore = Math.min(100, conversionScore + 15);
+  // Never paid = 0
+
+  // ── DIM 4: Perfil do devedor (-25 to +20) ──
+  let profileScore = 0;
+  const profile = clientData.debtor_profile;
+  if (profile === "ocasional") profileScore = 20;
+  else if (profile === "recorrente") profileScore = 5;
+  else if (profile === "insatisfeito") profileScore = -10;
+  else if (profile === "resistente") profileScore = -25;
+  // null/unknown = 0
+
+  // ── DIM 5: Tempo de atraso (-20 to +10) ──
+  let delayScore = 0;
+  if (clientData.data_vencimento) {
+    const venc = new Date(clientData.data_vencimento);
+    const delayDays = daysBetween(venc, now);
+    if (delayDays <= 0) delayScore = 10; // not overdue
+    else if (delayDays <= 30) delayScore = 10;
+    else if (delayDays <= 90) delayScore = 0;
+    else if (delayDays <= 180) delayScore = -10;
+    else delayScore = -20;
   }
 
-  // ── CREDIBILIDADE dimension (0-100) ──
-  let credibilityScore = 50;
-  const totalFormalized = agreementsCreated;
-  const totalBroken = agreementsCancelled;
-  if (totalFormalized > 0) {
-    credibilityScore = 70; // formalizing is positive
-    if (agreementsSigned > 0) credibilityScore = 80;
-    // Progressive penalty for breaks
-    if (totalBroken >= 1) credibilityScore -= 10;
-    if (totalBroken >= 2) credibilityScore -= 15;
-    if (totalBroken >= 3) credibilityScore -= 20;
-    credibilityScore = Math.max(15, credibilityScore);
-  } else if (totalBroken > 0) {
-    credibilityScore = 30;
-  }
-
-  // ── Final weighted score ──
-  const raw = contactScore * W_CONTACT + engagementScore * W_ENGAGEMENT + conversionScore * W_CONVERSION + credibilityScore * W_CREDIBILITY;
-  const score = Math.max(0, Math.min(100, Math.round(raw)));
+  // ── Final score (sum, clamp 0-100) ──
+  // Base offset: 10 (so a client with no signals at all gets ~10, not 0)
+  const rawScore = 10 + contactScore + engagementScore + paymentScore + profileScore + delayScore;
+  const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   // ── preferred_channel ──
   let preferred_channel = "unknown";
@@ -219,39 +192,41 @@ function calculateScore(events: ClientEvent[], now: Date): ScoreResult {
   }
 
   // ── suggested_queue ──
-  let suggested_queue = "low_history";
-  if (events.length < 3) {
-    suggested_queue = "low_history";
-  } else if (contactScore < 25 && contactTotal > 3) {
-    suggested_queue = "hygiene";
-  } else if (totalBroken >= 2 && totalFormalized > 0) {
-    suggested_queue = "renegotiation";
-  } else if (conversionScore < 30 && contactScore > 50) {
-    suggested_queue = "low_conversion";
-  } else if (preferred_channel === "whatsapp" || (whatsappInbound > callEvents)) {
-    suggested_queue = "priority_whatsapp";
-  } else {
-    suggested_queue = "priority_call";
+  let suggested_queue: string;
+  if (score >= 75) suggested_queue = "priority_high";
+  else if (score >= 50) suggested_queue = "priority_medium";
+  else suggested_queue = "priority_low";
+  if (events.length < 3) suggested_queue = "low_history";
+
+  // ── suggested_profile ──
+  let suggested_profile: string | null = null;
+  if (hasComplaints) {
+    suggested_profile = "insatisfeito";
+  } else if (!paymentConfirmed && totalResponses === 0 && score < 50) {
+    suggested_profile = "resistente";
+  } else if (overdueEvents >= 2 || agreementsCancelled >= 2) {
+    suggested_profile = "recorrente";
+  } else if (paymentConfirmed || agreementsSigned > 0) {
+    suggested_profile = "ocasional";
   }
 
   // ── score_reason ──
   const reasons: string[] = [];
-  if (events.length < 3) reasons.push("Sem histórico suficiente");
-  if (contactScore >= 70) reasons.push("Contato produtivo recente");
-  if (contactScore < 30 && contactTotal > 3) reasons.push("Muitas tentativas improdutivas");
-  if (engagementScore >= 70) reasons.push("Bom engajamento");
-  if (whatsappInbound > 0 && callEvents === 0) reasons.push("Responde WhatsApp, não atende ligação");
-  if (agreementsSigned > 0 && totalBroken === 0) reasons.push("Acordo formalizado sem quebra");
-  if (totalBroken >= 2) reasons.push(`Re-acordo com ${totalBroken} quebras`);
-  if (totalFormalized === 0 && events.length > 5) reasons.push("Muitas interações sem acordo");
-  const score_reason = reasons.length > 0 ? reasons.slice(0, 2).join("; ") : "Score calculado com base no histórico";
+  if (events.length < 3) reasons.push("Histórico limitado");
+  if (contactScore >= 20) reasons.push("Contato recente");
+  if (engagementScore >= 25) reasons.push("Bom engajamento");
+  if (paymentScore >= 25) reasons.push("Pagamentos em dia");
+  if (paymentScore <= -20) reasons.push("Quebra de acordo");
+  if (profileScore <= -10) reasons.push(`Perfil: ${profile}`);
+  if (delayScore <= -10) reasons.push("Atraso prolongado");
+  const score_reason = reasons.length > 0 ? reasons.slice(0, 3).join("; ") : "Score calculado com base no histórico";
 
   // ── score_confidence ──
   let score_confidence = "low";
   if (events.length >= 10) score_confidence = "high";
   else if (events.length >= 4) score_confidence = "medium";
 
-  return { cpf: "", score, preferred_channel, suggested_queue, score_reason, score_confidence };
+  return { cpf: "", score, preferred_channel, suggested_queue, score_reason, score_confidence, suggested_profile };
 }
 
 Deno.serve(async (req) => {
@@ -301,40 +276,53 @@ Deno.serve(async (req) => {
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000);
 
-    // Get unique CPFs to score
-    let cpfsToProcess: string[] = [];
+    // Get clients to score (with debtor_profile and data_vencimento)
+    let clientsQuery = supabase
+      .from("clients")
+      .select("cpf, debtor_profile, data_vencimento")
+      .eq("tenant_id", tenantId);
 
     if (cpf) {
       const clean = cpf.replace(/\D/g, "");
-      cpfsToProcess = [clean];
-    } else {
-      // Batch: get all unique CPFs in tenant
-      const { data: allClients } = await supabase
-        .from("clients")
-        .select("cpf")
-        .eq("tenant_id", tenantId);
+      const formatted = clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      clientsQuery = clientsQuery.or(`cpf.eq.${clean},cpf.eq.${formatted}`);
+    }
 
-      if (!allClients || allClients.length === 0) {
-        return new Response(JSON.stringify({ scores: [], message: "Nenhum cliente encontrado" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const { data: allClients } = await clientsQuery;
 
-      const uniqueCpfs = new Set<string>();
-      for (const c of allClients) {
-        uniqueCpfs.add(c.cpf.replace(/\D/g, ""));
+    if (!allClients || allClients.length === 0) {
+      return new Response(JSON.stringify({ scores: [], message: "Nenhum cliente encontrado" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Group by clean CPF, keep client data
+    const cpfDataMap = new Map<string, { debtor_profile: string | null; data_vencimento: string | null }>();
+    const uniqueCpfs: string[] = [];
+    for (const c of allClients) {
+      const clean = c.cpf.replace(/\D/g, "");
+      if (!cpfDataMap.has(clean)) {
+        cpfDataMap.set(clean, { debtor_profile: c.debtor_profile, data_vencimento: c.data_vencimento });
+        uniqueCpfs.push(clean);
+      } else {
+        // Keep earliest vencimento
+        const existing = cpfDataMap.get(clean)!;
+        if (!existing.data_vencimento || (c.data_vencimento && c.data_vencimento < existing.data_vencimento)) {
+          existing.data_vencimento = c.data_vencimento;
+        }
+        // Keep profile if set
+        if (!existing.debtor_profile && c.debtor_profile) {
+          existing.debtor_profile = c.debtor_profile;
+        }
       }
-      cpfsToProcess = Array.from(uniqueCpfs);
     }
 
     const allScores: ScoreResult[] = [];
     const BATCH = 100;
 
-    for (let i = 0; i < cpfsToProcess.length; i += BATCH) {
-      const batch = cpfsToProcess.slice(i, i + BATCH);
+    for (let i = 0; i < uniqueCpfs.length; i += BATCH) {
+      const batch = uniqueCpfs.slice(i, i + BATCH);
 
-      // Fetch events for this batch of CPFs
-      // We query by both clean and formatted CPF patterns
       const cpfPatterns = batch.flatMap(c => {
         const formatted = c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
         return [c, formatted];
@@ -349,7 +337,6 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(5000);
 
-      // Group events by clean CPF
       const eventsByCpf: Record<string, ClientEvent[]> = {};
       for (const ev of (events || [])) {
         const key = ev.client_cpf.replace(/\D/g, "");
@@ -359,7 +346,8 @@ Deno.serve(async (req) => {
 
       for (const cleanCpf of batch) {
         const cpfEvents = eventsByCpf[cleanCpf] || [];
-        const result = calculateScore(cpfEvents, now);
+        const clientData = cpfDataMap.get(cleanCpf) || { debtor_profile: null, data_vencimento: null };
+        const result = calculateScore(cpfEvents, now, clientData);
         result.cpf = cleanCpf;
         allScores.push(result);
       }
@@ -368,19 +356,27 @@ Deno.serve(async (req) => {
     // Update clients in DB
     for (const s of allScores) {
       const formatted = s.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-      await supabase.from("clients").update({
+      const updateData: Record<string, unknown> = {
         propensity_score: s.score,
         preferred_channel: s.preferred_channel,
         suggested_queue: s.suggested_queue,
         score_reason: s.score_reason,
         score_confidence: s.score_confidence,
         score_updated_at: now.toISOString(),
-      })
+      };
+      if (s.suggested_profile) {
+        updateData.suggested_profile = s.suggested_profile;
+      }
+      await supabase.from("clients").update(updateData)
         .eq("tenant_id", tenantId)
         .or(`cpf.eq.${s.cpf},cpf.eq.${formatted}`);
     }
 
-    return new Response(JSON.stringify({ scores: allScores.map(s => ({ cpf: s.cpf, score: s.score })), count: allScores.length, source: "operational_v1" }), {
+    return new Response(JSON.stringify({
+      scores: allScores.map(s => ({ cpf: s.cpf, score: s.score, suggested_profile: s.suggested_profile })),
+      count: allScores.length,
+      source: "operational_v2",
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

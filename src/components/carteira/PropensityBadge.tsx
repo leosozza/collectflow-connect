@@ -11,15 +11,15 @@ const PropensityBadge = ({ score, scoreReason, size = "sm" }: PropensityBadgePro
   if (score === null || score === undefined) return null;
 
   const getColor = (s: number) => {
-    if (s >= 70) return { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-400", icon: TrendingUp };
-    if (s >= 40) return { bg: "bg-amber-100 dark:bg-amber-900/40", text: "text-amber-700 dark:text-amber-400", icon: Minus };
+    if (s >= 75) return { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-400", icon: TrendingUp };
+    if (s >= 50) return { bg: "bg-amber-100 dark:bg-amber-900/40", text: "text-amber-700 dark:text-amber-400", icon: Minus };
     return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-700 dark:text-red-400", icon: TrendingDown };
   };
 
   const getLabel = (s: number) => {
-    if (s >= 70) return "Alto";
-    if (s >= 40) return "Médio";
-    return "Baixo";
+    if (s >= 75) return "Bom";
+    if (s >= 50) return "Médio";
+    return "Ruim";
   };
 
   const { bg, text, icon: Icon } = getColor(score);

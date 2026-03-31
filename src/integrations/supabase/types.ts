@@ -1276,6 +1276,9 @@ export type Database = {
           data_quitacao: string | null
           data_vencimento: string
           debtor_category_id: string | null
+          debtor_profile:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           email: string | null
           endereco: string | null
           enrichment_data: Json | null
@@ -1299,6 +1302,9 @@ export type Database = {
           status_cobranca_id: string | null
           status_cobranca_locked_at: string | null
           status_cobranca_locked_by: string | null
+          suggested_profile:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           suggested_queue: string | null
           tenant_id: string | null
           tipo_devedor_id: string | null
@@ -1325,6 +1331,9 @@ export type Database = {
           data_quitacao?: string | null
           data_vencimento: string
           debtor_category_id?: string | null
+          debtor_profile?:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           email?: string | null
           endereco?: string | null
           enrichment_data?: Json | null
@@ -1348,6 +1357,9 @@ export type Database = {
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_profile?:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
@@ -1374,6 +1386,9 @@ export type Database = {
           data_quitacao?: string | null
           data_vencimento?: string
           debtor_category_id?: string | null
+          debtor_profile?:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           email?: string | null
           endereco?: string | null
           enrichment_data?: Json | null
@@ -1397,6 +1412,9 @@ export type Database = {
           status_cobranca_id?: string | null
           status_cobranca_locked_at?: string | null
           status_cobranca_locked_by?: string | null
+          suggested_profile?:
+            | Database["public"]["Enums"]["debtor_profile_type"]
+            | null
           suggested_queue?: string | null
           tenant_id?: string | null
           tipo_devedor_id?: string | null
@@ -5788,6 +5806,11 @@ export type Database = {
     Enums: {
       app_role: "admin" | "operador"
       client_status: "pendente" | "pago" | "quebrado" | "vencido" | "em_acordo"
+      debtor_profile_type:
+        | "ocasional"
+        | "recorrente"
+        | "resistente"
+        | "insatisfeito"
       tenant_role:
         | "super_admin"
         | "admin"
@@ -5923,6 +5946,12 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "operador"],
       client_status: ["pendente", "pago", "quebrado", "vencido", "em_acordo"],
+      debtor_profile_type: [
+        "ocasional",
+        "recorrente",
+        "resistente",
+        "insatisfeito",
+      ],
       tenant_role: [
         "super_admin",
         "admin",

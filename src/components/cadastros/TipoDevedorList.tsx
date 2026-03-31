@@ -1,130 +1,60 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useTenant } from "@/hooks/useTenant";
-import { fetchTiposDevedor, upsertTipoDevedor, deleteTipoDevedor } from "@/services/cadastrosService";
-import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Info } from "lucide-react";
 
-const DEFAULT_TIPOS = [
-  { nome: "Negligente", descricao: "Cobrança agressiva, negativação rápida" },
-  { nome: "Crônico", descricao: "Lembretes frequentes, oferecer parcelamento" },
-  { nome: "Ocasional", descricao: "Abordagem empática, descontos" },
-  { nome: "Imprevisível", descricao: "Lembretes discretos" },
-  { nome: "Mau Pagador", descricao: "Processo jurídico, sem negociação" },
+const FIXED_PROFILES = [
+  { key: "ocasional", nome: "Ocasional", descricao: "Atrasou, mas paga", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
+  { key: "recorrente", nome: "Recorrente", descricao: "Sempre atrasa", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
+  { key: "resistente", nome: "Resistente", descricao: "Não quer pagar", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+  { key: "insatisfeito", nome: "Insatisfeito", descricao: "Não paga por insatisfação", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400" },
 ];
 
 const TipoDevedorList = () => {
-  const { tenant } = useTenant();
-  const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [nome, setNome] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [seeding, setSeeding] = useState(false);
-
-  const { data: tipos = [], isLoading } = useQuery({
-    queryKey: ["tipos_devedor", tenant?.id],
-    queryFn: () => fetchTiposDevedor(tenant!.id),
-    enabled: !!tenant?.id,
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: (data: any) => upsertTipoDevedor(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tipos_devedor"] }); toast.success("Salvo!"); setDialogOpen(false); },
-    onError: () => toast.error("Erro ao salvar"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteTipoDevedor,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tipos_devedor"] }); toast.success("Excluído!"); },
-    onError: () => toast.error("Erro ao excluir"),
-  });
-
-  const handleSeedDefaults = async () => {
-    if (!tenant?.id) return;
-    setSeeding(true);
-    try {
-      for (const t of DEFAULT_TIPOS) {
-        await upsertTipoDevedor({ tenant_id: tenant.id, nome: t.nome, descricao: t.descricao });
-      }
-      queryClient.invalidateQueries({ queryKey: ["tipos_devedor"] });
-      toast.success("Perfis padrão carregados!");
-    } catch {
-      toast.error("Erro ao carregar perfis padrão");
-    } finally {
-      setSeeding(false);
-    }
-  };
-
-  const openNew = () => { setEditing(null); setNome(""); setDescricao(""); setDialogOpen(true); };
-  const openEdit = (t: any) => { setEditing(t); setNome(t.nome); setDescricao(t.descricao || ""); setDialogOpen(true); };
-  const handleSave = () => {
-    if (!nome.trim()) { toast.error("Nome obrigatório"); return; }
-    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), descricao: descricao.trim() || null });
-  };
-
-  const filtered = tipos.filter((t: any) => t.nome.toLowerCase().includes(search.toLowerCase()));
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex items-center gap-2">
-          {tipos.length === 0 && !isLoading && (
-            <Button variant="outline" onClick={handleSeedDefaults} disabled={seeding}>
-              <Download className="w-4 h-4 mr-1" />
-              {seeding ? "Carregando..." : "Carregar perfis padrão"}
-            </Button>
-          )}
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo Perfil</Button>
-        </div>
+      <div className="flex items-center gap-2">
+        <Info className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">
+          Perfis fixos de devedor — apenas 1 perfil por cliente. O sistema sugere automaticamente com base no comportamento.
+        </span>
       </div>
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        {isLoading ? <div className="p-8 text-center text-muted-foreground">Carregando...</div> : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground text-sm">Nenhum tipo encontrado</div> : (
-          <Table>
-            <TableHeader><TableRow className="bg-muted/50"><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {filtered.map((t: any) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.nome}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.descricao || "—"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(t)}><Pencil className="w-4 h-4" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle>Excluir tipo?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteMutation.mutate(t.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead>Perfil</TableHead>
+              <TableHead>Descrição</TableHead>
+              <TableHead className="text-center">Impacto no Score</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {FIXED_PROFILES.map((p) => (
+              <TableRow key={p.key}>
+                <TableCell>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className={`${p.color} border-0 cursor-help`}>
+                        {p.nome}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{p.descricao}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{p.descricao}</TableCell>
+                <TableCell className="text-center font-mono text-sm">
+                  {p.key === "ocasional" && <span className="text-emerald-600">+20</span>}
+                  {p.key === "recorrente" && <span className="text-amber-600">+5</span>}
+                  {p.key === "resistente" && <span className="text-red-600">-25</span>}
+                  {p.key === "insatisfeito" && <span className="text-orange-600">-10</span>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "Editar Perfil do Devedor" : "Novo Perfil do Devedor"}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Nome *</Label><Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Casual, Recorrente..." /></div>
-            <div><Label>Descrição</Label><Textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Descrição opcional" /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Salvando..." : "Salvar"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
