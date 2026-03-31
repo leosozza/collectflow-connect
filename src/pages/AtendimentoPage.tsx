@@ -283,7 +283,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     return (
       <div className="p-8 text-center space-y-4">
         <p className="text-muted-foreground">Cliente não encontrado</p>
-        {!embedded && <Button variant="outline" onClick={() => navigate("/carteira")}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
+        {!embedded && <Button variant="outline" onClick={() => navigate(originBack)}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
       </div>
     );
   }
