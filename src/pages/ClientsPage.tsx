@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 
 const ClientsPage = () => {
+  useScrollRestore();
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const { trackAction } = useActivityTracker();

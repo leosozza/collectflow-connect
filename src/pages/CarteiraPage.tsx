@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
+import { useNavigateWithOrigin } from "@/hooks/useNavigateWithOrigin";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchTiposStatus, fetchCredores } from "@/services/cadastrosService";
@@ -45,6 +47,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const CarteiraPage = () => {
+  useScrollRestore();
+  const navigateWithOrigin = useNavigateWithOrigin();
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const permissions = usePermissions();
@@ -783,7 +787,7 @@ const CarteiraPage = () => {
                       <TableCell>
                         <button
                           className="font-medium text-primary hover:underline cursor-pointer text-left"
-                          onClick={() => navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
                         >
                           {client.nome_completo}
                         </button>
@@ -820,7 +824,7 @@ const CarteiraPage = () => {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8 text-primary hover:text-primary"
-                            onClick={() => navigate(`/atendimento/${client.id}`)}
+                            onClick={() => navigateWithOrigin(`/atendimento/${client.id}`)}
                             title="Atender"
                           >
                             <Headset className="w-4 h-4" />

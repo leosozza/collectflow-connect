@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
-import { useSearchParams, useNavigate, useParams } from "react-router-dom";
+import { useSearchParams, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,6 +52,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [searchParams] = useSearchParams();
   const id = propClientId || paramClientId || searchParams.get("clientId");
   const navigate = useNavigate();
+  const location = useLocation();
+  const originBack = (location.state as any)?.from || "/carteira";
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
@@ -281,7 +283,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     return (
       <div className="p-8 text-center space-y-4">
         <p className="text-muted-foreground">Cliente não encontrado</p>
-        {!embedded && <Button variant="outline" onClick={() => navigate("/carteira")}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
+        {!embedded && <Button variant="outline" onClick={() => navigate(originBack)}><ArrowLeft className="w-4 h-4 mr-2" /> Voltar</Button>}
       </div>
     );
   }

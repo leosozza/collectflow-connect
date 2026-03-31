@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery } from "@tanstack/react-query";
 import { fetchClients } from "@/services/clientService";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +18,7 @@ import AgingReport from "@/components/relatorios/AgingReport";
 import PrestacaoContas from "@/components/relatorios/PrestacaoContas";
 
 const RelatoriosPage = () => {
+  useScrollRestore();
   const now = new Date();
   const { tenant } = useTenant();
   const [selectedYear, setSelectedYear] = useUrlState("year", now.getFullYear().toString());

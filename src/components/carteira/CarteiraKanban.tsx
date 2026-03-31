@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
 import { formatCurrency } from "@/lib/formatters";
 import { Headset, ChevronLeft, ChevronRight } from "lucide-react";
@@ -24,6 +24,8 @@ const PAGE_SIZE = 100;
 
 const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const originUrl = location.pathname + location.search;
   const [pages, setPages] = useState<Record<string, number>>({});
 
   if (loading) {
@@ -134,7 +136,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
                       key={client.id}
                       className="bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                       onClick={() =>
-                        navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)
+                        navigate(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`, { state: { from: originUrl } })
                       }
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -152,7 +154,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
                           className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/atendimento/${client.id}`);
+                            navigate(`/atendimento/${client.id}`, { state: { from: originUrl } });
                           }}
                           title="Atender"
                         >
