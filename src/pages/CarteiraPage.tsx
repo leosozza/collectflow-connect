@@ -71,6 +71,8 @@ const CarteiraPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
+  const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
   const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
   const [sortField, setSortField] = useUrlState("sort", "created_at");
   const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
@@ -93,7 +95,9 @@ const CarteiraPage = () => {
     semContato: urlSemContato,
     emDia: urlEmDia,
     higienizados: urlHigienizados,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
+    scoreRange: urlScoreRange,
+    debtorProfile: urlDebtorProfile,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlScoreRange, urlDebtorProfile]);
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -124,6 +128,7 @@ const CarteiraPage = () => {
     tipoDevedorId: "", tipoDividaId: "", statusCobrancaId: "", semAcordo: false,
     cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
     valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
+    scoreRange: "", debtorProfile: "",
   }), []);
 
   const setFilters = useCallback(
@@ -366,10 +371,27 @@ const CarteiraPage = () => {
       filtered = filtered.filter(c => (c as any).enrichment_data != null);
     }
     if (filters.tipoDevedorId) {
-      filtered = filtered.filter((c: any) => c.tipo_devedor_id === filters.tipoDevedorId);
+      const ids = filters.tipoDevedorId.split(",");
+      filtered = filtered.filter((c: any) => ids.includes(c.tipo_devedor_id));
     }
     if (filters.tipoDividaId) {
-      filtered = filtered.filter((c: any) => c.tipo_divida_id === filters.tipoDividaId);
+      const ids = filters.tipoDividaId.split(",");
+      filtered = filtered.filter((c: any) => ids.includes(c.tipo_divida_id));
+    }
+    if (filters.debtorProfile) {
+      const profiles = filters.debtorProfile.split(",");
+      filtered = filtered.filter((c: any) => profiles.includes(c.debtor_profile));
+    }
+    if (filters.scoreRange) {
+      const ranges = filters.scoreRange.split(",");
+      filtered = filtered.filter((c: any) => {
+        const s = c.propensity_score;
+        if (s == null) return false;
+        if (ranges.includes("bom") && s >= 75) return true;
+        if (ranges.includes("medio") && s >= 50 && s < 75) return true;
+        if (ranges.includes("ruim") && s < 50) return true;
+        return false;
+      });
     }
     if (filters.statusCobrancaId) {
       const selectedIds = filters.statusCobrancaId.split(",");

@@ -56,6 +56,8 @@ const ClientsPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
+  const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
 
   const filters = useMemo(() => ({
     status: urlStatus,
@@ -75,7 +77,9 @@ const ClientsPage = () => {
     semContato: urlSemContato,
     emDia: urlEmDia,
     higienizados: urlHigienizados,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados]);
+    scoreRange: urlScoreRange,
+    debtorProfile: urlDebtorProfile,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlScoreRange, urlDebtorProfile]);
 
   const setFilters = useMemo(() => {
     return (newFilters: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
@@ -97,8 +101,10 @@ const ClientsPage = () => {
       setUrlSemContato(resolved.semContato);
       setUrlEmDia(resolved.emDia);
       setUrlHigienizados(resolved.higienizados);
+      setUrlScoreRange(resolved.scoreRange);
+      setUrlDebtorProfile(resolved.debtorProfile);
     };
-  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados]);
+  }, [filters, setUrlStatus, setUrlCredor, setUrlDateFrom, setUrlDateTo, setUrlSearch, setUrlTipoDevedorId, setUrlTipoDividaId, setUrlStatusCobrancaId, setUrlSemAcordo, setUrlCadastroDe, setUrlCadastroAte, setUrlQuitados, setUrlValorAbertoDe, setUrlValorAbertoAte, setUrlSemContato, setUrlEmDia, setUrlHigienizados, setUrlScoreRange, setUrlDebtorProfile]);
   const [formOpen, setFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);

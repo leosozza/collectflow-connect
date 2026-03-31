@@ -102,9 +102,21 @@ export const fetchClients = async (filters?: {
     if (filters?.operatorId) query = query.eq("operator_id", filters.operatorId);
     if (filters?.cadastroDe) query = query.gte("created_at", filters.cadastroDe + "T00:00:00");
     if (filters?.cadastroAte) query = query.lte("created_at", filters.cadastroAte + "T23:59:59");
-    if (filters?.tipoDevedorId) query = query.eq("tipo_devedor_id", filters.tipoDevedorId);
-    if (filters?.tipoDividaId) query = query.eq("tipo_divida_id", filters.tipoDividaId);
-    if (filters?.statusCobrancaId) query = query.eq("status_cobranca_id", filters.statusCobrancaId);
+    if (filters?.tipoDevedorId) {
+      const ids = filters.tipoDevedorId.split(",").filter(Boolean);
+      if (ids.length === 1) query = query.eq("tipo_devedor_id", ids[0]);
+      else if (ids.length > 1) query = query.in("tipo_devedor_id", ids);
+    }
+    if (filters?.tipoDividaId) {
+      const ids = filters.tipoDividaId.split(",").filter(Boolean);
+      if (ids.length === 1) query = query.eq("tipo_divida_id", ids[0]);
+      else if (ids.length > 1) query = query.in("tipo_divida_id", ids);
+    }
+    if (filters?.statusCobrancaId) {
+      const ids = filters.statusCobrancaId.split(",").filter(Boolean);
+      if (ids.length === 1) query = query.eq("status_cobranca_id", ids[0]);
+      else if (ids.length > 1) query = query.in("status_cobranca_id", ids);
+    }
 
     const data = await fetchAllRows<Client>(query);
     logger.info(MODULE, "fetch", { count: data.length });
