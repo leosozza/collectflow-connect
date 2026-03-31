@@ -211,6 +211,7 @@ const ClientDetailPage = () => {
         cpf={cpf || ""}
         agreements={agreements}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
+        backTo={backTo}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
