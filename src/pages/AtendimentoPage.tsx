@@ -120,7 +120,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const { data: client, isLoading: clientLoading } = useQuery<any>({
     queryKey: ["atendimento-client", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("*").eq("id", id!).single();
+      let q = supabase.from("clients").select("*").eq("id", id!);
+      if (tenant?.id) q = q.eq("tenant_id", tenant.id);
+      const { data, error } = await q.single();
       if (error) throw error;
       return data;
     },
