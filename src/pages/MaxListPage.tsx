@@ -121,8 +121,10 @@ function removeTimestamp(dateStr: string | null): string {
   return dateStr.split("T")[0]?.replace(/-/g, "/").split("/").reverse().join("/") || "";
 }
 
-function formatStatus(isCancelled: boolean): string {
-  return isCancelled ? "CANCELADO" : "ATIVO";
+function formatStatus(isCancelled: boolean, hasPagamento: boolean): string {
+  if (isCancelled) return "CANCELADO";
+  if (hasPagamento) return "PAGO";
+  return "ATIVO";
 }
 
 function extractYear(dateStr: string): string | null {
