@@ -329,7 +329,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-12 pt-3 pb-1 border-t border-border mt-2 space-y-4">
+            <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
                 <InfoItem label="Cod. Devedor" value={client.external_id} />
