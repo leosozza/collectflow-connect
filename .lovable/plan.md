@@ -1,268 +1,197 @@
 
 
-# Plano: Fase 2 — Performance, Escalabilidade e Estabilidade
+# Plano: Fase 3 — Robustez Operacional, Auditoria, Concorrência e Segurança
 
 ## Resumo
 
-Otimizar os módulos mais críticos (Carteira, WhatsApp, Telefonia) para operar com volume real. Mover lógica pesada para o banco, implementar paginação real, polling adaptativo e estruturar observações. Sem alterar UI, sem criar telas, sem mudar lógica de negócio.
+Implementar controle de concorrência por lock de atendimento, expandir auditoria para todas as ações críticas, hardening de edge functions, idempotência reforçada e observabilidade operacional. Sem alterar UI, sem criar telas novas, sem mudar fluxos de negócio.
 
 ---
 
-## Bloco 1: Carteira — RPC de Agrupamento no Banco
+## Bloco 1: Lock de Atendimento (Controle de Concorrência)
 
-**Problema**: O frontend busca até 1000 registros brutos, depois agrupa por CPF, calcula totais, deriva status e filtra — tudo em `useMemo` com ~160 linhas de lógica. Com 50k+ registros, isso é insustentável.
+**Estado atual**: Nenhum mecanismo de lock existe. Múltiplos operadores podem abrir o mesmo cliente simultaneamente.
 
-### 1.1 — Criar RPC `get_carteira_grouped`
-
-Criar uma function SQL que retorna dados já agrupados:
+### 1.1 — Criar tabela `atendimento_locks` (migration)
 
 ```sql
-CREATE FUNCTION get_carteira_grouped(
-  _tenant_id uuid,
-  _page int DEFAULT 1,
-  _page_size int DEFAULT 50,
-  _search text DEFAULT NULL,
-  _credor text DEFAULT NULL,
-  _date_from date DEFAULT NULL,
-  _date_to date DEFAULT NULL,
-  _status_cobranca_ids uuid[] DEFAULT NULL,
-  _tipo_devedor_ids uuid[] DEFAULT NULL,
-  _tipo_divida_ids uuid[] DEFAULT NULL,
-  _score_min int DEFAULT NULL,
-  _score_max int DEFAULT NULL,
-  _debtor_profiles text[] DEFAULT NULL,
-  _sort_field text DEFAULT 'created_at',
-  _sort_dir text DEFAULT 'desc',
-  _operator_id uuid DEFAULT NULL,
-  _sem_acordo boolean DEFAULT false
-) RETURNS TABLE (
-  representative_id uuid,
-  cpf text,
-  nome_completo text,
-  credor text,
-  phone text,
-  email text,
-  data_vencimento date,
-  valor_total numeric,
-  parcelas_count int,
-  propensity_score int,
-  status_cobranca_id uuid,
-  status text,
-  debtor_profile text,
-  all_ids uuid[],
-  total_count bigint
-)
+CREATE TABLE atendimento_locks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  client_id uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  operator_id uuid NOT NULL,
+  operator_name text NOT NULL,
+  channel text,
+  started_at timestamptz DEFAULT now(),
+  expires_at timestamptz DEFAULT now() + interval '15 minutes',
+  UNIQUE(tenant_id, client_id)
+);
+ALTER TABLE atendimento_locks ENABLE ROW LEVEL SECURITY;
+-- RLS: tenant users can read/write own tenant
+CREATE POLICY "tenant_locks" ON atendimento_locks
+  FOR ALL TO authenticated
+  USING (tenant_id = get_my_tenant_id())
+  WITH CHECK (tenant_id = get_my_tenant_id());
+
+-- Auto-cleanup function
+CREATE FUNCTION cleanup_expired_locks() RETURNS void
+LANGUAGE sql AS $$ DELETE FROM atendimento_locks WHERE expires_at < now(); $$;
 ```
 
-Lógica interna:
-- `GROUP BY cpf` com agregações (SUM valor_parcela, COUNT, MAX score, MIN data_vencimento)
-- Derivação de `status_cobranca_id` representativo via CASE WHEN (mesma lógica que hoje está no frontend)
-- Filtros aplicados via WHERE dinâmico
-- `_sem_acordo`: LEFT JOIN com agreements para excluir CPFs com acordo ativo
-- Paginação via `OFFSET/LIMIT`
-- Retorna `total_count` usando `COUNT(*) OVER()`
+### 1.2 — Criar `src/services/lockService.ts`
 
-### 1.2 — Adaptar `clientService.ts`
+- `acquireLock(tenantId, clientId, operatorId, operatorName, channel)`: tenta INSERT, retorna sucesso ou info do operador que tem o lock
+- `renewLock(tenantId, clientId, operatorId)`: UPDATE expires_at += 15min
+- `releaseLock(tenantId, clientId, operatorId)`: DELETE
+- `checkLock(tenantId, clientId)`: SELECT, retorna lock ativo ou null
+- Antes de acquire, limpa locks expirados com `cleanup_expired_locks()`
 
-Nova função `fetchCarteiraGrouped(tenantId, filters, page, pageSize)`:
-- Chama `supabase.rpc("get_carteira_grouped", params)`
-- Retorna `{ data: GroupedClient[], count: number }`
+### 1.3 — Integrar no `AtendimentoPage.tsx`
 
-### 1.3 — Adaptar `CarteiraPage.tsx`
+- Ao abrir atendimento, chamar `acquireLock`
+- Se lock ativo de outro operador: toast de aviso com nome do operador, modo somente leitura
+- Se admin/gerente: opção de takeover (DELETE + INSERT)
+- Renovação automática via `setInterval` a cada 5 minutos
+- Ao fechar/sair: `releaseLock` no cleanup do useEffect
 
-- Substituir `fetchClients` + `useMemo displayClients` (~160 linhas) por `fetchCarteiraGrouped`
-- Remover agrupamento por CPF no frontend
-- Remover derivação de status no frontend
-- Manter: seleção em massa, exportação, dialogs, view mode, kanban
-- Paginação real com controles next/prev + total
-- queryKey inclui page + todos os filtros
+### 1.4 — Integrar no `findOrCreateSession`
 
-### 1.4 — Adaptar `CarteiraKanban`
-
-- Receber dados já agrupados (mesmo formato)
-- Manter paginação interna por coluna (já existe)
-
-### 1.5 — Manter queries auxiliares
-
-- `agreement-cpfs`: manter (usado para badge "Acordo Vigente" e filtro semAcordo — agora o filtro vai para a RPC, mas o badge visual pode precisar)
-- `contacted-client-ids`: remover do frontend se possível (mover para RPC se necessário)
+- Chamar `acquireLock` ao criar sessão
+- Associar lock ao session lifecycle
 
 ---
 
-## Bloco 2: WhatsApp — Paginação e Realtime Otimizado
+## Bloco 2: Auditoria Expandida
 
-**Problema**: `loadConversations()` busca TODAS as conversas do tenant sem paginação. O realtime chama `loadConversations()` a cada evento, recarregando tudo.
+**Estado atual**: `logAction` já existe e é usado em ~15 pontos (clientService, agreementService, dispositionService, etc). Faltam ações críticas.
 
-### 2.1 — Paginar conversas em `conversationService.ts`
+### 2.1 — Adicionar `logAction` nos pontos faltantes
 
+| Serviço / Local | Ações a auditar |
+|---|---|
+| `importService` / `MaxListPage` | import_started, import_completed (count, credor) |
+| `dispositionService.createDisposition` | disposition_created (já tem parcial, verificar) |
+| `agreementService.updateAgreement` | agreement_updated (before/after status) |
+| `cadastrosService` | credor_created, credor_updated, status_type_created |
+| `AtendimentoPage` - save note | observation_added |
+| `AtendimentoPage` - takeover | atendimento_takeover |
+| `clientService.updateClient` | client_updated (changed fields) |
+| `whatsappCampaignService` | campaign_started, campaign_completed |
+| Operator assignment (CarteiraPage) | operator_assigned |
+
+### 2.2 — Enriquecer `logAction` com campo `module`
+
+Adicionar campo opcional `module` ao `logAction` para categorização:
 ```typescript
-export async function fetchConversations(
-  tenantId: string,
-  page = 1,
-  pageSize = 50,
-  statusFilter?: string
-): Promise<{ data: Conversation[], count: number }> {
-  // .range() + count: "exact"
+logAction({ 
+  action: "import_completed", 
+  entity_type: "import", 
+  details: { count: 500, credor: "X", module: "maxlist" } 
+});
+```
+
+Não precisa mudar a tabela — o `module` vai dentro de `details`.
+
+---
+
+## Bloco 3: Hardening de Edge Functions
+
+### 3.1 — `maxsystem-proxy`
+
+- Remover `ALLOWED_SLUGS` hardcoded — validar tenant dinamicamente via JWT/profile
+- Adicionar timeout na chamada ao MaxSystem (fetch com AbortController, 30s)
+- Log estruturado: tenant_id, action, count, duration
+
+### 3.2 — `threecplus-proxy`
+
+- Já tem validação JWT e tenant — verificar timeout
+- Adicionar AbortController com 15s timeout
+- Sanitizar logs para não vazar api_token
+
+### 3.3 — `evolution-proxy`
+
+- Verificar validação de JWT
+- Adicionar timeout 15s
+- Sanitizar headers/tokens nos logs
+
+### 3.4 — Padrão de resposta de erro
+
+Criar helper reutilizável para edge functions:
+```typescript
+function errorResponse(message: string, status: number, corsHeaders: Record<string,string>) {
+  return new Response(JSON.stringify({ error: message, success: false }), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
 }
 ```
 
-### 2.2 — Paginar mensagens
+---
+
+## Bloco 4: Idempotência e Resiliência
+
+### 4.1 — `bulkCreateClients` — já usa `external_id` para dedup
+
+Verificar que o upsert usa `onConflict: "tenant_id,external_id"`. Se não, corrigir.
+
+### 4.2 — `createDisposition` — dedup por sessão
+
+Adicionar verificação: se já existe disposition para mesmo `client_id + operator_id + disposition_type` nos últimos 30 segundos, ignorar (evitar duplo-clique).
+
+### 4.3 — `createAgreement` — verificar acordo existente
+
+Antes de criar acordo, verificar se já existe acordo pending/approved para mesmo CPF+credor+tenant. Se sim, rejeitar com mensagem clara.
+
+---
+
+## Bloco 5: Observabilidade Operacional
+
+### 5.1 — Criar `src/services/operationalLogService.ts`
 
 ```typescript
-export async function fetchMessages(
-  conversationId: string,
-  page = 1,
-  pageSize = 100
-): Promise<{ data: ChatMessage[], hasMore: boolean }> {
-  // Ordered DESC, then reverse for display
-  // Implements infinite scroll upward
+export async function logOperationalEvent(params: {
+  tenantId: string;
+  module: string;
+  action: string;
+  success: boolean;
+  durationMs?: number;
+  details?: Record<string, any>;
+  errorMessage?: string;
+}) {
+  // Insert into audit_logs com entity_type = "operational"
+  // Usa supabase direto, sem depender de auth (para edge functions tb)
 }
 ```
 
-### 2.3 — Realtime otimizado em `WhatsAppChatLayout.tsx`
+### 5.2 — Instrumentar módulos críticos
 
-Substituir `loadConversations()` no handler de realtime por atualização pontual:
+- `fetchCarteiraGrouped` — log com duration, count, filters
+- `bulkCreateClients` — log com batch_size, success/fail count
+- `fetchConversations` — log com count, duration
+- Edge functions já logam via console — manter
 
-```typescript
-// Em vez de recarregar tudo:
-if (payload.eventType === "INSERT") {
-  setConversations(prev => [newConv, ...prev]);
-} else if (payload.eventType === "UPDATE") {
-  setConversations(prev => prev.map(c => c.id === updated.id ? {...c, ...updated} : c));
-}
-```
+### 5.3 — Página de Auditoria (`AuditoriaPage`)
 
-### 2.4 — Mensagens realtime (já funciona bem)
-
-O handler de mensagens já faz append incremental — manter como está.
-
-### 2.5 — Infinite scroll na ConversationList
-
-- Detectar scroll no final da lista
-- Carregar próxima página
-- Concatenar com conversas existentes
+Já existe. Adicionar filtro por `module` (dentro de details) para facilitar diagnóstico operacional. Sem criar nova tela.
 
 ---
 
-## Bloco 3: Telefonia — Polling Adaptativo
+## Bloco 6: Revisão de Segurança
 
-**Problema**: `fetchAll` roda a cada 3s (operador) ou 30s (admin), independente do estado. Com múltiplos operadores, isso gera muitas chamadas simultâneas ao proxy.
+### 6.1 — Verificar RLS nas tabelas críticas
 
-### 3.1 — Polling adaptativo baseado em estado
+Executar query de verificação via `supabase--read_query` para confirmar que todas as tabelas operacionais têm RLS ativo e policies corretas.
 
-No `TelefoniaDashboard.tsx`:
+### 6.2 — Restringir ações por perfil no frontend
 
-```typescript
-const getAdaptiveInterval = useCallback(() => {
-  if (!myAgent || !isAgentOnline) return 30000; // offline: 30s
-  const status = myAgent.status;
-  if (status === 2) return 3000;  // em ligação: 3s
-  if (status === 3 || status === 4) return 5000; // pausa/ACW: 5s
-  if (status === 1) return 10000; // ocioso: 10s
-  return 15000; // default: 15s
-}, [myAgent, isAgentOnline]);
-```
+No `usePermissions`, as permissões já controlam acesso. Verificar que:
+- `delete` em clients requer `carteira.delete`
+- `import` requer `carteira.import`
+- Takeover requer role admin/gerente
+- Acesso admin telefonia/WhatsApp requer `contact_center.manage_admin`
 
-Para admin: manter 30s fixo (já é).
+### 6.3 — Sanitizar logs de edge functions
 
-### 3.2 — Backoff em erro
-
-```typescript
-const errorCountRef = useRef(0);
-const fetchAllWithBackoff = useCallback(async () => {
-  try {
-    await fetchAll();
-    errorCountRef.current = 0;
-  } catch {
-    errorCountRef.current++;
-  }
-}, [fetchAll]);
-
-// Interval = base * (1 + errorCount), max 60s
-```
-
-### 3.3 — Separar dados críticos de analíticos
-
-Atualmente `fetchAll` busca agents + company_calls + campaigns em paralelo. Separar:
-- **Crítico (polling rápido)**: `agents_status` (para operador, só seu status)
-- **Analítico (polling lento)**: `company_calls`, `list_campaigns`, `campaign_statistics`
-
-Para operadores: buscar apenas `agents_status` + suas campanhas no polling rápido. Campanhas e stats em polling separado de 60s.
-
----
-
-## Bloco 4: Observações Estruturadas
-
-**Estado atual**: Observações já são salvas em DUAS fontes:
-1. `clients.observacoes` — string concatenada (legado)
-2. `client_events` com `event_type = "observation_added"` — estruturado (já implementado)
-
-O ClientTimeline já lê de `client_events` quando disponível. A `ClientObservations` lê de `clients.observacoes`.
-
-### 4.1 — Migrar `ClientObservations` para ler de `client_events`
-
-- Em vez de parsear `clients.observacoes` (string concatenada), buscar de `client_events` com `event_type = "observation_added"`
-- Manter a UI idêntica (lista de notas com data + operador)
-- Dados vêm de `metadata.note` e `metadata.operator_name`
-
-### 4.2 — Manter gravação dual
-
-Ao salvar nota, continuar gravando em ambos (clients.observacoes + client_events) para backwards compatibility. Mas a leitura passa a vir de client_events.
-
-### 4.3 — Truncar `clients.observacoes`
-
-No `handleSaveNote`, limitar `clients.observacoes` às últimas 5 notas (resumo curto), não ao log completo. O histórico completo fica em client_events.
-
----
-
-## Bloco 5: Normalização Centralizada de Busca
-
-**Estado atual**: `cleanCPF` e `normalizeCPF` já existem em `cpfUtils.ts`. Telefone é limpo com `replace(/\D/g, "")` inline em vários locais.
-
-### 5.1 — Criar `normalizePhone` em `cpfUtils.ts`
-
-```typescript
-export const normalizePhone = (value: string): string => {
-  const digits = String(value || "").replace(/\D/g, "");
-  // Remove country code 55 if present and length > 11
-  if (digits.length === 13 && digits.startsWith("55")) return digits.slice(2);
-  if (digits.length === 12 && digits.startsWith("55")) return digits.slice(2);
-  return digits;
-};
-```
-
-### 5.2 — Aplicar nas buscas críticas
-
-- `useClientByPhone.ts` — usar `normalizePhone` antes da busca
-- `TelefoniaAtendimentoWrapper` — normalizar CPF com `cleanCPF` antes da query
-- `conversationService.ts` — normalizar phone ao buscar/vincular
-- `clientService.ts` — normalizar phone no `fetchClients` search
-
----
-
-## Bloco 6: Logs Operacionais Estruturados
-
-### 6.1 — Adicionar timing ao logger
-
-```typescript
-export const logger = {
-  // ... existente ...
-  timed: (module: string, action: string) => {
-    const start = performance.now();
-    return (data?: Record<string, any>) => {
-      const duration = Math.round(performance.now() - start);
-      console.log(JSON.stringify({ level: "info", module, action, duration_ms: duration, ...data, ts: new Date().toISOString() }));
-    };
-  },
-};
-```
-
-### 6.2 — Instrumentar módulos críticos
-
-- `fetchCarteiraGrouped` — log com tenant_id, filtros, count, duração
-- `fetchConversations` — log com tenant_id, count, duração
-- `fetchAll` (telefonia) — log com tenant_id, agent_count, duração
-- `bulkCreateClients` — log com tenant_id, batch_size, duração
+Revisar `threecplus-proxy`, `evolution-proxy`, `wuzapi-proxy` para não logar tokens/api_keys em console.log.
 
 ---
 
@@ -270,31 +199,32 @@ export const logger = {
 
 | Arquivo | Mudança |
 |---|---|
-| **Migration SQL** | RPC `get_carteira_grouped` |
-| `src/services/clientService.ts` | Nova função `fetchCarteiraGrouped` |
-| `src/pages/CarteiraPage.tsx` | Usar RPC, remover agrupamento frontend, paginação real |
-| `src/services/conversationService.ts` | Paginação em conversas e mensagens |
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Realtime otimizado, paginação |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Infinite scroll |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Polling adaptativo + backoff |
-| `src/components/atendimento/ClientTimeline.tsx` | ClientObservations lê de client_events |
-| `src/pages/AtendimentoPage.tsx` | Truncar observacoes no save |
-| `src/lib/cpfUtils.ts` | normalizePhone |
-| `src/hooks/useClientByPhone.ts` | Usar normalizePhone |
-| `src/lib/logger.ts` | Método timed |
+| **Migration SQL** | Tabela `atendimento_locks` + RLS + cleanup function |
+| `src/services/lockService.ts` | Novo — acquire/renew/release/check lock |
+| `src/pages/AtendimentoPage.tsx` | Lock lifecycle + aviso de operador ativo |
+| `src/services/auditService.ts` | Campo module opcional |
+| `src/services/clientService.ts` | logAction em updateClient |
+| `src/services/dispositionService.ts` | Dedup por sessão |
+| `src/services/agreementService.ts` | Verificar acordo existente antes de criar |
+| `src/pages/MaxListPage.tsx` | logAction import_started/completed |
+| `src/services/operationalLogService.ts` | Novo — log operacional |
+| `supabase/functions/maxsystem-proxy/index.ts` | Remover ALLOWED_SLUGS, timeout, logs |
+| `supabase/functions/threecplus-proxy/index.ts` | Timeout, sanitizar logs |
+| `supabase/functions/evolution-proxy/index.ts` | Timeout, sanitizar logs |
 
 ## O que NÃO muda
 - Layout, design, componentes visuais — intactos
-- Lógica de negócio (acordos, pagamentos, comissões) — intacta
-- Edge functions não mencionadas — intactas
-- Estrutura de tabelas — intacta (apenas nova RPC)
-- Fluxos operacionais — preservados
+- Lógica de negócio (acordos, comissões, score) — intacta
+- Estrutura de tabelas existentes — intacta
+- Fluxos operacionais aprovados — preservados
+- Contact Center, chat, automação — intactos
 
-## Ordem de implementação sugerida
+## Ordem de implementação
 
-1. RPC + Carteira (maior impacto em performance)
-2. WhatsApp paginação + realtime
-3. Telefonia polling adaptativo
-4. Observações estruturadas
-5. Normalização + Logs
+1. Lock de atendimento (migration + service + integração)
+2. Auditoria expandida (logAction nos pontos faltantes)
+3. Idempotência (dedup disposition + verificação acordo)
+4. Hardening edge functions (timeout + sanitização)
+5. Observabilidade (log operacional + instrumentação)
+6. Revisão de segurança (RLS + permissões)
 
