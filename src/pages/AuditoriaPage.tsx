@@ -56,6 +56,8 @@ const entityLabels: Record<string, string> = {
   user: "Usuário",
   settings: "Configurações",
   enrichment_job: "Job de Higienização",
+  import: "Importação",
+  operational: "Operacional",
 };
 
 /* ─── Logs Tab (existing content) ─── */
