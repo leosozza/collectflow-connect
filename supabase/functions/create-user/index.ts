@@ -2,7 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -19,7 +20,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create caller client to verify admin
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -36,13 +36,11 @@ Deno.serve(async (req) => {
 
     const callerId = callerUser.id;
 
-    // Create admin client for privileged operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get caller's tenant and verify they are admin
     const { data: callerTenantUser } = await supabaseAdmin
       .from("tenant_users")
       .select("tenant_id, role")
@@ -58,16 +56,71 @@ Deno.serve(async (req) => {
 
     const allowedRoles = ["admin", "super_admin"];
     if (!allowedRoles.includes(callerTenantUser.role)) {
-      return new Response(JSON.stringify({ error: "Forbidden: only admins can create users" }), {
+      return new Response(JSON.stringify({ error: "Forbidden: only admins can manage users" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const tenantId = callerTenantUser.tenant_id;
-
     const body = await req.json();
     const { action } = body;
+
+    // ── Delete user flow ──
+    if (action === "delete_user") {
+      const { user_id } = body;
+      if (!user_id) {
+        return new Response(JSON.stringify({ error: "user_id is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verify target belongs to caller's tenant
+      const { data: targetTU } = await supabaseAdmin
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user_id)
+        .maybeSingle();
+
+      if (targetTU && targetTU.tenant_id !== tenantId) {
+        return new Response(JSON.stringify({ error: "User not found in your tenant" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get profile_id for cascading deletes
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("user_id", user_id)
+        .maybeSingle();
+
+      if (profile?.id) {
+        await supabaseAdmin.from("operator_instances").delete().eq("profile_id", profile.id);
+        await supabaseAdmin.from("user_permissions").delete().eq("profile_id", profile.id);
+      }
+
+      // Clean invite_links
+      await supabaseAdmin.from("invite_links").delete().eq("created_by", user_id);
+      await supabaseAdmin.from("invite_links").delete().eq("used_by", user_id);
+
+      // Delete profile and tenant_users
+      await supabaseAdmin.from("profiles").delete().eq("user_id", user_id);
+      await supabaseAdmin.from("tenant_users").delete().eq("user_id", user_id);
+
+      // Delete auth user
+      const { error: authDelError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
+      if (authDelError) {
+        console.error("Failed to delete auth user:", authDelError.message);
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // ── Update password flow ──
     if (action === "update_password") {
@@ -112,7 +165,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Create user flow (existing) ──
+    // ── Create user flow ──
     const {
       full_name,
       email,
@@ -134,7 +187,9 @@ Deno.serve(async (req) => {
     }
 
     // Create user in auth
-    let newUserId: string;
+    let newUserId: string | undefined;
+    let wasCreatedHere = false;
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -144,7 +199,8 @@ Deno.serve(async (req) => {
 
     if (authError) {
       // If email already exists, try to reuse the orphaned auth user
-      if (authError.message?.toLowerCase().includes("already") || authError.message?.toLowerCase().includes("registered") || authError.message?.toLowerCase().includes("exists")) {
+      const msg = authError.message?.toLowerCase() || "";
+      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
         const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
         const existingUser = listData?.users?.find((u: { email?: string }) => u.email === email);
         if (!existingUser) {
@@ -184,30 +240,28 @@ Deno.serve(async (req) => {
       }
     } else {
       newUserId = authData.user.id;
+      wasCreatedHere = true;
     }
 
-    const newUserId = authData.user.id;
-
-    // Insert tenant_user record
+    // Insert tenant_user record (upsert to handle reuse)
     const { error: tuError } = await supabaseAdmin
       .from("tenant_users")
-      .insert({ tenant_id: tenantId, user_id: newUserId, role });
+      .upsert({ tenant_id: tenantId, user_id: newUserId, role }, { onConflict: "user_id" });
 
     if (tuError) {
-      // Rollback: delete auth user
-      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      if (wasCreatedHere) await supabaseAdmin.auth.admin.deleteUser(newUserId!);
       return new Response(JSON.stringify({ error: tuError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Upsert profile — covers cases where the trigger failed (invite flow, etc.)
+    // Upsert profile
     const profileUpsert: Record<string, unknown> = {
       user_id: newUserId,
       full_name,
       tenant_id: tenantId,
-      role: "operador", // app_role - operador is the base for profile table
+      role: "operador",
     };
     if (cpf) profileUpsert.cpf = cpf;
     if (phone) profileUpsert.phone = phone;
@@ -222,7 +276,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(newUserId);
+      if (wasCreatedHere) await supabaseAdmin.auth.admin.deleteUser(newUserId!);
       return new Response(JSON.stringify({ error: profileError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

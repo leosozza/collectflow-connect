@@ -324,18 +324,21 @@ const UsersPage = () => {
     onError: () => toast.error("Erro ao atualizar usuário"),
   });
 
-  // Delete mutation
+  // Delete mutation — full cascading deletion via edge function
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("profiles").delete().eq("id", id);
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("create-user", {
+        body: { action: "delete_user", user_id: userId },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast.success("Usuário removido!");
       setDeleteUser(null);
     },
-    onError: () => toast.error("Erro ao remover usuário"),
+    onError: (err: any) => toast.error(err.message || "Erro ao remover usuário"),
   });
 
   const handleEdit = (user: Profile) => {
