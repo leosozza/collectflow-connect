@@ -1,49 +1,66 @@
 
 
-# Plano: Corrigir upsert de tenant_users (onConflict errado)
+# Plano: Limpar importação incompleta e reimportar MaxList com segurança
 
-## Erro exato anterior
+## Diagnóstico
 
-```
-"there is no unique or exclusion constraint matching the ON CONFLICT specification"
-```
+A importação de hoje **funcionou parcialmente**:
+- Os 21.356 registros do MaxSystem foram buscados com sucesso
+- Os registros foram inseridos na tabela `clients` (todos os 21.356 estão lá, com 5.581 CPFs únicos)
+- **O erro ocorreu no final**: `supabase.from(...).insert(...).catch is not a function` — um bug na linha que salva o log de importação
+- A function crashou antes de retornar o resultado ao frontend, que interpretou como falha
 
-A linha 263 usa `onConflict: "user_id"`, mas a tabela `tenant_users` **não tem** constraint UNIQUE em `user_id` sozinho. A constraint real é `UNIQUE (tenant_id, user_id)`.
+**Resumo**: os dados estão no banco, mas o frontend recebeu erro. Não há acordos, eventos ou tabulações vinculados — os registros estão "limpos".
 
-## Validações realizadas
+## Etapas
 
-| Tabela | Constraint real | onConflict atual | Status |
-|---|---|---|---|
-| `tenant_users` | `UNIQUE (tenant_id, user_id)` | `"user_id"` | **ERRADO** → corrigir para `"tenant_id,user_id"` |
-| `profiles` | `UNIQUE (user_id)` | `"user_id"` | ✅ Correto |
+### 1. Corrigir o bug na Edge Function `maxlist-import`
 
-- **Tenant ID:** A lógica já resolve corretamente — admin usa seu próprio tenant, super_admin pode usar `body.tenant_id`.
-- **Vitor no auth:** Nenhum registro encontrado. Criação será do zero, sem conflito.
+O `.catch(() => {})` não funciona na Supabase JS v2 quando encadeado após `.insert()` sem `.select()` ou `.then()`. Trocar por tratamento com `try/catch` explícito tanto no `import_logs` (linha 459) quanto no `audit_logs` (linha 469).
 
-## Correção
+### 2. Excluir todos os clientes do tenant YBRASIL
 
-**Arquivo:** `supabase/functions/create-user/index.ts`
+Como não há acordos, eventos ou dados operacionais vinculados, a exclusão é segura:
+- Deletar todos os registros da tabela `clients` onde `tenant_id = '39a450f8-...'`
+- Limpar `import_logs` relacionados para evitar confusão de contadores
 
-**Única mudança:** Linhas 258-271 — trocar `onConflict: "user_id"` por `onConflict: "tenant_id,user_id"` e adicionar logs detalhados antes/depois do upsert.
+### 3. Reimportar via interface
 
+Após a correção e limpeza, o usuário pode refazer a importação normalmente pela tela `/maxlist`. Os 21.356 registros serão reimportados com o log correto.
+
+## Detalhes Técnicos
+
+**Bug exato (linha ~459-466):**
 ```typescript
-// ANTES (linha 263):
-{ onConflict: "user_id" }
+// ANTES (causa o crash):
+await supabase.from("import_logs").insert({...}).catch(() => {});
 
 // DEPOIS:
-{ onConflict: "tenant_id,user_id" }
+try {
+  await supabase.from("import_logs").insert({...});
+} catch (e) {
+  console.error("[maxlist-import] import_logs error:", e);
+}
 ```
 
-Adicionar logs:
-```typescript
-log("tenant_users_upsert_start", { tenant_id, user_id, role });
-// ... upsert ...
-log("tenant_users_upsert_ok", { tenant_id, user_id, role });
-// ou em caso de erro:
-log("tenant_users_failed", { error, hint, code });
+Mesma correção para `audit_logs` (linha ~469).
+
+**Exclusão dos clientes:**
+```sql
+DELETE FROM clients WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
+DELETE FROM import_logs WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
 ```
 
-## Após a correção
+**Arquivo afetado:** `supabase/functions/maxlist-import/index.ts`
 
-Testar via `curl_edge_functions` a criação do Vitor para confirmar sucesso.
+**Dados no banco (antes da limpeza):**
+| Métrica | Valor |
+|---|---|
+| Total de registros | 21.356 |
+| CPFs únicos | 5.581 |
+| Credor | TESS MODELS PRODUTOS FOTOGRAFICOS LTDA |
+| Status pendente | 13.090 |
+| Status pago | 8.266 |
+| Acordos vinculados | 0 |
+| Eventos vinculados | 0 |
 
