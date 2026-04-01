@@ -4,7 +4,7 @@ import { logAction } from "@/services/auditService";
 import { logger } from "@/lib/logger";
 import { handleServiceError } from "@/lib/errorHandler";
 import { generateInstallments } from "@/lib/installmentUtils";
-import { fetchAllRows } from "@/lib/supabaseUtils";
+import { cleanCPF } from "@/lib/cpfUtils";
 
 export interface Client {
   id: string;
