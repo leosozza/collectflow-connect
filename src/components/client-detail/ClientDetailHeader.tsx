@@ -143,39 +143,45 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   const updateClientMutation = useMutation({
     mutationFn: async (data: typeof editForm) => {
-      // Normalize CEP to XXXXX-XXX and UF to uppercase before saving
       const cepDigits = (data.cep || "").replace(/\D/g, "");
       const normalizedCep = cepDigits.length === 8
         ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`
         : data.cep || null;
       const normalizedUf = (data.uf || "").trim().toUpperCase() || null;
 
+      const sharedData = {
+        nome_completo: data.nome_completo,
+        phone: data.phone || null,
+        phone2: data.phone2 || null,
+        phone3: data.phone3 || null,
+        email: data.email || null,
+        endereco: (data.endereco || "").trim() || null,
+        bairro: (data.bairro || "").trim() || null,
+        cidade: (data.cidade || "").trim() || null,
+        uf: normalizedUf,
+        cep: normalizedCep,
+        observacoes: data.observacoes || null,
+      };
+
       const clientIds = clients.map(c => c.id);
       for (const id of clientIds) {
-        const { error } = await supabase.from("clients").update({
-          nome_completo: data.nome_completo,
-          phone: data.phone || null,
-          phone2: data.phone2 || null,
-          phone3: data.phone3 || null,
-          email: data.email || null,
-          endereco: (data.endereco || "").trim() || null,
-          bairro: (data.bairro || "").trim() || null,
-          cidade: (data.cidade || "").trim() || null,
-          uf: normalizedUf,
-          cep: normalizedCep,
-          cod_contrato: data.cod_contrato || null,
-          observacoes: data.observacoes || null,
-          external_id: data.external_id || null,
-        } as any).eq("id", id);
+        const { error } = await supabase.from("clients").update(sharedData as any).eq("id", id);
         if (error) throw error;
       }
+
+      // Campos com constraint unique: atualizar apenas no registro principal
+      const { error: uniqueError } = await supabase.from("clients").update({
+        cod_contrato: data.cod_contrato || null,
+        external_id: data.external_id || null,
+      } as any).eq("id", clientIds[0]);
+      if (uniqueError) throw uniqueError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Dados do devedor atualizados!");
       setEditOpen(false);
     },
-    onError: () => toast.error("Erro ao salvar dados"),
+    onError: (err: any) => toast.error(err?.message || "Erro ao salvar dados"),
   });
 
   const openWhatsApp = (phoneNumber?: string) => {
