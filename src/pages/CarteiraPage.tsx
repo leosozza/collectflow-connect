@@ -238,7 +238,7 @@ const CarteiraPage = () => {
       dispositions.forEach((d: any) => ids.add(d.client_id));
       // 2. Client IDs from conversations (linked via client_id)
       const convos = await fetchAllRows(
-        supabase.from("conversations" as any).select("client_id").not("client_id", "is", null)
+        supabase.from("conversations" as any).select("client_id").eq("tenant_id", tenant!.id).not("client_id", "is", null)
       );
       convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
