@@ -1,40 +1,50 @@
 
 
-# Plano: Corrigir Fluxo de Convite — Impedir Onboarding e Vincular ao Tenant
+# Plano: Corrigir Criação do Usuário Vitor (Email Duplicado)
 
-## Problema
+## Problema Raiz
 
-Quando o convidado clica no link e cria a conta, o `accept-invite` é chamado durante o signup mas pode falhar silenciosamente (o usuário ainda não confirmou o email). Depois de confirmar e fazer login, o sistema não encontra `tenant_users` e redireciona para o onboarding (criar nova tenant), que é errado.
+O usuário `vitordin07@outlook.com` já existe na tabela `auth.users` (id: `ddfcb452-c709-4ccd-a004-12bb384e7b2b`) — sobrou da tentativa anterior. A migration de limpeza removeu `profiles` e `tenant_users`, mas **não removeu o registro de auth**. Quando a edge function tenta `createUser` com o mesmo email, recebe erro de duplicidade.
 
 ## Solução
 
-Três correções complementares:
+Duas correções:
 
-### 1. Persistir o invite token no localStorage (`AuthPage.tsx`)
-- Após signup com invite, salvar `pendingInviteToken` no localStorage
-- Após login bem-sucedido, verificar se existe token pendente e chamar `accept-invite`
-- Limpar o token do localStorage após o accept-invite
+### 1. Limpar o auth user órfão (Migration)
+- Usar `supabase.auth.admin.deleteUser` não é possível via SQL
+- Criar migration que limpa quaisquer restos em `profiles`/`tenant_users` (já limpos)
+- A remoção do auth user será feita via edge function (chamada admin)
 
-### 2. ProtectedRoute: checar invite pendente antes de redirecionar ao onboarding (`ProtectedRoute.tsx`)
-- Se `requireTenant && !tenant && !tenantUser`, verificar se existe `pendingInviteToken` no localStorage
-- Se existir, chamar `accept-invite` e depois refetch do tenant
-- Só redirecionar ao onboarding se realmente não houver convite pendente
+**Na prática**: Invocar a edge function `create-user` com uma nova action `delete_user` para deletar o auth user órfão, OU simplesmente melhorar a edge function para detectar email existente e reutilizar o auth user.
 
-### 3. Limpar cadastro do Vitor (migration)
-- Deletar registros do Vitor da tabela `tenant_users` e `profiles` para ele poder se recadastrar corretamente
-- Verificar e restaurar o invite_link para ser reutilizado
+### 2. Tornar a edge function resiliente a emails existentes (`create-user/index.ts`)
+- Se `createUser` falhar com erro de email duplicado:
+  - Buscar o auth user existente por email via `listUsers`
+  - Verificar que o user **não** pertence a outro tenant
+  - Reutilizar o `user.id` existente e prosseguir com insert em `tenant_users` + upsert em `profiles`
+- Isso resolve o problema atual E previne reincidências futuras
 
-## Arquivos afetados
+## Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/AuthPage.tsx` | Salvar invite token no localStorage; após login, chamar accept-invite se token pendente |
-| `src/components/ProtectedRoute.tsx` | Interceptar redirecionamento ao onboarding quando há invite pendente |
-| Migration SQL | Limpar dados do Vitor para recadastro |
+| `supabase/functions/create-user/index.ts` | Adicionar fallback: se email já existe em auth, reutilizar o user existente em vez de falhar |
+
+## Detalhes técnicos
+
+```typescript
+// Após createUser falhar com "already registered":
+const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+const existing = existingUsers.users.find(u => u.email === email);
+if (existing) {
+  // Verificar que não pertence a outro tenant
+  // Reutilizar existing.id como newUserId
+}
+```
 
 ## O que NÃO muda
-- Edge functions (accept-invite funciona corretamente, o problema é quando é chamada)
-- OnboardingPage — intacta
-- Fluxo de criação de tenant para novos clientes — intacto
-- Layout e identidade visual — intactos
+- Fluxo de update_password — intacto
+- Lógica de rollback — intacta
+- RLS e permissões — intactas
+- Layout — intacto
 
