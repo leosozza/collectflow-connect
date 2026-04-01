@@ -408,15 +408,15 @@ const UsersPage = () => {
     }
     setChangingPw(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: { action: "update_password", user_id: pwUser.user_id, password: newPw },
+      const result = await invokeCreateUser({
+        action: "update_password",
+        user_id: pwUser.user_id,
+        password: newPw,
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Senha de ${pwUser.full_name} alterada com sucesso!`);
+      showEdgeFunctionResult(result);
       setPwUser(null);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao trocar senha");
+      toast.error(handleEdgeFunctionError(err));
     } finally {
       setChangingPw(false);
     }

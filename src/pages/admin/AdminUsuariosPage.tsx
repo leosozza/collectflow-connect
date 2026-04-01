@@ -46,7 +46,7 @@ const AdminUsuariosPage = () => {
     }
     setCreating(true);
     try {
-      const body: any = {
+      const body: Record<string, unknown> = {
         full_name: newName.trim(),
         email: newEmail.trim().toLowerCase(),
         password: newPassword,
@@ -55,10 +55,8 @@ const AdminUsuariosPage = () => {
       if (selectedTenantId !== "none") {
         body.tenant_id = selectedTenantId;
       }
-      const { data, error } = await supabase.functions.invoke("create-user", { body });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Usuário ${newName} criado com sucesso!`);
+      const result = await invokeCreateUser(body);
+      showEdgeFunctionResult(result, newName.trim());
       queryClient.invalidateQueries({ queryKey: ["sa-all-users"] });
       setNewOpen(false);
       setNewName("");
@@ -67,7 +65,7 @@ const AdminUsuariosPage = () => {
       setNewRole("operador");
       setSelectedTenantId("none");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao criar usuário");
+      toast.error(handleEdgeFunctionError(err));
     } finally {
       setCreating(false);
     }
