@@ -830,16 +830,27 @@ const MaxListPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="secondary" onClick={() => {
-                if (!selectedCredorName) {
-                  toast.error("Selecione um credor antes de importar");
-                  return;
-                }
-                handleSendToCRM();
-              }} disabled={importing || !selectedCredorName}>
-                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-                {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="default" onClick={() => {
+                  if (!selectedCredorName) { toast.error("Selecione um credor"); return; }
+                  handleSendToCRM("import");
+                }} disabled={importing || !selectedCredorName}>
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                  Importar Carteira
+                </Button>
+                <Button variant="secondary" onClick={() => {
+                  if (!selectedCredorName) { toast.error("Selecione um credor"); return; }
+                  handleSendToCRM("update");
+                }} disabled={importing || !selectedCredorName}>
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Atualizar Parcelas
+                </Button>
+              </div>
+              <div className="col-span-full">
+                <p className="text-xs text-muted-foreground mt-1">
+                  <strong>Importar Carteira:</strong> insere novos registros no RiVO. <strong>Atualizar Parcelas:</strong> sincroniza mudanças (pagamentos, cancelamentos, valores) com a base existente.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>
