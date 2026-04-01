@@ -670,7 +670,7 @@ const CarteiraPage = () => {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => handleEdit(client)}
+                            onClick={() => handleEdit(client as any)}
                             title="Editar"
                           >
                             <Edit className="w-4 h-4" />
