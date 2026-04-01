@@ -1,138 +1,268 @@
 
 
-# Plano: Correções Críticas de Produção — Isolamento, Performance e Estabilidade
+# Plano: Fase 2 — Performance, Escalabilidade e Estabilidade
 
 ## Resumo
 
-Aplicar hardening multi-tenant, corrigir a edge function `auto-status-sync`, otimizar queries pesadas, criar índices de performance e normalizar CPF/telefone na importação. Sem alterar UI, sem criar telas, sem mudar fluxos de negócio.
+Otimizar os módulos mais críticos (Carteira, WhatsApp, Telefonia) para operar com volume real. Mover lógica pesada para o banco, implementar paginação real, polling adaptativo e estruturar observações. Sem alterar UI, sem criar telas, sem mudar lógica de negócio.
 
 ---
 
-## Bloco 1: Edge Function `auto-status-sync` — Isolamento por Tenant
+## Bloco 1: Carteira — RPC de Agrupamento no Banco
 
-**Problema**: A função opera globalmente — todas queries rodam sem filtro de `tenant_id`, afetando dados de todos os tenants simultaneamente.
+**Problema**: O frontend busca até 1000 registros brutos, depois agrupa por CPF, calcula totais, deriva status e filtra — tudo em `useMemo` com ~160 linhas de lógica. Com 50k+ registros, isso é insustentável.
 
-**Correção em `supabase/functions/auto-status-sync/index.ts`**:
-- Receber `tenant_id` no body da requisição (obrigatório)
-- Rejeitar com 400 se `tenant_id` não informado
-- Filtrar `tipos_status` por `tenant_id`
-- Adicionar `.eq("tenant_id", tenant_id)` em TODAS as queries de `clients` (são ~12 queries)
-- Retornar `tenant_id` e contagens no response como log
+### 1.1 — Criar RPC `get_carteira_grouped`
 
----
-
-## Bloco 2: Isolamento nos Services do Frontend
-
-**Problema**: `fetchClients` em `clientService.ts` faz `select("*")` sem filtro de `tenant_id` — depende apenas de RLS. Se RLS falhar ou for permissiva, dados de outros tenants podem vazar. Mesmo padrão em `agreementService.ts`.
-
-**Correção**:
-
-### `clientService.ts` — `fetchClients`
-- Receber `tenantId` como parâmetro obrigatório
-- Adicionar `.eq("tenant_id", tenantId)` na query
-- Trocar `select("*")` por colunas específicas: `id, nome_completo, cpf, phone, email, credor, status, data_vencimento, valor_parcela, valor_pago, numero_parcela, total_parcelas, propensity_score, tipo_devedor_id, tipo_divida_id, status_cobranca_id, operator_id, external_id, created_at, valor_saldo, phone2, phone3, endereco, cidade, uf, cep, observacoes, debtor_profile, data_quitacao, tenant_id`
-
-### `clientService.ts` — `bulkCreateClients`
-- Na busca de existentes (`select("*").in("external_id", ...)`), adicionar `.eq("tenant_id", tenantId)` — o tenantId já vem do operador
-
-### `clientService.ts` — `removeFutureInstallments`
-- Precisa de `tenant_id` para não deletar parcelas de outro tenant com mesmo CPF/credor
-
-### `agreementService.ts` — `fetchAgreements`
-- Receber `tenantId` como parâmetro obrigatório
-- Adicionar `.eq("tenant_id", tenantId)`
-
-### `CarteiraPage.tsx` — queries auxiliares
-- `agreement-cpfs`: adicionar `.eq("tenant_id", tenant.id)`
-- `contacted-client-ids` (call_dispositions): adicionar `.eq("tenant_id", tenant.id)`
-- `contacted-client-ids` (conversations): adicionar `.eq("tenant_id", tenant.id)`
-
-### Propagar `tenantId` nos callers
-- `CarteiraPage`, `AcordosPage`, `ClientsPage` — passar `tenant.id` nos services
-
----
-
-## Bloco 3: Eliminar `fetchAllRows` em Queries Pesadas
-
-**Problema**: `fetchClients` usa `fetchAllRows` que pagina em batches de 1000 e carrega TUDO em memória. Com 50k+ registros, isso trava o browser.
-
-**Correção**:
-
-### `clientService.ts` — `fetchClients`
-- Remover `fetchAllRows`, usar paginação server-side com `.range(from, to)`
-- Alterar assinatura para aceitar `page` e `pageSize` (default 50)
-- Retornar `{ data: Client[], count: number }` usando `.select("...", { count: "exact" })`
-
-### `CarteiraPage.tsx`
-- Adaptar para usar paginação server-side (já tem controle de página no URL state)
-- Atualizar queryKey para incluir `page`
-
-### `agreementService.ts` — `fetchAgreements`
-- Substituir `fetchAllRows` por `.range()` com paginação
-- Retornar `{ data, count }`
-
-### `CarteiraPage.tsx` — queries auxiliares
-- `agreement-cpfs`: manter `fetchAllRows` mas selecionar apenas `client_cpf` (já faz)
-- `contacted-client-ids`: manter mas limitar a tenant
-
----
-
-## Bloco 4: Criar Índices de Performance (Migration SQL)
+Criar uma function SQL que retorna dados já agrupados:
 
 ```sql
--- clients
-CREATE INDEX IF NOT EXISTS idx_clients_tenant_id ON clients(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_clients_cpf ON clients(cpf);
-CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(tenant_id, status);
-CREATE INDEX IF NOT EXISTS idx_clients_data_vencimento ON clients(tenant_id, data_vencimento DESC);
-CREATE INDEX IF NOT EXISTS idx_clients_external_id ON clients(tenant_id, external_id);
-CREATE INDEX IF NOT EXISTS idx_clients_credor ON clients(tenant_id, credor);
-
--- conversations
-CREATE INDEX IF NOT EXISTS idx_conversations_tenant_last_msg ON conversations(tenant_id, last_message_at DESC);
-
--- chat_messages
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id, created_at);
-
--- call_dispositions
-CREATE INDEX IF NOT EXISTS idx_call_dispositions_client ON call_dispositions(client_id);
-CREATE INDEX IF NOT EXISTS idx_call_dispositions_tenant ON call_dispositions(tenant_id);
-
--- agreements
-CREATE INDEX IF NOT EXISTS idx_agreements_client_cpf ON agreements(tenant_id, client_cpf);
-CREATE INDEX IF NOT EXISTS idx_agreements_status ON agreements(tenant_id, status);
-
--- client_events
-CREATE INDEX IF NOT EXISTS idx_client_events_client ON client_events(client_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_client_events_tenant ON client_events(tenant_id, event_type);
+CREATE FUNCTION get_carteira_grouped(
+  _tenant_id uuid,
+  _page int DEFAULT 1,
+  _page_size int DEFAULT 50,
+  _search text DEFAULT NULL,
+  _credor text DEFAULT NULL,
+  _date_from date DEFAULT NULL,
+  _date_to date DEFAULT NULL,
+  _status_cobranca_ids uuid[] DEFAULT NULL,
+  _tipo_devedor_ids uuid[] DEFAULT NULL,
+  _tipo_divida_ids uuid[] DEFAULT NULL,
+  _score_min int DEFAULT NULL,
+  _score_max int DEFAULT NULL,
+  _debtor_profiles text[] DEFAULT NULL,
+  _sort_field text DEFAULT 'created_at',
+  _sort_dir text DEFAULT 'desc',
+  _operator_id uuid DEFAULT NULL,
+  _sem_acordo boolean DEFAULT false
+) RETURNS TABLE (
+  representative_id uuid,
+  cpf text,
+  nome_completo text,
+  credor text,
+  phone text,
+  email text,
+  data_vencimento date,
+  valor_total numeric,
+  parcelas_count int,
+  propensity_score int,
+  status_cobranca_id uuid,
+  status text,
+  debtor_profile text,
+  all_ids uuid[],
+  total_count bigint
+)
 ```
 
+Lógica interna:
+- `GROUP BY cpf` com agregações (SUM valor_parcela, COUNT, MAX score, MIN data_vencimento)
+- Derivação de `status_cobranca_id` representativo via CASE WHEN (mesma lógica que hoje está no frontend)
+- Filtros aplicados via WHERE dinâmico
+- `_sem_acordo`: LEFT JOIN com agreements para excluir CPFs com acordo ativo
+- Paginação via `OFFSET/LIMIT`
+- Retorna `total_count` usando `COUNT(*) OVER()`
+
+### 1.2 — Adaptar `clientService.ts`
+
+Nova função `fetchCarteiraGrouped(tenantId, filters, page, pageSize)`:
+- Chama `supabase.rpc("get_carteira_grouped", params)`
+- Retorna `{ data: GroupedClient[], count: number }`
+
+### 1.3 — Adaptar `CarteiraPage.tsx`
+
+- Substituir `fetchClients` + `useMemo displayClients` (~160 linhas) por `fetchCarteiraGrouped`
+- Remover agrupamento por CPF no frontend
+- Remover derivação de status no frontend
+- Manter: seleção em massa, exportação, dialogs, view mode, kanban
+- Paginação real com controles next/prev + total
+- queryKey inclui page + todos os filtros
+
+### 1.4 — Adaptar `CarteiraKanban`
+
+- Receber dados já agrupados (mesmo formato)
+- Manter paginação interna por coluna (já existe)
+
+### 1.5 — Manter queries auxiliares
+
+- `agreement-cpfs`: manter (usado para badge "Acordo Vigente" e filtro semAcordo — agora o filtro vai para a RPC, mas o badge visual pode precisar)
+- `contacted-client-ids`: remover do frontend se possível (mover para RPC se necessário)
+
 ---
 
-## Bloco 5: Normalização de CPF e Telefone na Importação
+## Bloco 2: WhatsApp — Paginação e Realtime Otimizado
 
-**Estado atual**: `importService.ts` já tem `cleanCPF()` e `cleanPhone()` que normalizam. `bulkCreateClients` em `clientService.ts` usa dados pós-parse que já passaram por essas funções.
+**Problema**: `loadConversations()` busca TODAS as conversas do tenant sem paginação. O realtime chama `loadConversations()` a cada evento, recarregando tudo.
 
-**Problema residual**: Na MaxList (`MaxListPage.tsx`), o CPF é limpo (`replace(/[^\d]/g, "")`) mas a função `cleanCPF` do `cpfUtils` faz `padStart(11, "0")` que a MaxList não aplica.
+### 2.1 — Paginar conversas em `conversationService.ts`
 
-**Correção**:
-- Em `MaxListPage.tsx`, no `buildRecordFromMapping`, usar `cleanCPF()` de `@/lib/cpfUtils` para o CPF
-- Em `MaxListPage.tsx`, garantir que telefones passam por `cleanPhone` (já faz `replace(/[^\d]/g, "")`)
-- Em `clientService.ts` — `bulkCreateClients`, aplicar `cleanCPF` como sanitização final antes do insert/upsert
+```typescript
+export async function fetchConversations(
+  tenantId: string,
+  page = 1,
+  pageSize = 50,
+  statusFilter?: string
+): Promise<{ data: Conversation[], count: number }> {
+  // .range() + count: "exact"
+}
+```
+
+### 2.2 — Paginar mensagens
+
+```typescript
+export async function fetchMessages(
+  conversationId: string,
+  page = 1,
+  pageSize = 100
+): Promise<{ data: ChatMessage[], hasMore: boolean }> {
+  // Ordered DESC, then reverse for display
+  // Implements infinite scroll upward
+}
+```
+
+### 2.3 — Realtime otimizado em `WhatsAppChatLayout.tsx`
+
+Substituir `loadConversations()` no handler de realtime por atualização pontual:
+
+```typescript
+// Em vez de recarregar tudo:
+if (payload.eventType === "INSERT") {
+  setConversations(prev => [newConv, ...prev]);
+} else if (payload.eventType === "UPDATE") {
+  setConversations(prev => prev.map(c => c.id === updated.id ? {...c, ...updated} : c));
+}
+```
+
+### 2.4 — Mensagens realtime (já funciona bem)
+
+O handler de mensagens já faz append incremental — manter como está.
+
+### 2.5 — Infinite scroll na ConversationList
+
+- Detectar scroll no final da lista
+- Carregar próxima página
+- Concatenar com conversas existentes
 
 ---
 
-## Bloco 6: MaxList — NÃO migrar para backend nesta fase
+## Bloco 3: Telefonia — Polling Adaptativo
 
-A migração da importação MaxList para edge function é uma refatoração significativa que envolve:
-- Criar nova edge function com lógica de mapeamento complexa
-- Implementar sistema de jobs assíncronos
-- Criar polling de progresso
+**Problema**: `fetchAll` roda a cada 3s (operador) ou 30s (admin), independente do estado. Com múltiplos operadores, isso gera muitas chamadas simultâneas ao proxy.
 
-**Recomendação**: Adiar para fase 2. Nesta fase, manter processamento no frontend mas:
-- Garantir isolamento por tenant (já tem)
-- Usar batches menores (já usa 1000)
-- Adicionar `tenant_id` explícito em todas as operações
+### 3.1 — Polling adaptativo baseado em estado
+
+No `TelefoniaDashboard.tsx`:
+
+```typescript
+const getAdaptiveInterval = useCallback(() => {
+  if (!myAgent || !isAgentOnline) return 30000; // offline: 30s
+  const status = myAgent.status;
+  if (status === 2) return 3000;  // em ligação: 3s
+  if (status === 3 || status === 4) return 5000; // pausa/ACW: 5s
+  if (status === 1) return 10000; // ocioso: 10s
+  return 15000; // default: 15s
+}, [myAgent, isAgentOnline]);
+```
+
+Para admin: manter 30s fixo (já é).
+
+### 3.2 — Backoff em erro
+
+```typescript
+const errorCountRef = useRef(0);
+const fetchAllWithBackoff = useCallback(async () => {
+  try {
+    await fetchAll();
+    errorCountRef.current = 0;
+  } catch {
+    errorCountRef.current++;
+  }
+}, [fetchAll]);
+
+// Interval = base * (1 + errorCount), max 60s
+```
+
+### 3.3 — Separar dados críticos de analíticos
+
+Atualmente `fetchAll` busca agents + company_calls + campaigns em paralelo. Separar:
+- **Crítico (polling rápido)**: `agents_status` (para operador, só seu status)
+- **Analítico (polling lento)**: `company_calls`, `list_campaigns`, `campaign_statistics`
+
+Para operadores: buscar apenas `agents_status` + suas campanhas no polling rápido. Campanhas e stats em polling separado de 60s.
+
+---
+
+## Bloco 4: Observações Estruturadas
+
+**Estado atual**: Observações já são salvas em DUAS fontes:
+1. `clients.observacoes` — string concatenada (legado)
+2. `client_events` com `event_type = "observation_added"` — estruturado (já implementado)
+
+O ClientTimeline já lê de `client_events` quando disponível. A `ClientObservations` lê de `clients.observacoes`.
+
+### 4.1 — Migrar `ClientObservations` para ler de `client_events`
+
+- Em vez de parsear `clients.observacoes` (string concatenada), buscar de `client_events` com `event_type = "observation_added"`
+- Manter a UI idêntica (lista de notas com data + operador)
+- Dados vêm de `metadata.note` e `metadata.operator_name`
+
+### 4.2 — Manter gravação dual
+
+Ao salvar nota, continuar gravando em ambos (clients.observacoes + client_events) para backwards compatibility. Mas a leitura passa a vir de client_events.
+
+### 4.3 — Truncar `clients.observacoes`
+
+No `handleSaveNote`, limitar `clients.observacoes` às últimas 5 notas (resumo curto), não ao log completo. O histórico completo fica em client_events.
+
+---
+
+## Bloco 5: Normalização Centralizada de Busca
+
+**Estado atual**: `cleanCPF` e `normalizeCPF` já existem em `cpfUtils.ts`. Telefone é limpo com `replace(/\D/g, "")` inline em vários locais.
+
+### 5.1 — Criar `normalizePhone` em `cpfUtils.ts`
+
+```typescript
+export const normalizePhone = (value: string): string => {
+  const digits = String(value || "").replace(/\D/g, "");
+  // Remove country code 55 if present and length > 11
+  if (digits.length === 13 && digits.startsWith("55")) return digits.slice(2);
+  if (digits.length === 12 && digits.startsWith("55")) return digits.slice(2);
+  return digits;
+};
+```
+
+### 5.2 — Aplicar nas buscas críticas
+
+- `useClientByPhone.ts` — usar `normalizePhone` antes da busca
+- `TelefoniaAtendimentoWrapper` — normalizar CPF com `cleanCPF` antes da query
+- `conversationService.ts` — normalizar phone ao buscar/vincular
+- `clientService.ts` — normalizar phone no `fetchClients` search
+
+---
+
+## Bloco 6: Logs Operacionais Estruturados
+
+### 6.1 — Adicionar timing ao logger
+
+```typescript
+export const logger = {
+  // ... existente ...
+  timed: (module: string, action: string) => {
+    const start = performance.now();
+    return (data?: Record<string, any>) => {
+      const duration = Math.round(performance.now() - start);
+      console.log(JSON.stringify({ level: "info", module, action, duration_ms: duration, ...data, ts: new Date().toISOString() }));
+    };
+  },
+};
+```
+
+### 6.2 — Instrumentar módulos críticos
+
+- `fetchCarteiraGrouped` — log com tenant_id, filtros, count, duração
+- `fetchConversations` — log com tenant_id, count, duração
+- `fetchAll` (telefonia) — log com tenant_id, agent_count, duração
+- `bulkCreateClients` — log com tenant_id, batch_size, duração
 
 ---
 
@@ -140,18 +270,31 @@ A migração da importação MaxList para edge function é uma refatoração sig
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/auto-status-sync/index.ts` | tenant_id obrigatório + filtrar todas queries |
-| `src/services/clientService.ts` | tenant_id explícito + paginação server-side + select colunas + normalização CPF |
-| `src/services/agreementService.ts` | tenant_id explícito + paginação |
-| `src/pages/CarteiraPage.tsx` | adaptar para paginação server-side + tenant_id nas queries |
-| `src/pages/AcordosPage.tsx` | passar tenant_id |
-| `src/pages/MaxListPage.tsx` | usar cleanCPF de cpfUtils |
-| Migration SQL | índices de performance |
+| **Migration SQL** | RPC `get_carteira_grouped` |
+| `src/services/clientService.ts` | Nova função `fetchCarteiraGrouped` |
+| `src/pages/CarteiraPage.tsx` | Usar RPC, remover agrupamento frontend, paginação real |
+| `src/services/conversationService.ts` | Paginação em conversas e mensagens |
+| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Realtime otimizado, paginação |
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Infinite scroll |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Polling adaptativo + backoff |
+| `src/components/atendimento/ClientTimeline.tsx` | ClientObservations lê de client_events |
+| `src/pages/AtendimentoPage.tsx` | Truncar observacoes no save |
+| `src/lib/cpfUtils.ts` | normalizePhone |
+| `src/hooks/useClientByPhone.ts` | Usar normalizePhone |
+| `src/lib/logger.ts` | Método timed |
 
 ## O que NÃO muda
-- Layout, telas, componentes visuais — intactos
-- Fluxos de negócio — intactos
-- Contact Center, chat, automação — intactos
-- Estrutura de tabelas — intacta (apenas índices)
+- Layout, design, componentes visuais — intactos
+- Lógica de negócio (acordos, pagamentos, comissões) — intacta
 - Edge functions não mencionadas — intactas
+- Estrutura de tabelas — intacta (apenas nova RPC)
+- Fluxos operacionais — preservados
+
+## Ordem de implementação sugerida
+
+1. RPC + Carteira (maior impacto em performance)
+2. WhatsApp paginação + realtime
+3. Telefonia polling adaptativo
+4. Observações estruturadas
+5. Normalização + Logs
 
