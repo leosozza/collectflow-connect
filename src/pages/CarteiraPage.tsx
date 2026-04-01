@@ -503,7 +503,7 @@ const CarteiraPage = () => {
     },
     onSuccess: async (_data, variables) => {
       // Run auto-status-sync to derive statuses automatically
-      await supabase.functions.invoke("auto-status-sync");
+      await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant?.id } });
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
       queryClient.invalidateQueries({ queryKey: ["import_logs"] });
