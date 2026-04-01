@@ -954,7 +954,7 @@ const MaxListPage = () => {
         onOpenChange={setShowMappingDialog}
         sourceHeaders={["ResponsibleName", "ResponsibleCPF", "ContractNumber", "IdRecord", "CellPhone1", "CellPhone2", "HomePhone", "Email", "Number", "Value", "NetValue", "Discount", "PaymentDateQuery", "PaymentDateEffected", "IsCancelled", "ModelName", "Observations", "Id", "Producer"]}
         tenantId={tenant.id}
-        onConfirm={handleMappingConfirmed}
+        onConfirm={(mapping) => handleImportOrUpdate(mapping, pendingImportMode)}
       />
 
       {importReport && (
