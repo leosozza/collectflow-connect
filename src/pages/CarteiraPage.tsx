@@ -556,7 +556,7 @@ const CarteiraPage = () => {
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
-          clients={displayClients}
+          clients={displayClients as any[]}
           loading={isLoading}
           tiposStatus={tiposStatus as any}
         />
