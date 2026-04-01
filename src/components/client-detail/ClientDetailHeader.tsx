@@ -341,7 +341,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Telefones */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
                 <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
                 <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
