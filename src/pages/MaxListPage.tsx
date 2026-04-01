@@ -758,6 +758,7 @@ const MaxListPage = () => {
       toast.error(err.message || "Erro na atualização de pagos");
       logAction({ action: "update_pagos_failed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, error: err.message } });
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setImporting(false);
       setUpdatingPagos(false);
     }
