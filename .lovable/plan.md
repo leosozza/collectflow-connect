@@ -1,50 +1,79 @@
 
 
-# Plano: Corrigir Criação do Usuário Vitor (Email Duplicado)
+# Plano: Corrigir create-user, exclusão completa e limpeza de usuários
 
-## Problema Raiz
+## Causa raiz
 
-O usuário `vitordin07@outlook.com` já existe na tabela `auth.users` (id: `ddfcb452-c709-4ccd-a004-12bb384e7b2b`) — sobrou da tentativa anterior. A migration de limpeza removeu `profiles` e `tenant_users`, mas **não removeu o registro de auth**. Quando a edge function tenta `createUser` com o mesmo email, recebe erro de duplicidade.
+A Edge Function `create-user` **não sobe** (BootFailure) porque a linha 189 declara `const newUserId = authData.user.id;` quando `newUserId` já foi declarado como `let` na linha 137. Isso é um erro de sintaxe que impede qualquer execução da function.
 
-## Solução
+Secundariamente, a exclusão de usuários em `UsersPage.tsx` (linha 330) apaga apenas `profiles`, deixando `tenant_users` e `auth.users` intactos — gerando usuários órfãos que causam conflitos em recadastros.
 
-Duas correções:
+## Etapas
 
-### 1. Limpar o auth user órfão (Migration)
-- Usar `supabase.auth.admin.deleteUser` não é possível via SQL
-- Criar migration que limpa quaisquer restos em `profiles`/`tenant_users` (já limpos)
-- A remoção do auth user será feita via edge function (chamada admin)
+### 1. Corrigir `create-user/index.ts`
+- **Remover linha 189** (`const newUserId = authData.user.id;`) — é redundante, pois o `else` na linha 186 já atribui `newUserId = authData.user.id`
+- Manter o fallback de reaproveitamento por email existente (linhas 145-187)
+- No rollback (linhas 198, 225): adicionar flag `wasCreatedHere` para só deletar auth user se ele foi criado nesta execução (não reutilizado)
+- Atualizar CORS headers para incluir headers extras do supabase-js (`x-supabase-client-platform`, etc.)
 
-**Na prática**: Invocar a edge function `create-user` com uma nova action `delete_user` para deletar o auth user órfão, OU simplesmente melhorar a edge function para detectar email existente e reutilizar o auth user.
+### 2. Adicionar action `delete_user` na mesma edge function
+- Nova action que recebe `user_id` e executa remoção completa:
+  - `operator_instances` (por profile_id)
+  - `user_permissions` (por profile_id)
+  - `invite_links` (por created_by ou used_by)
+  - `profiles`
+  - `tenant_users`
+  - `auth.users` (via `supabaseAdmin.auth.admin.deleteUser`)
+- Validação: só permite deletar usuários do mesmo tenant do caller
 
-### 2. Tornar a edge function resiliente a emails existentes (`create-user/index.ts`)
-- Se `createUser` falhar com erro de email duplicado:
-  - Buscar o auth user existente por email via `listUsers`
-  - Verificar que o user **não** pertence a outro tenant
-  - Reutilizar o `user.id` existente e prosseguir com insert em `tenant_users` + upsert em `profiles`
-- Isso resolve o problema atual E previne reincidências futuras
+### 3. Atualizar exclusão em `UsersPage.tsx`
+- `deleteMutation` passa a chamar `supabase.functions.invoke("create-user", { body: { action: "delete_user", user_id } })` em vez de apagar só `profiles`
 
-## Arquivo afetado
+### 4. Backup e limpeza
+- Gerar listagem completa dos usuários atuais (email, user_id, tenant) antes da remoção
+- Executar migration para limpar `profiles`, `tenant_users` e dependências dos usuários que NÃO são:
+  - `raulsjunior579@gmail.com`
+  - `raul@temisconsultoria.com.br`
+- Executar remoção dos auth users órfãos via a edge function corrigida (ou via action `delete_user`)
+
+### 5. Validação
+- Confirmar que restam apenas os 2 usuários
+- Testar criação manual do Vitor (auth + tenant_users + profile)
+
+## Escopo explicitamente fora
+- Fluxo de convite/email — não será alterado
+- Testes de convite — adiados
+
+## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/create-user/index.ts` | Adicionar fallback: se email já existe em auth, reutilizar o user existente em vez de falhar |
+| `supabase/functions/create-user/index.ts` | Remover redeclaração, adicionar action `delete_user`, flag de rollback, CORS |
+| `src/pages/UsersPage.tsx` | `deleteMutation` chama edge function com action `delete_user` |
+| Migration SQL | Limpeza de usuários não autorizados |
 
 ## Detalhes técnicos
 
-```typescript
-// Após createUser falhar com "already registered":
-const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-const existing = existingUsers.users.find(u => u.email === email);
-if (existing) {
-  // Verificar que não pertence a outro tenant
-  // Reutilizar existing.id como newUserId
-}
+```text
+Linha 189 atual (causa o BootFailure):
+  const newUserId = authData.user.id;   ← REMOVER
+
+Já existe na linha 186:
+  newUserId = authData.user.id;         ← correto (usa o let da linha 137)
 ```
 
-## O que NÃO muda
-- Fluxo de update_password — intacto
-- Lógica de rollback — intacta
-- RLS e permissões — intactas
-- Layout — intacto
+Rollback seguro:
+```typescript
+let wasCreatedHere = false;
+// após createUser sucesso:
+wasCreatedHere = true;
+// no catch/rollback:
+if (wasCreatedHere) await supabaseAdmin.auth.admin.deleteUser(newUserId);
+```
+
+## Entregáveis finais
+- Causa raiz documentada
+- Lista de arquivos alterados
+- Lista de usuários removidos vs preservados
+- Resultado do teste de criação do Vitor
 
