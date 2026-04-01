@@ -64,21 +64,38 @@ export interface ClientFormData {
 
 const MODULE = "clientService";
 
-export const fetchClients = async (filters?: {
-  status?: string;
-  credor?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  operatorId?: string;
-  search?: string;
-  cadastroDe?: string;
-  cadastroAte?: string;
-  tipoDevedorId?: string;
-  tipoDividaId?: string;
-  statusCobrancaId?: string;
-}): Promise<Client[]> => {
+const CLIENT_SELECT_COLUMNS = "id, nome_completo, cpf, phone, phone2, phone3, email, credor, status, data_vencimento, valor_parcela, valor_pago, numero_parcela, total_parcelas, propensity_score, tipo_devedor_id, tipo_divida_id, status_cobranca_id, status_cobranca_locked_by, status_cobranca_locked_at, operator_id, external_id, created_at, updated_at, valor_saldo, valor_entrada, endereco, cidade, uf, cep, observacoes, debtor_profile, data_quitacao, tenant_id, enrichment_data, quebra, cod_contrato";
+
+export const fetchClients = async (
+  tenantId: string,
+  filters?: {
+    status?: string;
+    credor?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    operatorId?: string;
+    search?: string;
+    cadastroDe?: string;
+    cadastroAte?: string;
+    tipoDevedorId?: string;
+    tipoDividaId?: string;
+    statusCobrancaId?: string;
+  },
+  pagination?: { page: number; pageSize: number }
+): Promise<{ data: Client[]; count: number }> => {
   try {
-    let query = supabase.from("clients").select("*").order("data_vencimento", { ascending: false });
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+
+    const page = pagination?.page ?? 1;
+    const pageSize = pagination?.pageSize ?? 1000;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from("clients")
+      .select(CLIENT_SELECT_COLUMNS, { count: "exact" })
+      .eq("tenant_id", tenantId)
+      .order("data_vencimento", { ascending: false });
 
     if (filters?.search?.trim()) {
       const term = filters.search.trim();
@@ -118,9 +135,10 @@ export const fetchClients = async (filters?: {
       else if (ids.length > 1) query = query.in("status_cobranca_id", ids);
     }
 
-    const data = await fetchAllRows<Client>(query);
-    logger.info(MODULE, "fetch", { count: data.length });
-    return data;
+    const { data, count, error } = await query.range(from, to);
+    if (error) throw error;
+    logger.info(MODULE, "fetch", { count: data?.length, total: count });
+    return { data: (data || []) as Client[], count: count || 0 };
   } catch (error) {
     handleServiceError(error, MODULE);
   }
