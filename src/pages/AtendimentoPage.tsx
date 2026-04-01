@@ -77,6 +77,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [isLocked, setIsLocked] = useState(false);
   const [lockOwner, setLockOwner] = useState<string | null>(null);
   const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hungUpCallIdRef = useRef<string | number | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
 
