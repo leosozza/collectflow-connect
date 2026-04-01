@@ -43,7 +43,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [fetchingCep, setFetchingCep] = useState(false);
 
   // Dívida
-  const [credor, setCredor] = useState(defaultValues?.credor || "MAXFAMA");
+  const [credor, setCredor] = useState(defaultValues?.credor || "");
   const [valorEntrada, setValorEntrada] = useState(defaultValues?.valor_entrada?.toString() || "");
   const [dataVencimento, setDataVencimento] = useState(defaultValues?.data_vencimento || "");
   const status = "pendente" as const;
