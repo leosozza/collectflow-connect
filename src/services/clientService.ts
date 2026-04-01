@@ -268,13 +268,17 @@ export const markAsBroken = async (client: Client): Promise<void> => {
 };
 
 const removeFutureInstallments = async (client: Client): Promise<void> => {
-  const { error } = await supabase
+  let query = supabase
     .from("clients")
     .delete()
     .eq("cpf", client.cpf)
     .eq("credor", client.credor)
     .eq("status", "pendente")
     .gt("numero_parcela", client.numero_parcela);
+  if (client.tenant_id) {
+    query = query.eq("tenant_id", client.tenant_id);
+  }
+  const { error } = await query;
   if (error) throw error;
 };
 
