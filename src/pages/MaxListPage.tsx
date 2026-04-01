@@ -686,6 +686,72 @@ const MaxListPage = () => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleUpdatePagos = async () => {
+    if (!updatePagosCredor) {
+      toast.error("Selecione um credor");
+      return;
+    }
+    setUpdatingPagos(true);
+    setShowUpdatePagosDialog(false);
+    setImporting(true);
+    setImportProgress(10);
+
+    try {
+      // Build payment date filter
+      const pagDe = `${updatePagosDe}T00:00:00`;
+      const pagAte = `${updatePagosAte}T23:59:59`;
+      const filter = `PaymentDateEffectedQuery+ge+datetime'${pagDe}'+and+PaymentDateEffectedQuery+le+datetime'${pagAte}'`;
+
+      // Get saved mapping
+      const savedMappings = await fetchFieldMappings(tenant.id);
+      const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
+      const fieldMapping = apiMapping ? migrateLegacyMapping(apiMapping.mappings as Record<string, string>) : {};
+
+      logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
+
+      const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+        body: {
+          tenant_id: tenant.id,
+          filter,
+          credor: updatePagosCredor,
+          field_mapping: fieldMapping,
+          status_cobranca_id: "__auto__",
+          mode: "update",
+        },
+      });
+
+      if (error) throw error;
+
+      setImportProgress(100);
+
+      const report: ImportReport = {
+        inserted: result?.inserted || 0,
+        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
+        skipped: result?.errors || 0,
+        unchanged: result?.unchanged || 0,
+        paid: result?.paid || 0,
+        cancelledMaxlist: result?.cancelled_maxlist || 0,
+        duplicatesDiscarded: result?.duplicates_discarded || 0,
+        totalFetched: result?.total_fetched || 0,
+        durationMs: result?.duration_ms || 0,
+        mode: "update",
+      };
+      setImportReport(report);
+      setShowImportResult(true);
+
+      logAction({ action: "update_pagos_completed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, inserted: result?.inserted, updated: result?.updated, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, unchanged: result?.unchanged, duration_ms: result?.duration_ms } });
+
+      toast.success(`Atualização de pagos concluída! ${result?.paid || 0} pagamentos sincronizados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro na atualização de pagos");
+      logAction({ action: "update_pagos_failed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, error: err.message } });
+    } finally {
+      setImporting(false);
+      setUpdatingPagos(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
