@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
@@ -560,7 +561,7 @@ const MaxListPage = () => {
       } else if ((apiField === "CellPhone1" || apiField === "CellPhone2" || apiField === "HomePhone") && value) {
         value = String(value).replace(/[^\d]/g, "");
       } else if (apiField === "ResponsibleCPF" && value) {
-        value = String(value).replace(/[^\d]/g, "");
+        value = cleanCPF(String(value));
       }
 
       if (systemField.startsWith("custom:")) {
@@ -782,7 +783,7 @@ const MaxListPage = () => {
     // If auto status selected, run auto-status-sync to derive statuses
     if (selectedStatusCobrancaId === "__auto__") {
       toast.info("Derivando status automaticamente...");
-      await supabase.functions.invoke("auto-status-sync");
+      await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } });
     }
 
     setImporting(false);

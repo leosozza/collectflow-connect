@@ -5,7 +5,7 @@ import { autoCancelProtestsForCpf } from "@/services/protestoService";
 import { autoCancelSerasaForCpf } from "@/services/serasaService";
 import { logger } from "@/lib/logger";
 import { handleServiceError } from "@/lib/errorHandler";
-import { fetchAllRows } from "@/lib/supabaseUtils";
+
 
 export interface Agreement {
   id: string;
@@ -46,14 +46,20 @@ export interface AgreementFormData {
 
 const MODULE = "agreementService";
 
-export const fetchAgreements = async (filters?: {
-  status?: string;
-  created_by?: string;
-}): Promise<Agreement[]> => {
+export const fetchAgreements = async (
+  tenantId: string,
+  filters?: {
+    status?: string;
+    created_by?: string;
+  }
+): Promise<Agreement[]> => {
   try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+
     let query = supabase
       .from("agreements")
       .select("*")
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
     if (filters?.status && filters.status !== "todos") {
@@ -63,7 +69,8 @@ export const fetchAgreements = async (filters?: {
       query = query.eq("created_by", filters.created_by);
     }
 
-    const data = await fetchAllRows<any>(query);
+    const { data, error } = await query;
+    if (error) throw error;
 
     // Fetch creator profiles
     const creatorIds = [...new Set((data || []).map((a: any) => a.created_by).filter(Boolean))];

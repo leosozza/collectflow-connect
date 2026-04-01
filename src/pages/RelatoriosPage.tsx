@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { parseISO } from "date-fns";
 import { useUrlState } from "@/hooks/useUrlState";
-import { fetchAllRows } from "@/lib/supabaseUtils";
+import { Client } from "@/services/clientService";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Printer } from "lucide-react";
@@ -32,8 +32,13 @@ const RelatoriosPage = () => {
   const [quitacaoAte, setQuitacaoAte] = useUrlState("quitAte", "");
 
   const { data: clients = [] } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => fetchClients(),
+    queryKey: ["clients", tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id) return [];
+      const result = await fetchClients(tenant.id);
+      return result.data;
+    },
+    enabled: !!tenant?.id,
   });
 
   const { data: profiles = [] } = useQuery({

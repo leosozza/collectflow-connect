@@ -52,7 +52,7 @@ const AcordosPage = () => {
       } catch (_) {}
       const filters: { created_by?: string } = {};
       if (!isAdmin && user) filters.created_by = user.id;
-      const data = await fetchAgreements(Object.keys(filters).length > 0 ? filters : undefined);
+      const data = await fetchAgreements(tenant?.id || "", Object.keys(filters).length > 0 ? filters : undefined);
       setAgreements(data);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });

@@ -33,10 +33,10 @@ const FinanceiroPage = () => {
     try {
       const [expData, clientData] = await Promise.all([
         fetchExpenses({ dateFrom, dateTo }),
-        fetchClients({ status: "pago", dateFrom, dateTo }),
+        fetchClients(tenant?.id || "", { status: "pago", dateFrom, dateTo }),
       ]);
       setExpenses(expData);
-      setRevenue(clientData.reduce((s, c) => s + c.valor_pago, 0));
+      setRevenue(clientData.data.reduce((s: number, c: any) => s + c.valor_pago, 0));
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {

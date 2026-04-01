@@ -207,22 +207,23 @@ const CarteiraPage = () => {
     ...filters,
   };
 
-  const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["clients", filtersWithOperator],
-    queryFn: () => fetchClients(filtersWithOperator),
-    enabled: hasActiveFilters,
+  const { data: clientsResult = { data: [], count: 0 }, isLoading } = useQuery({
+    queryKey: ["clients", tenant?.id, filtersWithOperator],
+    queryFn: () => fetchClients(tenant!.id, filtersWithOperator),
+    enabled: hasActiveFilters && !!tenant?.id,
   });
+  const clients = clientsResult.data;
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
-    queryKey: ["agreement-cpfs"],
+    queryKey: ["agreement-cpfs", tenant?.id],
     queryFn: async () => {
-      const query = supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
+      const query = supabase.from("agreements").select("client_cpf").eq("tenant_id", tenant!.id).in("status", ["pending", "approved"]);
       const data = await fetchAllRows(query);
       const cpfSet = new Set<string>();
       data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
-    enabled: hasActiveFilters,
+    enabled: hasActiveFilters && !!tenant?.id,
   });
 
   // Fetch client IDs that have had contact (dispositions or conversations)
@@ -232,12 +233,12 @@ const CarteiraPage = () => {
       const ids = new Set<string>();
       // 1. Client IDs from call_dispositions
       const dispositions = await fetchAllRows(
-        supabase.from("call_dispositions").select("client_id")
+        supabase.from("call_dispositions").select("client_id").eq("tenant_id", tenant!.id)
       );
       dispositions.forEach((d: any) => ids.add(d.client_id));
       // 2. Client IDs from conversations (linked via client_id)
       const convos = await fetchAllRows(
-        supabase.from("conversations" as any).select("client_id").not("client_id", "is", null)
+        supabase.from("conversations" as any).select("client_id").eq("tenant_id", tenant!.id).not("client_id", "is", null)
       );
       convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
       return ids;
@@ -280,7 +281,7 @@ const CarteiraPage = () => {
   useEffect(() => {
     if (!syncCalledRef.current && tenant?.id) {
       syncCalledRef.current = true;
-      supabase.functions.invoke("auto-status-sync").then(({ error }) => {
+      supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } }).then(({ error }) => {
         if (!error) {
           queryClient.invalidateQueries({ queryKey: ["clients"] });
         }
@@ -502,7 +503,7 @@ const CarteiraPage = () => {
     },
     onSuccess: async (_data, variables) => {
       // Run auto-status-sync to derive statuses automatically
-      await supabase.functions.invoke("auto-status-sync");
+      await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant?.id } });
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
       queryClient.invalidateQueries({ queryKey: ["import_logs"] });
