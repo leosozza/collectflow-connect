@@ -1082,7 +1082,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen (fallback when operator didn't dispose in the client file)
-    if (effectiveACW && (isPaused || isTPAStatus)) {
+    if (effectiveACW && (isPaused || isTPAStatus || isACW)) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
