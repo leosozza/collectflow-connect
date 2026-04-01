@@ -43,7 +43,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [fetchingCep, setFetchingCep] = useState(false);
 
   // Dívida
-  const [credor, setCredor] = useState(defaultValues?.credor || "MAXFAMA");
+  const [credor, setCredor] = useState(defaultValues?.credor || "");
   const [valorEntrada, setValorEntrada] = useState(defaultValues?.valor_entrada?.toString() || "");
   const [dataVencimento, setDataVencimento] = useState(defaultValues?.data_vencimento || "");
   const status = "pendente" as const;
@@ -185,9 +185,9 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
           <div className="space-y-1.5">
             <Label>Credor <span className="text-destructive">*</span></Label>
             <Select value={credor} onValueChange={setCredor}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecione o credor" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="MAXFAMA">MAXFAMA</SelectItem>
+                <SelectItem value="default">Padrão</SelectItem>
               </SelectContent>
             </Select>
           </div>

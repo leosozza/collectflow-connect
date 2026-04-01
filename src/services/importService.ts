@@ -296,7 +296,7 @@ const parseRows = (
     const parcelaCol = isCustomMapping ? colMap["numero_parcela"] : colMap["parcela"];
 
     rows.push({
-      credor: getCellStr(colMap["credor"]) || "MAXFAMA",
+      credor: getCellStr(colMap["credor"]) || "",
       nome_completo: nome,
       cpf: formatCPFDisplay(rawCpf),
       external_id: getCellStr(externalIdCol) || undefined,

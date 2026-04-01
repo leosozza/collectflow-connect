@@ -17,7 +17,7 @@ const ConfiguracoesPage = () => {
   const permissions = usePermissions();
   const [visited, setVisited] = useState<Set<string>>(new Set(["integracao"]));
 
-  const isMaxList = tenant?.id === "39a450f8-7a40-46e5-8bc7-708da5043ec7";
+  const isMaxList = ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
 
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },

@@ -29,7 +29,7 @@ const SAMPLE_DATA: Record<string, string> = {
   "{{cpf}}": "123.456.789-00",
   "{{valor_parcela}}": "R$ 350,00",
   "{{data_vencimento}}": "15/03/2026",
-  "{{credor}}": "MAXFAMA",
+  "{{credor}}": "Empresa Exemplo",
 };
 
 const channelLabel: Record<string, string> = { whatsapp: "WhatsApp", email: "Email", both: "Ambos" };

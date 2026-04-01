@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon, Settings } from "lucide-react";
+import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon, Settings, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,8 +54,13 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
   );
 };
 
-const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
 const BATCH_SIZE = 1000;
+
+function isMaxListEnabled(tenant: any): boolean {
+  const settings = tenant?.settings as any;
+  if (settings?.maxlist_enabled === true) return true;
+  return tenant?.slug === "ybrasil";
+}
 
 interface MaxSystemItem {
   ContractNumber: string;
@@ -116,8 +121,10 @@ function removeTimestamp(dateStr: string | null): string {
   return dateStr.split("T")[0]?.replace(/-/g, "/").split("/").reverse().join("/") || "";
 }
 
-function formatStatus(isCancelled: boolean): string {
-  return isCancelled ? "CANCELADO" : "ATIVO";
+function formatStatus(isCancelled: boolean, hasPagamento: boolean): string {
+  if (isCancelled) return "CANCELADO";
+  if (hasPagamento) return "PAGO";
+  return "ATIVO";
 }
 
 function extractYear(dateStr: string): string | null {
@@ -129,6 +136,7 @@ function extractYear(dateStr: string): string | null {
 
 function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
   const dtVenc = removeTimestamp(item.PaymentDateQuery);
+  const hasPag = !!item.PaymentDateEffected;
   return {
     CREDOR: credorName,
     COD_DEVEDOR: item.IdRecord,
@@ -157,7 +165,7 @@ function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
     VL_SALDO: item.NetValue ?? null,
     VL_ATUALIZADO: null,
     TP_TITULO: null,
-    STATUS: formatStatus(item.IsCancelled),
+    STATUS: formatStatus(item.IsCancelled, hasPag),
     NOME_MODELO: item.ModelName || null,
     OBSERVACOES: item.Observations || null,
   };
@@ -241,7 +249,8 @@ const MaxListPage = () => {
   const [importProgress, setImportProgress] = useState(0);
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
-  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]); // kept for compat
+  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
+  const [pendingImportMode, setPendingImportMode] = useState<"import" | "update">("import");
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -288,7 +297,7 @@ const MaxListPage = () => {
       const json = await resp.json();
       return (json.Items || []) as { Id: number; Name: string }[];
     },
-    enabled: !!tenant?.id && ALLOWED_SLUGS.includes(tenant.slug),
+    enabled: !!tenant?.id && isMaxListEnabled(tenant),
   });
 
   // No longer auto-select a status — default is "__auto__"
@@ -314,13 +323,13 @@ const MaxListPage = () => {
   };
 
   useEffect(() => {
-    if (!tenantLoading && tenant && !ALLOWED_SLUGS.includes(tenant.slug)) {
+    if (!tenantLoading && tenant && !isMaxListEnabled(tenant)) {
       navigate("/");
     }
   }, [tenant, tenantLoading, navigate]);
 
   if (tenantLoading || !tenant) return null;
-  if (!ALLOWED_SLUGS.includes(tenant.slug)) return null;
+  if (!isMaxListEnabled(tenant)) return null;
 
   const handleSearch = async () => {
     const filter = buildFilter(filters);
@@ -508,7 +517,7 @@ const MaxListPage = () => {
     return migrated;
   };
 
-  const handleSendToCRM = async () => {
+  const handleSendToCRM = async (importMode: "import" | "update" = "import") => {
     const sourceData = someSelected
       ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
       : data;
@@ -518,6 +527,8 @@ const MaxListPage = () => {
       return;
     }
 
+    setPendingImportMode(importMode);
+
     // Check if saved mapping exists — if so, skip dialog
     try {
       const savedMappings = await fetchFieldMappings(tenant.id);
@@ -526,7 +537,7 @@ const MaxListPage = () => {
         const rawMapping = apiMapping.mappings as Record<string, string>;
         const effectiveMapping = migrateLegacyMapping(rawMapping);
         setPendingMappingData(sourceData);
-        handleMappingConfirmed(effectiveMapping);
+        handleImportOrUpdate(effectiveMapping, importMode);
         return;
       }
     } catch (err) {
@@ -610,12 +621,13 @@ const MaxListPage = () => {
     };
   };
 
-  const handleMappingConfirmed = async (_mapping: Record<string, string>) => {
+  const handleImportOrUpdate = async (_mapping: Record<string, string>, importMode: "import" | "update") => {
     setShowMappingDialog(false);
     setImporting(true);
     setImportProgress(0);
 
-    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
+    const actionLabel = importMode === "update" ? "update" : "import";
+    logAction({ action: `${actionLabel}_started`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
 
     try {
       const filter = buildFilter(filters);
@@ -628,6 +640,7 @@ const MaxListPage = () => {
           credor: selectedCredorName,
           field_mapping: _mapping,
           status_cobranca_id: selectedStatusCobrancaId,
+          mode: importMode,
         },
       });
 
@@ -637,16 +650,24 @@ const MaxListPage = () => {
 
       const report: ImportReport = {
         inserted: result?.inserted || 0,
-        updated: [],
-        rejected: Array(result?.rejected || 0).fill({ reason: "Dados insuficientes" }),
+        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
         skipped: result?.errors || 0,
+        unchanged: result?.unchanged || 0,
+        paid: result?.paid || 0,
+        cancelledMaxlist: result?.cancelled_maxlist || 0,
+        duplicatesDiscarded: result?.duplicates_discarded || 0,
+        totalFetched: result?.total_fetched || 0,
+        durationMs: result?.duration_ms || 0,
+        mode: importMode,
       };
       setImportReport(report);
       setShowImportResult(true);
 
-      logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: result?.inserted, rejected: result?.rejected, duration_ms: result?.duration_ms } });
+      logAction({ action: `${actionLabel}_completed`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, inserted: result?.inserted, updated: result?.updated, unchanged: result?.unchanged, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, rejected: result?.rejected, duration_ms: result?.duration_ms } });
 
-      toast.success(`Importação concluída! ${result?.inserted || 0} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+      const label = importMode === "update" ? "Atualização" : "Importação";
+      toast.success(`${label} concluída! ${(result?.inserted || 0) + (result?.updated || 0)} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
     } catch (err: any) {
       toast.error(err.message || "Erro na importação");
       logAction({ action: "import_failed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, error: err.message } });
@@ -809,16 +830,27 @@ const MaxListPage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="secondary" onClick={() => {
-                if (!selectedCredorName) {
-                  toast.error("Selecione um credor antes de importar");
-                  return;
-                }
-                handleSendToCRM();
-              }} disabled={importing || !selectedCredorName}>
-                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-                {someSelected ? `Enviar ${selectedIndexes.size} selecionados` : "Enviar todos para CRM"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="default" onClick={() => {
+                  if (!selectedCredorName) { toast.error("Selecione um credor"); return; }
+                  handleSendToCRM("import");
+                }} disabled={importing || !selectedCredorName}>
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                  Importar Carteira
+                </Button>
+                <Button variant="secondary" onClick={() => {
+                  if (!selectedCredorName) { toast.error("Selecione um credor"); return; }
+                  handleSendToCRM("update");
+                }} disabled={importing || !selectedCredorName}>
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Atualizar Parcelas
+                </Button>
+              </div>
+              <div className="col-span-full">
+                <p className="text-xs text-muted-foreground mt-1">
+                  <strong>Importar Carteira:</strong> insere novos registros no RiVO. <strong>Atualizar Parcelas:</strong> sincroniza mudanças (pagamentos, cancelamentos, valores) com a base existente.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>
@@ -922,7 +954,7 @@ const MaxListPage = () => {
         onOpenChange={setShowMappingDialog}
         sourceHeaders={["ResponsibleName", "ResponsibleCPF", "ContractNumber", "IdRecord", "CellPhone1", "CellPhone2", "HomePhone", "Email", "Number", "Value", "NetValue", "Discount", "PaymentDateQuery", "PaymentDateEffected", "IsCancelled", "ModelName", "Observations", "Id", "Producer"]}
         tenantId={tenant.id}
-        onConfirm={handleMappingConfirmed}
+        onConfirm={(mapping) => handleImportOrUpdate(mapping, pendingImportMode)}
       />
 
       {importReport && (
