@@ -328,18 +328,14 @@ const UsersPage = () => {
   // Delete mutation — full cascading deletion via edge function
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: { action: "delete_user", user_id: userId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      return invokeCreateUser({ action: "delete_user", user_id: userId });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast.success("Usuário removido!");
+      showEdgeFunctionResult(result);
       setDeleteUser(null);
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao remover usuário"),
+    onError: (err: any) => toast.error(handleEdgeFunctionError(err)),
   });
 
   const handleEdit = (user: Profile) => {
