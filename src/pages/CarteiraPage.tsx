@@ -578,6 +578,39 @@ const CarteiraPage = () => {
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
+      {/* Banner: selecionar todos os filtrados */}
+      {selectedIds.size > 0 && selectedIds.size === allClientIds.length && allClientIds.length > 0 && totalCount > allClientIds.length && !selectAllFiltered && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
+          {selectedIds.size} clientes desta página selecionados.{" "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-primary font-semibold px-1 h-auto"
+            onClick={handleSelectAllFiltered}
+            disabled={loadingAllIds}
+          >
+            {loadingAllIds ? (
+              <><Loader2 className="w-3 h-3 animate-spin mr-1 inline" />Carregando...</>
+            ) : (
+              <>Selecionar todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados</>
+            )}
+          </Button>
+        </div>
+      )}
+      {selectAllFiltered && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
+          Todos os {selectedIds.size.toLocaleString("pt-BR")} clientes filtrados estão selecionados.{" "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-primary font-semibold px-1 h-auto"
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); }}
+          >
+            Limpar seleção
+          </Button>
+        </div>
+      )}
+
       {viewMode === "kanban" ? (
         <CarteiraKanban
           clients={displayClients as any[]}
