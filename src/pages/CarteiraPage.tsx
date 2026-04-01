@@ -714,7 +714,7 @@ const CarteiraPage = () => {
       <DialerExportDialog
         open={dialerOpen}
         onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients}
+        selectedClients={selectedClients as any[]}
       />
 
       {/* WhatsApp bulk dialog */}
