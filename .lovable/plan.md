@@ -1,203 +1,157 @@
 
 
-# Plano: Rodada Final de Hardening Pós-Implantação
+# Plano: Evolução Final do MaxList — Exclusivo YBRASIL
 
 ## Resumo
 
-Fechar pendências críticas: lock real com somente-leitura + takeover funcional, migrar MaxList para edge function, reforçar tenant_id nas queries do Atendimento/Telefonia/WhatsApp, migrar observações para leitura estruturada, paginação real no WhatsApp, e polling adaptativo na telefonia. Sem alterar layout, sem criar telas.
+Transformar o MaxList em módulo exclusivo do tenant YBRASIL com dois fluxos distintos (Importar Carteira / Atualizar Parcelas), atualização inteligente com diff campo-a-campo, novo status `cancelado_maxlist`, relatório detalhado e restrição total de acesso. Sem alterar identidade visual, sem impactar outros tenants.
 
 ---
 
-## Bloco 1: Lock Real no Atendimento
+## Bloco 1: Restrição de Acesso — Somente YBRASIL
 
-**Estado atual**: `isLocked` existe, banner aparece, mas DispositionPanel, DebtorCategoryPanel, AgreementCalculator e observações continuam habilitados.
+### 1.1 — Frontend (`MaxListPage.tsx`)
+- Substituir `ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"]` por verificação via `tenant.settings.maxlist_enabled === true`
+- Fallback: se settings não tiver a flag, checar `tenant.slug === "ybrasil"` como safety net
+- Remover referências a `maxfama` e `temis`
 
-### 1.1 — Desabilitar ações quando `isLocked === true`
+### 1.2 — Edge function `maxlist-import`
+- Após buscar `tenantData`, verificar `settings.maxlist_enabled === true`
+- Se não habilitado: retornar erro 403 "MaxList não habilitado para este tenant"
 
-Em `AtendimentoPage.tsx`:
-- Passar `disabled={isLocked}` para `DispositionPanel` (prop nova, desabilita botões internos)
-- Passar `disabled={isLocked}` para `DebtorCategoryPanel`
-- Ocultar botão "Formalizar Acordo" quando `isLocked`
-- Passar `onSaveNote={isLocked ? undefined : handleSaveNote}` para `ClientObservations` (já esconde o form quando `onSaveNote` é undefined)
-- Desabilitar `handleCall` e `handleHangup` quando `isLocked`
+### 1.3 — Edge function `maxsystem-proxy`
+- Mesma validação: verificar `settings.maxlist_enabled` no tenant antes de prosseguir
 
-### 1.2 — Takeover funcional
-
-- Adicionar botão "Assumir Atendimento" no banner de lock, visível apenas para roles `admin`, `gerente`, `supervisor`
-- Usar `takeoverLock` do `lockService.ts` (já existe)
-- Após takeover: `setIsLocked(false)`, `setLockOwner(null)`, iniciar renovação
-- Registrar `logAction({ action: "atendimento_takeover", ... })`
-
-### 1.3 — Verificar role do operador
-
-- Usar `useTenant()` → `tenantUser.role` para checar se é admin/gerente/supervisor
-- Condicionar visibilidade do botão de takeover
-
-### Componentes a alterar para aceitar `disabled`:
-- `DispositionPanel.tsx` — adicionar prop `disabled`, desabilitar submit
-- `DebtorCategoryPanel.tsx` — adicionar prop `disabled`, desabilitar select/save
+### 1.4 — Menu lateral (`AppLayout.tsx`)
+- Condicionar exibição do link MaxList à mesma flag `maxlist_enabled`
 
 ---
 
-## Bloco 2: Migrar MaxList para Edge Function
+## Bloco 2: Dois Fluxos Distintos na UI
 
-**Estado atual**: Frontend busca 5000 registros por vez do MaxSystem, acumula em `allItems`, processa mapping e faz upsert em batches de 1000 — tudo no browser.
+### 2.1 — Botões separados na tela MaxList
 
-### 2.1 — Criar edge function `maxlist-import`
+Após buscar dados (preview), exibir dois botões distintos em vez do botão único "Enviar todos para CRM":
 
-Recebe:
+- **Importar Carteira** — para primeira carga e novas parcelas. Usa mode `import`
+- **Atualizar Parcelas** — para reconciliação. Usa mode `update`
+
+### 2.2 — Textos descritivos
+- Importar: "Insere novos registros no RiVO"
+- Atualizar: "Sincroniza mudanças (pagamentos, cancelamentos, valores) com a base existente"
+
+### 2.3 — Ambos chamam `maxlist-import` com novo campo `mode: "import" | "update"`
+
+---
+
+## Bloco 3: Edge Function `maxlist-import` — Atualização Inteligente
+
+### 3.1 — Novo parâmetro `mode`
+- `"import"` (default): comportamento atual — upsert direto
+- `"update"`: reconciliação inteligente com diff
+
+### 3.2 — Lógica do modo `update`
+
+Para cada registro mapeado:
+1. Buscar existente por `external_id + tenant_id`
+2. Se não encontrado, fallback por `cod_contrato + numero_parcela + cpf + tenant_id`
+3. Se não existe: inserir como novo
+4. Se existe: comparar campos financeiros campo-a-campo
+
+### 3.3 — Campos comparados no diff
+```
+data_pagamento, valor_pago, valor_parcela, valor_saldo,
+data_vencimento, status, cod_contrato, numero_parcela, model_name
+```
+
+### 3.4 — Campos protegidos (NUNCA sobrescrever)
+```
+observacoes, propensity_score, debtor_profile, operator_id,
+status_cobranca_id (exceto auto-sync), custom_data interno
+```
+
+### 3.5 — Regras de status YBRASIL
+- Se `IsCancelled === true` na origem: `status = "cancelado_maxlist"`
+- Se `PaymentDateEffected` preenchido: `status = "pago"`, atualizar `data_pagamento` e `valor_pago`
+- Se em aberto: `status = "pendente"`
+
+### 3.6 — Classificação de cada registro
+- `novo`: não existia, foi inserido
+- `atualizado`: existia, teve campos alterados (com diff detalhado)
+- `pago`: subconjunto de atualizado — mudou para pago
+- `cancelado_maxlist`: subconjunto de atualizado — mudou para cancelado
+- `sem_alteracao`: existia, nada mudou
+- `rejeitado`: dados insuficientes (CPF/nome ausente)
+- `duplicidade_descartada`: repetido dentro do mesmo lote
+
+### 3.7 — Relatório retornado
 ```json
 {
-  "tenant_id": "uuid",
-  "filter": "string (OData filter)",
-  "credor": "string",
-  "field_mapping": { ... },
-  "status_cobranca_id": "uuid | '__auto__' | null"
+  "success": true,
+  "mode": "update",
+  "total_fetched": 5000,
+  "inserted": 12,
+  "updated": 45,
+  "paid": 8,
+  "cancelled_maxlist": 3,
+  "unchanged": 4920,
+  "rejected": 5,
+  "duplicates_discarded": 10,
+  "errors": 0,
+  "duration_ms": 12345,
+  "updated_records": [{ "nome": "...", "cpf": "...", "changes": {...} }]
 }
 ```
 
-Lógica interna:
-1. Buscar dados do MaxSystem em pages de 5000 (mesma lógica que `maxsystem-proxy`)
-2. Mapear cada registro usando `field_mapping` (mesma lógica de `buildRecordFromMapping`)
-3. Normalizar CPF (padStart 11) e telefone
-4. Deduplicar por `external_id`
-5. Upsert em batches de 500 com `onConflict: "external_id,tenant_id"`
-6. Se `status_cobranca_id === "__auto__"`, chamar `auto-status-sync` ao final
-7. Retornar relatório: `{ inserted, updated, rejected, skipped }`
-
-Timeout: 300s (import pode ser longo — configurar no `config.toml`)
-
-### 2.2 — Simplificar `MaxListPage.tsx`
-
-- `handleMappingConfirmed` → chama `supabase.functions.invoke("maxlist-import", { body: {...} })`
-- Exibe loading + resultado retornado
-- Remove: acúmulo de `allItems` no state para import (manter para preview)
-- Preview: limitar a 50 registros no frontend para visualização
-
-### 2.3 — Config TOML
-
-Adicionar bloco de função para timeout:
-```toml
-[functions.maxlist-import]
-verify_jwt = false
-```
+### 3.8 — Modo `import`
+- Mantém lógica atual de upsert em batch
+- Mas aplica mesma regra de status YBRASIL (`cancelado_maxlist` em vez de `quebrado`)
+- Retorna relatório expandido com os novos contadores
 
 ---
 
-## Bloco 3: Tenant_id Explícito nas Queries Operacionais
+## Bloco 4: Relatório Final Expandido
 
-### 3.1 — `AtendimentoPage.tsx`
-
-Queries sem `.eq("tenant_id")`:
-- L136: `clientRecords` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
-- L163: `agreements` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
-- L182: `callLogs` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
-- L123: `client` query — por ID, ok (unique), mas adicionar tenant para defesa
-
-### 3.2 — `TelefoniaDashboard.tsx`
-
-- L56: `clientByCpf` query — `.eq("cpf", cleanCpf)` sem tenant → adicionar tenant_id
-- Requer propagar `tenantId` para `TelefoniaAtendimentoWrapper`
-
-### 3.3 — `auto-status-sync`
-
-- L173: `.in("id", batch)` sem `.eq("tenant_id")` → adicionar
-- L236: `.in("id", batch)` sem `.eq("tenant_id")` → adicionar
-
-### 3.4 — `WhatsAppChatLayout.tsx`
-
-- L125: `clients` query por `selectedConv.client_id` — sem tenant → adicionar `.eq("tenant_id", tenantId)`
-
-### 3.5 — `conversationService.ts`
-
-- `deleteConversation`: delete `chat_messages` sem tenant filter → ok (FK), mas defensivo: adicionar
-- `sendTextMessage` L131: conversation select sem tenant → adicionar
-
----
-
-## Bloco 4: Observações Estruturadas
-
-**Estado atual**: `ClientObservations` lê de `clients.observacoes` (string concatenada). A timeline já lê de `client_events`. Há gravação dual.
-
-### 4.1 — Migrar `ClientObservations` para ler de `client_events`
-
-- Em vez de receber `observacoes` string e parsear, buscar `client_events` com `event_type = "observation_added"` filtrado por `client_id`
-- Exibir `metadata.note`, `metadata.operator_name`, `created_at`
-- Props: `clientId` + `tenantId` em vez de `observacoes`
-
-### 4.2 — Truncar gravação em `clients.observacoes`
-
-Em `handleSaveNote`: limitar `clients.observacoes` às últimas 3 entradas (resumo), não o log completo.
-
-### 4.3 — Manter gravação dual
-
-Continuar salvando em `client_events` + `clients.observacoes` (truncado).
-
----
-
-## Bloco 5: Paginação Real no WhatsApp
-
-**Estado atual**: `fetchConversations` e `fetchMessages` suportam paginação via `.range()`. Mas a UI não utiliza.
-
-### 5.1 — Infinite scroll em `ConversationList`
-
-- Adicionar `onLoadMore` callback prop
-- Detectar scroll near-bottom do `ScrollArea`
-- Concatenar novas conversas ao state existente
-- Prop `hasMore: boolean` para controlar loading indicator
-
-### 5.2 — `WhatsAppChatLayout` — usar paginação
-
-- Substituir `loadConversations()` por paginação incremental
-- Track `page` e `hasMoreConversations` no state
-- `loadConversations` carrega page 1; `loadMore` incrementa page
-- Mensagens: track `messagePage` + `hasMoreMessages`
-- Ao selecionar conversa, carregar primeira página de mensagens
-- Botão/scroll up para carregar histórico anterior
-
-### 5.3 — Preservar conversa ativa
-
-- Realtime já faz updates incrementais (implementado na Fase 2) — manter
-
----
-
-## Bloco 6: Polling Adaptativo na Telefonia
-
-**Estado atual**: Intervalo fixo de 3s (operador) ou 30s (admin). Sem backoff.
-
-### 6.1 — Intervalo adaptativo em `TelefoniaDashboard.tsx`
-
-Substituir `interval` fixo por cálculo dinâmico:
+### 4.1 — Expandir `ImportReport` interface
 ```typescript
-const getAdaptiveInterval = () => {
-  if (!myAgent || !isAgentOnline) return 30000;
-  if (myAgent.status === 2) return 3000;  // em ligação
-  if (myAgent.status === 3 || myAgent.status === 4) return 5000; // pausa/ACW
-  if (myAgent.status === 1) return 10000; // ocioso
-  return 15000;
-};
+export interface ImportReport {
+  inserted: number;
+  updated: UpdatedRecord[];
+  rejected: RejectedRecord[];
+  skipped: number;
+  unchanged: number;       // novo
+  paid: number;            // novo
+  cancelledMaxlist: number; // novo
+  duplicatesDiscarded: number; // novo
+  totalFetched: number;    // novo
+  durationMs: number;      // novo
+  mode: "import" | "update"; // novo
+}
 ```
 
-### 6.2 — Backoff em erro
-
-```typescript
-const errorCountRef = useRef(0);
-// Em fetchAll: errorCountRef.current++ em catch, reset em success
-// Intervalo efetivo = baseInterval * (1 + Math.min(errorCountRef.current, 5))
-```
-
-### 6.3 — Aplicar intervalo dinâmico no useEffect
-
-Substituir `setInterval(fetchAll, interval * 1000)` por `setTimeout` recursivo com intervalo recalculado a cada ciclo.
+### 4.2 — Expandir `ImportResultDialog`
+- Adicionar badges para: sem alteração, pagos, cancelados, duplicidades
+- Mudar título conforme `mode`: "Resultado da Importação" / "Resultado da Atualização"
+- Manter accordion com detalhes de atualizados e rejeitados
+- Download Excel com todas as categorias
 
 ---
 
-## Bloco 7: Auditoria Complementar
+## Bloco 5: Auditoria
 
-Garantir `logAction` em:
-- Takeover de lock (Bloco 1)
-- MaxList import (Bloco 2 — edge function loga internamente)
-- Já existe em: observação, disposição, acordo, client update, import start/complete
+### 5.1 — Edge function loga em `audit_logs` e `import_logs`
+- Ação: `maxlist_import` ou `maxlist_update`
+- Detalhes incluem todos os contadores + filtros + duração
+- Campo `module: "maxlist"` nos details
+- Apenas tenant YBRASIL terá esses logs
+
+---
+
+## Bloco 6: Limpeza de Referências Legadas
+
+- `ClientForm.tsx`: remover default "MAXFAMA" do credor — usar primeiro credor do tenant ou vazio
+- `importService.ts`: remover fallback "MAXFAMA" — usar credor selecionado ou vazio
+- `CredorReguaTab.tsx`: trocar exemplo "MAXFAMA" por "Empresa Exemplo"
 
 ---
 
@@ -205,30 +159,26 @@ Garantir `logAction` em:
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/AtendimentoPage.tsx` | Lock somente-leitura real + takeover + tenant_id nas queries |
-| `src/components/atendimento/DispositionPanel.tsx` | Prop `disabled` |
-| `src/components/atendimento/DebtorCategoryPanel.tsx` | Prop `disabled` |
-| `src/components/atendimento/ClientTimeline.tsx` | `ClientObservations` lê de `client_events` |
-| `supabase/functions/maxlist-import/index.ts` | Nova edge function |
-| `src/pages/MaxListPage.tsx` | Delegar import ao backend |
-| `supabase/functions/auto-status-sync/index.ts` | tenant_id nos `.in("id", batch)` |
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Paginação + tenant_id |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Infinite scroll |
-| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Polling adaptativo + backoff + tenant_id |
-| `src/services/conversationService.ts` | tenant_id defensivo |
-| `supabase/config.toml` | Config para maxlist-import |
+| `supabase/functions/maxlist-import/index.ts` | Mode import/update, diff inteligente, status cancelado_maxlist, relatório expandido |
+| `supabase/functions/maxsystem-proxy/index.ts` | Validar maxlist_enabled |
+| `src/pages/MaxListPage.tsx` | Restrição por settings, dois botões, relatório expandido |
+| `src/components/maxlist/ImportResultDialog.tsx` | Interface expandida, novos contadores, título dinâmico |
+| `src/components/AppLayout.tsx` | Condicionar menu MaxList a settings |
+| `src/components/clients/ClientForm.tsx` | Remover "MAXFAMA" hardcoded |
+| `src/services/importService.ts` | Remover fallback "MAXFAMA" |
+| `src/components/cadastros/CredorReguaTab.tsx` | Trocar exemplo |
 
 ## O que NÃO muda
-- Layout, design, componentes visuais — intactos
-- Lógica de negócio (acordos, comissões, score) — intacta
-- Estrutura de tabelas — intacta
+- Layout, design, componentes visuais existentes — intactos
+- Lógica de negócio dos demais módulos — intacta
+- Estrutura de tabelas — intacta (status `cancelado_maxlist` é valor string no campo `status` existente)
 - Fluxos operacionais aprovados — preservados
+- Outros tenants — zero impacto
 
 ## Ordem de implementação
-1. Lock real + takeover (AtendimentoPage + DispositionPanel + DebtorCategoryPanel)
-2. Tenant_id explícito (queries do Atendimento, Telefonia, WhatsApp, auto-status-sync)
-3. Observações estruturadas (ClientObservations migrado)
-4. Edge function maxlist-import + simplificar MaxListPage
-5. Paginação WhatsApp (ConversationList infinite scroll)
-6. Polling adaptativo telefonia
+1. Edge function `maxlist-import` (mode + diff + status + relatório)
+2. Edge function `maxsystem-proxy` (validação)
+3. `MaxListPage` (restrição + dois botões + relatório)
+4. `ImportResultDialog` (interface expandida)
+5. Limpeza de referências legadas
 
