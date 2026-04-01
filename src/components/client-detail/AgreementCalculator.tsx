@@ -674,14 +674,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
         </Button>
       </div>
-    </div>
 
       {/* Missing Fields Dialog */}
       <Dialog open={missingFieldsOpen} onOpenChange={(open) => {
         if (!open) {
           setMissingFieldsOpen(false);
           setPendingAgreement(null);
-          onAgreementCreated(); // still refresh even if user skips
+          onAgreementCreated();
         }
       }}>
         <DialogContent className="sm:max-w-md">
