@@ -454,12 +454,12 @@ const CarteiraPage = () => {
     setSelectedIds(next);
   };
 
-  const selectedClients = clients.filter((c) => selectedIds.has(c.id));
+  const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
   const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
-    const cpfMap = new Map<string, Client>();
+    const cpfMap = new Map<string, GroupedClient>();
     for (const c of selectedClients) {
       const cpf = c.cpf.replace(/\D/g, "");
       if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
