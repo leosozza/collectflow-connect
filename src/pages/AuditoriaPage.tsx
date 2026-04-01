@@ -231,8 +231,8 @@ const ExclusaoTab = () => {
     if (!individualSearch.trim()) return;
     setSearchingIndividual(true);
     try {
-      const results = await fetchClients({ search: individualSearch, status: "todos", credor: "todos", dateFrom: "", dateTo: "" });
-      setIndividualResults(results.slice(0, 20));
+      const results = await fetchClients(tenant?.id || "", { search: individualSearch, status: "todos", credor: "todos", dateFrom: "", dateTo: "" });
+      setIndividualResults(results.data.slice(0, 20));
     } catch {
       toast.error("Erro ao buscar clientes");
     } finally {
