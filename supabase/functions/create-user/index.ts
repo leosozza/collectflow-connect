@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
     }
 
     // Create user in auth
+    let newUserId: string;
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -142,10 +143,47 @@ Deno.serve(async (req) => {
     });
 
     if (authError) {
-      return new Response(JSON.stringify({ error: authError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // If email already exists, try to reuse the orphaned auth user
+      if (authError.message?.toLowerCase().includes("already") || authError.message?.toLowerCase().includes("registered") || authError.message?.toLowerCase().includes("exists")) {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const existingUser = listData?.users?.find((u: { email?: string }) => u.email === email);
+        if (!existingUser) {
+          return new Response(JSON.stringify({ error: "Email conflict but user not found" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Ensure user doesn't belong to another tenant
+        const { data: existingTU } = await supabaseAdmin
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", existingUser.id)
+          .maybeSingle();
+
+        if (existingTU && existingTU.tenant_id !== tenantId) {
+          return new Response(JSON.stringify({ error: "User already belongs to another tenant" }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Update password and metadata for the reused user
+        await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+          password,
+          email_confirm: true,
+          user_metadata: { full_name },
+        });
+
+        newUserId = existingUser.id;
+        console.log(`Reusing existing auth user ${newUserId} for email ${email}`);
+      } else {
+        return new Response(JSON.stringify({ error: authError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      newUserId = authData.user.id;
     }
 
     const newUserId = authData.user.id;
