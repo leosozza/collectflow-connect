@@ -74,8 +74,47 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [finishingDisposition, setFinishingDisposition] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || searchParams.get("sessionId") || null);
   const [callHungUp, setCallHungUp] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockOwner, setLockOwner] = useState<string | null>(null);
+  const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
+
+  // Lock lifecycle
+  useEffect(() => {
+    if (!id || !tenant?.id || !profile?.id) return;
+
+    const tryAcquire = async () => {
+      const result = await acquireLock(
+        tenant.id,
+        id,
+        profile.user_id || profile.id,
+        profile.full_name || "Operador",
+        activeChannel
+      );
+      if (!result.acquired) {
+        setIsLocked(true);
+        setLockOwner(result.existingOperator || "Outro operador");
+        toast.warning(`Este cliente está em atendimento por ${result.existingOperator || "outro operador"}`, { duration: 6000 });
+      } else {
+        setIsLocked(false);
+        setLockOwner(null);
+        // Renew every 5 minutes
+        lockRenewalRef.current = setInterval(() => {
+          renewLock(tenant.id, id!, profile.user_id || profile.id);
+        }, 5 * 60 * 1000);
+      }
+    };
+
+    tryAcquire();
+
+    return () => {
+      if (lockRenewalRef.current) clearInterval(lockRenewalRef.current);
+      if (tenant?.id && id && profile) {
+        releaseLock(tenant.id, id, profile.user_id || profile.id);
+      }
+    };
+  }, [id, tenant?.id, profile?.id]);
 
   // Fetch client
   const { data: client, isLoading: clientLoading } = useQuery<any>({
