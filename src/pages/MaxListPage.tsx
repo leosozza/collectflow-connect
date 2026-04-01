@@ -686,6 +686,7 @@ const MaxListPage = () => {
       if (progressInterval) clearInterval(progressInterval);
       setImporting(false);
     }
+  };
 
   const updateFilter = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
