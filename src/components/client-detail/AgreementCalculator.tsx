@@ -72,6 +72,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [generatingBoletos, setGeneratingBoletos] = useState(false);
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
 
+  // Missing fields dialog for pre-boleto validation
+  const [missingFieldsOpen, setMissingFieldsOpen] = useState(false);
+  const [missingFields, setMissingFields] = useState<Record<string, string>>({});
+  const [savingMissingFields, setSavingMissingFields] = useState(false);
+  const [pendingAgreement, setPendingAgreement] = useState<any>(null);
+
   // Fetch credor rules and auto-fill honorários + aging discount
   useEffect(() => {
     if (!profile?.tenant_id || !credor) return;
