@@ -419,7 +419,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Endereço */}
-              <div className="pt-3 border-t border-border">
+              <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs text-muted-foreground uppercase font-medium">Endereço</p>
                   <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={() => setEditOpen(true)}>
