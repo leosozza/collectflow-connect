@@ -635,9 +635,13 @@ const MaxListPage = () => {
     const actionLabel = importMode === "update" ? "update" : "import";
     logAction({ action: `${actionLabel}_started`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
     try {
       const filter = buildFilter(filters);
       setImportProgress(10);
+      progressInterval = setInterval(() => {
+        setImportProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 5));
+      }, 800);
 
       const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
         body: {
@@ -652,6 +656,7 @@ const MaxListPage = () => {
 
       if (error) throw error;
 
+      if (progressInterval) clearInterval(progressInterval);
       setImportProgress(100);
 
       const report: ImportReport = {
