@@ -400,7 +400,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Email */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Email" value={
                   client.email ? (
                     <span className="flex items-center gap-1">
