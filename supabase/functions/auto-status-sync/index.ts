@@ -170,6 +170,7 @@ Deno.serve(async (req) => {
         await supabase
           .from("clients")
           .update({ status_cobranca_id: emDiaId })
+          .eq("tenant_id", tenant_id)
           .in("id", batch);
       }
     }
