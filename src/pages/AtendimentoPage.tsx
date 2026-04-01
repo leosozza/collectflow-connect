@@ -427,6 +427,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const getStatusConfig = () => {
     const s = Number(agentStatus);
     const hasManualPause = !!sessionStorage.getItem("3cp_active_pause_name");
+    // If operator already hung up locally, show post-call state regardless of polling delay
+    if (callHungUp) return { label: "Ligação encerrada — aguardando tabulação", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
     if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 3 && hasManualPause) return { label: `Em Pausa: ${sessionStorage.getItem("3cp_active_pause_name")}`, icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
