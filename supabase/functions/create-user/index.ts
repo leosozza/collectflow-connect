@@ -256,19 +256,21 @@ Deno.serve(async (req) => {
     }
 
     // Step 2: Upsert tenant_users
+    // Constraint: tenant_users_tenant_id_user_id_key UNIQUE (tenant_id, user_id)
+    log("tenant_users_upsert_start", { tenant_id: effectiveTenantId, user_id: newUserId, role });
     const { error: tuError } = await supabaseAdmin
       .from("tenant_users")
       .upsert(
         { tenant_id: effectiveTenantId, user_id: newUserId, role },
-        { onConflict: "user_id" }
+        { onConflict: "tenant_id,user_id" }
       );
 
     if (tuError) {
-      log("tenant_users_failed", { error: tuError.message });
+      log("tenant_users_failed", { error: tuError.message, hint: tuError.hint, code: tuError.code });
       if (wasCreatedHere) await supabaseAdmin.auth.admin.deleteUser(newUserId!);
       return errorResponse("TENANT_USERS_FAILED", tuError.message, 500, "Falha ao vincular tenant_users");
     }
-    log("tenant_users_ok", { tenantId: effectiveTenantId });
+    log("tenant_users_upsert_ok", { tenant_id: effectiveTenantId, user_id: newUserId, role });
 
     // Step 3: Upsert profile (use the role from body, not hardcoded)
     const profileUpsert: Record<string, unknown> = {
