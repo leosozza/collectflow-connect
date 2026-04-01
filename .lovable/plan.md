@@ -1,66 +1,49 @@
 
 
-# Plano: Limpar importação incompleta e reimportar MaxList com segurança
+# Plano: Corrigir barra de progresso do MaxList
 
-## Diagnóstico
+## Problema
 
-A importação de hoje **funcionou parcialmente**:
-- Os 21.356 registros do MaxSystem foram buscados com sucesso
-- Os registros foram inseridos na tabela `clients` (todos os 21.356 estão lá, com 5.581 CPFs únicos)
-- **O erro ocorreu no final**: `supabase.from(...).insert(...).catch is not a function` — um bug na linha que salva o log de importação
-- A function crashou antes de retornar o resultado ao frontend, que interpretou como falha
+A barra de progresso fica em 10% e pula direto para 100% porque o frontend faz apenas duas atualizações:
+1. `setImportProgress(10)` — antes de chamar a Edge Function
+2. `setImportProgress(100)` — quando a resposta chega
 
-**Resumo**: os dados estão no banco, mas o frontend recebeu erro. Não há acordos, eventos ou tabulações vinculados — os registros estão "limpos".
+Não há progresso intermediário porque a Edge Function é uma chamada única que retorna só quando termina.
 
-## Etapas
+## Backend: OK ✅
 
-### 1. Corrigir o bug na Edge Function `maxlist-import`
+A importação mais recente funcionou corretamente:
+- **3.700 registros** importados (2.041 pendente + 1.659 pago)
+- Import log registrado corretamente
+- Nenhum erro
 
-O `.catch(() => {})` não funciona na Supabase JS v2 quando encadeado após `.insert()` sem `.select()` ou `.then()`. Trocar por tratamento com `try/catch` explícito tanto no `import_logs` (linha 459) quanto no `audit_logs` (linha 469).
+## Correção do Frontend
 
-### 2. Excluir todos os clientes do tenant YBRASIL
+**Arquivo:** `src/pages/MaxListPage.tsx`
 
-Como não há acordos, eventos ou dados operacionais vinculados, a exclusão é segura:
-- Deletar todos os registros da tabela `clients` onde `tenant_id = '39a450f8-...'`
-- Limpar `import_logs` relacionados para evitar confusão de contadores
+Adicionar um **progresso simulado** (fake progress) que avança gradualmente enquanto aguarda a resposta da Edge Function, similar ao padrão usado em uploads grandes:
 
-### 3. Reimportar via interface
-
-Após a correção e limpeza, o usuário pode refazer a importação normalmente pela tela `/maxlist`. Os 21.356 registros serão reimportados com o log correto.
-
-## Detalhes Técnicos
-
-**Bug exato (linha ~459-466):**
 ```typescript
-// ANTES (causa o crash):
-await supabase.from("import_logs").insert({...}).catch(() => {});
+// Iniciar timer que avança de 10% até 90% gradualmente
+const interval = setInterval(() => {
+  setImportProgress(prev => {
+    if (prev >= 90) return prev;
+    return prev + Math.random() * 5; // incremento suave
+  });
+}, 800);
 
-// DEPOIS:
-try {
-  await supabase.from("import_logs").insert({...});
-} catch (e) {
-  console.error("[maxlist-import] import_logs error:", e);
-}
+// Ao receber resposta:
+clearInterval(interval);
+setImportProgress(100);
 ```
 
-Mesma correção para `audit_logs` (linha ~469).
+Aplicar em ambos os fluxos:
+- `handleImportOrUpdate` (importar/atualizar)
+- `handleUpdatePagos` (atualizar pagos)
 
-**Exclusão dos clientes:**
-```sql
-DELETE FROM clients WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
-DELETE FROM import_logs WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7';
-```
+## Arquivo afetado
 
-**Arquivo afetado:** `supabase/functions/maxlist-import/index.ts`
-
-**Dados no banco (antes da limpeza):**
-| Métrica | Valor |
+| Arquivo | Mudança |
 |---|---|
-| Total de registros | 21.356 |
-| CPFs únicos | 5.581 |
-| Credor | TESS MODELS PRODUTOS FOTOGRAFICOS LTDA |
-| Status pendente | 13.090 |
-| Status pago | 8.266 |
-| Acordos vinculados | 0 |
-| Eventos vinculados | 0 |
+| `src/pages/MaxListPage.tsx` | Adicionar fake progress com `setInterval` nos dois fluxos de importação |
 
