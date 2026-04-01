@@ -495,18 +495,35 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
       }
+      // NEW: Transition from on_call (2) to idle (1) = ACW without TPA configured
+      if (prevStatus === 2 && currentStatus === 1) {
+        const pendingCall = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+        const alreadyQualified = !!sessionStorage.getItem("3cp_qualified_from_disposition");
+        if (pendingCall && !alreadyQualified) {
+          console.log("[Telefonia] ACW forçado: chamada encerrada sem TPA (2→1), callId:", pendingCall);
+          setIsACW(true);
+        }
+      }
       // Transition from paused/ACW (3 or 4) to idle (1) = ACW ended or unpause
       if ((prevStatus === 3 || prevStatus === 4) && currentStatus === 1) {
+        // Only clear ACW if it was already resolved (not forced from 2→1)
+        if (!isACW) {
+          setSelectedQualification("");
+          setQualifyNotes("");
+          sessionStorage.removeItem("3cp_qualified_from_disposition");
+          sessionStorage.removeItem("3cp_last_call_id");
+        }
         setIsACW(false);
-        setSelectedQualification("");
-        setQualifyNotes("");
-        sessionStorage.removeItem("3cp_qualified_from_disposition");
-        sessionStorage.removeItem("3cp_last_call_id");
+      }
+      // Sync: clear activePauseName when leaving pause/work_break states
+      if ((prevStatus === 3 || prevStatus === 6) && currentStatus !== 3 && currentStatus !== 6) {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
       }
     }
 
     previousStatusRef.current = currentStatus;
-  }, [isOperatorView, myAgent?.status]);
+  }, [isOperatorView, myAgent?.status, lastCallId, isACW]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
@@ -696,7 +713,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       console.log("[Telefonia] handleUnpause result:", JSON.stringify(result));
       const isError = result?.status && result.status >= 400;
       if (isError) {
-        toast.error(result.detail || result.message || "Erro ao retomar");
+        const msg = (result.detail || result.message || "").toLowerCase();
+        if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
+          // Agent already left pause on server — clear local state gracefully
+          setActivePauseName("");
+          sessionStorage.removeItem("3cp_active_pause_name");
+          toast.info("Pausa já encerrada no servidor");
+        } else {
+          toast.error(result.detail || result.message || "Erro ao retomar");
+        }
       } else {
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
@@ -705,7 +730,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       fetchAll();
     } catch (err: any) {
       console.error("[Telefonia] handleUnpause error:", err);
-      toast.error(err?.message || "Erro ao retomar");
+      const msg = (err?.message || "").toLowerCase();
+      if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
+        toast.info("Pausa já encerrada no servidor");
+        fetchAll();
+      } else {
+        toast.error(err?.message || "Erro ao retomar");
+      }
     } finally {
       setUnpausing(false);
     }
@@ -1049,7 +1082,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     // State: ACW (After Call Work) → show disposition screen (fallback when operator didn't dispose in the client file)
-    if (effectiveACW && (isPaused || isTPAStatus)) {
+    if (effectiveACW && (isPaused || isTPAStatus || isACW)) {
       return (
         <div className="space-y-4">
           {/* ACW Header */}
