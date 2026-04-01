@@ -713,7 +713,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       console.log("[Telefonia] handleUnpause result:", JSON.stringify(result));
       const isError = result?.status && result.status >= 400;
       if (isError) {
-        toast.error(result.detail || result.message || "Erro ao retomar");
+        const msg = (result.detail || result.message || "").toLowerCase();
+        if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
+          // Agent already left pause on server — clear local state gracefully
+          setActivePauseName("");
+          sessionStorage.removeItem("3cp_active_pause_name");
+          toast.info("Pausa já encerrada no servidor");
+        } else {
+          toast.error(result.detail || result.message || "Erro ao retomar");
+        }
       } else {
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
@@ -722,7 +730,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       fetchAll();
     } catch (err: any) {
       console.error("[Telefonia] handleUnpause error:", err);
-      toast.error(err?.message || "Erro ao retomar");
+      const msg = (err?.message || "").toLowerCase();
+      if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
+        toast.info("Pausa já encerrada no servidor");
+        fetchAll();
+      } else {
+        toast.error(err?.message || "Erro ao retomar");
+      }
     } finally {
       setUnpausing(false);
     }
