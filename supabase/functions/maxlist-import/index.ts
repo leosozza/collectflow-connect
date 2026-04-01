@@ -456,38 +456,48 @@ Deno.serve(async (req) => {
     const actionName = mode === "update" ? "maxlist_update" : "maxlist_import";
 
     // Log import
-    await supabase.from("import_logs").insert({
-      tenant_id,
-      source: "maxlist",
-      total_records: finalRecords.length,
-      inserted,
-      skipped: errors,
-      credor,
-    }).catch(() => {});
+    try {
+      const { error: logErr } = await supabase.from("import_logs").insert({
+        tenant_id,
+        source: "maxlist",
+        total_records: finalRecords.length,
+        inserted,
+        skipped: errors,
+        credor,
+      });
+      if (logErr) console.error("[maxlist-import] import_logs error:", logErr.message);
+    } catch (e: any) {
+      console.error("[maxlist-import] import_logs exception:", e.message);
+    }
 
     // Audit log
-    await supabase.from("audit_logs").insert({
-      tenant_id,
-      user_id: claimsData.user.id,
-      user_name: "Sistema",
-      action: actionName,
-      entity_type: "import",
-      details: {
-        module: "maxlist",
-        mode,
-        credor,
-        total_fetched: allItems.length,
-        inserted,
-        updated,
-        paid,
-        cancelled_maxlist: cancelledMaxlist,
-        unchanged,
-        rejected: rejected.length,
-        duplicates_discarded: duplicatesDiscarded,
-        errors,
-        duration_ms: durationMs,
-      },
-    }).catch(() => {});
+    try {
+      const { error: auditErr } = await supabase.from("audit_logs").insert({
+        tenant_id,
+        user_id: claimsData.user.id,
+        user_name: "Sistema",
+        action: actionName,
+        entity_type: "import",
+        details: {
+          module: "maxlist",
+          mode,
+          credor,
+          total_fetched: allItems.length,
+          inserted,
+          updated,
+          paid,
+          cancelled_maxlist: cancelledMaxlist,
+          unchanged,
+          rejected: rejected.length,
+          duplicates_discarded: duplicatesDiscarded,
+          errors,
+          duration_ms: durationMs,
+        },
+      });
+      if (auditErr) console.error("[maxlist-import] audit_logs error:", auditErr.message);
+    } catch (e: any) {
+      console.error("[maxlist-import] audit_logs exception:", e.message);
+    }
 
     const report = {
       success: true,
