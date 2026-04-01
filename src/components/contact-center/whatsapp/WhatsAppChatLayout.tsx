@@ -110,7 +110,7 @@ const WhatsAppChatLayout = () => {
       setMessages([]);
       return;
     }
-    fetchMessages(selectedConv.id).then(setMessages).catch(console.error);
+    fetchMessages(selectedConv.id).then((result) => setMessages(result.data)).catch(console.error);
     markConversationRead(selectedConv.id).catch(console.error);
   }, [selectedConv?.id]);
 
