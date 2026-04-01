@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useSearchParams, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +77,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [isLocked, setIsLocked] = useState(false);
   const [lockOwner, setLockOwner] = useState<string | null>(null);
   const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hungUpCallIdRef = useRef<string | number | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
 
@@ -235,7 +236,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (effectiveAgentId && settings.threecplus_domain) {
         // Set flag IMMEDIATELY to prevent ACW screen from appearing while qualify is async
         sessionStorage.setItem("3cp_qualified_from_disposition", "true");
-        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id })
+        // Use hungUpCallIdRef if sessionStorage was already cleared by hangup
+        const qualifyCallId = callId || hungUpCallIdRef.current || undefined;
+        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId: qualifyCallId, tenantId: tenant?.id })
           .then((success) => {
             if (success) {
               sessionStorage.removeItem("3cp_last_call_id");
@@ -251,6 +254,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
           .catch((err) => {
             console.error("[Atendimento] qualifyOn3CPlus error:", err);
             toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+          })
+          .finally(() => {
+            // Clean up hung up ref and flag after tabulation completes
+            hungUpCallIdRef.current = null;
+            sessionStorage.removeItem("3cp_call_hung_up");
           });
       }
     },
@@ -388,6 +396,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       } else {
         toast.success("Ligação encerrada");
         setCallHungUp(true);
+        // Save call_id in ref for later tabulation, then clear sessionStorage immediately
+        hungUpCallIdRef.current = activeCallId;
+        sessionStorage.removeItem("3cp_last_call_id");
+        sessionStorage.setItem("3cp_call_hung_up", "true");
+        console.log("[Hangup] call_id salvo em ref:", activeCallId, "— sessionStorage limpo");
         // Register call_hangup event
         if (tenant?.id && client?.cpf) {
           supabase.from("client_events").insert({
@@ -414,6 +427,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const getStatusConfig = () => {
     const s = Number(agentStatus);
     const hasManualPause = !!sessionStorage.getItem("3cp_active_pause_name");
+    // If operator already hung up locally, show post-call state regardless of polling delay
+    if (callHungUp) return { label: "Ligação encerrada — aguardando tabulação", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
     if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 3 && hasManualPause) return { label: `Em Pausa: ${sessionStorage.getItem("3cp_active_pause_name")}`, icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };

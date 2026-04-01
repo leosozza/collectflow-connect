@@ -497,10 +497,19 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       }
       // NEW: Transition from on_call (2) to idle (1) = ACW without TPA configured
       if (prevStatus === 2 && currentStatus === 1) {
+        const hungUpFlag = !!sessionStorage.getItem("3cp_call_hung_up");
         const pendingCall = lastCallId || sessionStorage.getItem("3cp_last_call_id");
         const alreadyQualified = !!sessionStorage.getItem("3cp_qualified_from_disposition");
-        if (pendingCall && !alreadyQualified) {
-          console.log("[Telefonia] ACW forçado: chamada encerrada sem TPA (2→1), callId:", pendingCall);
+        if ((pendingCall || hungUpFlag) && !alreadyQualified) {
+          console.log("[Telefonia] ACW forçado: chamada encerrada sem TPA (2→1), callId:", pendingCall, "hungUpFlag:", hungUpFlag);
+          setIsACW(true);
+        }
+      }
+      // If hangup was done from AtendimentoPage while polling still shows status 2, force ACW
+      if (currentStatus === 2 && !!sessionStorage.getItem("3cp_call_hung_up")) {
+        const alreadyQualified = !!sessionStorage.getItem("3cp_qualified_from_disposition");
+        if (!alreadyQualified && !isACW) {
+          console.log("[Telefonia] Hangup detectado via flag enquanto polling ainda em status 2 — forçando ACW");
           setIsACW(true);
         }
       }
@@ -904,7 +913,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, operatorAgentId, lastCallId, myAgent?.status, activePauseName, campaignQualifications, setOnFinishDisposition]);
 
-  const isOnCall = myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call";
+  const isOnCall = (myAgent?.status === 2 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "on_call") && !sessionStorage.getItem("3cp_call_hung_up");
   const isPaused = myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
   const isTPAStatus = myAgent?.status === 4 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw";
   const isSipConnected = myAgent?.sip_connected === true || myAgent?.extension_status === "registered" || myAgent?.sip_status === "registered";
