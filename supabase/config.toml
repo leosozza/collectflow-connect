@@ -1,1 +1,4 @@
 project_id = "hulwcntfioqifopyjcvv"
+
+[functions.maxlist-import]
+verify_jwt = false
