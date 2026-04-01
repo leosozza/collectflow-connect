@@ -562,6 +562,54 @@ export type Database = {
           },
         ]
       }
+      atendimento_locks: {
+        Row: {
+          channel: string | null
+          client_id: string
+          expires_at: string | null
+          id: string
+          operator_id: string
+          operator_name: string
+          started_at: string | null
+          tenant_id: string
+        }
+        Insert: {
+          channel?: string | null
+          client_id: string
+          expires_at?: string | null
+          id?: string
+          operator_id: string
+          operator_name?: string
+          started_at?: string | null
+          tenant_id: string
+        }
+        Update: {
+          channel?: string | null
+          client_id?: string
+          expires_at?: string | null
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          started_at?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_locks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_locks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       atendimento_sessions: {
         Row: {
           ai_session_id: string | null
@@ -5605,6 +5653,7 @@ export type Database = {
           shortfall: number
         }[]
       }
+      cleanup_expired_locks: { Args: never; Returns: undefined }
       consume_tokens: {
         Args: {
           p_amount: number

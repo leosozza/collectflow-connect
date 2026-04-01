@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -620,6 +621,8 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(0);
 
+    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: selectedRaw.length } });
+
     // Build records using the mapping directly from API fields
     const allRecords = selectedRaw.map((raw) => buildRecordFromMapping(raw, _mapping));
 
@@ -777,6 +780,8 @@ const MaxListPage = () => {
     };
     setImportReport(report);
     setShowImportResult(true);
+
+    logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: Math.max(reportInserted, 0), updated: changeLogs.length, rejected: rejectedRecords.length } });
 
     toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
 

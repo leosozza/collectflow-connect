@@ -104,6 +104,24 @@ export const createAgreement = async (
   options?: { requiresApproval?: boolean; approvalReason?: string }
 ): Promise<Agreement> => {
   try {
+    // Idempotency: check for existing active agreement for same CPF+credor
+    const rawCpf = data.client_cpf.replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
+    const { data: existingAgreements } = await supabase
+      .from("agreements")
+      .select("id, status")
+      .eq("tenant_id", tenantId)
+      .eq("credor", data.credor)
+      .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`)
+      .in("status", ["pending", "approved", "pending_approval"])
+      .limit(1);
+
+    if (existingAgreements && existingAgreements.length > 0) {
+      throw new Error("Já existe um acordo ativo para este CPF e credor. Cancele o acordo existente antes de criar um novo.");
+    }
+
     const status = options?.requiresApproval ? "pending_approval" : "pending";
     const { data: result, error } = await supabase
       .from("agreements")

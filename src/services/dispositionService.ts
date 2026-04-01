@@ -330,6 +330,28 @@ export const createDisposition = async (params: {
   notes?: string;
   scheduled_callback?: string;
 }): Promise<CallDisposition> => {
+  // Dedup: check if same disposition was created in last 30 seconds (double-click protection)
+  try {
+    const { data: recent } = await supabase
+      .from("call_dispositions")
+      .select("id, created_at")
+      .eq("client_id", params.client_id)
+      .eq("operator_id", params.operator_id)
+      .eq("disposition_type", params.disposition_type)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (recent && recent.length > 0) {
+      const lastCreated = new Date(recent[0].created_at).getTime();
+      if (Date.now() - lastCreated < 30000) {
+        logger.info("dispositionService", "dedup_skipped", { client_id: params.client_id, type: params.disposition_type });
+        return recent[0] as CallDisposition;
+      }
+    }
+  } catch {
+    // Don't block on dedup check failure
+  }
+
   const { data, error } = await supabase
     .from("call_dispositions")
     .insert(params as any)
@@ -340,7 +362,7 @@ export const createDisposition = async (params: {
     action: "disposition",
     entity_type: "client",
     entity_id: params.client_id,
-    details: { type: params.disposition_type, notes: params.notes },
+    details: { type: params.disposition_type, notes: params.notes, module: "atendimento" },
   });
   return data as CallDisposition;
 };

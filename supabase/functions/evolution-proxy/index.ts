@@ -51,6 +51,20 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get("action");
     const body = await req.json().catch(() => ({}));
 
+    // Helper: fetch with 15s timeout
+    const fetchEvo = async (input: string, init?: RequestInit): Promise<Response> => {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
+      try {
+        return await fetch(input, { ...init, signal: controller.signal });
+      } catch (err: any) {
+        if (err?.name === "AbortError") throw new Error("Evolution API timeout (15s)");
+        throw err;
+      } finally {
+        clearTimeout(tid);
+      }
+    };
+
     let result: any;
 
     switch (action) {
@@ -63,7 +77,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        const resp = await fetch(`${baseUrl}/instance/create`, {
+        const resp = await fetchEvo(`${baseUrl}/instance/create`, {
           method: "POST",
           headers: {
             apikey: evolutionKey,
@@ -88,21 +102,21 @@ Deno.serve(async (req) => {
           if (resp.status === 403 && rawMsgStr.toLowerCase().includes("already in use")) {
             // Graceful logout first
             try {
-              await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+              await fetchEvo(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
                 method: "DELETE",
                 headers: { apikey: evolutionKey },
               });
             } catch { /* ignore */ }
 
             // Delete the orphaned instance
-            const delResp = await fetch(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
+            const delResp = await fetchEvo(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
               method: "DELETE",
               headers: { apikey: evolutionKey, "Content-Type": "application/json" },
             });
             await delResp.json().catch(() => null);
 
             // Retry creation
-            const retryResp = await fetch(`${baseUrl}/instance/create`, {
+            const retryResp = await fetchEvo(`${baseUrl}/instance/create`, {
               method: "POST",
               headers: { apikey: evolutionKey, "Content-Type": "application/json" },
               body: JSON.stringify({ instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
@@ -141,7 +155,7 @@ Deno.serve(async (req) => {
 
         // SEMPRE fazer logout primeiro para limpar sessão stale
         try {
-          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+          await fetchEvo(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
             method: "DELETE",
             headers: { apikey: evolutionKey },
           });
@@ -150,7 +164,7 @@ Deno.serve(async (req) => {
         // Aguardar sessão ser liberada
         await new Promise((resolve) => setTimeout(resolve, 1500));
 
-        const connectResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+        const connectResp = await fetchEvo(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
           method: "GET",
           headers: { apikey: evolutionKey },
         });
@@ -181,7 +195,7 @@ Deno.serve(async (req) => {
 
         if (!getQr(result)) {
           // Logout to clear the stale session
-          const logoutResp = await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+          const logoutResp = await fetchEvo(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
             method: "DELETE",
             headers: { apikey: evolutionKey },
           });
@@ -189,7 +203,7 @@ Deno.serve(async (req) => {
           await logoutResp.text();
 
           // Trigger connect to start QR generation
-          await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+          await fetchEvo(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
             method: "GET",
             headers: { apikey: evolutionKey },
           });
@@ -198,7 +212,7 @@ Deno.serve(async (req) => {
           for (let attempt = 1; attempt <= 6; attempt++) {
             await new Promise((resolve) => setTimeout(resolve, 2000));
 
-            const qrResp = await fetch(`${baseUrl}/instance/qrcode/${encodeURIComponent(instanceName)}`, {
+            const qrResp = await fetchEvo(`${baseUrl}/instance/qrcode/${encodeURIComponent(instanceName)}`, {
               method: "GET",
               headers: { apikey: evolutionKey, "Content-Type": "application/json" },
             });
@@ -233,7 +247,7 @@ Deno.serve(async (req) => {
         // PUT /instance/restart is not supported on this Evolution API version.
         // Use logout + connect as the effective restart mechanism.
         try {
-          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+          await fetchEvo(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
             method: "DELETE",
             headers: { apikey: evolutionKey },
           });
@@ -242,7 +256,7 @@ Deno.serve(async (req) => {
         // Wait for session to clear
         await new Promise((resolve) => setTimeout(resolve, 1500));
 
-        const restartConnResp = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+        const restartConnResp = await fetchEvo(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
           method: "GET",
           headers: { apikey: evolutionKey },
         });
@@ -267,7 +281,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        const resp = await fetch(`${baseUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+        const resp = await fetchEvo(`${baseUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
           method: "GET",
           headers: { apikey: evolutionKey },
         });
@@ -304,7 +318,7 @@ Deno.serve(async (req) => {
 
         // Try logout first (graceful disconnect), then delete
         try {
-          await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
+          await fetchEvo(`${baseUrl}/instance/logout/${encodeURIComponent(instanceName)}`, {
             method: "DELETE",
             headers: { apikey: evolutionKey },
           });
@@ -312,7 +326,7 @@ Deno.serve(async (req) => {
           // ignore logout errors
         }
 
-        const resp = await fetch(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
+        const resp = await fetchEvo(`${baseUrl}/instance/delete/${encodeURIComponent(instanceName)}`, {
           method: "DELETE",
           headers: {
             apikey: evolutionKey,
@@ -365,7 +379,7 @@ Deno.serve(async (req) => {
           payload.text = message || "";
         }
 
-        const resp = await fetch(`${baseUrl}/message/${endpoint}/${encodeURIComponent(instanceName)}`, {
+        const resp = await fetchEvo(`${baseUrl}/message/${endpoint}/${encodeURIComponent(instanceName)}`, {
           method: "POST",
           headers: {
             apikey: evolutionKey,
@@ -394,7 +408,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        const resp = await fetch(`${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`, {
+        const resp = await fetchEvo(`${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`, {
           method: "POST",
           headers: {
             apikey: evolutionKey,

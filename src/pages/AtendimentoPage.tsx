@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useSearchParams, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,9 @@ import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, typ
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
-import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot } from "lucide-react";
+import { acquireLock, renewLock, releaseLock, takeoverLock } from "@/services/lockService";
+import { logAction } from "@/services/auditService";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -72,8 +74,47 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [finishingDisposition, setFinishingDisposition] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(propSessionId || searchParams.get("sessionId") || null);
   const [callHungUp, setCallHungUp] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockOwner, setLockOwner] = useState<string | null>(null);
+  const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
+
+  // Lock lifecycle
+  useEffect(() => {
+    if (!id || !tenant?.id || !profile?.id) return;
+
+    const tryAcquire = async () => {
+      const result = await acquireLock(
+        tenant.id,
+        id,
+        profile.user_id || profile.id,
+        profile.full_name || "Operador",
+        activeChannel
+      );
+      if (!result.acquired) {
+        setIsLocked(true);
+        setLockOwner(result.existingOperator || "Outro operador");
+        toast.warning(`Este cliente está em atendimento por ${result.existingOperator || "outro operador"}`, { duration: 6000 });
+      } else {
+        setIsLocked(false);
+        setLockOwner(null);
+        // Renew every 5 minutes
+        lockRenewalRef.current = setInterval(() => {
+          renewLock(tenant.id, id!, profile.user_id || profile.id);
+        }, 5 * 60 * 1000);
+      }
+    };
+
+    tryAcquire();
+
+    return () => {
+      if (lockRenewalRef.current) clearInterval(lockRenewalRef.current);
+      if (tenant?.id && id && profile) {
+        releaseLock(tenant.id, id, profile.user_id || profile.id);
+      }
+    };
+  }, [id, tenant?.id, profile?.id]);
 
   // Fetch client
   const { data: client, isLoading: clientLoading } = useQuery<any>({
@@ -250,6 +291,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         } as any);
       }
 
+      logAction({ action: "observation_added", entity_type: "client", entity_id: client.id, details: { module: "atendimento", note: note.substring(0, 200) } });
       toast.success("Observação salva");
       queryClient.invalidateQueries({ queryKey: ["atendimento-client", client.id] });
       queryClient.invalidateQueries({ queryKey: ["client-events-timeline"] });
@@ -397,6 +439,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Lock Warning Banner */}
+      {isLocked && lockOwner && (
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-white">
+          <Lock className="w-4 h-4" />
+          Cliente em atendimento por: {lockOwner} — Modo somente leitura
+        </div>
+      )}
       {/* 3CPlus Status Banner */}
       {statusConfig && (
         <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>

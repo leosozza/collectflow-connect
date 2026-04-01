@@ -6,8 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Allowed tenant slugs
-const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
+// Tenant access validated dynamically via JWT + tenant_users lookup
 
 // State number to UF abbreviation map
 const STATE_TO_UF: Record<number, string> = {
@@ -16,6 +15,20 @@ const STATE_TO_UF: Record<number, string> = {
   16: "PR", 17: "PE", 18: "PI", 19: "RJ", 20: "RN", 21: "RS", 22: "RO",
   23: "RR", 24: "SC", 25: "SE", 26: "SP", 27: "TO",
 };
+
+/** Fetch with timeout (30s default) */
+async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = 30000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new Error(`Request timeout after ${timeoutMs}ms`);
+    throw err;
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -75,7 +88,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", tu.tenant_id)
       .single();
 
-    if (!tenant || !ALLOWED_SLUGS.includes(tenant.slug)) {
+    if (!tenant) {
       return new Response(JSON.stringify({ error: "Acesso não autorizado para este tenant" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -88,7 +101,7 @@ Deno.serve(async (req: Request) => {
     // === Agencies endpoint ===
     if (action === "agencies") {
       const agenciesUrl = "https://maxsystem.azurewebsites.net/api/Agencies?%24inlinecount=allpages";
-      const agResp = await fetch(agenciesUrl);
+      const agResp = await fetchWithTimeout(agenciesUrl);
       if (!agResp.ok) {
         const text = await agResp.text();
         return new Response(JSON.stringify({ error: "MaxSystem agencies error", details: text }), {
@@ -112,7 +125,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${contractNumber})`;
-      const resp = await fetch(searchUrl);
+      const resp = await fetchWithTimeout(searchUrl);
       if (!resp.ok) {
         const text = await resp.text();
         return new Response(JSON.stringify({ error: "MaxSystem model-search error", details: text }), {
@@ -137,7 +150,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${modelId}`;
-      const resp = await fetch(detailsUrl);
+      const resp = await fetchWithTimeout(detailsUrl);
       if (!resp.ok) {
         const text = await resp.text();
         return new Response(JSON.stringify({ error: "MaxSystem model-details error", details: text }), {
@@ -184,7 +197,7 @@ Deno.serve(async (req: Request) => {
           try {
             // Step 1: Search for the model ID by ContractNumber
             const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${cn})`;
-            const resp = await fetch(searchUrl);
+            const resp = await fetchWithTimeout(searchUrl);
             if (!resp.ok) return;
             const json = await resp.json();
             const item = (json.Items || [])[0];
@@ -192,7 +205,7 @@ Deno.serve(async (req: Request) => {
 
             // Step 2: Fetch details to get ModelName
             const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${item.Id}`;
-            const detResp = await fetch(detailsUrl);
+            const detResp = await fetchWithTimeout(detailsUrl);
             if (!detResp.ok) return;
             const details = await detResp.json();
             if (details?.ModelName) {
@@ -222,7 +235,7 @@ Deno.serve(async (req: Request) => {
 
     const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${requestedTop}&%24skip=${skip}&%24orderby=ResponsibleCPF+desc&%24filter=${encodeURI(filter)}`;
 
-    const response = await fetch(maxUrl);
+    const response = await fetchWithTimeout(maxUrl);
     if (!response.ok) {
       const text = await response.text();
       return new Response(JSON.stringify({ error: "MaxSystem error", details: text }), {
