@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { UserPlus, Loader2, Eye, EyeOff, Users } from "lucide-react";
+import { invokeCreateUser, handleEdgeFunctionError, showEdgeFunctionResult } from "@/services/userEdgeFunctionService";
 
 const AdminUsuariosPage = () => {
   const queryClient = useQueryClient();
