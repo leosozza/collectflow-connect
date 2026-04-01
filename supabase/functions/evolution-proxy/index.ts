@@ -51,6 +51,20 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get("action");
     const body = await req.json().catch(() => ({}));
 
+    // Helper: fetch with 15s timeout
+    const fetchEvo = async (input: string, init?: RequestInit): Promise<Response> => {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
+      try {
+        return await fetch(input, { ...init, signal: controller.signal });
+      } catch (err: any) {
+        if (err?.name === "AbortError") throw new Error("Evolution API timeout (15s)");
+        throw err;
+      } finally {
+        clearTimeout(tid);
+      }
+    };
+
     let result: any;
 
     switch (action) {

@@ -1139,17 +1139,36 @@ Deno.serve(async (req) => {
         );
     }
 
-    console.log(`3CPlus proxy: ${action} -> ${method} ${url}`);
+    // Sanitize log — never print api_token
+    console.log(`3CPlus proxy: ${action} -> ${method} ${url.replace(/api_token=[^&]+/, 'api_token=***')}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const fetchOptions: RequestInit = {
       method,
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     };
     if (reqBody) {
       fetchOptions.body = reqBody;
     }
 
-    const response = await fetch(url, fetchOptions);
+    let response: Response;
+    try {
+      response = await fetch(url, fetchOptions);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err?.name === "AbortError") {
+        return new Response(
+          JSON.stringify({ status: 504, detail: "3CPlus API timeout (15s)" }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     // Handle recording endpoints that return audio
     const contentType = response.headers.get('content-type') || '';
