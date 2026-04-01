@@ -54,8 +54,13 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
   );
 };
 
-const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
 const BATCH_SIZE = 1000;
+
+function isMaxListEnabled(tenant: any): boolean {
+  const settings = tenant?.settings as any;
+  if (settings?.maxlist_enabled === true) return true;
+  return tenant?.slug === "ybrasil";
+}
 
 interface MaxSystemItem {
   ContractNumber: string;
