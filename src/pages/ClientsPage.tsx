@@ -112,10 +112,12 @@ const ClientsPage = () => {
   const [paymentClient, setPaymentClient] = useState<Client | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["clients", filters],
-    queryFn: () => fetchClients(filters),
+  const { data: clientsResult = { data: [], count: 0 }, isLoading } = useQuery({
+    queryKey: ["clients", tenant?.id, filters],
+    queryFn: () => fetchClients(tenant!.id, filters),
+    enabled: !!tenant?.id,
   });
+  const clients = clientsResult.data;
 
 
 
