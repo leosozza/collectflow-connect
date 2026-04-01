@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   fetchClients,
   fetchCarteiraGrouped,
+  fetchAllCarteiraIds,
   createClient,
   updateClient,
   bulkCreateClients,
@@ -169,6 +170,8 @@ const CarteiraPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  const [loadingAllIds, setLoadingAllIds] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [calculatingScore, setCalculatingScore] = useState(false);
@@ -437,8 +440,29 @@ const CarteiraPage = () => {
   const toggleSelectAll = () => {
     if (selectedIds.size === allClientIds.length && allClientIds.length > 0) {
       setSelectedIds(new Set());
+      setSelectAllFiltered(false);
     } else {
       setSelectedIds(new Set(allClientIds));
+      setSelectAllFiltered(false);
+    }
+  };
+
+  // Reset selectAllFiltered when filters or page change
+  useEffect(() => {
+    setSelectAllFiltered(false);
+  }, [rpcFilters, currentPage]);
+
+  const handleSelectAllFiltered = async () => {
+    if (!tenant?.id) return;
+    setLoadingAllIds(true);
+    try {
+      const allFilteredIds = await fetchAllCarteiraIds(tenant.id, rpcFilters, sortField, sortDir);
+      setSelectedIds(new Set(allFilteredIds));
+      setSelectAllFiltered(true);
+    } catch (err: any) {
+      toast.error("Erro ao buscar todos os IDs filtrados");
+    } finally {
+      setLoadingAllIds(false);
     }
   };
 
@@ -553,6 +577,39 @@ const CarteiraPage = () => {
       </div>
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
+
+      {/* Banner: selecionar todos os filtrados */}
+      {selectedIds.size > 0 && selectedIds.size === allClientIds.length && allClientIds.length > 0 && totalCount > allClientIds.length && !selectAllFiltered && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
+          {selectedIds.size} clientes desta página selecionados.{" "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-primary font-semibold px-1 h-auto"
+            onClick={handleSelectAllFiltered}
+            disabled={loadingAllIds}
+          >
+            {loadingAllIds ? (
+              <><Loader2 className="w-3 h-3 animate-spin mr-1 inline" />Carregando...</>
+            ) : (
+              <>Selecionar todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados</>
+            )}
+          </Button>
+        </div>
+      )}
+      {selectAllFiltered && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
+          Todos os {selectedIds.size.toLocaleString("pt-BR")} clientes filtrados estão selecionados.{" "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-primary font-semibold px-1 h-auto"
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); }}
+          >
+            Limpar seleção
+          </Button>
+        </div>
+      )}
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
