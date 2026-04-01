@@ -296,7 +296,7 @@ const MaxListPage = () => {
       const json = await resp.json();
       return (json.Items || []) as { Id: number; Name: string }[];
     },
-    enabled: !!tenant?.id && ALLOWED_SLUGS.includes(tenant.slug),
+    enabled: !!tenant?.id && isMaxListEnabled(tenant),
   });
 
   // No longer auto-select a status — default is "__auto__"
