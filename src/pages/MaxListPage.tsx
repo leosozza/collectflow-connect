@@ -561,7 +561,6 @@ const MaxListPage = () => {
       } else if ((apiField === "CellPhone1" || apiField === "CellPhone2" || apiField === "HomePhone") && value) {
         value = String(value).replace(/[^\d]/g, "");
       } else if (apiField === "ResponsibleCPF" && value) {
-        const { cleanCPF } = await import("@/lib/cpfUtils");
         value = cleanCPF(String(value));
       }
 
