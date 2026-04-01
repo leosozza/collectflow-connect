@@ -164,10 +164,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     queryFn: async () => {
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
-      const { data, error } = await supabase
+      let q = supabase
         .from("agreements").select("*, profiles:created_by(full_name)")
         .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
         .order("created_at", { ascending: false });
+      if (tenant?.id) q = q.eq("tenant_id", tenant.id);
+      const { data, error } = await q;
       if (error) throw error;
       return (data || []).map((a: any) => ({
         ...a,
