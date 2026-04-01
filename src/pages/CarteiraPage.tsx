@@ -207,11 +207,12 @@ const CarteiraPage = () => {
     ...filters,
   };
 
-  const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["clients", filtersWithOperator],
-    queryFn: () => fetchClients(filtersWithOperator),
-    enabled: hasActiveFilters,
+  const { data: clientsResult = { data: [], count: 0 }, isLoading } = useQuery({
+    queryKey: ["clients", tenant?.id, filtersWithOperator],
+    queryFn: () => fetchClients(tenant!.id, filtersWithOperator),
+    enabled: hasActiveFilters && !!tenant?.id,
   });
+  const clients = clientsResult.data;
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
     queryKey: ["agreement-cpfs"],
