@@ -73,19 +73,34 @@ export async function sendInternalNote(
   return data as unknown as ChatMessage;
 }
 
-export async function fetchConversations(tenantId: string): Promise<Conversation[]> {
-  const { data, error } = await supabase
+export async function fetchConversations(
+  tenantId: string,
+  page = 1,
+  pageSize = 50,
+  statusFilter?: string
+): Promise<{ data: Conversation[]; count: number }> {
+  let query = supabase
     .from("conversations" as any)
-    .select("*, clients(nome_completo)")
+    .select("*, clients(nome_completo)", { count: "exact" })
     .eq("tenant_id", tenantId)
     .order("last_message_at", { ascending: false });
+
+  if (statusFilter && statusFilter !== "all") {
+    query = query.eq("status", statusFilter);
+  }
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const { data, count, error } = await query.range(from, to);
   if (error) throw error;
 
-  return ((data || []) as any[]).map((row: any) => ({
+  const mapped = ((data || []) as any[]).map((row: any) => ({
     ...row,
     client_name: row.clients?.nome_completo ?? undefined,
     clients: undefined,
   })) as Conversation[];
+
+  return { data: mapped, count: count || 0 };
 }
 
 export async function fetchMessages(conversationId: string): Promise<ChatMessage[]> {
