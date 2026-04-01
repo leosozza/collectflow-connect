@@ -52,12 +52,14 @@ const TelefoniaAtendimentoWrapper = ({
   const { data: clientByCpf, isLoading: cpfLoading } = useQuery({
     queryKey: ["client-by-cpf", cleanCpf],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: tenantIdResult } = await supabase.rpc("get_my_tenant_id");
+      let q = supabase
         .from("clients")
         .select("*")
         .eq("cpf", cleanCpf)
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      if (tenantIdResult) q = q.eq("tenant_id", tenantIdResult);
+      const { data, error } = await q.maybeSingle();
       if (error) throw error;
       return data;
     },
