@@ -447,23 +447,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               {/* Classificações */}
               <div className="pt-3 border-t border-border">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Perfil do Devedor</p>
-                    <Select
-                      value={client.tipo_devedor_id || "none"}
-                      onValueChange={(v) => updatePerfilMutation.mutate(v === "none" ? null : v)}
-                    >
-                      <SelectTrigger className="h-8 text-sm w-48">
-                        <SelectValue placeholder="Selecionar..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhum</SelectItem>
-                        {tiposDevedor.map((t: any) => (
-                          <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <InfoItem label="Tipo de Dívida" value={tipoDividaNome} />
                   <InfoItem label="Status Cobrança" value={statusCobrancaNome} />
                 </div>
