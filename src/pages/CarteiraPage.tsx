@@ -233,7 +233,7 @@ const CarteiraPage = () => {
       const ids = new Set<string>();
       // 1. Client IDs from call_dispositions
       const dispositions = await fetchAllRows(
-        supabase.from("call_dispositions").select("client_id")
+        supabase.from("call_dispositions").select("client_id").eq("tenant_id", tenant!.id)
       );
       dispositions.forEach((d: any) => ids.add(d.client_id));
       // 2. Client IDs from conversations (linked via client_id)
