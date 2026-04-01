@@ -517,7 +517,7 @@ const MaxListPage = () => {
     return migrated;
   };
 
-  const handleSendToCRM = async () => {
+  const handleSendToCRM = async (importMode: "import" | "update" = "import") => {
     const sourceData = someSelected
       ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
       : data;
@@ -527,6 +527,8 @@ const MaxListPage = () => {
       return;
     }
 
+    setPendingImportMode(importMode);
+
     // Check if saved mapping exists — if so, skip dialog
     try {
       const savedMappings = await fetchFieldMappings(tenant.id);
@@ -535,7 +537,7 @@ const MaxListPage = () => {
         const rawMapping = apiMapping.mappings as Record<string, string>;
         const effectiveMapping = migrateLegacyMapping(rawMapping);
         setPendingMappingData(sourceData);
-        handleMappingConfirmed(effectiveMapping);
+        handleImportOrUpdate(effectiveMapping, importMode);
         return;
       }
     } catch (err) {
