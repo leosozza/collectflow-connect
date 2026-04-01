@@ -427,7 +427,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     Editar endereço
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                   <InfoItem label="Rua" value={client.endereco} className="md:col-span-2" />
                   <InfoItem label="Bairro" value={client.bairro} />
                   <InfoItem label="Cidade" value={client.cidade} />
