@@ -701,6 +701,7 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(10);
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
     try {
       // Build payment date filter
       const pagDe = `${updatePagosDe}T00:00:00`;
@@ -713,6 +714,10 @@ const MaxListPage = () => {
       const fieldMapping = apiMapping ? migrateLegacyMapping(apiMapping.mappings as Record<string, string>) : {};
 
       logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
+
+      progressInterval = setInterval(() => {
+        setImportProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 5));
+      }, 800);
 
       const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
         body: {
@@ -727,6 +732,7 @@ const MaxListPage = () => {
 
       if (error) throw error;
 
+      if (progressInterval) clearInterval(progressInterval);
       setImportProgress(100);
 
       const report: ImportReport = {
