@@ -985,7 +985,7 @@ const UsersPage = () => {
                       .from("invite_links")
                       .insert({
                         tenant_id: tenant.id,
-                        role: inviteRole,
+                        role: inviteRole as "operador" | "supervisor" | "gerente" | "admin",
                         created_by: profile.user_id,
                         expires_at: expiresAt.toISOString(),
                       })
