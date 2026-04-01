@@ -781,6 +781,8 @@ const MaxListPage = () => {
     setImportReport(report);
     setShowImportResult(true);
 
+    logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: Math.max(reportInserted, 0), updated: changeLogs.length, rejected: rejectedRecords.length } });
+
     toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
 
     // If auto status selected, run auto-status-sync to derive statuses
