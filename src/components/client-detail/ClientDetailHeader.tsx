@@ -437,7 +437,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Valores */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
                 <InfoItem label="Saldo Devedor" value={formatCurrency(totalSaldo)} />
                 <InfoItem label="Valor Atualizado" value={<span className="font-semibold">{formatCurrency(totalAtualizado)}</span>} />
