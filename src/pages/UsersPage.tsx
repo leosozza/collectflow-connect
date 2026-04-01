@@ -752,7 +752,7 @@ const UsersPage = () => {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
+              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.user_id)}
             >
               Remover
             </AlertDialogAction>
