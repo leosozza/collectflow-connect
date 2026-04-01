@@ -454,6 +454,76 @@ export interface CarteiraFilters {
   cadastroAte?: string;
 }
 
+export const fetchAllCarteiraIds = async (
+  tenantId: string,
+  filters: CarteiraFilters = {},
+  sortField = "created_at",
+  sortDir = "desc"
+): Promise<string[]> => {
+  try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+
+    let scoreMin: number | null = null;
+    let scoreMax: number | null = null;
+    if (filters.scoreRange) {
+      const ranges = filters.scoreRange.split(",");
+      let min = 100, max = 0;
+      for (const r of ranges) {
+        if (r === "bom") { min = Math.min(min, 75); max = Math.max(max, 100); }
+        if (r === "medio") { min = Math.min(min, 50); max = Math.max(max, 74); }
+        if (r === "ruim") { min = Math.min(min, 0); max = Math.max(max, 49); }
+      }
+      if (ranges.length > 0) { scoreMin = min; scoreMax = max; }
+    }
+
+    const allIds: string[] = [];
+    let page = 1;
+    const pageSize = 5000;
+
+    while (true) {
+      const params: Record<string, any> = {
+        _tenant_id: tenantId,
+        _page: page,
+        _page_size: pageSize,
+        _sort_field: sortField,
+        _sort_dir: sortDir,
+      };
+
+      if (filters.search?.trim()) params._search = filters.search.trim();
+      if (filters.credor && filters.credor !== "todos") params._credor = filters.credor;
+      if (filters.dateFrom) params._date_from = filters.dateFrom;
+      if (filters.dateTo) params._date_to = filters.dateTo;
+      if (filters.statusCobrancaId) params._status_cobranca_ids = filters.statusCobrancaId.split(",").filter(Boolean);
+      if (filters.tipoDevedorId) params._tipo_devedor_ids = filters.tipoDevedorId.split(",").filter(Boolean);
+      if (filters.tipoDividaId) params._tipo_divida_ids = filters.tipoDividaId.split(",").filter(Boolean);
+      if (filters.debtorProfile) params._debtor_profiles = filters.debtorProfile.split(",").filter(Boolean);
+      if (filters.operatorId) params._operator_id = filters.operatorId;
+      if (filters.semAcordo) params._sem_acordo = true;
+      if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
+      if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
+      if (scoreMin !== null) params._score_min = scoreMin;
+      if (scoreMax !== null) params._score_max = scoreMax;
+
+      const { data, error } = await supabase.rpc("get_carteira_grouped" as any, params);
+      if (error) throw error;
+
+      const rows = (data || []) as any[];
+      for (const r of rows) {
+        const ids = r.all_ids || [r.representative_id];
+        for (const id of ids) allIds.push(id);
+      }
+
+      if (rows.length < pageSize) break;
+      page++;
+    }
+
+    logger.info(MODULE, "fetchAllCarteiraIds", { total: allIds.length });
+    return allIds;
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
 export const fetchCarteiraGrouped = async (
   tenantId: string,
   filters: CarteiraFilters = {},

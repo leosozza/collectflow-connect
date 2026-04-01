@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   fetchClients,
   fetchCarteiraGrouped,
+  fetchAllCarteiraIds,
   createClient,
   updateClient,
   bulkCreateClients,
