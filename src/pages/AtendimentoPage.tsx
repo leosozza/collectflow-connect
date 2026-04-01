@@ -445,6 +445,26 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     }
   };
 
+  const canTakeover = tenantUser && ["admin", "gerente", "supervisor", "super_admin"].includes(tenantUser.role);
+
+  const handleTakeover = async () => {
+    if (!tenant?.id || !id || !profile) return;
+    const lock = await takeoverLock(tenant.id, id, profile.user_id || profile.id, profile.full_name || "Operador", activeChannel);
+    if (lock) {
+      setIsLocked(false);
+      setLockOwner(null);
+      // Start renewal
+      if (lockRenewalRef.current) clearInterval(lockRenewalRef.current);
+      lockRenewalRef.current = setInterval(() => {
+        renewLock(tenant.id, id!, profile.user_id || profile.id);
+      }, 5 * 60 * 1000);
+      logAction({ action: "atendimento_takeover", entity_type: "client", entity_id: id, details: { module: "atendimento", previous_operator: lockOwner } });
+      toast.success("Atendimento assumido com sucesso");
+    } else {
+      toast.error("Erro ao assumir atendimento");
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Lock Warning Banner */}
@@ -452,6 +472,16 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-white">
           <Lock className="w-4 h-4" />
           Cliente em atendimento por: {lockOwner} — Modo somente leitura
+          {canTakeover && (
+            <Button
+              onClick={handleTakeover}
+              size="sm"
+              variant="secondary"
+              className="ml-4 gap-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
+            >
+              Assumir Atendimento
+            </Button>
+          )}
         </div>
       )}
       {/* 3CPlus Status Banner */}
@@ -505,10 +535,10 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         totalParcelas={clientRecords.length}
         parcelasPagas={clientRecords.filter((c) => c.status === "pago").length}
         diasAtraso={diasAtraso}
-        onCall={handleCall}
+        onCall={isLocked ? undefined : handleCall}
         callingPhone={callingPhone}
-        onNegotiate={() => setShowNegotiation(true)}
-        onHangup={handleHangup}
+        onNegotiate={isLocked ? undefined : () => setShowNegotiation(true)}
+        onHangup={isLocked ? undefined : handleHangup}
         hangingUp={hangingUp}
         hasActiveCall={!!effectiveCallId && !callHungUp}
       />
@@ -519,6 +549,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
           <DispositionPanel
             onDisposition={handleDisposition}
             loading={dispositionMutation.isPending}
+            disabled={isLocked}
           />
           <DebtorCategoryPanel
             clientId={client.id}
@@ -526,22 +557,25 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
             currentCategoryId={client.debtor_category_id}
             tenantId={tenant?.id}
             clientCpf={client.cpf}
+            disabled={isLocked}
           />
-          <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Formalizar Acordo — {client.nome_completo}</DialogTitle>
-              </DialogHeader>
-              <AgreementCalculator
-                clients={clientRecords}
-                cpf={client.cpf}
-                clientName={client.nome_completo}
-                credor={client.credor}
-                onAgreementCreated={handleAgreementCreated}
-                hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
-              />
-            </DialogContent>
-          </Dialog>
+          {!isLocked && (
+            <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Formalizar Acordo — {client.nome_completo}</DialogTitle>
+                </DialogHeader>
+                <AgreementCalculator
+                  clients={clientRecords}
+                  cpf={client.cpf}
+                  clientName={client.nome_completo}
+                  credor={client.credor}
+                  onAgreementCreated={handleAgreementCreated}
+                  hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
         <div>
           <ClientTimeline
@@ -554,7 +588,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         <div>
           <ClientObservations
             observacoes={client.observacoes}
-            onSaveNote={handleSaveNote}
+            onSaveNote={isLocked ? undefined : handleSaveNote}
             savingNote={savingNote}
           />
         </div>
