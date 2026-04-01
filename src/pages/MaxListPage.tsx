@@ -766,6 +766,14 @@ const MaxListPage = () => {
               {count.toLocaleString("pt-BR")} registros
             </Badge>
           )}
+          <Button
+            variant="default"
+            onClick={() => setShowUpdatePagosDialog(true)}
+            disabled={importing || updatingPagos}
+          >
+            {updatingPagos ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+            Atualizar Pagos
+          </Button>
           <Button variant="outline" onClick={() => setShowSettings(true)}>
             <Settings className="w-4 h-4 mr-2" />
             Configurações
