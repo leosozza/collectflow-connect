@@ -11,11 +11,13 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
 import {
   fetchClients,
+  fetchCarteiraGrouped,
   createClient,
   updateClient,
   bulkCreateClients,
   Client,
   ClientFormData,
+  GroupedClient,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
 import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
@@ -31,7 +33,7 @@ import EnrichmentConfirmDialog from "@/components/carteira/EnrichmentConfirmDial
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search } from "lucide-react";
+import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/supabaseUtils";
