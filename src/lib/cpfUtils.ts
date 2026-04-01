@@ -46,3 +46,11 @@ export const isValidCPF = (cpf: string): boolean => {
 export const normalizeCPF = (value: string): string => {
   return value.replace(/\D/g, "").padStart(11, "0").slice(0, 11);
 };
+
+/** Normalize a phone number to digits-only, removing country code 55 if present */
+export const normalizePhone = (value: string): string => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) return digits.slice(2);
+  if (digits.length === 12 && digits.startsWith("55")) return digits.slice(2);
+  return digits;
+};

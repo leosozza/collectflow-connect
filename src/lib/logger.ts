@@ -25,4 +25,15 @@ export const logger = {
         ts: new Date().toISOString(),
       })
     ),
+
+  /** Start a timer and return a function to log the elapsed time */
+  timed: (module: string, action: string) => {
+    const start = performance.now();
+    return (data?: Record<string, any>) => {
+      const duration = Math.round(performance.now() - start);
+      console.log(
+        JSON.stringify({ level: "info", module, action, duration_ms: duration, ...data, ts: new Date().toISOString() })
+      );
+    };
+  },
 };
