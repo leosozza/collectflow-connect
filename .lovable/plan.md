@@ -1,49 +1,47 @@
 
 
-# Plano: Corrigir barra de progresso do MaxList
+# Plano: Selecionar todos os clientes filtrados (não apenas a página)
 
 ## Problema
 
-A barra de progresso fica em 10% e pula direto para 100% porque o frontend faz apenas duas atualizações:
-1. `setImportProgress(10)` — antes de chamar a Edge Function
-2. `setImportProgress(100)` — quando a resposta chega
+O "Selecionar todos" só seleciona os 50 da página atual porque `allClientIds` é derivado de `displayClients` (limitado ao PAGE_SIZE de 50). Quando o filtro retorna 3.700 resultados, só 50 são selecionáveis.
 
-Não há progresso intermediário porque a Edge Function é uma chamada única que retorna só quando termina.
+## Solução
 
-## Backend: OK ✅
+Adicionar um **banner estilo Gmail** que aparece quando todos os 50 da página estão selecionados, permitindo selecionar **todos os N registros filtrados** com um clique. Ao clicar, uma query busca todos os IDs correspondentes aos filtros no banco.
 
-A importação mais recente funcionou corretamente:
-- **3.700 registros** importados (2.041 pendente + 1.659 pago)
-- Import log registrado corretamente
-- Nenhum erro
+### Fluxo do usuário:
+1. Aplica filtro (ex: "Aguardando Acionamento") → 3.700 resultados
+2. Clica no checkbox do cabeçalho → seleciona os 50 da página
+3. Aparece banner: *"50 clientes desta página selecionados. **Selecionar todos os 3.700 clientes filtrados**"*
+4. Clica → busca todos os IDs via RPC → seleção completa
+5. Banner muda: *"Todos os 3.700 clientes selecionados. **Limpar seleção**"*
 
-## Correção do Frontend
-
-**Arquivo:** `src/pages/MaxListPage.tsx`
-
-Adicionar um **progresso simulado** (fake progress) que avança gradualmente enquanto aguarda a resposta da Edge Function, similar ao padrão usado em uploads grandes:
-
-```typescript
-// Iniciar timer que avança de 10% até 90% gradualmente
-const interval = setInterval(() => {
-  setImportProgress(prev => {
-    if (prev >= 90) return prev;
-    return prev + Math.random() * 5; // incremento suave
-  });
-}, 800);
-
-// Ao receber resposta:
-clearInterval(interval);
-setImportProgress(100);
-```
-
-Aplicar em ambos os fluxos:
-- `handleImportOrUpdate` (importar/atualizar)
-- `handleUpdatePagos` (atualizar pagos)
-
-## Arquivo afetado
+## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/MaxListPage.tsx` | Adicionar fake progress com `setInterval` nos dois fluxos de importação |
+| `src/services/clientService.ts` | Nova função `fetchAllCarteiraIds` — chama a mesma RPC `get_carteira_grouped` com page_size grande, retorna apenas os IDs |
+| `src/pages/CarteiraPage.tsx` | Novo estado `selectAllFiltered`, banner condicional, integração com dialogs |
+
+## Detalhes técnicos
+
+### 1. `clientService.ts` — nova função
+
+```typescript
+export const fetchAllCarteiraIds = async (
+  tenantId: string, filters: CarteiraFilters
+): Promise<string[]> => {
+  // Chama a mesma RPC mas com page_size = 100000 para pegar tudo
+  // Retorna apenas os all_ids concatenados
+};
+```
+
+### 2. `CarteiraPage.tsx` — mudanças
+
+- Novo estado: `const [selectAllFiltered, setSelectAllFiltered] = useState(false)`
+- Reset `selectAllFiltered = false` quando filtros mudam ou página muda
+- Função `handleSelectAllFiltered`: chama `fetchAllCarteiraIds`, seta os IDs em `selectedIds`
+- Banner renderizado entre filtros e tabela quando `selectedIds.size === allClientIds.length && allClientIds.length > 0`
+- Os dialogs (WhatsApp, Dialer, Atribuir) já usam `selectedIds` e `selectedClients` — para o caso de "todos filtrados", os dialogs receberão os IDs diretamente (não precisam dos dados completos dos clientes)
 
