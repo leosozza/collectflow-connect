@@ -390,14 +390,25 @@ const UsersPage = () => {
           instance_ids: newInstanceIds,
         },
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+          toast.error("Sessão expirada. Faça logout e login novamente.");
+          return;
+        }
+        throw error;
+      }
       if (data?.error) throw new Error(data.error);
       toast.success(`Usuário ${newName} criado com sucesso!`);
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setNewUserOpen(false);
       resetNewUser();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao criar usuário");
+      const msg = err.message || "Erro ao criar usuário";
+      if (msg.includes("401") || msg.includes("Unauthorized")) {
+        toast.error("Sessão expirada. Faça logout e login novamente.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setCreatingUser(false);
     }
