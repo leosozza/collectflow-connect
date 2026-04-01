@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizePhone } from "@/lib/cpfUtils";
 
 export const useClientByPhone = (phone: string | undefined) => {
-  const normalizedPhone = phone?.replace(/\D/g, "") || "";
-  const phoneSuffix = normalizedPhone.length >= 8 ? normalizedPhone.slice(-8) : normalizedPhone;
+  const normalized = normalizePhone(phone || "");
+  const phoneSuffix = normalized.length >= 8 ? normalized.slice(-8) : normalized;
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client-by-phone", phoneSuffix],

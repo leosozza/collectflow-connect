@@ -103,14 +103,22 @@ export async function fetchConversations(
   return { data: mapped, count: count || 0 };
 }
 
-export async function fetchMessages(conversationId: string): Promise<ChatMessage[]> {
+export async function fetchMessages(
+  conversationId: string,
+  page = 1,
+  pageSize = 100
+): Promise<{ data: ChatMessage[]; hasMore: boolean }> {
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
   const { data, error } = await supabase
     .from("chat_messages" as any)
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .range(from, to);
   if (error) throw error;
-  return (data || []) as unknown as ChatMessage[];
+  const messages = ((data || []) as unknown as ChatMessage[]).reverse();
+  return { data: messages, hasMore: (data || []).length === pageSize };
 }
 
 export async function sendTextMessage(

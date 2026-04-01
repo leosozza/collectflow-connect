@@ -411,3 +411,114 @@ export const bulkCreateClients = async (
     handleServiceError(error, MODULE);
   }
 };
+
+export interface GroupedClient {
+  representative_id: string;
+  cpf: string;
+  nome_completo: string;
+  credor: string;
+  phone: string | null;
+  email: string | null;
+  data_vencimento: string;
+  valor_total: number;
+  valor_pago_total: number;
+  parcelas_count: number;
+  propensity_score: number | null;
+  status_cobranca_id: string | null;
+  status: string;
+  debtor_profile: string | null;
+  operator_id: string | null;
+  external_id: string | null;
+  all_ids: string[];
+  total_count: number;
+  // Aliases for backward compat
+  id: string;
+  valor_parcela: number;
+  allIds: string[];
+}
+
+export interface CarteiraFilters {
+  search?: string;
+  credor?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  statusCobrancaId?: string;
+  tipoDevedorId?: string;
+  tipoDividaId?: string;
+  scoreRange?: string;
+  debtorProfile?: string;
+  operatorId?: string;
+  semAcordo?: boolean;
+  cadastroDe?: string;
+  cadastroAte?: string;
+}
+
+export const fetchCarteiraGrouped = async (
+  tenantId: string,
+  filters: CarteiraFilters = {},
+  page = 1,
+  pageSize = 50,
+  sortField = "created_at",
+  sortDir = "desc"
+): Promise<{ data: GroupedClient[]; count: number }> => {
+  try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+    const end = logger.timed(MODULE, "fetchCarteiraGrouped");
+
+    // Parse score range into min/max
+    let scoreMin: number | null = null;
+    let scoreMax: number | null = null;
+    if (filters.scoreRange) {
+      const ranges = filters.scoreRange.split(",");
+      let min = 100, max = 0;
+      for (const r of ranges) {
+        if (r === "bom") { min = Math.min(min, 75); max = Math.max(max, 100); }
+        if (r === "medio") { min = Math.min(min, 50); max = Math.max(max, 74); }
+        if (r === "ruim") { min = Math.min(min, 0); max = Math.max(max, 49); }
+      }
+      if (ranges.length > 0) { scoreMin = min; scoreMax = max; }
+    }
+
+    const params: Record<string, any> = {
+      _tenant_id: tenantId,
+      _page: page,
+      _page_size: pageSize,
+      _sort_field: sortField,
+      _sort_dir: sortDir,
+    };
+
+    if (filters.search?.trim()) params._search = filters.search.trim();
+    if (filters.credor && filters.credor !== "todos") params._credor = filters.credor;
+    if (filters.dateFrom) params._date_from = filters.dateFrom;
+    if (filters.dateTo) params._date_to = filters.dateTo;
+    if (filters.statusCobrancaId) params._status_cobranca_ids = filters.statusCobrancaId.split(",").filter(Boolean);
+    if (filters.tipoDevedorId) params._tipo_devedor_ids = filters.tipoDevedorId.split(",").filter(Boolean);
+    if (filters.tipoDividaId) params._tipo_divida_ids = filters.tipoDividaId.split(",").filter(Boolean);
+    if (filters.debtorProfile) params._debtor_profiles = filters.debtorProfile.split(",").filter(Boolean);
+    if (filters.operatorId) params._operator_id = filters.operatorId;
+    if (filters.semAcordo) params._sem_acordo = true;
+    if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
+    if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
+    if (scoreMin !== null) params._score_min = scoreMin;
+    if (scoreMax !== null) params._score_max = scoreMax;
+
+    const { data, error } = await supabase.rpc("get_carteira_grouped" as any, params);
+    if (error) throw error;
+
+    const rows = (data || []) as any[];
+    const count = rows.length > 0 ? Number(rows[0].total_count) : 0;
+
+    const mapped: GroupedClient[] = rows.map((r: any) => ({
+      ...r,
+      id: r.representative_id,
+      valor_parcela: Number(r.valor_total),
+      allIds: r.all_ids || [r.representative_id],
+      propensity_score: r.propensity_score || null,
+    }));
+
+    end({ tenant_id: tenantId, count: mapped.length, total: count, page });
+    return { data: mapped, count };
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
