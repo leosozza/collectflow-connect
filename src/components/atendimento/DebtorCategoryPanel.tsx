@@ -10,6 +10,7 @@ interface Props {
   currentCategoryId?: string | null;
   tenantId?: string;
   clientCpf?: string;
+  disabled?: boolean;
 }
 
 const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf }: Props) => {
