@@ -120,11 +120,25 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
+  // Consolidate contact/address fields across all records for the same CPF
+  // Must be before early returns to maintain consistent hook order
+  const first = useMemo(() => {
+    if (clients.length === 0) return null;
+    const base = { ...clients[0] };
+    const contactFields = ["email", "phone", "endereco", "bairro", "cidade", "uf", "cep"] as const;
+    for (const c of clients) {
+      for (const field of contactFields) {
+        if (!base[field] && c[field]) base[field] = c[field];
+      }
+    }
+    return base;
+  }, [clients]);
+
   if (isLoading) {
     return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
   }
 
-  if (clients.length === 0) {
+  if (!first || clients.length === 0) {
     return (
       <div className="p-8 text-center space-y-4">
         <p className="text-muted-foreground">Cliente não encontrado</p>
@@ -135,17 +149,6 @@ const ClientDetailPage = () => {
     );
   }
 
-  // Consolidate contact/address fields across all records for the same CPF
-  const first = useMemo(() => {
-    const base = { ...clients[0] };
-    const contactFields = ["email", "phone", "endereco", "bairro", "cidade", "uf", "cep"] as const;
-    for (const c of clients) {
-      for (const field of contactFields) {
-        if (!base[field] && c[field]) base[field] = c[field];
-      }
-    }
-    return base;
-  }, [clients]);
   const lastAgreement = agreements[0] || null;
 
   const handleAgreementCreated = () => {
