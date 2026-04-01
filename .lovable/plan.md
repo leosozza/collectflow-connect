@@ -1,42 +1,42 @@
 
+# Plano: Corrigir Edge Function `create-user`
 
-# Plano: Botão "Atualizar Parcelas Pagas" — Atalho Rápido
+## Problema
 
-## Resumo
+A função `create-user` usa `supabaseClient.auth.getClaims(token)` (linha 30), mas esse método pode não existir na versão do `@supabase/supabase-js@2` resolvida pelo `esm.sh`. O erro silencioso resulta em status 500.
 
-Adicionar um botão direto na tela MaxList que busca no MaxSystem apenas parcelas com pagamento efetuado (usando filtro `PaymentDateEffectedQuery`) e executa a atualização inteligente automaticamente, sem precisar preencher filtros manualmente.
+## Correção
 
-## Como funciona
+### `supabase/functions/create-user/index.ts`
 
-O MaxSystem já suporta o filtro `PaymentDateEffectedQuery`. O botão vai:
-1. Montar automaticamente um filtro de pagamento efetuado (ex: últimos 30 dias, ou período configurável)
-2. Chamar a edge function `maxlist-import` com `mode: "update"` — que já faz o diff inteligente
-3. Exibir o relatório final normalmente
+Substituir `getClaims` por `getUser(token)` que é estável e disponível em todas as versões do supabase-js v2:
 
-Isso reduz drasticamente o volume consultado (só parcelas pagas) e simplifica a operação.
+```typescript
+// ANTES (linha 29-36):
+const token = authHeader.replace("Bearer ", "");
+const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+if (claimsError || !claimsData?.claims) { ... }
+const callerId = claimsData.claims.sub;
 
-## Alterações
+// DEPOIS:
+const { data: { user: callerUser }, error: userError } = await supabaseAdmin.auth.admin.getUserById(
+  (await supabaseClient.auth.getUser()).data.user?.id ?? ""
+);
+```
 
-### `MaxListPage.tsx`
-- Adicionar botão **"Atualizar Pagos"** no header da página (visível sempre, sem precisar buscar antes)
-- Ao clicar: abrir mini-dialog pedindo apenas **Credor** e **Período de pagamento** (padrão: últimos 30 dias)
-- Montar filtro OData: `PaymentDateEffectedQuery ge datetime'...' and PaymentDateEffectedQuery le datetime'...'`
-- Buscar mapeamento salvo (mesmo fluxo existente)
-- Chamar `supabase.functions.invoke("maxlist-import", { mode: "update", filter, ... })`
-- Exibir resultado no `ImportResultDialog` existente
+Na prática, a abordagem mais simples e confiável:
+1. Usar `supabaseClient.auth.getUser()` (com o token do caller no header) para obter o `user.id`
+2. Usar esse ID para buscar `tenant_users`
 
-### Nenhuma alteração no backend
-A edge function `maxlist-import` já suporta `mode: "update"` com diff inteligente. O filtro OData já é passado ao MaxSystem para buscar apenas os registros relevantes.
+Isso elimina a dependência do `getClaims` e funciona em qualquer versão.
 
 ## Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/MaxListPage.tsx` | Botão "Atualizar Pagos" + mini-dialog de período + chamada direta ao backend |
+| `supabase/functions/create-user/index.ts` | Substituir `getClaims` por `getUser()` |
 
 ## O que NÃO muda
-- Edge functions — intactas
-- Layout geral — intacto
-- Fluxo existente de busca + importar/atualizar — preservado
-- Banco de dados — intacto
-
+- Lógica de criação de usuário — intacta
+- Verificação de admin — intacta
+- Rollback em caso de erro — intacto
