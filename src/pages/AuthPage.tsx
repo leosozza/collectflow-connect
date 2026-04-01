@@ -107,14 +107,19 @@ const AuthPage = () => {
             toast.error(error.message || "Erro ao criar conta");
           }
         } else {
-          // If invite token, accept invite
-          if (inviteToken && signUpData?.user?.id) {
-            try {
-              await supabase.functions.invoke("accept-invite", {
-                body: { token: inviteToken, user_id: signUpData.user.id },
-              });
-            } catch {
-              // non-blocking
+          // Save invite token for later (after email confirmation + login)
+          if (inviteToken) {
+            localStorage.setItem("pendingInviteToken", inviteToken);
+            // Also try immediately in case auto-confirm is on
+            if (signUpData?.user?.id) {
+              try {
+                await supabase.functions.invoke("accept-invite", {
+                  body: { token: inviteToken, user_id: signUpData.user.id },
+                });
+                localStorage.removeItem("pendingInviteToken");
+              } catch {
+                // Will retry after login
+              }
             }
           }
           toast.success("Conta criada! Verifique seu e-mail para confirmar.");
