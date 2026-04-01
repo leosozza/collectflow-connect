@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { invokeCreateUser, handleEdgeFunctionError, showEdgeFunctionResult } from "@/services/userEdgeFunctionService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserPermissionsTab from "@/components/cadastros/UserPermissionsTab";
 import CommissionGradesTab from "@/components/cadastros/CommissionGradesTab";
@@ -327,18 +328,14 @@ const UsersPage = () => {
   // Delete mutation — full cascading deletion via edge function
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: { action: "delete_user", user_id: userId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      return invokeCreateUser({ action: "delete_user", user_id: userId });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast.success("Usuário removido!");
+      showEdgeFunctionResult(result);
       setDeleteUser(null);
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao remover usuário"),
+    onError: (err: any) => toast.error(handleEdgeFunctionError(err)),
   });
 
   const handleEdit = (user: Profile) => {
@@ -376,39 +373,24 @@ const UsersPage = () => {
     }
     setCreatingUser(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: {
-          full_name: newName.trim(),
-          cpf: newCpf.replace(/\D/g, "") || null,
-          phone: newPhone.replace(/\D/g, "") || null,
-          email: newEmail.trim().toLowerCase(),
-          password: newPassword,
-          role: newRole,
-          permission_profile_id: newProfileId === "none" ? null : newProfileId,
-          commission_grade_id: newGradeId === "none" ? null : newGradeId,
-          threecplus_agent_id: newAgentId,
-          instance_ids: newInstanceIds,
-        },
+      const result = await invokeCreateUser({
+        full_name: newName.trim(),
+        cpf: newCpf.replace(/\D/g, "") || null,
+        phone: newPhone.replace(/\D/g, "") || null,
+        email: newEmail.trim().toLowerCase(),
+        password: newPassword,
+        role: newRole,
+        permission_profile_id: newProfileId === "none" ? null : newProfileId,
+        commission_grade_id: newGradeId === "none" ? null : newGradeId,
+        threecplus_agent_id: newAgentId,
+        instance_ids: newInstanceIds,
       });
-      if (error) {
-        if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-          toast.error("Sessão expirada. Faça logout e login novamente.");
-          return;
-        }
-        throw error;
-      }
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Usuário ${newName} criado com sucesso!`);
+      showEdgeFunctionResult(result, newName.trim());
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setNewUserOpen(false);
       resetNewUser();
     } catch (err: any) {
-      const msg = err.message || "Erro ao criar usuário";
-      if (msg.includes("401") || msg.includes("Unauthorized")) {
-        toast.error("Sessão expirada. Faça logout e login novamente.");
-      } else {
-        toast.error(msg);
-      }
+      toast.error(handleEdgeFunctionError(err));
     } finally {
       setCreatingUser(false);
     }
@@ -426,15 +408,15 @@ const UsersPage = () => {
     }
     setChangingPw(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: { action: "update_password", user_id: pwUser.user_id, password: newPw },
+      const result = await invokeCreateUser({
+        action: "update_password",
+        user_id: pwUser.user_id,
+        password: newPw,
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Senha de ${pwUser.full_name} alterada com sucesso!`);
+      showEdgeFunctionResult(result);
       setPwUser(null);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao trocar senha");
+      toast.error(handleEdgeFunctionError(err));
     } finally {
       setChangingPw(false);
     }
