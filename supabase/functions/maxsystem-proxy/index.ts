@@ -16,6 +16,20 @@ const STATE_TO_UF: Record<number, string> = {
   23: "RR", 24: "SC", 25: "SE", 26: "SP", 27: "TO",
 };
 
+/** Fetch with timeout (30s default) */
+async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = 30000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new Error(`Request timeout after ${timeoutMs}ms`);
+    throw err;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
