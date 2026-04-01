@@ -13,6 +13,7 @@ import { toast } from "sonner";
 interface DispositionPanelProps {
   onDisposition: (type: DispositionType, notes?: string, scheduledCallback?: string) => Promise<void>;
   loading?: boolean;
+  disabled?: boolean;
 }
 
 const DEFAULT_GROUP_MAP: Record<string, string> = {
@@ -23,7 +24,7 @@ const DEFAULT_GROUP_MAP: Record<string, string> = {
   wrong_contact: "contato",
 };
 
-const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => {
+const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanelProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const [selected, setSelected] = useState<string | null>(null);
@@ -82,7 +83,7 @@ const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => 
     return (
       <button
         key={d.key}
-        disabled={loading}
+        disabled={loading || disabled}
         onClick={() => handleDisposition(d.key)}
         className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all disabled:opacity-50
           ${isSelected
@@ -116,7 +117,7 @@ const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => 
             <Button
               size="icon"
               onClick={handleCallback}
-              disabled={loading || !callbackDate}
+              disabled={loading || disabled || !callbackDate}
               className="h-10 w-10 rounded-full shrink-0"
             >
               <Check className="w-4 h-4" />
@@ -152,7 +153,7 @@ const DispositionPanel = ({ onDisposition, loading }: DispositionPanelProps) => 
                   return (
                     <button
                       key={d.key}
-                      disabled={loading}
+                      disabled={loading || disabled}
                       onClick={() => handleDisposition(d.key)}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm font-medium transition-all disabled:opacity-50
                         ${isSelected

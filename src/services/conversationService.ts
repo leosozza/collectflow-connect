@@ -132,6 +132,7 @@ export async function sendTextMessage(
     .from("conversations" as any)
     .select("remote_phone")
     .eq("id", conversationId)
+    .eq("tenant_id", tenantId)
     .single();
 
   if (!conv) throw new Error("Conversa não encontrada");

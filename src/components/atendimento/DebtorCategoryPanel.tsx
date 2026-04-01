@@ -10,9 +10,10 @@ interface Props {
   currentCategoryId?: string | null;
   tenantId?: string;
   clientCpf?: string;
+  disabled?: boolean;
 }
 
-const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf }: Props) => {
+const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf, disabled }: Props) => {
   const queryClient = useQueryClient();
 
   const { data: credor } = useQuery({
@@ -105,7 +106,7 @@ const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId
             return (
               <button
                 key={cat.id}
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || disabled}
                 onClick={() => handleSelect(cat.id)}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all disabled:opacity-50
                   ${isActive

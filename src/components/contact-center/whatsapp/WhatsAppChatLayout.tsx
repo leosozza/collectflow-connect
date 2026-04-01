@@ -125,6 +125,7 @@ const WhatsAppChatLayout = () => {
       .from("clients")
       .select("nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento")
       .eq("id", selectedConv.client_id)
+      .eq("tenant_id", tenantId!)
       .single()
       .then(({ data }) => setClientInfo(data));
   }, [selectedConv?.client_id]);
