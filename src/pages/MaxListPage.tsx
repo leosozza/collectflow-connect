@@ -3,7 +3,7 @@ import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,12 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon, Settings, RefreshCw } from "lucide-react";
+import { Search, Download, Upload, Loader2, FileSpreadsheet, Database, Filter, CalendarIcon, Settings, RefreshCw, CheckCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import MaxListMappingDialog from "@/components/maxlist/MaxListMappingDialog";
@@ -255,6 +256,11 @@ const MaxListPage = () => {
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedCredorName, setSelectedCredorName] = useState<string>("");
+  const [showUpdatePagosDialog, setShowUpdatePagosDialog] = useState(false);
+  const [updatePagosCredor, setUpdatePagosCredor] = useState<string>("");
+  const [updatePagosDe, setUpdatePagosDe] = useState<string>(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+  const [updatePagosAte, setUpdatePagosAte] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [updatingPagos, setUpdatingPagos] = useState(false);
 
   const { data: credores } = useQuery({
     queryKey: ["credores_maxlist", tenant?.id],
@@ -680,6 +686,72 @@ const MaxListPage = () => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleUpdatePagos = async () => {
+    if (!updatePagosCredor) {
+      toast.error("Selecione um credor");
+      return;
+    }
+    setUpdatingPagos(true);
+    setShowUpdatePagosDialog(false);
+    setImporting(true);
+    setImportProgress(10);
+
+    try {
+      // Build payment date filter
+      const pagDe = `${updatePagosDe}T00:00:00`;
+      const pagAte = `${updatePagosAte}T23:59:59`;
+      const filter = `PaymentDateEffectedQuery+ge+datetime'${pagDe}'+and+PaymentDateEffectedQuery+le+datetime'${pagAte}'`;
+
+      // Get saved mapping
+      const savedMappings = await fetchFieldMappings(tenant.id);
+      const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
+      const fieldMapping = apiMapping ? migrateLegacyMapping(apiMapping.mappings as Record<string, string>) : {};
+
+      logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
+
+      const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+        body: {
+          tenant_id: tenant.id,
+          filter,
+          credor: updatePagosCredor,
+          field_mapping: fieldMapping,
+          status_cobranca_id: "__auto__",
+          mode: "update",
+        },
+      });
+
+      if (error) throw error;
+
+      setImportProgress(100);
+
+      const report: ImportReport = {
+        inserted: result?.inserted || 0,
+        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
+        skipped: result?.errors || 0,
+        unchanged: result?.unchanged || 0,
+        paid: result?.paid || 0,
+        cancelledMaxlist: result?.cancelled_maxlist || 0,
+        duplicatesDiscarded: result?.duplicates_discarded || 0,
+        totalFetched: result?.total_fetched || 0,
+        durationMs: result?.duration_ms || 0,
+        mode: "update",
+      };
+      setImportReport(report);
+      setShowImportResult(true);
+
+      logAction({ action: "update_pagos_completed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, inserted: result?.inserted, updated: result?.updated, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, unchanged: result?.unchanged, duration_ms: result?.duration_ms } });
+
+      toast.success(`Atualização de pagos concluída! ${result?.paid || 0} pagamentos sincronizados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro na atualização de pagos");
+      logAction({ action: "update_pagos_failed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, error: err.message } });
+    } finally {
+      setImporting(false);
+      setUpdatingPagos(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -694,6 +766,14 @@ const MaxListPage = () => {
               {count.toLocaleString("pt-BR")} registros
             </Badge>
           )}
+          <Button
+            variant="default"
+            onClick={() => setShowUpdatePagosDialog(true)}
+            disabled={importing || updatingPagos}
+          >
+            {updatingPagos ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+            Atualizar Pagos
+          </Button>
           <Button variant="outline" onClick={() => setShowSettings(true)}>
             <Settings className="w-4 h-4 mr-2" />
             Configurações
@@ -970,6 +1050,50 @@ const MaxListPage = () => {
         onOpenChange={setShowSettings}
         tenantId={tenant.id}
       />
+
+      {/* Dialog Atualizar Pagos */}
+      <Dialog open={showUpdatePagosDialog} onOpenChange={setShowUpdatePagosDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Atualizar Parcelas Pagas</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Busca no MaxSystem apenas parcelas com pagamento efetuado no período selecionado e sincroniza automaticamente com o RiVO.
+          </p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label className="text-sm font-semibold">Credor *</Label>
+              <Select value={updatePagosCredor} onValueChange={setUpdatePagosCredor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o credor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {credores?.map((c) => (
+                    <SelectItem key={c.id} value={c.razao_social}>{c.razao_social}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">Pagamento de</Label>
+                <DatePickerField value={updatePagosDe} onChange={setUpdatePagosDe} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">Pagamento até</Label>
+                <DatePickerField value={updatePagosAte} onChange={setUpdatePagosAte} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUpdatePagosDialog(false)}>Cancelar</Button>
+            <Button onClick={handleUpdatePagos} disabled={!updatePagosCredor}>
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Atualizar Pagos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
