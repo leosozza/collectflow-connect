@@ -618,12 +618,13 @@ const MaxListPage = () => {
     };
   };
 
-  const handleMappingConfirmed = async (_mapping: Record<string, string>) => {
+  const handleImportOrUpdate = async (_mapping: Record<string, string>, importMode: "import" | "update") => {
     setShowMappingDialog(false);
     setImporting(true);
     setImportProgress(0);
 
-    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
+    const actionLabel = importMode === "update" ? "update" : "import";
+    logAction({ action: `${actionLabel}_started`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
 
     try {
       const filter = buildFilter(filters);
@@ -636,6 +637,7 @@ const MaxListPage = () => {
           credor: selectedCredorName,
           field_mapping: _mapping,
           status_cobranca_id: selectedStatusCobrancaId,
+          mode: importMode,
         },
       });
 
@@ -645,16 +647,24 @@ const MaxListPage = () => {
 
       const report: ImportReport = {
         inserted: result?.inserted || 0,
-        updated: [],
-        rejected: Array(result?.rejected || 0).fill({ reason: "Dados insuficientes" }),
+        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
         skipped: result?.errors || 0,
+        unchanged: result?.unchanged || 0,
+        paid: result?.paid || 0,
+        cancelledMaxlist: result?.cancelled_maxlist || 0,
+        duplicatesDiscarded: result?.duplicates_discarded || 0,
+        totalFetched: result?.total_fetched || 0,
+        durationMs: result?.duration_ms || 0,
+        mode: importMode,
       };
       setImportReport(report);
       setShowImportResult(true);
 
-      logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: result?.inserted, rejected: result?.rejected, duration_ms: result?.duration_ms } });
+      logAction({ action: `${actionLabel}_completed`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, inserted: result?.inserted, updated: result?.updated, unchanged: result?.unchanged, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, rejected: result?.rejected, duration_ms: result?.duration_ms } });
 
-      toast.success(`Importação concluída! ${result?.inserted || 0} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+      const label = importMode === "update" ? "Atualização" : "Importação";
+      toast.success(`${label} concluída! ${(result?.inserted || 0) + (result?.updated || 0)} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
     } catch (err: any) {
       toast.error(err.message || "Erro na importação");
       logAction({ action: "import_failed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, error: err.message } });
