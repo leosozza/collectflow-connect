@@ -322,13 +322,13 @@ const MaxListPage = () => {
   };
 
   useEffect(() => {
-    if (!tenantLoading && tenant && !ALLOWED_SLUGS.includes(tenant.slug)) {
+    if (!tenantLoading && tenant && !isMaxListEnabled(tenant)) {
       navigate("/");
     }
   }, [tenant, tenantLoading, navigate]);
 
   if (tenantLoading || !tenant) return null;
-  if (!ALLOWED_SLUGS.includes(tenant.slug)) return null;
+  if (!isMaxListEnabled(tenant)) return null;
 
   const handleSearch = async () => {
     const filter = buildFilter(filters);
