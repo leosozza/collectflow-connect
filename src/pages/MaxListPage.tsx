@@ -249,7 +249,8 @@ const MaxListPage = () => {
   const [importProgress, setImportProgress] = useState(0);
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
-  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]); // kept for compat
+  const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
+  const [pendingImportMode, setPendingImportMode] = useState<"import" | "update">("import");
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
