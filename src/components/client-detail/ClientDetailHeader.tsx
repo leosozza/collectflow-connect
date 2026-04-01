@@ -331,7 +331,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <CollapsibleContent>
             <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                 <InfoItem label="Cod. Devedor" value={client.external_id} />
                 <InfoItem label="Cod. Contrato" value={codContratos} />
                 <InfoItem label="Modelo" value={modelNames} />
