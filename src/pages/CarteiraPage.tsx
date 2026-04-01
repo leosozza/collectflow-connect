@@ -440,8 +440,29 @@ const CarteiraPage = () => {
   const toggleSelectAll = () => {
     if (selectedIds.size === allClientIds.length && allClientIds.length > 0) {
       setSelectedIds(new Set());
+      setSelectAllFiltered(false);
     } else {
       setSelectedIds(new Set(allClientIds));
+      setSelectAllFiltered(false);
+    }
+  };
+
+  // Reset selectAllFiltered when filters or page change
+  useEffect(() => {
+    setSelectAllFiltered(false);
+  }, [rpcFilters, currentPage]);
+
+  const handleSelectAllFiltered = async () => {
+    if (!tenant?.id) return;
+    setLoadingAllIds(true);
+    try {
+      const allFilteredIds = await fetchAllCarteiraIds(tenant.id, rpcFilters, sortField, sortDir);
+      setSelectedIds(new Set(allFilteredIds));
+      setSelectAllFiltered(true);
+    } catch (err: any) {
+      toast.error("Erro ao buscar todos os IDs filtrados");
+    } finally {
+      setLoadingAllIds(false);
     }
   };
 
