@@ -150,6 +150,12 @@ const UsersPage = () => {
   const [newInstanceIds, setNewInstanceIds] = useState<string[]>([]);
   const [creatingUser, setCreatingUser] = useState(false);
 
+  // Invite link state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState<string>("operador");
+  const [inviteLink, setInviteLink] = useState<string>("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
   const apiToken = settings.threecplus_api_token || "";
