@@ -6,8 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Allowed tenant slugs
-const ALLOWED_SLUGS = ["maxfama", "temis", "ybrasil"];
+// Tenant access validated dynamically via JWT + tenant_users lookup
 
 // State number to UF abbreviation map
 const STATE_TO_UF: Record<number, string> = {
