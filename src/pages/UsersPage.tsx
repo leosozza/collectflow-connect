@@ -373,39 +373,24 @@ const UsersPage = () => {
     }
     setCreatingUser(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: {
-          full_name: newName.trim(),
-          cpf: newCpf.replace(/\D/g, "") || null,
-          phone: newPhone.replace(/\D/g, "") || null,
-          email: newEmail.trim().toLowerCase(),
-          password: newPassword,
-          role: newRole,
-          permission_profile_id: newProfileId === "none" ? null : newProfileId,
-          commission_grade_id: newGradeId === "none" ? null : newGradeId,
-          threecplus_agent_id: newAgentId,
-          instance_ids: newInstanceIds,
-        },
+      const result = await invokeCreateUser({
+        full_name: newName.trim(),
+        cpf: newCpf.replace(/\D/g, "") || null,
+        phone: newPhone.replace(/\D/g, "") || null,
+        email: newEmail.trim().toLowerCase(),
+        password: newPassword,
+        role: newRole,
+        permission_profile_id: newProfileId === "none" ? null : newProfileId,
+        commission_grade_id: newGradeId === "none" ? null : newGradeId,
+        threecplus_agent_id: newAgentId,
+        instance_ids: newInstanceIds,
       });
-      if (error) {
-        if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-          toast.error("Sessão expirada. Faça logout e login novamente.");
-          return;
-        }
-        throw error;
-      }
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Usuário ${newName} criado com sucesso!`);
+      showEdgeFunctionResult(result, newName.trim());
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setNewUserOpen(false);
       resetNewUser();
     } catch (err: any) {
-      const msg = err.message || "Erro ao criar usuário";
-      if (msg.includes("401") || msg.includes("Unauthorized")) {
-        toast.error("Sessão expirada. Faça logout e login novamente.");
-      } else {
-        toast.error(msg);
-      }
+      toast.error(handleEdgeFunctionError(err));
     } finally {
       setCreatingUser(false);
     }
