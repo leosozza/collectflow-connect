@@ -185,10 +185,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     queryFn: async () => {
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
-      const { data, error } = await supabase
+      let q = supabase
         .from("call_logs" as any).select("*")
         .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
         .order("called_at", { ascending: false });
+      if (tenant?.id) q = q.eq("tenant_id", tenant.id);
+      const { data, error } = await q;
       if (error) throw error;
       return (data || []) as any[];
     },
