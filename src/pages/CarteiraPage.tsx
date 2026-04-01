@@ -215,15 +215,15 @@ const CarteiraPage = () => {
   const clients = clientsResult.data;
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
-    queryKey: ["agreement-cpfs"],
+    queryKey: ["agreement-cpfs", tenant?.id],
     queryFn: async () => {
-      const query = supabase.from("agreements").select("client_cpf").in("status", ["pending", "approved"]);
+      const query = supabase.from("agreements").select("client_cpf").eq("tenant_id", tenant!.id).in("status", ["pending", "approved"]);
       const data = await fetchAllRows(query);
       const cpfSet = new Set<string>();
       data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
     },
-    enabled: hasActiveFilters,
+    enabled: hasActiveFilters && !!tenant?.id,
   });
 
   // Fetch client IDs that have had contact (dispositions or conversations)
