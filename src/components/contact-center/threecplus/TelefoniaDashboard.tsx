@@ -495,18 +495,35 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         setActivePauseName("");
         sessionStorage.removeItem("3cp_active_pause_name");
       }
+      // NEW: Transition from on_call (2) to idle (1) = ACW without TPA configured
+      if (prevStatus === 2 && currentStatus === 1) {
+        const pendingCall = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+        const alreadyQualified = !!sessionStorage.getItem("3cp_qualified_from_disposition");
+        if (pendingCall && !alreadyQualified) {
+          console.log("[Telefonia] ACW forçado: chamada encerrada sem TPA (2→1), callId:", pendingCall);
+          setIsACW(true);
+        }
+      }
       // Transition from paused/ACW (3 or 4) to idle (1) = ACW ended or unpause
       if ((prevStatus === 3 || prevStatus === 4) && currentStatus === 1) {
+        // Only clear ACW if it was already resolved (not forced from 2→1)
+        if (!isACW) {
+          setSelectedQualification("");
+          setQualifyNotes("");
+          sessionStorage.removeItem("3cp_qualified_from_disposition");
+          sessionStorage.removeItem("3cp_last_call_id");
+        }
         setIsACW(false);
-        setSelectedQualification("");
-        setQualifyNotes("");
-        sessionStorage.removeItem("3cp_qualified_from_disposition");
-        sessionStorage.removeItem("3cp_last_call_id");
+      }
+      // Sync: clear activePauseName when leaving pause/work_break states
+      if ((prevStatus === 3 || prevStatus === 6) && currentStatus !== 3 && currentStatus !== 6) {
+        setActivePauseName("");
+        sessionStorage.removeItem("3cp_active_pause_name");
       }
     }
 
     previousStatusRef.current = currentStatus;
-  }, [isOperatorView, myAgent?.status]);
+  }, [isOperatorView, myAgent?.status, lastCallId, isACW]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
