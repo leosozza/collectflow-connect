@@ -675,6 +675,60 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Button>
       </div>
     </div>
+
+      {/* Missing Fields Dialog */}
+      <Dialog open={missingFieldsOpen} onOpenChange={(open) => {
+        if (!open) {
+          setMissingFieldsOpen(false);
+          setPendingAgreement(null);
+          onAgreementCreated(); // still refresh even if user skips
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-warning">
+              <AlertTriangle className="w-5 h-5" />
+              Dados incompletos para emissão de boleto
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            O acordo foi criado, mas faltam dados obrigatórios para gerar os boletos. Preencha os campos abaixo:
+          </p>
+          <div className="space-y-3 py-2">
+            {Object.keys(missingFields).map((field) => {
+              const labelMap: Record<string, string> = {
+                email: "E-mail", phone: "Telefone", cep: "CEP",
+                endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+              };
+              return (
+                <div key={field} className="space-y-1">
+                  <Label className="text-xs font-medium">{labelMap[field] || field}</Label>
+                  <Input
+                    value={missingFields[field]}
+                    onChange={(e) => setMissingFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                    placeholder={`Informe o ${(labelMap[field] || field).toLowerCase()}`}
+                    className="h-9"
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => {
+              setMissingFieldsOpen(false);
+              setPendingAgreement(null);
+              onAgreementCreated();
+            }}>
+              Pular (sem boleto)
+            </Button>
+            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields}>
+              {savingMissingFields ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar e Gerar Boletos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
