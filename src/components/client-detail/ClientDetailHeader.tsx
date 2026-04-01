@@ -451,8 +451,8 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Classificações */}
-              <div className="pt-3 border-t border-border">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+              <div className="pt-2 border-t border-border">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
                   <InfoItem label="Tipo de Dívida" value={tipoDividaNome} />
                   <InfoItem label="Status Cobrança" value={statusCobrancaNome} />
                 </div>
