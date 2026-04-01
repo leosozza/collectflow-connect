@@ -1,197 +1,203 @@
 
 
-# Plano: Fase 3 — Robustez Operacional, Auditoria, Concorrência e Segurança
+# Plano: Rodada Final de Hardening Pós-Implantação
 
 ## Resumo
 
-Implementar controle de concorrência por lock de atendimento, expandir auditoria para todas as ações críticas, hardening de edge functions, idempotência reforçada e observabilidade operacional. Sem alterar UI, sem criar telas novas, sem mudar fluxos de negócio.
+Fechar pendências críticas: lock real com somente-leitura + takeover funcional, migrar MaxList para edge function, reforçar tenant_id nas queries do Atendimento/Telefonia/WhatsApp, migrar observações para leitura estruturada, paginação real no WhatsApp, e polling adaptativo na telefonia. Sem alterar layout, sem criar telas.
 
 ---
 
-## Bloco 1: Lock de Atendimento (Controle de Concorrência)
+## Bloco 1: Lock Real no Atendimento
 
-**Estado atual**: Nenhum mecanismo de lock existe. Múltiplos operadores podem abrir o mesmo cliente simultaneamente.
+**Estado atual**: `isLocked` existe, banner aparece, mas DispositionPanel, DebtorCategoryPanel, AgreementCalculator e observações continuam habilitados.
 
-### 1.1 — Criar tabela `atendimento_locks` (migration)
+### 1.1 — Desabilitar ações quando `isLocked === true`
 
-```sql
-CREATE TABLE atendimento_locks (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id),
-  client_id uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-  operator_id uuid NOT NULL,
-  operator_name text NOT NULL,
-  channel text,
-  started_at timestamptz DEFAULT now(),
-  expires_at timestamptz DEFAULT now() + interval '15 minutes',
-  UNIQUE(tenant_id, client_id)
-);
-ALTER TABLE atendimento_locks ENABLE ROW LEVEL SECURITY;
--- RLS: tenant users can read/write own tenant
-CREATE POLICY "tenant_locks" ON atendimento_locks
-  FOR ALL TO authenticated
-  USING (tenant_id = get_my_tenant_id())
-  WITH CHECK (tenant_id = get_my_tenant_id());
+Em `AtendimentoPage.tsx`:
+- Passar `disabled={isLocked}` para `DispositionPanel` (prop nova, desabilita botões internos)
+- Passar `disabled={isLocked}` para `DebtorCategoryPanel`
+- Ocultar botão "Formalizar Acordo" quando `isLocked`
+- Passar `onSaveNote={isLocked ? undefined : handleSaveNote}` para `ClientObservations` (já esconde o form quando `onSaveNote` é undefined)
+- Desabilitar `handleCall` e `handleHangup` quando `isLocked`
 
--- Auto-cleanup function
-CREATE FUNCTION cleanup_expired_locks() RETURNS void
-LANGUAGE sql AS $$ DELETE FROM atendimento_locks WHERE expires_at < now(); $$;
-```
+### 1.2 — Takeover funcional
 
-### 1.2 — Criar `src/services/lockService.ts`
+- Adicionar botão "Assumir Atendimento" no banner de lock, visível apenas para roles `admin`, `gerente`, `supervisor`
+- Usar `takeoverLock` do `lockService.ts` (já existe)
+- Após takeover: `setIsLocked(false)`, `setLockOwner(null)`, iniciar renovação
+- Registrar `logAction({ action: "atendimento_takeover", ... })`
 
-- `acquireLock(tenantId, clientId, operatorId, operatorName, channel)`: tenta INSERT, retorna sucesso ou info do operador que tem o lock
-- `renewLock(tenantId, clientId, operatorId)`: UPDATE expires_at += 15min
-- `releaseLock(tenantId, clientId, operatorId)`: DELETE
-- `checkLock(tenantId, clientId)`: SELECT, retorna lock ativo ou null
-- Antes de acquire, limpa locks expirados com `cleanup_expired_locks()`
+### 1.3 — Verificar role do operador
 
-### 1.3 — Integrar no `AtendimentoPage.tsx`
+- Usar `useTenant()` → `tenantUser.role` para checar se é admin/gerente/supervisor
+- Condicionar visibilidade do botão de takeover
 
-- Ao abrir atendimento, chamar `acquireLock`
-- Se lock ativo de outro operador: toast de aviso com nome do operador, modo somente leitura
-- Se admin/gerente: opção de takeover (DELETE + INSERT)
-- Renovação automática via `setInterval` a cada 5 minutos
-- Ao fechar/sair: `releaseLock` no cleanup do useEffect
-
-### 1.4 — Integrar no `findOrCreateSession`
-
-- Chamar `acquireLock` ao criar sessão
-- Associar lock ao session lifecycle
+### Componentes a alterar para aceitar `disabled`:
+- `DispositionPanel.tsx` — adicionar prop `disabled`, desabilitar submit
+- `DebtorCategoryPanel.tsx` — adicionar prop `disabled`, desabilitar select/save
 
 ---
 
-## Bloco 2: Auditoria Expandida
+## Bloco 2: Migrar MaxList para Edge Function
 
-**Estado atual**: `logAction` já existe e é usado em ~15 pontos (clientService, agreementService, dispositionService, etc). Faltam ações críticas.
+**Estado atual**: Frontend busca 5000 registros por vez do MaxSystem, acumula em `allItems`, processa mapping e faz upsert em batches de 1000 — tudo no browser.
 
-### 2.1 — Adicionar `logAction` nos pontos faltantes
+### 2.1 — Criar edge function `maxlist-import`
 
-| Serviço / Local | Ações a auditar |
-|---|---|
-| `importService` / `MaxListPage` | import_started, import_completed (count, credor) |
-| `dispositionService.createDisposition` | disposition_created (já tem parcial, verificar) |
-| `agreementService.updateAgreement` | agreement_updated (before/after status) |
-| `cadastrosService` | credor_created, credor_updated, status_type_created |
-| `AtendimentoPage` - save note | observation_added |
-| `AtendimentoPage` - takeover | atendimento_takeover |
-| `clientService.updateClient` | client_updated (changed fields) |
-| `whatsappCampaignService` | campaign_started, campaign_completed |
-| Operator assignment (CarteiraPage) | operator_assigned |
-
-### 2.2 — Enriquecer `logAction` com campo `module`
-
-Adicionar campo opcional `module` ao `logAction` para categorização:
-```typescript
-logAction({ 
-  action: "import_completed", 
-  entity_type: "import", 
-  details: { count: 500, credor: "X", module: "maxlist" } 
-});
-```
-
-Não precisa mudar a tabela — o `module` vai dentro de `details`.
-
----
-
-## Bloco 3: Hardening de Edge Functions
-
-### 3.1 — `maxsystem-proxy`
-
-- Remover `ALLOWED_SLUGS` hardcoded — validar tenant dinamicamente via JWT/profile
-- Adicionar timeout na chamada ao MaxSystem (fetch com AbortController, 30s)
-- Log estruturado: tenant_id, action, count, duration
-
-### 3.2 — `threecplus-proxy`
-
-- Já tem validação JWT e tenant — verificar timeout
-- Adicionar AbortController com 15s timeout
-- Sanitizar logs para não vazar api_token
-
-### 3.3 — `evolution-proxy`
-
-- Verificar validação de JWT
-- Adicionar timeout 15s
-- Sanitizar headers/tokens nos logs
-
-### 3.4 — Padrão de resposta de erro
-
-Criar helper reutilizável para edge functions:
-```typescript
-function errorResponse(message: string, status: number, corsHeaders: Record<string,string>) {
-  return new Response(JSON.stringify({ error: message, success: false }), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" }
-  });
+Recebe:
+```json
+{
+  "tenant_id": "uuid",
+  "filter": "string (OData filter)",
+  "credor": "string",
+  "field_mapping": { ... },
+  "status_cobranca_id": "uuid | '__auto__' | null"
 }
 ```
 
----
+Lógica interna:
+1. Buscar dados do MaxSystem em pages de 5000 (mesma lógica que `maxsystem-proxy`)
+2. Mapear cada registro usando `field_mapping` (mesma lógica de `buildRecordFromMapping`)
+3. Normalizar CPF (padStart 11) e telefone
+4. Deduplicar por `external_id`
+5. Upsert em batches de 500 com `onConflict: "external_id,tenant_id"`
+6. Se `status_cobranca_id === "__auto__"`, chamar `auto-status-sync` ao final
+7. Retornar relatório: `{ inserted, updated, rejected, skipped }`
 
-## Bloco 4: Idempotência e Resiliência
+Timeout: 300s (import pode ser longo — configurar no `config.toml`)
 
-### 4.1 — `bulkCreateClients` — já usa `external_id` para dedup
+### 2.2 — Simplificar `MaxListPage.tsx`
 
-Verificar que o upsert usa `onConflict: "tenant_id,external_id"`. Se não, corrigir.
+- `handleMappingConfirmed` → chama `supabase.functions.invoke("maxlist-import", { body: {...} })`
+- Exibe loading + resultado retornado
+- Remove: acúmulo de `allItems` no state para import (manter para preview)
+- Preview: limitar a 50 registros no frontend para visualização
 
-### 4.2 — `createDisposition` — dedup por sessão
+### 2.3 — Config TOML
 
-Adicionar verificação: se já existe disposition para mesmo `client_id + operator_id + disposition_type` nos últimos 30 segundos, ignorar (evitar duplo-clique).
-
-### 4.3 — `createAgreement` — verificar acordo existente
-
-Antes de criar acordo, verificar se já existe acordo pending/approved para mesmo CPF+credor+tenant. Se sim, rejeitar com mensagem clara.
-
----
-
-## Bloco 5: Observabilidade Operacional
-
-### 5.1 — Criar `src/services/operationalLogService.ts`
-
-```typescript
-export async function logOperationalEvent(params: {
-  tenantId: string;
-  module: string;
-  action: string;
-  success: boolean;
-  durationMs?: number;
-  details?: Record<string, any>;
-  errorMessage?: string;
-}) {
-  // Insert into audit_logs com entity_type = "operational"
-  // Usa supabase direto, sem depender de auth (para edge functions tb)
-}
+Adicionar bloco de função para timeout:
+```toml
+[functions.maxlist-import]
+verify_jwt = false
 ```
 
-### 5.2 — Instrumentar módulos críticos
+---
 
-- `fetchCarteiraGrouped` — log com duration, count, filters
-- `bulkCreateClients` — log com batch_size, success/fail count
-- `fetchConversations` — log com count, duration
-- Edge functions já logam via console — manter
+## Bloco 3: Tenant_id Explícito nas Queries Operacionais
 
-### 5.3 — Página de Auditoria (`AuditoriaPage`)
+### 3.1 — `AtendimentoPage.tsx`
 
-Já existe. Adicionar filtro por `module` (dentro de details) para facilitar diagnóstico operacional. Sem criar nova tela.
+Queries sem `.eq("tenant_id")`:
+- L136: `clientRecords` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
+- L163: `agreements` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
+- L182: `callLogs` query — busca por CPF sem tenant → adicionar `.eq("tenant_id", tenant.id)`
+- L123: `client` query — por ID, ok (unique), mas adicionar tenant para defesa
+
+### 3.2 — `TelefoniaDashboard.tsx`
+
+- L56: `clientByCpf` query — `.eq("cpf", cleanCpf)` sem tenant → adicionar tenant_id
+- Requer propagar `tenantId` para `TelefoniaAtendimentoWrapper`
+
+### 3.3 — `auto-status-sync`
+
+- L173: `.in("id", batch)` sem `.eq("tenant_id")` → adicionar
+- L236: `.in("id", batch)` sem `.eq("tenant_id")` → adicionar
+
+### 3.4 — `WhatsAppChatLayout.tsx`
+
+- L125: `clients` query por `selectedConv.client_id` — sem tenant → adicionar `.eq("tenant_id", tenantId)`
+
+### 3.5 — `conversationService.ts`
+
+- `deleteConversation`: delete `chat_messages` sem tenant filter → ok (FK), mas defensivo: adicionar
+- `sendTextMessage` L131: conversation select sem tenant → adicionar
 
 ---
 
-## Bloco 6: Revisão de Segurança
+## Bloco 4: Observações Estruturadas
 
-### 6.1 — Verificar RLS nas tabelas críticas
+**Estado atual**: `ClientObservations` lê de `clients.observacoes` (string concatenada). A timeline já lê de `client_events`. Há gravação dual.
 
-Executar query de verificação via `supabase--read_query` para confirmar que todas as tabelas operacionais têm RLS ativo e policies corretas.
+### 4.1 — Migrar `ClientObservations` para ler de `client_events`
 
-### 6.2 — Restringir ações por perfil no frontend
+- Em vez de receber `observacoes` string e parsear, buscar `client_events` com `event_type = "observation_added"` filtrado por `client_id`
+- Exibir `metadata.note`, `metadata.operator_name`, `created_at`
+- Props: `clientId` + `tenantId` em vez de `observacoes`
 
-No `usePermissions`, as permissões já controlam acesso. Verificar que:
-- `delete` em clients requer `carteira.delete`
-- `import` requer `carteira.import`
-- Takeover requer role admin/gerente
-- Acesso admin telefonia/WhatsApp requer `contact_center.manage_admin`
+### 4.2 — Truncar gravação em `clients.observacoes`
 
-### 6.3 — Sanitizar logs de edge functions
+Em `handleSaveNote`: limitar `clients.observacoes` às últimas 3 entradas (resumo), não o log completo.
 
-Revisar `threecplus-proxy`, `evolution-proxy`, `wuzapi-proxy` para não logar tokens/api_keys em console.log.
+### 4.3 — Manter gravação dual
+
+Continuar salvando em `client_events` + `clients.observacoes` (truncado).
+
+---
+
+## Bloco 5: Paginação Real no WhatsApp
+
+**Estado atual**: `fetchConversations` e `fetchMessages` suportam paginação via `.range()`. Mas a UI não utiliza.
+
+### 5.1 — Infinite scroll em `ConversationList`
+
+- Adicionar `onLoadMore` callback prop
+- Detectar scroll near-bottom do `ScrollArea`
+- Concatenar novas conversas ao state existente
+- Prop `hasMore: boolean` para controlar loading indicator
+
+### 5.2 — `WhatsAppChatLayout` — usar paginação
+
+- Substituir `loadConversations()` por paginação incremental
+- Track `page` e `hasMoreConversations` no state
+- `loadConversations` carrega page 1; `loadMore` incrementa page
+- Mensagens: track `messagePage` + `hasMoreMessages`
+- Ao selecionar conversa, carregar primeira página de mensagens
+- Botão/scroll up para carregar histórico anterior
+
+### 5.3 — Preservar conversa ativa
+
+- Realtime já faz updates incrementais (implementado na Fase 2) — manter
+
+---
+
+## Bloco 6: Polling Adaptativo na Telefonia
+
+**Estado atual**: Intervalo fixo de 3s (operador) ou 30s (admin). Sem backoff.
+
+### 6.1 — Intervalo adaptativo em `TelefoniaDashboard.tsx`
+
+Substituir `interval` fixo por cálculo dinâmico:
+```typescript
+const getAdaptiveInterval = () => {
+  if (!myAgent || !isAgentOnline) return 30000;
+  if (myAgent.status === 2) return 3000;  // em ligação
+  if (myAgent.status === 3 || myAgent.status === 4) return 5000; // pausa/ACW
+  if (myAgent.status === 1) return 10000; // ocioso
+  return 15000;
+};
+```
+
+### 6.2 — Backoff em erro
+
+```typescript
+const errorCountRef = useRef(0);
+// Em fetchAll: errorCountRef.current++ em catch, reset em success
+// Intervalo efetivo = baseInterval * (1 + Math.min(errorCountRef.current, 5))
+```
+
+### 6.3 — Aplicar intervalo dinâmico no useEffect
+
+Substituir `setInterval(fetchAll, interval * 1000)` por `setTimeout` recursivo com intervalo recalculado a cada ciclo.
+
+---
+
+## Bloco 7: Auditoria Complementar
+
+Garantir `logAction` em:
+- Takeover de lock (Bloco 1)
+- MaxList import (Bloco 2 — edge function loga internamente)
+- Já existe em: observação, disposição, acordo, client update, import start/complete
 
 ---
 
@@ -199,32 +205,30 @@ Revisar `threecplus-proxy`, `evolution-proxy`, `wuzapi-proxy` para não logar to
 
 | Arquivo | Mudança |
 |---|---|
-| **Migration SQL** | Tabela `atendimento_locks` + RLS + cleanup function |
-| `src/services/lockService.ts` | Novo — acquire/renew/release/check lock |
-| `src/pages/AtendimentoPage.tsx` | Lock lifecycle + aviso de operador ativo |
-| `src/services/auditService.ts` | Campo module opcional |
-| `src/services/clientService.ts` | logAction em updateClient |
-| `src/services/dispositionService.ts` | Dedup por sessão |
-| `src/services/agreementService.ts` | Verificar acordo existente antes de criar |
-| `src/pages/MaxListPage.tsx` | logAction import_started/completed |
-| `src/services/operationalLogService.ts` | Novo — log operacional |
-| `supabase/functions/maxsystem-proxy/index.ts` | Remover ALLOWED_SLUGS, timeout, logs |
-| `supabase/functions/threecplus-proxy/index.ts` | Timeout, sanitizar logs |
-| `supabase/functions/evolution-proxy/index.ts` | Timeout, sanitizar logs |
+| `src/pages/AtendimentoPage.tsx` | Lock somente-leitura real + takeover + tenant_id nas queries |
+| `src/components/atendimento/DispositionPanel.tsx` | Prop `disabled` |
+| `src/components/atendimento/DebtorCategoryPanel.tsx` | Prop `disabled` |
+| `src/components/atendimento/ClientTimeline.tsx` | `ClientObservations` lê de `client_events` |
+| `supabase/functions/maxlist-import/index.ts` | Nova edge function |
+| `src/pages/MaxListPage.tsx` | Delegar import ao backend |
+| `supabase/functions/auto-status-sync/index.ts` | tenant_id nos `.in("id", batch)` |
+| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Paginação + tenant_id |
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Infinite scroll |
+| `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` | Polling adaptativo + backoff + tenant_id |
+| `src/services/conversationService.ts` | tenant_id defensivo |
+| `supabase/config.toml` | Config para maxlist-import |
 
 ## O que NÃO muda
 - Layout, design, componentes visuais — intactos
 - Lógica de negócio (acordos, comissões, score) — intacta
-- Estrutura de tabelas existentes — intacta
+- Estrutura de tabelas — intacta
 - Fluxos operacionais aprovados — preservados
-- Contact Center, chat, automação — intactos
 
 ## Ordem de implementação
-
-1. Lock de atendimento (migration + service + integração)
-2. Auditoria expandida (logAction nos pontos faltantes)
-3. Idempotência (dedup disposition + verificação acordo)
-4. Hardening edge functions (timeout + sanitização)
-5. Observabilidade (log operacional + instrumentação)
-6. Revisão de segurança (RLS + permissões)
+1. Lock real + takeover (AtendimentoPage + DispositionPanel + DebtorCategoryPanel)
+2. Tenant_id explícito (queries do Atendimento, Telefonia, WhatsApp, auto-status-sync)
+3. Observações estruturadas (ClientObservations migrado)
+4. Edge function maxlist-import + simplificar MaxListPage
+5. Paginação WhatsApp (ConversationList infinite scroll)
+6. Polling adaptativo telefonia
 
