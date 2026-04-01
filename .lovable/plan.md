@@ -1,79 +1,95 @@
 
 
-# Plano: Corrigir create-user, exclusão completa e limpeza de usuários
+# Plano: Correção Definitiva do Fluxo de Criação/Exclusão de Usuários
 
-## Causa raiz
+## Causa Raiz Atual do 401
 
-A Edge Function `create-user` **não sobe** (BootFailure) porque a linha 189 declara `const newUserId = authData.user.id;` quando `newUserId` já foi declarado como `let` na linha 137. Isso é um erro de sintaxe que impede qualquer execução da function.
-
-Secundariamente, a exclusão de usuários em `UsersPage.tsx` (linha 330) apaga apenas `profiles`, deixando `tenant_users` e `auth.users` intactos — gerando usuários órfãos que causam conflitos em recadastros.
+Os logs confirmam: o POST mais recente para `create-user` retornou **401** porque a sessão do caller (`session_id c1332745`) foi invalidada durante a limpeza em massa de usuários. O `getUser()` na linha 29 falha com `session_not_found`. Após re-login (19:17:12), a function retornou **500** (bug do `newUserId` duplicado, já corrigido). A tentativa seguinte (19:18:30) deu 401 novamente porque a sessão do novo login também foi perdida. **A function funciona, o token do caller é que está inválido.** Após re-login, a criação deve funcionar -- mas o código tem vários problemas estruturais que precisam ser corrigidos.
 
 ## Etapas
 
-### 1. Corrigir `create-user/index.ts`
-- **Remover linha 189** (`const newUserId = authData.user.id;`) — é redundante, pois o `else` na linha 186 já atribui `newUserId = authData.user.id`
-- Manter o fallback de reaproveitamento por email existente (linhas 145-187)
-- No rollback (linhas 198, 225): adicionar flag `wasCreatedHere` para só deletar auth user se ele foi criado nesta execução (não reutilizado)
-- Atualizar CORS headers para incluir headers extras do supabase-js (`x-supabase-client-platform`, etc.)
+### 1. Reescrever `create-user/index.ts` com instrumentação e idempotência
 
-### 2. Adicionar action `delete_user` na mesma edge function
-- Nova action que recebe `user_id` e executa remoção completa:
-  - `operator_instances` (por profile_id)
-  - `user_permissions` (por profile_id)
-  - `invite_links` (por created_by ou used_by)
-  - `profiles`
-  - `tenant_users`
-  - `auth.users` (via `supabaseAdmin.auth.admin.deleteUser`)
-- Validação: só permite deletar usuários do mesmo tenant do caller
+**Logging estruturado** em cada etapa (caller auth, tenant resolution, auth create/reuse, tenant_users upsert, profiles upsert, rollback).
 
-### 3. Atualizar exclusão em `UsersPage.tsx`
-- `deleteMutation` passa a chamar `supabase.functions.invoke("create-user", { body: { action: "delete_user", user_id } })` em vez de apagar só `profiles`
+**Erros estruturados** com `{ code, message, details }` em todas as respostas de erro.
 
-### 4. Backup e limpeza
-- Gerar listagem completa dos usuários atuais (email, user_id, tenant) antes da remoção
-- Executar migration para limpar `profiles`, `tenant_users` e dependências dos usuários que NÃO são:
-  - `raulsjunior579@gmail.com`
-  - `raul@temisconsultoria.com.br`
-- Executar remoção dos auth users órfãos via a edge function corrigida (ou via action `delete_user`)
+**Idempotência completa:**
+- Email normalizado com `trim().toLowerCase()` antes de qualquer operação
+- Usuário novo → criar normalmente
+- Existe no auth sem tenant → reaproveitar, vincular
+- Existe no auth no mesmo tenant → atualizar senha/metadados, retornar sucesso
+- Existe no auth em outro tenant → bloquear com `TENANT_CONFLICT` / 409
+- Auth órfão → corrigir automaticamente
 
-### 5. Validação
-- Confirmar que restam apenas os 2 usuários
-- Testar criação manual do Vitor (auth + tenant_users + profile)
+**Tenant ID correto:**
+- Admin comum → usa `callerTenantUser.tenant_id`
+- Super admin + `body.tenant_id` preenchido → usa `body.tenant_id`
 
-## Escopo explicitamente fora
-- Fluxo de convite/email — não será alterado
-- Testes de convite — adiados
+**Role no profile:** usar o `role` do body, não hardcodar `"operador"` (linha 264 atual).
+
+**Rollback seguro:** flag `wasCreatedHere` já existe; garantir que nunca deleta auth user reaproveitado.
+
+**Busca por email:** substituir `listUsers({ perPage: 1000 })` por busca usando `getUserByEmail` ou filtro direto mais confiável.
+
+### 2. Corrigir action `delete_user` na mesma function
+
+Revisar cascading delete para cobrir todas as dependências:
+- `operator_instances` (by profile_id)
+- `user_permissions` (by profile_id)
+- `invite_links` (by created_by ou used_by)
+- `profiles` (by user_id)
+- `tenant_users` (by user_id)
+- `auth.users` (via admin.deleteUser)
+
+Validar que o target pertence ao tenant do caller (já existe, manter).
+
+### 3. Atualizar frontend `UsersPage.tsx`
+
+**Error handling real:**
+- Parsear `data.code`, `data.message`, `data.details` da resposta
+- Mensagens específicas por código:
+  - `SESSION_EXPIRED` → "Sessão expirada. Faça logout e login."
+  - `TENANT_CONFLICT` → "Usuário já pertence a outra empresa."
+  - `USER_REUSED` → toast de sucesso informando reaproveitamento
+  - `VALIDATION_ERROR` → mostrar `details`
+- Nunca exibir apenas "non-2xx" genérico
+
+Aplicar o mesmo padrão no `deleteMutation` e `handleChangePassword`.
+
+### 4. Atualizar `AdminUsuariosPage.tsx`
+
+Mesmo tratamento de erro estruturado. Garantir que `body.tenant_id` é enviado quando super_admin seleciona um tenant.
+
+### 5. Validar integridade de dados
+
+Verificar via query se existe unicidade em `profiles.user_id` e `tenant_users(user_id)`. Se constraints estiverem faltando, documentar (não criar migration agora se já existem via unique index).
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/create-user/index.ts` | Remover redeclaração, adicionar action `delete_user`, flag de rollback, CORS |
-| `src/pages/UsersPage.tsx` | `deleteMutation` chama edge function com action `delete_user` |
-| Migration SQL | Limpeza de usuários não autorizados |
+| `supabase/functions/create-user/index.ts` | Reescrita: logging, erros estruturados, idempotência, tenant_id por role, role no profile, delete cascading |
+| `src/pages/UsersPage.tsx` | Error handling com códigos estruturados |
+| `src/pages/admin/AdminUsuariosPage.tsx` | Error handling com códigos estruturados |
 
-## Detalhes técnicos
+## Escopo fora
+- Fluxo de convite/email
+- Migrations de schema (constraints já existentes serão verificadas, não alteradas)
 
-```text
-Linha 189 atual (causa o BootFailure):
-  const newUserId = authData.user.id;   ← REMOVER
+## Detalhes Tcnicos
 
-Já existe na linha 186:
-  newUserId = authData.user.id;         ← correto (usa o let da linha 137)
-```
-
-Rollback seguro:
+Estrutura de resposta de erro:
 ```typescript
-let wasCreatedHere = false;
-// após createUser sucesso:
-wasCreatedHere = true;
-// no catch/rollback:
-if (wasCreatedHere) await supabaseAdmin.auth.admin.deleteUser(newUserId);
+{ code: "SESSION_EXPIRED" | "TENANT_CONFLICT" | "VALIDATION_ERROR" | "AUTH_CREATE_FAILED" | ...,
+  message: "Descrição legível",
+  details: "Contexto adicional" }
 ```
 
-## Entregáveis finais
-- Causa raiz documentada
-- Lista de arquivos alterados
-- Lista de usuários removidos vs preservados
-- Resultado do teste de criação do Vitor
+Logging na function:
+```typescript
+console.log(JSON.stringify({ step: "auth_caller", callerId, email: callerUser.email }));
+console.log(JSON.stringify({ step: "tenant_resolved", tenantId, callerRole }));
+console.log(JSON.stringify({ step: "auth_create", status: "reused"|"created", newUserId }));
+```
 
