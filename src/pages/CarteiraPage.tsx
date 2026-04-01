@@ -170,6 +170,8 @@ const CarteiraPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  const [loadingAllIds, setLoadingAllIds] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [calculatingScore, setCalculatingScore] = useState(false);
