@@ -621,6 +621,8 @@ const MaxListPage = () => {
     setImporting(true);
     setImportProgress(0);
 
+    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: selectedRaw.length } });
+
     // Build records using the mapping directly from API fields
     const allRecords = selectedRaw.map((raw) => buildRecordFromMapping(raw, _mapping));
 
