@@ -612,197 +612,47 @@ const MaxListPage = () => {
 
   const handleMappingConfirmed = async (_mapping: Record<string, string>) => {
     setShowMappingDialog(false);
-
-    // Get the raw items corresponding to selection
-    const selectedRaw = someSelected
-      ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => rawItems[i])
-      : rawItems;
-
     setImporting(true);
     setImportProgress(0);
 
-    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: selectedRaw.length } });
+    logAction({ action: "import_started", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
 
-    // Build records using the mapping directly from API fields
-    const allRecords = selectedRaw.map((raw) => buildRecordFromMapping(raw, _mapping));
+    try {
+      const filter = buildFilter(filters);
+      setImportProgress(10);
 
-    // Capture rejected records
-    const rejectedRecords: ImportReport["rejected"] = [];
-    allRecords.forEach((r) => {
-      const reasons: string[] = [];
-      if (!r.cpf) reasons.push("CPF ausente");
-      if (!r.nome_completo) reasons.push("Nome ausente");
-      if (reasons.length > 0) {
-        rejectedRecords.push({
-          nome: r.nome_completo || undefined,
-          cpf: r.cpf || undefined,
-          reason: reasons.join(", "),
-        });
-      }
-    });
-
-    const validRecords = allRecords.filter((r) => r.cpf && r.nome_completo);
-
-    // Deduplicate by external_id, keeping last occurrence
-    const deduplicatedMap = new Map<string, typeof validRecords[0]>();
-    for (const r of validRecords) {
-      deduplicatedMap.set(r.external_id, r);
-    }
-    const duplicatesRemoved = validRecords.length - deduplicatedMap.size;
-    const records = [...deduplicatedMap.values()];
-    if (duplicatesRemoved > 0) {
-      console.log(`[MaxList] Removed ${duplicatesRemoved} duplicate external_id records`);
-    }
-
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token || "";
-
-    // Fetch existing clients for change logging
-    const externalIds = records.map((r) => r.external_id).filter(Boolean);
-    const existingMap = new Map<string, any>();
-    if (externalIds.length > 0) {
-      for (let i = 0; i < externalIds.length; i += 500) {
-        const batch = externalIds.slice(i, i + 500);
-        const { data: existing } = await supabase
-          .from("clients")
-          .select("*")
-          .in("external_id", batch)
-          .eq("tenant_id", tenant.id)
-          .limit(5000);
-        (existing || []).forEach((e: any) => {
-          if (e.external_id) existingMap.set(e.external_id, e);
-        });
-      }
-    }
-
-    let totalInserted = 0;
-    let totalSkipped = 0;
-    const changeLogs: any[] = [];
-
-    const totalSteps = records.length;
-
-    for (let i = 0; i < records.length; i += BATCH_SIZE) {
-      const batch = records.slice(i, i + BATCH_SIZE);
-      try {
-        const rows = batch.map((r) => ({
+      const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+        body: {
           tenant_id: tenant.id,
-          nome_completo: r.nome_completo,
-          cpf: r.cpf,
-          credor: r.credor,
-          valor_parcela: r.valor_parcela,
-          valor_saldo: r.valor_saldo ?? null,
-          data_vencimento: r.data_vencimento,
-          data_pagamento: r.data_pagamento,
-          external_id: r.external_id,
-          cod_contrato: r.cod_contrato,
-          numero_parcela: r.numero_parcela,
-          total_parcelas: r.total_parcelas,
-          valor_entrada: r.valor_entrada,
-          valor_pago: r.valor_pago,
-          status: r.status as "pendente" | "pago" | "quebrado",
-          phone: r.phone,
-          phone2: r.phone2,
-          phone3: r.phone3,
-          email: r.email || null,
-          model_name: r.model_name || null,
-          observacoes: r.observacoes || null,
-          ...(r.custom_data ? { custom_data: r.custom_data } : {}),
-          updated_at: new Date().toISOString(),
-          status_cobranca_id: selectedStatusCobrancaId === "__auto__" ? null : (selectedStatusCobrancaId || null),
-        }));
+          filter,
+          credor: selectedCredorName,
+          field_mapping: _mapping,
+          status_cobranca_id: selectedStatusCobrancaId,
+        },
+      });
 
-        // Track changes
-        rows.forEach((row) => {
-          const existing = existingMap.get(row.external_id || "");
-          if (existing) {
-            const changes: Record<string, { old: any; new: any }> = {};
-            const fields = ["nome_completo", "phone", "phone2", "phone3", "valor_parcela", "valor_pago", "status", "data_vencimento", "status_cobranca_id"];
-            fields.forEach((f) => {
-              if ((row as any)[f] !== undefined && String(existing[f]) !== String((row as any)[f])) {
-                changes[f] = { old: existing[f], new: (row as any)[f] };
-              }
-            });
-            if (Object.keys(changes).length > 0) {
-              changeLogs.push({
-                tenant_id: tenant.id,
-                client_id: existing.id,
-                source: "maxlist",
-                changes,
-              });
-            }
-          }
-        });
+      if (error) throw error;
 
-        const { data: result, error } = await supabase
-          .from("clients")
-          .upsert(rows as any, { onConflict: "external_id,tenant_id" })
-          .select("id");
+      setImportProgress(100);
 
-        if (error) {
-          console.error("Erro lote:", error);
-          totalSkipped += batch.length;
-        } else {
-          totalInserted += result?.length ?? batch.length;
-        }
-      } catch (err) {
-        console.error("Erro ao enviar lote:", err);
-        totalSkipped += batch.length;
-      }
-
-      setImportProgress(Math.round(((i + BATCH_SIZE) / totalSteps) * 100));
-      await new Promise((r) => setTimeout(r, 300));
-    }
-
-    // Save change logs
-    if (changeLogs.length > 0) {
-      for (let i = 0; i < changeLogs.length; i += 100) {
-        await supabase.from("client_update_logs").insert(changeLogs.slice(i, i + 100) as any);
-      }
-    }
-
-    // Build updated records for report
-    const updatedRecords: ImportReport["updated"] = changeLogs.map((log) => {
-      const existing = Object.values(Object.fromEntries(existingMap)).find((e: any) => e.id === log.client_id) as any;
-      return {
-        nome: existing?.nome_completo || "-",
-        cpf: existing?.cpf || "-",
-        changes: log.changes,
+      const report: ImportReport = {
+        inserted: result?.inserted || 0,
+        updated: [],
+        rejected: Array(result?.rejected || 0).fill({ reason: "Dados insuficientes" }),
+        skipped: result?.errors || 0,
       };
-    });
+      setImportReport(report);
+      setShowImportResult(true);
 
-    const reportInserted = totalInserted - changeLogs.length;
+      logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: result?.inserted, rejected: result?.rejected, duration_ms: result?.duration_ms } });
 
-    const report: ImportReport = {
-      inserted: Math.max(reportInserted, 0),
-      updated: updatedRecords,
-      rejected: rejectedRecords,
-      skipped: totalSkipped,
-    };
-    setImportReport(report);
-    setShowImportResult(true);
-
-    logAction({ action: "import_completed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, inserted: Math.max(reportInserted, 0), updated: changeLogs.length, rejected: rejectedRecords.length } });
-
-    toast.success(`Importação concluída! ${Math.max(reportInserted, 0)} inseridos, ${changeLogs.length} atualizados, ${rejectedRecords.length} rejeitados`);
-
-    // If auto status selected, run auto-status-sync to derive statuses
-    if (selectedStatusCobrancaId === "__auto__") {
-      toast.info("Derivando status automaticamente...");
-      await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } });
+      toast.success(`Importação concluída! ${result?.inserted || 0} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro na importação");
+      logAction({ action: "import_failed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, error: err.message } });
+    } finally {
+      setImporting(false);
     }
-
-    setImporting(false);
-    setImportProgress(100);
-
-    // Log import
-    await supabase.from("import_logs").insert({
-      tenant_id: tenant.id,
-      source: "maxlist",
-      total_records: records.length,
-      inserted: totalInserted,
-      skipped: totalSkipped,
-      credor: selectedCredorName,
-    });
   };
 
   const updateFilter = (key: string, value: string) => {
