@@ -12,9 +12,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
