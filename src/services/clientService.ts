@@ -218,6 +218,7 @@ export const updateClient = async (
 
     if (error) throw error;
     logger.info(MODULE, "update", { id });
+    logAction({ action: "update", entity_type: "client", entity_id: id, details: { changed_fields: Object.keys(data), module: "client" } });
     return result as Client;
   } catch (error) {
     handleServiceError(error, MODULE);

@@ -291,6 +291,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         } as any);
       }
 
+      logAction({ action: "observation_added", entity_type: "client", entity_id: client.id, details: { module: "atendimento", note: note.substring(0, 200) } });
       toast.success("Observação salva");
       queryClient.invalidateQueries({ queryKey: ["atendimento-client", client.id] });
       queryClient.invalidateQueries({ queryKey: ["client-events-timeline"] });
