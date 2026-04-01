@@ -313,6 +313,7 @@ export const bulkCreateClients = async (
       const { status_raw, ...rest } = c as any;
       return {
         ...rest,
+        cpf: cleanCPF(rest.cpf),
         data_vencimento: rest.data_vencimento || today,
         operator_id: operatorId,
       };
