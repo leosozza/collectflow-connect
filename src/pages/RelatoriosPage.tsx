@@ -32,8 +32,13 @@ const RelatoriosPage = () => {
   const [quitacaoAte, setQuitacaoAte] = useUrlState("quitAte", "");
 
   const { data: clients = [] } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => fetchClients(),
+    queryKey: ["clients", tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id) return [];
+      const result = await fetchClients(tenant.id);
+      return result.data;
+    },
+    enabled: !!tenant?.id,
   });
 
   const { data: profiles = [] } = useQuery({

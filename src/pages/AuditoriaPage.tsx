@@ -259,7 +259,7 @@ const ExclusaoTab = () => {
     setSearchingBulk(true);
     setSearchedBulk(true);
     try {
-      const results = await fetchClients({
+      const results = await fetchClients(tenant?.id || "", {
         search: bulkSearch,
         status: bulkQuitados ? "pago" : "todos",
         credor: bulkCredor,
@@ -267,7 +267,7 @@ const ExclusaoTab = () => {
         dateTo: bulkDateTo,
         statusCobrancaId: bulkStatusId === "todos" ? "" : bulkStatusId,
       });
-      setBulkResults(results);
+      setBulkResults(results.data);
       setBulkSelectedIds(new Set());
     } catch {
       toast.error("Erro ao buscar clientes");

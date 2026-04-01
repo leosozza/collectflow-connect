@@ -281,7 +281,7 @@ const CarteiraPage = () => {
   useEffect(() => {
     if (!syncCalledRef.current && tenant?.id) {
       syncCalledRef.current = true;
-      supabase.functions.invoke("auto-status-sync").then(({ error }) => {
+      supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } }).then(({ error }) => {
         if (!error) {
           queryClient.invalidateQueries({ queryKey: ["clients"] });
         }
