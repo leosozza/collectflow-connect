@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
