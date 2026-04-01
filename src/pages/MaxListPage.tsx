@@ -1050,6 +1050,50 @@ const MaxListPage = () => {
         onOpenChange={setShowSettings}
         tenantId={tenant.id}
       />
+
+      {/* Dialog Atualizar Pagos */}
+      <Dialog open={showUpdatePagosDialog} onOpenChange={setShowUpdatePagosDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Atualizar Parcelas Pagas</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Busca no MaxSystem apenas parcelas com pagamento efetuado no período selecionado e sincroniza automaticamente com o RiVO.
+          </p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label className="text-sm font-semibold">Credor *</Label>
+              <Select value={updatePagosCredor} onValueChange={setUpdatePagosCredor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o credor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {credores?.map((c) => (
+                    <SelectItem key={c.id} value={c.razao_social}>{c.razao_social}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">Pagamento de</Label>
+                <DatePickerField value={updatePagosDe} onChange={setUpdatePagosDe} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">Pagamento até</Label>
+                <DatePickerField value={updatePagosAte} onChange={setUpdatePagosAte} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUpdatePagosDialog(false)}>Cancelar</Button>
+            <Button onClick={handleUpdatePagos} disabled={!updatePagosCredor}>
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Atualizar Pagos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
