@@ -721,7 +721,7 @@ const CarteiraPage = () => {
       <WhatsAppBulkDialog
         open={whatsappOpen}
         onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={uniqueSelectedClients}
+        selectedClients={uniqueSelectedClients as any[]}
       />
 
       {/* Assign operator dialog */}
