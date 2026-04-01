@@ -683,9 +683,9 @@ const MaxListPage = () => {
       toast.error(err.message || "Erro na importação");
       logAction({ action: "import_failed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, error: err.message } });
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setImporting(false);
     }
-  };
 
   const updateFilter = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
