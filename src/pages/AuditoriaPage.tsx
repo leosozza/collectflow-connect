@@ -40,6 +40,13 @@ const actionLabels: Record<string, string> = {
   break: "Quebra",
   import: "Importação",
   enrichment: "Higienização",
+  disposition: "Tabulação",
+  cancel: "Cancelamento",
+  import_started: "Importação Iniciada",
+  import_completed: "Importação Concluída",
+  observation_added: "Observação",
+  atendimento_takeover: "Takeover",
+  operator_assigned: "Atribuição Operador",
 };
 
 const entityLabels: Record<string, string> = {
