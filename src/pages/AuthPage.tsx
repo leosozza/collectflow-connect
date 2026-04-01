@@ -94,6 +94,22 @@ const AuthPage = () => {
             toast.error(error.message || "Erro ao fazer login");
           }
         } else {
+          // After login, check for pending invite token
+          const pendingToken = localStorage.getItem("pendingInviteToken");
+          if (pendingToken) {
+            try {
+              const { data: session } = await supabase.auth.getSession();
+              if (session?.session?.user?.id) {
+                await supabase.functions.invoke("accept-invite", {
+                  body: { token: pendingToken, user_id: session.session.user.id },
+                });
+              }
+            } catch {
+              // non-blocking, ProtectedRoute will retry
+            } finally {
+              localStorage.removeItem("pendingInviteToken");
+            }
+          }
           toast.success("Login realizado!");
           navigate("/");
         }
