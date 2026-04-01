@@ -13,7 +13,7 @@ interface Props {
   disabled?: boolean;
 }
 
-const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf }: Props) => {
+const DebtorCategoryPanel = ({ clientId, credorName, currentCategoryId, tenantId, clientCpf, disabled }: Props) => {
   const queryClient = useQueryClient();
 
   const { data: credor } = useQuery({
