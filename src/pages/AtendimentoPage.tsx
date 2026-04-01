@@ -236,7 +236,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (effectiveAgentId && settings.threecplus_domain) {
         // Set flag IMMEDIATELY to prevent ACW screen from appearing while qualify is async
         sessionStorage.setItem("3cp_qualified_from_disposition", "true");
-        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId, tenantId: tenant?.id })
+        // Use hungUpCallIdRef if sessionStorage was already cleared by hangup
+        const qualifyCallId = callId || hungUpCallIdRef.current || undefined;
+        qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId: qualifyCallId, tenantId: tenant?.id })
           .then((success) => {
             if (success) {
               sessionStorage.removeItem("3cp_last_call_id");
@@ -252,6 +254,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
           .catch((err) => {
             console.error("[Atendimento] qualifyOn3CPlus error:", err);
             toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+          })
+          .finally(() => {
+            // Clean up hung up ref and flag after tabulation completes
+            hungUpCallIdRef.current = null;
+            sessionStorage.removeItem("3cp_call_hung_up");
           });
       }
     },
