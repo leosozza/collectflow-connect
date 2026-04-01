@@ -117,7 +117,7 @@ const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanel
             <Button
               size="icon"
               onClick={handleCallback}
-              disabled={loading || !callbackDate}
+              disabled={loading || disabled || !callbackDate}
               className="h-10 w-10 rounded-full shrink-0"
             >
               <Check className="w-4 h-4" />
