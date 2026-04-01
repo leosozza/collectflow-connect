@@ -185,9 +185,9 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
           <div className="space-y-1.5">
             <Label>Credor <span className="text-destructive">*</span></Label>
             <Select value={credor} onValueChange={setCredor}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecione o credor" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="MAXFAMA">MAXFAMA</SelectItem>
+                <SelectItem value="default">Padrão</SelectItem>
               </SelectContent>
             </Select>
           </div>
