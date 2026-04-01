@@ -70,6 +70,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
@@ -147,6 +149,12 @@ const UsersPage = () => {
   const [newAgentPopoverOpen, setNewAgentPopoverOpen] = useState(false);
   const [newInstanceIds, setNewInstanceIds] = useState<string[]>([]);
   const [creatingUser, setCreatingUser] = useState(false);
+
+  // Invite link state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState<string>("operador");
+  const [inviteLink, setInviteLink] = useState<string>("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
 
   const settings = (tenant?.settings as Record<string, any>) || {};
   const domain = settings.threecplus_domain || "";
@@ -552,9 +560,14 @@ const UsersPage = () => {
               <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
               <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
             </div>
-            <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
-              <UserPlus className="w-4 h-4" /> Novo Usuário
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setInviteOpen(true); setInviteLink(""); setInviteRole("operador"); }} className="gap-2">
+                <Link2 className="w-4 h-4" /> Enviar Convite
+              </Button>
+              <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
+                <UserPlus className="w-4 h-4" /> Novo Usuário
+              </Button>
+            </div>
           </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -916,6 +929,89 @@ const UsersPage = () => {
                 "Criar Usuário"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Link Dialog */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerar Link de Convite</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Gere um link para o operador criar sua própria conta, já vinculada à sua empresa.
+            </p>
+            <div className="space-y-2">
+              <Label>Cargo do convidado</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operador">Operador</SelectItem>
+                  <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="gerente">Gerente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {inviteLink ? (
+              <div className="space-y-2">
+                <Label>Link gerado (válido por 7 dias)</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={inviteLink} className="text-xs" />
+                  <Button size="icon" variant="outline" onClick={() => {
+                    navigator.clipboard.writeText(inviteLink);
+                    toast.success("Link copiado!");
+                  }}>
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            {!inviteLink ? (
+              <Button
+                disabled={generatingInvite}
+                onClick={async () => {
+                  if (!tenant?.id || !profile?.user_id) return;
+                  setGeneratingInvite(true);
+                  try {
+                    const expiresAt = new Date();
+                    expiresAt.setDate(expiresAt.getDate() + 7);
+
+                    const { data, error } = await supabase
+                      .from("invite_links")
+                      .insert({
+                        tenant_id: tenant.id,
+                        role: inviteRole as "operador" | "supervisor" | "gerente" | "admin",
+                        created_by: profile.user_id,
+                        expires_at: expiresAt.toISOString(),
+                      })
+                      .select("token")
+                      .single();
+
+                    if (error) throw error;
+
+                    const baseUrl = window.location.origin;
+                    setInviteLink(`${baseUrl}/auth?invite=${data.token}`);
+                    toast.success("Link de convite gerado!");
+                  } catch (err: any) {
+                    console.error("invite error:", err);
+                    toast.error(err.message || "Erro ao gerar convite");
+                  } finally {
+                    setGeneratingInvite(false);
+                  }
+                }}
+                className="gap-2"
+              >
+                {generatingInvite && <Loader2 className="w-4 h-4 animate-spin" />}
+                Gerar Link
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setInviteOpen(false)}>Fechar</Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
