@@ -396,6 +396,11 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       } else {
         toast.success("Ligação encerrada");
         setCallHungUp(true);
+        // Save call_id in ref for later tabulation, then clear sessionStorage immediately
+        hungUpCallIdRef.current = activeCallId;
+        sessionStorage.removeItem("3cp_last_call_id");
+        sessionStorage.setItem("3cp_call_hung_up", "true");
+        console.log("[Hangup] call_id salvo em ref:", activeCallId, "— sessionStorage limpo");
         // Register call_hangup event
         if (tenant?.id && client?.cpf) {
           supabase.from("client_events").insert({
