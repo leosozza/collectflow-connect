@@ -256,6 +256,11 @@ const MaxListPage = () => {
   const [showImportResult, setShowImportResult] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedCredorName, setSelectedCredorName] = useState<string>("");
+  const [showUpdatePagosDialog, setShowUpdatePagosDialog] = useState(false);
+  const [updatePagosCredor, setUpdatePagosCredor] = useState<string>("");
+  const [updatePagosDe, setUpdatePagosDe] = useState<string>(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+  const [updatePagosAte, setUpdatePagosAte] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [updatingPagos, setUpdatingPagos] = useState(false);
 
   const { data: credores } = useQuery({
     queryKey: ["credores_maxlist", tenant?.id],
