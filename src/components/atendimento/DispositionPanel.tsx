@@ -13,6 +13,7 @@ import { toast } from "sonner";
 interface DispositionPanelProps {
   onDisposition: (type: DispositionType, notes?: string, scheduledCallback?: string) => Promise<void>;
   loading?: boolean;
+  disabled?: boolean;
 }
 
 const DEFAULT_GROUP_MAP: Record<string, string> = {
