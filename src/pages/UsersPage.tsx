@@ -560,9 +560,14 @@ const UsersPage = () => {
               <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
               <p className="text-muted-foreground text-sm">Gerencie operadores e administradores</p>
             </div>
-            <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
-              <UserPlus className="w-4 h-4" /> Novo Usuário
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setInviteOpen(true); setInviteLink(""); setInviteRole("operador"); }} className="gap-2">
+                <Link2 className="w-4 h-4" /> Enviar Convite
+              </Button>
+              <Button onClick={() => { setNewUserOpen(true); resetNewUser(); }} className="gap-2">
+                <UserPlus className="w-4 h-4" /> Novo Usuário
+              </Button>
+            </div>
           </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
