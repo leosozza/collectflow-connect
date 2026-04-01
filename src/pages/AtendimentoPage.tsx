@@ -135,10 +135,12 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     queryFn: async () => {
       const cpf = client!.cpf;
       const rawCpf = cpf.replace(/\D/g, "");
-      const { data, error } = await supabase
+      let q = supabase
         .from("clients").select("*")
         .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
         .order("numero_parcela", { ascending: true });
+      if (tenant?.id) q = q.eq("tenant_id", tenant.id);
+      const { data, error } = await q;
       if (error) throw error;
       return data || [];
     },
