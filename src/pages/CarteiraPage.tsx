@@ -11,11 +11,13 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
 import {
   fetchClients,
+  fetchCarteiraGrouped,
   createClient,
   updateClient,
   bulkCreateClients,
   Client,
   ClientFormData,
+  GroupedClient,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
 import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
@@ -31,7 +33,7 @@ import EnrichmentConfirmDialog from "@/components/carteira/EnrichmentConfirmDial
 import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search } from "lucide-react";
+import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/supabaseUtils";
@@ -207,12 +209,39 @@ const CarteiraPage = () => {
     ...filters,
   };
 
-  const { data: clientsResult = { data: [], count: 0 }, isLoading } = useQuery({
-    queryKey: ["clients", tenant?.id, filtersWithOperator],
-    queryFn: () => fetchClients(tenant!.id, filtersWithOperator),
+  // Server-side page state
+  const [urlPage, setUrlPage] = useUrlState("page", 1);
+  const currentPage = Number(urlPage) || 1;
+  const PAGE_SIZE = 50;
+
+  // Build RPC filter params
+  const rpcFilters = useMemo(() => ({
+    search: filters.search?.trim() || undefined,
+    credor: filters.credor !== "todos" ? filters.credor : undefined,
+    dateFrom: filters.dateFrom || undefined,
+    dateTo: filters.dateTo || undefined,
+    statusCobrancaId: filters.statusCobrancaId || undefined,
+    tipoDevedorId: filters.tipoDevedorId || undefined,
+    tipoDividaId: filters.tipoDividaId || undefined,
+    scoreRange: filters.scoreRange || undefined,
+    debtorProfile: filters.debtorProfile || undefined,
+    operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
+    semAcordo: filters.semAcordo || undefined,
+    cadastroDe: filters.cadastroDe || undefined,
+    cadastroAte: filters.cadastroAte || undefined,
+  }), [filters, permissions.canViewFullData, profileId]);
+
+  const { data: carteiraResult = { data: [], count: 0 }, isLoading } = useQuery({
+    queryKey: ["carteira-grouped", tenant?.id, rpcFilters, currentPage, sortField, sortDir],
+    queryFn: () => fetchCarteiraGrouped(tenant!.id, rpcFilters, currentPage, PAGE_SIZE, sortField, sortDir),
     enabled: hasActiveFilters && !!tenant?.id,
   });
-  const clients = clientsResult.data;
+  const displayClients = carteiraResult.data;
+  const totalCount = carteiraResult.count;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  // Keep clients query for backward compat (used by selectedClients for dialogs)
+  const clients = useMemo(() => displayClients as any[], [displayClients]);
 
   const { data: agreementCpfs = new Set<string>() } = useQuery({
     queryKey: ["agreement-cpfs", tenant?.id],
@@ -222,26 +251,6 @@ const CarteiraPage = () => {
       const cpfSet = new Set<string>();
       data.forEach((a: any) => cpfSet.add(a.client_cpf.replace(/\D/g, "")));
       return cpfSet;
-    },
-    enabled: hasActiveFilters && !!tenant?.id,
-  });
-
-  // Fetch client IDs that have had contact (dispositions or conversations)
-  const { data: contactedClientIds = new Set<string>() } = useQuery({
-    queryKey: ["contacted-client-ids", tenant?.id],
-    queryFn: async () => {
-      const ids = new Set<string>();
-      // 1. Client IDs from call_dispositions
-      const dispositions = await fetchAllRows(
-        supabase.from("call_dispositions").select("client_id").eq("tenant_id", tenant!.id)
-      );
-      dispositions.forEach((d: any) => ids.add(d.client_id));
-      // 2. Client IDs from conversations (linked via client_id)
-      const convos = await fetchAllRows(
-        supabase.from("conversations" as any).select("client_id").eq("tenant_id", tenant!.id).not("client_id", "is", null)
-      );
-      convos.forEach((c: any) => { if (c.client_id) ids.add(c.client_id); });
-      return ids;
     },
     enabled: hasActiveFilters && !!tenant?.id,
   });
@@ -283,184 +292,11 @@ const CarteiraPage = () => {
       syncCalledRef.current = true;
       supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } }).then(({ error }) => {
         if (!error) {
-          queryClient.invalidateQueries({ queryKey: ["clients"] });
+          queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
         }
       });
     }
   }, [tenant?.id, queryClient]);
-
-  // Grouped client type for CPF aggregation
-  interface GroupedClient extends Client {
-    valor_total: number;
-    parcelas_count: number;
-    allIds: string[];
-  }
-
-  const displayClients = useMemo((): GroupedClient[] => {
-    const today = new Date().toISOString().split("T")[0];
-
-    // Build reverse status name → id map for derivation
-    const statusNameToId = new Map<string, string>();
-    statusMap.forEach((v, id) => statusNameToId.set(v.nome, id));
-    const quitadoId = statusNameToId.get("Quitado");
-    const acordoVigenteIdDerived = statusNameToId.get("Acordo Vigente");
-    const quebraAcordoId = statusNameToId.get("Quebra de Acordo");
-    const aguardandoId = statusNameToId.get("Aguardando acionamento");
-    const emDiaId = statusNameToId.get("Em dia");
-
-    // Derive correct status_cobranca_id based on actual record status (deterministic)
-    let filtered = clients.map(c => {
-      let derivedStatusId = c.status_cobranca_id;
-      const st = c.status as string;
-      if (st === "pago" && quitadoId) {
-        derivedStatusId = quitadoId;
-      } else if (st === "em_acordo" && acordoVigenteIdDerived) {
-        derivedStatusId = acordoVigenteIdDerived;
-      } else if (st === "quebrado" && quebraAcordoId) {
-        derivedStatusId = quebraAcordoId;
-      } else if ((st === "pendente" || st === "vencido") && c.data_vencimento < today && aguardandoId) {
-        derivedStatusId = aguardandoId;
-      } else if (st === "pendente" && c.data_vencimento >= today && emDiaId) {
-        derivedStatusId = emDiaId;
-      }
-      if (derivedStatusId !== c.status_cobranca_id) {
-        return { ...c, status_cobranca_id: derivedStatusId };
-      }
-      return c;
-    });
-
-    // Assignment mode per creditor: operators only see their assigned clients for creditors in "assigned" mode
-    if (!permissions.canViewFullData && profileId) {
-      filtered = filtered.filter(c => {
-        const mode = credorModeMap.get(c.credor) || "open";
-        if (mode === "assigned") return c.operator_id === profileId;
-        return true;
-      });
-    }
-
-    if (filters.semAcordo) {
-      filtered = filtered.filter(c => !agreementCpfs.has(c.cpf.replace(/\D/g, "")));
-    }
-    if (filters.quitados) {
-      filtered = filtered.filter(c => c.status === "pago");
-    }
-    if (filters.valorAbertoDe > 0) {
-      filtered = filtered.filter(c => ((Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - c.valor_pago) >= filters.valorAbertoDe);
-    }
-    if (filters.valorAbertoAte > 0) {
-      filtered = filtered.filter(c => ((Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - c.valor_pago) <= filters.valorAbertoAte);
-    }
-    if (filters.semContato) {
-      filtered = filtered.filter(c => !contactedClientIds.has(c.id));
-    }
-    if (filters.emDia) {
-      const today = new Date().toISOString().split("T")[0];
-      // Group all filtered by CPF+credor to check if ALL PENDING installments are in day
-      const cpfCredorMap = new Map<string, Client[]>();
-      filtered.forEach(c => {
-        const key = `${c.cpf.replace(/\D/g, "")}|${c.credor}`;
-        if (!cpfCredorMap.has(key)) cpfCredorMap.set(key, []);
-        cpfCredorMap.get(key)!.push(c);
-      });
-      const emDiaCpfs = new Set<string>();
-      cpfCredorMap.forEach((group, key) => {
-        const cpfClean = key.split("|")[0];
-        // Only consider pending installments; ignore pago/quebrado
-        const pendentes = group.filter(c => c.status === "pendente");
-        const allEmDia = pendentes.length > 0 && pendentes.every(c => c.data_vencimento >= today);
-        if (allEmDia && !agreementCpfs.has(cpfClean)) {
-          emDiaCpfs.add(key);
-        }
-      });
-      filtered = filtered.filter(c => emDiaCpfs.has(`${c.cpf.replace(/\D/g, "")}|${c.credor}`));
-    }
-    if (filters.higienizados) {
-      filtered = filtered.filter(c => (c as any).enrichment_data != null);
-    }
-    if (filters.tipoDevedorId) {
-      const ids = filters.tipoDevedorId.split(",");
-      filtered = filtered.filter((c: any) => ids.includes(c.tipo_devedor_id));
-    }
-    if (filters.tipoDividaId) {
-      const ids = filters.tipoDividaId.split(",");
-      filtered = filtered.filter((c: any) => ids.includes(c.tipo_divida_id));
-    }
-    if (filters.debtorProfile) {
-      const profiles = filters.debtorProfile.split(",");
-      filtered = filtered.filter((c: any) => profiles.includes(c.debtor_profile));
-    }
-    if (filters.scoreRange) {
-      const ranges = filters.scoreRange.split(",");
-      filtered = filtered.filter((c: any) => {
-        const s = c.propensity_score;
-        if (s == null) return false;
-        if (ranges.includes("bom") && s >= 75) return true;
-        if (ranges.includes("medio") && s >= 50 && s < 75) return true;
-        if (ranges.includes("ruim") && s < 50) return true;
-        return false;
-      });
-    }
-    if (filters.statusCobrancaId) {
-      const selectedIds = filters.statusCobrancaId.split(",");
-      filtered = filtered.filter((c: any) => selectedIds.includes(c.status_cobranca_id));
-    }
-    if (filters.cadastroDe) {
-      filtered = filtered.filter(c => c.created_at >= filters.cadastroDe);
-    }
-    if (filters.cadastroAte) {
-      filtered = filtered.filter(c => c.created_at <= filters.cadastroAte + "T23:59:59");
-    }
-
-    // Group by CPF
-    const groupMap = new Map<string, Client[]>();
-    filtered.forEach(c => {
-      const key = c.cpf.replace(/\D/g, "");
-      if (!groupMap.has(key)) groupMap.set(key, []);
-      groupMap.get(key)!.push(c);
-    });
-
-    const grouped: GroupedClient[] = Array.from(groupMap.values()).map(group => {
-      // Find earliest due date
-      const earliest = group.reduce((min, c) => c.data_vencimento < min.data_vencimento ? c : min, group[0]);
-      // Sum all valor_parcela
-      const valorTotal = group.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
-      // Highest propensity score
-      const maxScore = group.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
-      // Use status_cobranca from the first pending record if available
-      const cpfClean = earliest.cpf.replace(/\D/g, "");
-      const pendingRecord = group.find(c => c.status === "pendente" && c.status_cobranca_id);
-      // If CPF has an active agreement, force "Acordo Vigente" status
-      const acordoVigenteId = agreementCpfs.has(cpfClean)
-        ? ([...statusMap.entries()].find(([_, v]) => v.nome === "Acordo Vigente")?.[0] || null)
-        : null;
-      const representativeStatusCobranca = acordoVigenteId || pendingRecord?.status_cobranca_id || earliest.status_cobranca_id;
-
-      return {
-        ...earliest,
-        status_cobranca_id: representativeStatusCobranca,
-        valor_total: valorTotal,
-        valor_parcela: valorTotal,
-        parcelas_count: group.length,
-        propensity_score: maxScore || null,
-        allIds: group.map(c => c.id),
-      };
-    });
-
-    const sorted = [...grouped].sort((a, b) => {
-      let cmp = 0;
-      if (sortField === "created_at") {
-        cmp = (a.created_at || "").localeCompare(b.created_at || "");
-      } else if (sortField === "data_vencimento") {
-        cmp = a.data_vencimento.localeCompare(b.data_vencimento);
-      } else if (sortField === "status_cobranca") {
-        const nameA = a.status_cobranca_id && statusMap.has(a.status_cobranca_id) ? statusMap.get(a.status_cobranca_id)!.nome : "zzz";
-        const nameB = b.status_cobranca_id && statusMap.has(b.status_cobranca_id) ? statusMap.get(b.status_cobranca_id)!.nome : "zzz";
-        cmp = nameA.localeCompare(nameB);
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return sorted;
-  }, [clients, filters.semAcordo, filters.quitados, filters.valorAbertoDe, filters.valorAbertoAte, filters.semContato, filters.emDia, filters.higienizados, filters.tipoDevedorId, filters.tipoDividaId, filters.statusCobrancaId, filters.cadastroDe, filters.cadastroAte, filters.debtorProfile, filters.scoreRange, agreementCpfs, contactedClientIds, sortField, sortDir, statusMap, credorModeMap, permissions.canViewFullData, profileId]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
@@ -618,12 +454,12 @@ const CarteiraPage = () => {
     setSelectedIds(next);
   };
 
-  const selectedClients = clients.filter((c) => selectedIds.has(c.id));
+  const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
   const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
-    const cpfMap = new Map<string, Client>();
+    const cpfMap = new Map<string, GroupedClient>();
     for (const c of selectedClients) {
       const cpf = c.cpf.replace(/\D/g, "");
       if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
@@ -716,11 +552,11 @@ const CarteiraPage = () => {
         </div>
       </div>
 
-      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["clients"] })} showAdvancedFilters={permissions.canFilterCarteira} />
+      <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
       {viewMode === "kanban" ? (
         <CarteiraKanban
-          clients={displayClients}
+          clients={displayClients as any[]}
           loading={isLoading}
           tiposStatus={tiposStatus as any}
         />
@@ -834,7 +670,7 @@ const CarteiraPage = () => {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => handleEdit(client)}
+                            onClick={() => handleEdit(client as any)}
                             title="Editar"
                           >
                             <Edit className="w-4 h-4" />
@@ -878,14 +714,14 @@ const CarteiraPage = () => {
       <DialerExportDialog
         open={dialerOpen}
         onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients}
+        selectedClients={selectedClients as any[]}
       />
 
       {/* WhatsApp bulk dialog */}
       <WhatsAppBulkDialog
         open={whatsappOpen}
         onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={uniqueSelectedClients}
+        selectedClients={uniqueSelectedClients as any[]}
       />
 
       {/* Assign operator dialog */}

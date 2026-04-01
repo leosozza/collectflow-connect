@@ -76,11 +76,11 @@ const WhatsAppChatLayout = () => {
   const loadConversations = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const data = await fetchConversations(tenantId);
-      setConversations(data);
+      const result = await fetchConversations(tenantId);
+      setConversations(result.data);
 
       // Load disposition assignments for all conversations
-      const convIds = data.map((c) => c.id);
+      const convIds = result.data.map((c) => c.id);
       if (convIds.length > 0) {
         const { data: assignments } = await supabase
           .from("conversation_disposition_assignments" as any)
@@ -91,7 +91,7 @@ const WhatsAppChatLayout = () => {
 
       // Initialize known waiting set on first load
       if (knownWaitingRef.current.size === 0) {
-        for (const c of data) {
+        for (const c of result.data) {
           if (c.status === "waiting") knownWaitingRef.current.add(c.id);
         }
       }
@@ -110,7 +110,7 @@ const WhatsAppChatLayout = () => {
       setMessages([]);
       return;
     }
-    fetchMessages(selectedConv.id).then(setMessages).catch(console.error);
+    fetchMessages(selectedConv.id).then((result) => setMessages(result.data)).catch(console.error);
     markConversationRead(selectedConv.id).catch(console.error);
   }, [selectedConv?.id]);
 
@@ -144,7 +144,6 @@ const WhatsAppChatLayout = () => {
             const conv = payload.new as any;
             if (conv.status === "waiting" && !knownWaitingRef.current.has(conv.id)) {
               knownWaitingRef.current.add(conv.id);
-              // Create notification for the operator
               const displayName = conv.remote_name || conv.remote_phone || "Cliente";
               supabase
                 .from("notifications")
@@ -164,7 +163,38 @@ const WhatsAppChatLayout = () => {
               knownWaitingRef.current.delete(conv.id);
             }
           }
-          loadConversations();
+
+          // Optimized: update state incrementally instead of full reload
+          if (payload.eventType === "INSERT") {
+            const newConv = payload.new as any;
+            // Fetch client name for the new conversation
+            if (newConv.client_id) {
+              supabase.from("clients").select("nome_completo").eq("id", newConv.client_id).single()
+                .then(({ data }) => {
+                  setConversations(prev => [{
+                    ...newConv,
+                    client_name: data?.nome_completo ?? undefined,
+                  } as Conversation, ...prev]);
+                });
+            } else {
+              setConversations(prev => [newConv as Conversation, ...prev]);
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as any;
+            setConversations(prev => {
+              const idx = prev.findIndex(c => c.id === updated.id);
+              if (idx === -1) return prev;
+              const updatedConv = { ...prev[idx], ...updated };
+              const newList = [...prev];
+              newList[idx] = updatedConv;
+              // Re-sort by last_message_at
+              newList.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+              return newList;
+            });
+          } else if (payload.eventType === "DELETE") {
+            const deleted = payload.old as any;
+            setConversations(prev => prev.filter(c => c.id !== deleted.id));
+          }
         }
       )
       .subscribe();
@@ -172,7 +202,7 @@ const WhatsAppChatLayout = () => {
     return () => {
       supabase.removeChannel(convChannel);
     };
-  }, [tenantId, loadConversations, profile]);
+  }, [tenantId, profile]);
 
   useEffect(() => {
     if (!selectedConv) return;
