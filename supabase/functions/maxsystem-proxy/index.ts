@@ -101,7 +101,7 @@ Deno.serve(async (req: Request) => {
     // === Agencies endpoint ===
     if (action === "agencies") {
       const agenciesUrl = "https://maxsystem.azurewebsites.net/api/Agencies?%24inlinecount=allpages";
-      const agResp = await fetch(agenciesUrl);
+      const agResp = await fetchWithTimeout(agenciesUrl);
       if (!agResp.ok) {
         const text = await agResp.text();
         return new Response(JSON.stringify({ error: "MaxSystem agencies error", details: text }), {
@@ -125,7 +125,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${contractNumber})`;
-      const resp = await fetch(searchUrl);
+      const resp = await fetchWithTimeout(searchUrl);
       if (!resp.ok) {
         const text = await resp.text();
         return new Response(JSON.stringify({ error: "MaxSystem model-search error", details: text }), {
@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${modelId}`;
-      const resp = await fetch(detailsUrl);
+      const resp = await fetchWithTimeout(detailsUrl);
       if (!resp.ok) {
         const text = await resp.text();
         return new Response(JSON.stringify({ error: "MaxSystem model-details error", details: text }), {
@@ -197,7 +197,7 @@ Deno.serve(async (req: Request) => {
           try {
             // Step 1: Search for the model ID by ContractNumber
             const searchUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch?%24top=1&%24filter=(ContractNumber+eq+${cn})`;
-            const resp = await fetch(searchUrl);
+            const resp = await fetchWithTimeout(searchUrl);
             if (!resp.ok) return;
             const json = await resp.json();
             const item = (json.Items || [])[0];
@@ -205,7 +205,7 @@ Deno.serve(async (req: Request) => {
 
             // Step 2: Fetch details to get ModelName
             const detailsUrl = `https://maxsystem.azurewebsites.net/api/NewModelSearch/Details/${item.Id}`;
-            const detResp = await fetch(detailsUrl);
+            const detResp = await fetchWithTimeout(detailsUrl);
             if (!detResp.ok) return;
             const details = await detResp.json();
             if (details?.ModelName) {
@@ -235,7 +235,7 @@ Deno.serve(async (req: Request) => {
 
     const maxUrl = `https://maxsystem.azurewebsites.net/api/Installment?%24inlinecount=allpages&%24top=${requestedTop}&%24skip=${skip}&%24orderby=ResponsibleCPF+desc&%24filter=${encodeURI(filter)}`;
 
-    const response = await fetch(maxUrl);
+    const response = await fetchWithTimeout(maxUrl);
     if (!response.ok) {
       const text = await response.text();
       return new Response(JSON.stringify({ error: "MaxSystem error", details: text }), {
