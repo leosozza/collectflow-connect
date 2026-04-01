@@ -76,11 +76,11 @@ const WhatsAppChatLayout = () => {
   const loadConversations = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const data = await fetchConversations(tenantId);
-      setConversations(data);
+      const result = await fetchConversations(tenantId);
+      setConversations(result.data);
 
       // Load disposition assignments for all conversations
-      const convIds = data.map((c) => c.id);
+      const convIds = result.data.map((c) => c.id);
       if (convIds.length > 0) {
         const { data: assignments } = await supabase
           .from("conversation_disposition_assignments" as any)
@@ -91,7 +91,7 @@ const WhatsAppChatLayout = () => {
 
       // Initialize known waiting set on first load
       if (knownWaitingRef.current.size === 0) {
-        for (const c of data) {
+        for (const c of result.data) {
           if (c.status === "waiting") knownWaitingRef.current.add(c.id);
         }
       }
