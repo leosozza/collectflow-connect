@@ -439,6 +439,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Lock Warning Banner */}
+      {isLocked && lockOwner && (
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-white">
+          <Lock className="w-4 h-4" />
+          Cliente em atendimento por: {lockOwner} — Modo somente leitura
+        </div>
+      )}
       {/* 3CPlus Status Banner */}
       {statusConfig && (
         <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>

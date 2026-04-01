@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", tu.tenant_id)
       .single();
 
-    if (!tenant || !ALLOWED_SLUGS.includes(tenant.slug)) {
+    if (!tenant) {
       return new Response(JSON.stringify({ error: "Acesso não autorizado para este tenant" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
