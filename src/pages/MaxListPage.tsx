@@ -136,6 +136,7 @@ function extractYear(dateStr: string): string | null {
 
 function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
   const dtVenc = removeTimestamp(item.PaymentDateQuery);
+  const hasPag = !!item.PaymentDateEffected;
   return {
     CREDOR: credorName,
     COD_DEVEDOR: item.IdRecord,
@@ -164,7 +165,7 @@ function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
     VL_SALDO: item.NetValue ?? null,
     VL_ATUALIZADO: null,
     TP_TITULO: null,
-    STATUS: formatStatus(item.IsCancelled),
+    STATUS: formatStatus(item.IsCancelled, hasPag),
     NOME_MODELO: item.ModelName || null,
     OBSERVACOES: item.Observations || null,
   };
