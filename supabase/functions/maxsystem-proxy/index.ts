@@ -84,12 +84,22 @@ Deno.serve(async (req: Request) => {
 
     const { data: tenant } = await adminClient
       .from("tenants")
-      .select("slug")
+      .select("slug, settings")
       .eq("id", tu.tenant_id)
       .single();
 
     if (!tenant) {
       return new Response(JSON.stringify({ error: "Acesso não autorizado para este tenant" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate maxlist_enabled
+    const tenantSettings = (tenant.settings as any) || {};
+    const maxlistEnabled = tenantSettings.maxlist_enabled === true || tenant.slug === "ybrasil";
+    if (!maxlistEnabled) {
+      return new Response(JSON.stringify({ error: "MaxList não habilitado para este tenant" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
