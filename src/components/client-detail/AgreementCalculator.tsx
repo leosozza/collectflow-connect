@@ -12,9 +12,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
@@ -67,6 +71,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [addressStatus, setAddressStatus] = useState("");
   const [generatingBoletos, setGeneratingBoletos] = useState(false);
   const [credorRules, setCredorRules] = useState<CredorRulesResult | null>(null);
+
+  // Missing fields dialog for pre-boleto validation
+  const [missingFieldsOpen, setMissingFieldsOpen] = useState(false);
+  const [missingFields, setMissingFields] = useState<Record<string, string>>({});
+  const [savingMissingFields, setSavingMissingFields] = useState(false);
+  const [pendingAgreement, setPendingAgreement] = useState<any>(null);
 
   // Fetch credor rules and auto-fill honorários + aging discount
   useEffect(() => {
@@ -228,6 +238,94 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { isOut: reasons.length > 0, reasons };
   }, [credorRules, descontoPercent, numParcelas]);
 
+  /** Check required fields for boleto generation and return missing ones */
+  const checkRequiredFields = useCallback(() => {
+    const consolidated: Record<string, string> = {};
+    const fields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
+    for (const field of fields) {
+      consolidated[field] = "";
+      for (const c of clients) {
+        const val = (c as any)[field];
+        if (val && String(val).trim()) {
+          consolidated[field] = String(val).trim();
+          break;
+        }
+      }
+    }
+    const missing: Record<string, string> = {};
+    const labels: Record<string, string> = {
+      email: "E-mail", phone: "Telefone", cep: "CEP",
+      endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+    };
+    for (const field of fields) {
+      if (!consolidated[field]) missing[field] = "";
+    }
+    return { consolidated, missing, labels };
+  }, [clients]);
+
+  /** Save missing fields to all client records of same CPF, then proceed with boletos */
+  const handleSaveMissingFields = async () => {
+    if (!profile?.tenant_id || !pendingAgreement) return;
+    setSavingMissingFields(true);
+    try {
+      const rawCpf = cpf.replace(/\D/g, "");
+      const updatePayload: Record<string, string> = {};
+      for (const [key, val] of Object.entries(missingFields)) {
+        if (val.trim()) updatePayload[key] = val.trim();
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from("clients")
+          .update(updatePayload)
+          .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
+          .eq("tenant_id", profile.tenant_id);
+      }
+      setMissingFieldsOpen(false);
+      await generateBoletosForAgreement(pendingAgreement);
+      setPendingAgreement(null);
+      onAgreementCreated();
+    } catch (err: any) {
+      toast.error("Erro ao salvar dados: " + (err.message || "Erro desconhecido"));
+    } finally {
+      setSavingMissingFields(false);
+    }
+  };
+
+  /** Generate boletos for a given agreement */
+  const generateBoletosForAgreement = async (agreement: any) => {
+    setGeneratingBoletos(true);
+    try {
+      const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
+        number: inst.number,
+        value: inst.value,
+        dueDate: inst.dueDate,
+      }));
+
+      const boletoResult = await negociarieService.generateAgreementBoletos(
+        {
+          id: agreement.id,
+          client_cpf: cpf,
+          credor,
+          tenant_id: profile!.tenant_id,
+          client_name: clientName,
+        },
+        boletoInstallments
+      );
+
+      if (boletoResult.success > 0 && boletoResult.failed === 0) {
+        toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
+      } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
+        toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
+      } else if (boletoResult.failed > 0) {
+        toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
+      }
+    } catch (boletoErr: any) {
+      toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
+    } finally {
+      setGeneratingBoletos(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
@@ -264,37 +362,22 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
       // Generate boletos automatically via Negociarie
       if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
-        setGeneratingBoletos(true);
-        try {
-          const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
-            number: inst.number,
-            value: inst.value,
-            dueDate: inst.dueDate,
-          }));
-
-          const boletoResult = await negociarieService.generateAgreementBoletos(
-            {
-              id: agreement.id,
-              client_cpf: cpf,
-              credor,
-              tenant_id: profile.tenant_id,
-              client_name: clientName,
-            },
-            boletoInstallments
-          );
-
-          if (boletoResult.success > 0 && boletoResult.failed === 0) {
-            toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
-          } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
-            toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
-          } else if (boletoResult.failed > 0) {
-            toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
+        // Check for missing required fields before generating boletos
+        const { missing, labels } = checkRequiredFields();
+        if (Object.keys(missing).length > 0) {
+          // Open dialog for user to fill missing fields
+          const fieldsWithLabels: Record<string, string> = {};
+          for (const key of Object.keys(missing)) {
+            fieldsWithLabels[key] = "";
           }
-        } catch (boletoErr: any) {
-          toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
-        } finally {
-          setGeneratingBoletos(false);
+          setMissingFields(fieldsWithLabels);
+          setPendingAgreement(agreement);
+          setMissingFieldsOpen(true);
+          setSubmitting(false);
+          return; // Don't call onAgreementCreated yet — wait for dialog
         }
+
+        await generateBoletosForAgreement(agreement);
       }
 
       onAgreementCreated();
@@ -591,6 +674,59 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
         </Button>
       </div>
+
+      {/* Missing Fields Dialog */}
+      <Dialog open={missingFieldsOpen} onOpenChange={(open) => {
+        if (!open) {
+          setMissingFieldsOpen(false);
+          setPendingAgreement(null);
+          onAgreementCreated();
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-warning">
+              <AlertTriangle className="w-5 h-5" />
+              Dados incompletos para emissão de boleto
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            O acordo foi criado, mas faltam dados obrigatórios para gerar os boletos. Preencha os campos abaixo:
+          </p>
+          <div className="space-y-3 py-2">
+            {Object.keys(missingFields).map((field) => {
+              const labelMap: Record<string, string> = {
+                email: "E-mail", phone: "Telefone", cep: "CEP",
+                endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+              };
+              return (
+                <div key={field} className="space-y-1">
+                  <Label className="text-xs font-medium">{labelMap[field] || field}</Label>
+                  <Input
+                    value={missingFields[field]}
+                    onChange={(e) => setMissingFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                    placeholder={`Informe o ${(labelMap[field] || field).toLowerCase()}`}
+                    className="h-9"
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => {
+              setMissingFieldsOpen(false);
+              setPendingAgreement(null);
+              onAgreementCreated();
+            }}>
+              Pular (sem boleto)
+            </Button>
+            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields}>
+              {savingMissingFields ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar e Gerar Boletos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

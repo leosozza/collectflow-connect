@@ -135,7 +135,17 @@ const ClientDetailPage = () => {
     );
   }
 
-  const first = clients[0];
+  // Consolidate contact/address fields across all records for the same CPF
+  const first = useMemo(() => {
+    const base = { ...clients[0] };
+    const contactFields = ["email", "phone", "endereco", "bairro", "cidade", "uf", "cep"] as const;
+    for (const c of clients) {
+      for (const field of contactFields) {
+        if (!base[field] && c[field]) base[field] = c[field];
+      }
+    }
+    return base;
+  }, [clients]);
   const lastAgreement = agreements[0] || null;
 
   const handleAgreementCreated = () => {
