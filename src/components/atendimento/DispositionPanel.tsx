@@ -83,7 +83,7 @@ const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanel
     return (
       <button
         key={d.key}
-        disabled={loading}
+        disabled={loading || disabled}
         onClick={() => handleDisposition(d.key)}
         className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all disabled:opacity-50
           ${isSelected
