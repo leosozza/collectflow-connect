@@ -70,6 +70,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommissionGrade, CommissionTier } from "@/lib/commission";
