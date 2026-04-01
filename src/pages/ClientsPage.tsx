@@ -174,7 +174,7 @@ const ClientsPage = () => {
     },
     onSuccess: async () => {
       // Run auto-status-sync to derive statuses automatically
-      await supabase.functions.invoke("auto-status-sync");
+      await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant?.id } });
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       toast.success("Clientes importados com sucesso!");
       setImportOpen(false);
