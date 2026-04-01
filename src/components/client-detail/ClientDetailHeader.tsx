@@ -329,9 +329,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-12 pt-3 pb-1 border-t border-border mt-2 space-y-4">
+            <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                 <InfoItem label="Cod. Devedor" value={client.external_id} />
                 <InfoItem label="Cod. Contrato" value={codContratos} />
                 <InfoItem label="Modelo" value={modelNames} />
@@ -341,7 +341,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Telefones */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
                 <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
                 <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
@@ -400,7 +400,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Email */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Email" value={
                   client.email ? (
                     <span className="flex items-center gap-1">
@@ -419,7 +419,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Endereço */}
-              <div className="pt-3 border-t border-border">
+              <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs text-muted-foreground uppercase font-medium">Endereço</p>
                   <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={() => setEditOpen(true)}>
@@ -427,7 +427,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     Editar endereço
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                   <InfoItem label="Rua" value={client.endereco} className="md:col-span-2" />
                   <InfoItem label="Bairro" value={client.bairro} />
                   <InfoItem label="Cidade" value={client.cidade} />
@@ -437,7 +437,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Valores */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
                 <InfoItem label="Saldo Devedor" value={formatCurrency(totalSaldo)} />
                 <InfoItem label="Valor Atualizado" value={<span className="font-semibold">{formatCurrency(totalAtualizado)}</span>} />
@@ -445,14 +445,14 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Datas */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 pt-3 border-t border-border">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
                 <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
               </div>
 
               {/* Classificações */}
-              <div className="pt-3 border-t border-border">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+              <div className="pt-2 border-t border-border">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
                   <InfoItem label="Tipo de Dívida" value={tipoDividaNome} />
                   <InfoItem label="Status Cobrança" value={statusCobrancaNome} />
                 </div>
