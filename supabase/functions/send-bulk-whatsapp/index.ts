@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // Validate auth
+    // Validate auth via getUser (robust)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -96,16 +96,15 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub;
+    const userId = userData.user.id;
 
     // Get user's tenant
     const { data: tenantUser } = await supabase
@@ -187,16 +186,47 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
   if (rErr) throw rErr;
 
-  // Load all assigned instances
+  // Load all assigned instances from DB
   const instanceIds = [...new Set((recipients || []).map((r: any) => r.assigned_instance_id).filter(Boolean))];
-  const { data: instances } = await supabase
-    .from("whatsapp_instances")
-    .select("id, instance_url, api_key, instance_name, provider")
-    .in("id", instanceIds);
+  const { data: instances } = instanceIds.length > 0
+    ? await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_url, api_key, instance_name, provider")
+        .in("id", instanceIds)
+    : { data: [] };
 
   const instanceMap = new Map<string, any>();
   for (const inst of instances || []) {
     instanceMap.set(inst.id, inst);
+  }
+
+  // Build virtual Gupshup instance for recipients with null assigned_instance_id
+  const hasGupshupRecipients = (recipients || []).some((r: any) => !r.assigned_instance_id);
+  const gupshupConfigured = !!(tenantSettings.gupshup_api_key && tenantSettings.gupshup_source_number);
+  const useGupshupFallback = hasGupshupRecipients && gupshupConfigured;
+
+  // Pre-flight: validate all instances have credentials
+  const missingInstances: string[] = [];
+  for (const iid of instanceIds) {
+    if (!instanceMap.has(iid)) {
+      missingInstances.push(iid);
+    }
+  }
+  if (hasGupshupRecipients && !gupshupConfigured) {
+    missingInstances.push("gupshup-official (credenciais não configuradas)");
+  }
+
+  if (missingInstances.length > 0 && missingInstances.length === instanceIds.length + (hasGupshupRecipients ? 1 : 0)) {
+    // ALL instances are missing — fail fast
+    await supabase
+      .from("whatsapp_campaigns")
+      .update({ status: "failed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", campaignId);
+
+    return new Response(
+      JSON.stringify({ error: `Instâncias não encontradas: ${missingInstances.join(", ")}`, sent: 0, failed: (recipients || []).length, errors: [`Nenhuma instância válida encontrada`], finalStatus: "failed" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   // Global fallback env vars
@@ -209,10 +239,16 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   let failed = 0;
   const errors: string[] = [];
 
-  // Wrap entire processing in try/catch to guarantee campaign always gets a final status
   try {
     for (const recipient of recipients || []) {
-      const inst = instanceMap.get(recipient.assigned_instance_id);
+      // Resolve instance: DB instance or virtual Gupshup
+      let inst = instanceMap.get(recipient.assigned_instance_id);
+
+      if (!inst && !recipient.assigned_instance_id && useGupshupFallback) {
+        // Virtual Gupshup instance
+        inst = { provider: "gupshup", instance_name: tenantSettings.gupshup_app_name || "gupshup" };
+      }
+
       if (!inst) {
         await supabase
           .from("whatsapp_campaign_recipients")

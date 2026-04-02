@@ -21,7 +21,6 @@ export interface WhatsAppCampaign {
   delivered_count: number;
   read_count: number;
   failed_count: number;
-  // FASE 2: routing_mode, allowed_operator_ids, team_id
   routing_mode: string;
   created_by: string;
   started_at: string | null;
@@ -91,7 +90,6 @@ export function deduplicateClients(clients: Client[]): {
       excludedCount++;
       continue;
     }
-    // Dedup: first client with this phone wins
     if (!phoneMap.has(normalized)) {
       phoneMap.set(normalized, {
         clientId: client.id,
@@ -118,7 +116,6 @@ export function distributeRoundRobin(
   recipients: DeduplicatedRecipient[],
   instanceIds: string[]
 ): (DeduplicatedRecipient & { assignedInstanceId: string })[] {
-  // Shuffle recipients for balanced distribution
   const shuffled = [...recipients].sort(() => Math.random() - 0.5);
   return shuffled.map((r, i) => ({
     ...r,
@@ -126,10 +123,10 @@ export function distributeRoundRobin(
   }));
 }
 
-// ---- Fetch eligible instances ----
+// ---- Fetch eligible instances (multi-provider: DB + Gupshup virtual) ----
 
 export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
-  // All active/connected instances are eligible for manual bulk — no provider_category filter
+  // 1) Fetch real DB instances
   const { data, error } = await supabase
     .from("whatsapp_instances" as any)
     .select("id, name, instance_name, phone_number, provider, status, provider_category")
@@ -137,7 +134,54 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
     .in("status", ["active", "connected"]);
 
   if (error) throw error;
-  return (data || []) as unknown as EligibleInstance[];
+  const instances = (data || []) as unknown as EligibleInstance[];
+
+  // 2) Check tenant settings for Gupshup official
+  try {
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("settings")
+      .eq("id", tenantId)
+      .single();
+
+    const settings = (tenantData?.settings as Record<string, any>) || {};
+    const hasGupshup = !!(settings.gupshup_api_key && settings.gupshup_source_number);
+    const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
+
+    if (isGupshupActive && hasGupshup) {
+      // Inject virtual Gupshup instance so it appears in the selector
+      instances.push({
+        id: "gupshup-official",
+        name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
+        instance_name: settings.gupshup_app_name || "gupshup",
+        phone_number: settings.gupshup_source_number,
+        provider: "gupshup",
+        status: "active",
+        provider_category: "official_meta",
+      });
+    }
+  } catch {
+    // If tenant query fails, continue with DB instances only
+  }
+
+  return instances;
+}
+
+// ---- Derive provider_category from selected instances ----
+
+export function deriveProviderCategory(
+  selectedInstanceIds: string[],
+  allInstances: EligibleInstance[]
+): string {
+  const selected = allInstances.filter((i) => selectedInstanceIds.includes(i.id));
+  if (selected.length === 0) return "unofficial";
+
+  const allOfficial = selected.every((i) => i.provider_category === "official_meta");
+  const allUnofficial = selected.every((i) => i.provider_category !== "official_meta");
+
+  if (allOfficial) return "official_meta";
+  if (allUnofficial) return "unofficial";
+  return "mixed";
 }
 
 // ---- Campaign CRUD ----
@@ -151,6 +195,7 @@ export interface CreateCampaignInput {
   total_selected: number;
   total_unique_recipients: number;
   created_by: string;
+  provider_category?: string;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<WhatsAppCampaign> {
@@ -160,7 +205,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       tenant_id: input.tenant_id,
       source: "carteira",
       channel_type: "whatsapp",
-      provider_category: "unofficial",
+      provider_category: input.provider_category || "unofficial",
       campaign_type: "manual_human_outreach",
       status: "draft",
       message_mode: input.message_mode,
@@ -170,7 +215,6 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       total_selected: input.total_selected,
       total_unique_recipients: input.total_unique_recipients,
       created_by: input.created_by,
-      // FASE 2: routing_mode defaults to 'human'
     } as any)
     .select()
     .single();
@@ -191,12 +235,11 @@ export async function createRecipients(
     representative_client_id: r.representativeClientId,
     phone: r.phone,
     recipient_name: r.recipientName,
-    assigned_instance_id: r.assignedInstanceId,
+    assigned_instance_id: r.assignedInstanceId === "gupshup-official" ? null : r.assignedInstanceId,
     status: "pending",
     message_body_snapshot: messageBody,
   }));
 
-  // Insert in batches of 500
   for (let i = 0; i < rows.length; i += 500) {
     const batch = rows.slice(i, i + 500);
     const { error } = await supabase
