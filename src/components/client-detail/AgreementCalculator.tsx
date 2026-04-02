@@ -289,7 +289,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { consolidated, missing, labels };
   }, [clients, cpf, profile?.tenant_id]);
 
-  /** Save missing fields to all client records of same CPF, then proceed with boletos */
+  /** Save missing fields to all client records of same CPF + canonical profile, then proceed with boletos */
   const handleSaveMissingFields = async () => {
     if (!profile?.tenant_id || !pendingAgreement) return;
     setSavingMissingFields(true);
@@ -300,11 +300,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         if (val.trim()) updatePayload[key] = val.trim();
       }
       if (Object.keys(updatePayload).length > 0) {
+        // Update clients table for retrocompatibility
         await supabase
           .from("clients")
           .update(updatePayload)
           .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
           .eq("tenant_id", profile.tenant_id);
+
+        // Upsert canonical profile
+        await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
       }
       setMissingFieldsOpen(false);
       await generateBoletosForAgreement(pendingAgreement);
