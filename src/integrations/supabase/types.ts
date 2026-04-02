@@ -522,6 +522,7 @@ export type Database = {
           credor_id: string | null
           field_key: string
           id: string
+          is_highlighted: boolean
           label: string
           sort_order: number
           tenant_id: string
@@ -531,6 +532,7 @@ export type Database = {
           credor_id?: string | null
           field_key: string
           id?: string
+          is_highlighted?: boolean
           label: string
           sort_order?: number
           tenant_id: string
@@ -540,6 +542,7 @@ export type Database = {
           credor_id?: string | null
           field_key?: string
           id?: string
+          is_highlighted?: boolean
           label?: string
           sort_order?: number
           tenant_id?: string
