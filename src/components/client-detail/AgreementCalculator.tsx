@@ -77,6 +77,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   // Missing fields dialog for pre-boleto validation
   const [missingFieldsOpen, setMissingFieldsOpen] = useState(false);
   const [missingFields, setMissingFields] = useState<Record<string, string>>({});
+  const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
 
