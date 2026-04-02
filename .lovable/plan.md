@@ -1,56 +1,75 @@
 
 
-# Plano: Corrigir fluxo de disparo WhatsApp em lote multi-provider
+# Plano: Otimizar performance e robustez da integração 3CPlus no Atendimento
 
-## Causa Raiz
+## 1. Correção de lentidão (Waterfall de Queries)
 
-3 problemas distintos:
+**Problema**: As queries de `clientRecords`, `agreements`, `callLogs` dependem de `client?.cpf` — só iniciam após o fetch do cliente completar. Isso cria um waterfall sequencial.
 
-1. **`fetchEligibleInstances`** filtra `provider_category = "unofficial"` — ignora instâncias oficiais (Gupshup) e instâncias legadas sem categoria
-2. **`send-bulk-whatsapp` (campaign flow)** usa sempre `POST {instance_url}/message/sendText/{instance_name}` (formato Evolution/Baylers) — quebra para WuzAPI e Gupshup
-3. **Modal** mostra "Nenhuma instância não-oficial ativa" — texto e lógica acoplados a unofficial
+**Solução**: Criar uma única query combinada que busca o cliente por ID e, na mesma resposta, já retorna o CPF. Usar `initialData` ou prefetch para iniciar as queries dependentes mais cedo. Concretamente:
 
-## Solução
+- Adicionar `placeholderData` nas queries dependentes para que o React Query não bloqueie a renderização
+- Usar `queryClient.prefetchQuery` para as queries de agreements/callLogs assim que o CPF estiver disponível no cache (via `onSuccess` implícito do React Query v5)
+- Agrupar `clientRecords` + `agreements` + `callLogs` em um único `useQueries` que roda em paralelo assim que `client?.cpf` existir (já é o comportamento atual do React Query — o problema real é que cada query espera `enabled: !!client?.cpf` individualmente, mas todas já rodam em paralelo quando habilitadas)
 
-### 1. `src/services/whatsappCampaignService.ts` — Ampliar elegibilidade
+**Análise real**: As 3 queries (`clientRecords`, `agreements`, `callLogs`) já são independentes entre si e todas têm `enabled: !!client?.cpf`. O React Query as dispara **em paralelo** assim que `client?.cpf` fica disponível. O waterfall real é apenas: fetch client → fetch CPF-based queries. Para otimizar:
 
-Remover filtro `provider_category = "unofficial"`. Buscar todas as instâncias ativas/conectadas do tenant:
+- Extrair o CPF do state/params da navegação (quando vindo da carteira/telefonia, o CPF geralmente está disponível)
+- Passar `cpf` como query param na navegação para `/atendimento` e usá-lo como `initialCpf` para iniciar as queries antes do client fetch completar
+
+**Arquivo**: `src/pages/AtendimentoPage.tsx`
+
+## 2. Force Release do Agente (forceReleaseAgent)
+
+**Problema**: Se `qualifyOn3CPlus` falha, o agente fica preso em TPA/ACW na 3CPlus.
+
+**Solução**: Criar `forceReleaseAgent` em `dispositionService.ts` que chama `unpause_agent` no proxy. Integrar no `handleFinishDisposition` como fallback.
 
 ```typescript
-export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
-  const { data, error } = await supabase
-    .from("whatsapp_instances" as any)
-    .select("id, name, instance_name, phone_number, provider, status, provider_category")
-    .eq("tenant_id", tenantId)
-    .in("status", ["active", "connected"]);
-  if (error) throw error;
-  return (data || []) as unknown as EligibleInstance[];
-}
+export async function forceReleaseAgent(params: {
+  tenantSettings: Record<string, any>;
+  agentId: number;
+}): Promise<boolean>
 ```
 
-### 2. `supabase/functions/send-bulk-whatsapp/index.ts` — Envio por provider
+**Arquivo**: `src/services/dispositionService.ts`
 
-No `handleCampaignFlow`, após resolver a instância, rotear por `inst.provider`:
+## 3. Fallback automático na tabulação
 
-- **`evolution` / `baylers`** (padrão atual): `POST {url}/message/sendText/{instance_name}` com header `apikey`
-- **`wuzapi`**: `POST {url}/chat/send/text` com header `Token`, body `{ phone: "{number}@s.whatsapp.net", body: message }`
-- **`gupshup`**: `POST https://api.gupshup.io/wa/api/v1/msg` com `apikey` header e form-urlencoded body (buscar `gupshup_source_number` e `gupshup_app_name` do tenant settings)
-- **Fallback desconhecido**: marcar como `failed` com erro "Provider não suportado para bulk"
+**Problema**: Quando `qualifyOn3CPlus` retorna `false` ou erro, o operador vê um toast mas fica preso.
 
-Extrair a lógica de envio para uma função `sendByProvider(inst, phone, message, tenantSettings)` que retorna `{ ok, result }`.
+**Solução**: No `onSuccess` da `dispositionMutation`, após falha de qualify:
+- Chamar `forceReleaseAgent` automaticamente como fallback
+- Se o fallback também falhar, exibir botão "Tentar Novamente" persistente no banner de status
+- Adicionar estado `qualifyFailed` que ativa o botão de retry no banner
 
-### 3. `src/components/carteira/WhatsAppBulkDialog.tsx` — UI ajustada
+**Arquivo**: `src/pages/AtendimentoPage.tsx`
 
-- Trocar mensagem de "Nenhuma instância não-oficial ativa" para "Nenhuma instância ativa encontrada"
-- No badge de cada instância, mostrar o provider real: `Baylers`, `WuzAPI`, `Gupshup`, etc.
+## 4. Proteção contra sobrescrita do polling
 
-## Arquivos Afetados
+**Problema**: Após hangup, o polling pode sobrescrever o estado local com dados da chamada anterior.
+
+**Solução**: No `useThreeCPlusStatus`, comparar o `callId` detectado com o `hungUpCallIdRef`. Se for o mesmo, não atualizar o state. Adicionar guard no `AtendimentoPage` para ignorar transições de status que referenciem um callId já tabulado.
+
+**Arquivo**: `src/hooks/useThreeCPlusStatus.ts`, `src/pages/AtendimentoPage.tsx`
+
+## 5. Banner de feedback visual aprimorado
+
+**Problema**: O banner não indica se a última tabulação sincronizou ou falhou.
+
+**Solução**: Adicionar estado `syncStatus: 'idle' | 'synced' | 'failed'` e renderizar no banner:
+- `synced` → badge verde "✓ Sincronizado com 3CPlus"
+- `failed` → badge vermelho "✗ Falha na sincronização" + botão "Tentar Novamente" que chama `forceReleaseAgent`
+
+**Arquivo**: `src/pages/AtendimentoPage.tsx`
+
+## Resumo de arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/whatsappCampaignService.ts` | Remover filtro `provider_category` |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Roteamento de envio por provider |
-| `src/components/carteira/WhatsAppBulkDialog.tsx` | Texto e badge ajustados |
+| `src/services/dispositionService.ts` | Adicionar `forceReleaseAgent` |
+| `src/pages/AtendimentoPage.tsx` | CPF via params, fallback qualify, banner sync status, retry button |
+| `src/hooks/useThreeCPlusStatus.ts` | Guard contra sobrescrita de chamada já tabulada |
 
-Nenhuma alteração em banco, tabelas ou fluxo de negócio. O fluxo da carteira (selecionar → modal → mensagem → instâncias → campanha → enviar) permanece idêntico.
+Nenhuma alteração em banco, tabelas ou edge functions.
 
