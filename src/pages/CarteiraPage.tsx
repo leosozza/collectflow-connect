@@ -218,7 +218,8 @@ const CarteiraPage = () => {
   // Server-side page state
   const [urlPage, setUrlPage] = useUrlState("page", 1);
   const currentPage = Number(urlPage) || 1;
-  const PAGE_SIZE = 50;
+  const [pageSize, setPageSize] = useUrlState("pageSize", 50);
+  const PAGE_SIZE = pageSize;
 
   // Build RPC filter params
   const rpcFilters = useMemo(() => ({
