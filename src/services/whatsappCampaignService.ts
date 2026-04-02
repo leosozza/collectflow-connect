@@ -56,6 +56,8 @@ export interface EligibleInstance {
   provider: string;
   status: string;
   provider_category: string;
+  is_default?: boolean;
+  supports_manual_bulk?: boolean;
 }
 
 export interface DeduplicatedRecipient {
@@ -126,17 +128,33 @@ export function distributeRoundRobin(
 // ---- Fetch eligible instances (multi-provider: DB + Gupshup virtual) ----
 
 export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
-  // 1) Fetch real DB instances
+  const OPERATIONAL_STATUSES = ["active", "connected", "connecting", "open"];
+
+  // 1) Fetch DB instances with capability fields (no strict status filter)
   const { data, error } = await supabase
     .from("whatsapp_instances" as any)
-    .select("id, name, instance_name, phone_number, provider, status, provider_category")
-    .eq("tenant_id", tenantId)
-    .in("status", ["active", "connected"]);
+    .select("id, name, instance_name, phone_number, provider, status, provider_category, is_default, supports_manual_bulk")
+    .eq("tenant_id", tenantId);
 
   if (error) throw error;
-  const instances = (data || []) as unknown as EligibleInstance[];
 
-  // 2) Check tenant settings for Gupshup official
+  // 2) Filter by eligibility: supports bulk AND (operational status OR is_default)
+  const eligible = ((data || []) as unknown as EligibleInstance[]).filter((i) => {
+    const hasOperationalStatus = OPERATIONAL_STATUSES.includes(i.status);
+    const isBulkCapable = i.supports_manual_bulk !== false; // true or null (legacy)
+    return isBulkCapable && (hasOperationalStatus || i.is_default);
+  });
+
+  // 3) Sort: default first, then connected/active, then others
+  eligible.sort((a, b) => {
+    if (a.is_default && !b.is_default) return -1;
+    if (!a.is_default && b.is_default) return 1;
+    const aConn = a.status === "active" || a.status === "connected" ? 0 : 1;
+    const bConn = b.status === "active" || b.status === "connected" ? 0 : 1;
+    return aConn - bConn;
+  });
+
+  // 4) Check tenant settings for Gupshup official
   try {
     const { data: tenantData } = await supabase
       .from("tenants")
@@ -149,8 +167,7 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
     const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
 
     if (isGupshupActive && hasGupshup) {
-      // Inject virtual Gupshup instance so it appears in the selector
-      instances.push({
+      eligible.push({
         id: "gupshup-official",
         name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
         instance_name: settings.gupshup_app_name || "gupshup",
@@ -158,13 +175,15 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
         provider: "gupshup",
         status: "active",
         provider_category: "official_meta",
+        is_default: false,
+        supports_manual_bulk: true,
       });
     }
   } catch {
     // If tenant query fails, continue with DB instances only
   }
 
-  return instances;
+  return eligible;
 }
 
 // ---- Derive provider_category from selected instances ----
