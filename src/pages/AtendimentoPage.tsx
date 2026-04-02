@@ -425,20 +425,27 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   };
 
   const getStatusConfig = () => {
-    const s = Number(agentStatus);
+    // Use live polling status as primary source, fall back to context agentStatus
+    const liveStatus = liveAgentState.isOnline ? liveAgentState.status : undefined;
+    const s = Number(liveStatus ?? agentStatus);
     const hasManualPause = !!sessionStorage.getItem("3cp_active_pause_name");
-    // If operator already hung up locally, show post-call state regardless of polling delay
+
+    // If live polling shows TPA/ACW (3 or 4), override callHungUp — the real status takes priority
+    if (s === 4 || (s === 3 && !hasManualPause)) {
+      // Auto-clear callHungUp when live status confirms post-call
+      if (callHungUp) setCallHungUp(false);
+      return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
+    }
+    // callHungUp is only a short-lived fallback until the next poll confirms TPA
     if (callHungUp) return { label: "Ligação encerrada — aguardando tabulação", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 2) return { label: "Em Ligação", icon: Phone, bgClass: "bg-emerald-500 text-white", pulse: true };
-    if (s === 4) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 3 && hasManualPause) return { label: `Em Pausa: ${sessionStorage.getItem("3cp_active_pause_name")}`, icon: Coffee, bgClass: "bg-amber-500 text-white", pulse: false };
-    if (s === 3) return { label: "TPA — Pós-atendimento", icon: Clock, bgClass: "bg-amber-500 text-white", pulse: false };
     if (s === 1) return { label: "Ocioso — Aguardando", icon: CheckCircle2, bgClass: "bg-muted text-muted-foreground", pulse: false };
     return null;
   };
 
-  // Show status banner when agentId is present (telephony context)
-  const statusConfig = agentId ? getStatusConfig() : null;
+  // Show status banner when agentId is present OR live polling detects online agent
+  const statusConfig = (agentId || liveAgentState.isOnline) ? getStatusConfig() : null;
   // Show "Finalizar Tabulação" only for TPA (status 4) or status 3 without manual pause name (ACW)
   const isTPA = Number(agentStatus) === 4 || (Number(agentStatus) === 3 && !sessionStorage.getItem("3cp_active_pause_name"));
   const showFinishButton = onFinishDisposition && isTPA;
