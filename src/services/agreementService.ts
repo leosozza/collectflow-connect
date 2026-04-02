@@ -22,6 +22,7 @@ export interface Agreement {
   entrada_value?: number;
   entrada_date?: string;
   status: string;
+  boleto_pendente?: boolean;
   created_by: string;
   approved_by: string | null;
   notes: string | null;

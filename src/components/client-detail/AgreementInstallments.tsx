@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate, updateInstallmentValue } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
+import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
+import { logAction } from "@/services/auditService";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -17,6 +20,7 @@ import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
@@ -45,6 +49,13 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [editingValueIdx, setEditingValueIdx] = useState<number | null>(null);
   const [editValueInput, setEditValueInput] = useState("");
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
+
+  // Boleto pendente states
+  const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
+  const [boletoPendenteMissingOpen, setBoletoPendenteMissingOpen] = useState(false);
+  const [boletoPendenteMissing, setBoletoPendenteMissing] = useState<Record<string, string>>({});
+  const [boletoPendenteFound, setBoletoPendenteFound] = useState<Record<string, string>>({});
+  const [savingBoletoPendente, setSavingBoletoPendente] = useState(false);
 
   // Date edit dialog state
   const [dateEditDialogOpen, setDateEditDialogOpen] = useState(false);
@@ -275,6 +286,106 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
+  const REQUIRED_FIELDS = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
+  const FIELD_LABELS: Record<string, string> = {
+    email: "E-mail", phone: "Telefone", cep: "CEP",
+    endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+  };
+
+  const handleGenerateAllBoletos = async () => {
+    if (!tenantId) return;
+    setGeneratingAllBoletos(true);
+    try {
+      const profileData = await getClientProfile(tenantId, cpf);
+      const missing: Record<string, string> = {};
+      const found: Record<string, string> = {};
+      for (const f of REQUIRED_FIELDS) {
+        const val = (profileData as any)[f] || "";
+        if (val) found[f] = val;
+        else missing[f] = "";
+      }
+      if (Object.keys(missing).length > 0) {
+        setBoletoPendenteMissing(missing);
+        setBoletoPendenteFound(found);
+        setBoletoPendenteMissingOpen(true);
+        setGeneratingAllBoletos(false);
+        return;
+      }
+      await executeBoletosGeneration();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      setGeneratingAllBoletos(false);
+    }
+  };
+
+  const executeBoletosGeneration = async () => {
+    if (!tenantId) return;
+    setGeneratingAllBoletos(true);
+    try {
+      const boletoInstallments = installments.map((inst: any) => ({
+        number: inst.number,
+        value: inst.value,
+        dueDate: inst.dueDate.toISOString().split("T")[0],
+      }));
+      const result = await negociarieService.generateAgreementBoletos(
+        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
+        boletoInstallments
+      );
+      // Clear boleto_pendente flag
+      await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      logAction({
+        action: "boleto_gerado_posteriormente",
+        entity_type: "agreement",
+        entity_id: agreementId,
+        details: { cpf, credor: agreement.credor, success: result.success, failed: result.failed },
+      });
+      if (result.success > 0) {
+        toast({ title: `${result.success} boleto(s) gerado(s) com sucesso!` });
+      }
+      if (result.failed > 0) {
+        toast({ title: "Falha parcial", description: result.errors[0], variant: "destructive" });
+      }
+      refetchCobrancas();
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar boletos", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAllBoletos(false);
+    }
+  };
+
+  const handleSaveBoletoPendenteMissing = async () => {
+    if (!tenantId) return;
+    setSavingBoletoPendente(true);
+    try {
+      const rawCpf = cpf.replace(/\D/g, "");
+      const updatePayload: Record<string, string> = {};
+      for (const [key, val] of Object.entries(boletoPendenteMissing)) {
+        if (val.trim()) updatePayload[key] = val.trim();
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from("clients")
+          .update(updatePayload)
+          .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
+          .eq("tenant_id", tenantId);
+        await upsertClientProfile(tenantId, rawCpf, updatePayload, "manual");
+        logAction({
+          action: "dados_cliente_atualizados",
+          entity_type: "agreement",
+          entity_id: agreementId,
+          details: { cpf, campos_atualizados: Object.keys(updatePayload) },
+        });
+      }
+      setBoletoPendenteMissingOpen(false);
+      await executeBoletosGeneration();
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar dados", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingBoletoPendente(false);
+    }
+  };
+
   const [open, setOpen] = useState(false);
 
   return (
@@ -299,6 +410,26 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           {paidCount}/{totalInstallments} pagas
         </span>
       </div>
+
+      {/* Boleto Pendente Banner */}
+      {(agreement as any).boleto_pendente && cobrancas.length === 0 && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span className="text-xs">Boletos pendentes — dados incompletos na criação do acordo.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-3 gap-1.5 text-xs h-7"
+              disabled={generatingAllBoletos}
+              onClick={handleGenerateAllBoletos}
+            >
+              {generatingAllBoletos ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileBarChart className="w-3 h-3" />}
+              Gerar Boletos
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <CollapsibleContent>
 
@@ -583,6 +714,61 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           <Button onClick={handleSaveDateEdit} disabled={savingDate || !selectedDateForEdit}>
             {savingDate && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Boleto Pendente Missing Fields Dialog */}
+    <Dialog open={boletoPendenteMissingOpen} onOpenChange={(o) => !o && setBoletoPendenteMissingOpen(false)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="w-5 h-5" />
+            Complete os dados para gerar os boletos
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Preencha os campos faltantes para gerar os boletos deste acordo:
+        </p>
+
+        {(() => {
+          const found = Object.entries(boletoPendenteFound).filter(([key]) => !boletoPendenteMissing.hasOwnProperty(key));
+          return found.length > 0 ? (
+            <div className="bg-muted/50 rounded-md p-3 space-y-1">
+              <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
+              {found.map(([key, val]) => (
+                <div key={key} className="flex items-center gap-2 text-xs">
+                  <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+                  <span className="text-muted-foreground">{FIELD_LABELS[key] || key}:</span>
+                  <span className="font-medium truncate">{String(val)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null;
+        })()}
+
+        <div className="space-y-3 py-2">
+          <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
+          {Object.keys(boletoPendenteMissing).map((field) => (
+            <div key={field} className="space-y-1">
+              <Label className="text-xs font-medium">{FIELD_LABELS[field] || field}</Label>
+              <Input
+                value={boletoPendenteMissing[field]}
+                onChange={(e) => setBoletoPendenteMissing((prev) => ({ ...prev, [field]: e.target.value }))}
+                placeholder={`Informe o ${(FIELD_LABELS[field] || field).toLowerCase()}`}
+                className="h-9"
+              />
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setBoletoPendenteMissingOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSaveBoletoPendenteMissing} disabled={savingBoletoPendente}>
+            {savingBoletoPendente ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Salvar e Gerar Boletos
           </Button>
         </DialogFooter>
       </DialogContent>
