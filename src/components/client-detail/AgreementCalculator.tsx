@@ -444,7 +444,21 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Desc.</Label>
-              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => setDescontoPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
+              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => {
+                const pct = Number(e.target.value) || 0;
+                setDescontoPercent(pct);
+                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
+                setDescontoReais(bruto > 0 ? Math.round(bruto * (pct / 100) * 100) / 100 : 0);
+              }} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[100px]">
+              <Label className="text-[10px]">R$ Desc.</Label>
+              <Input type="number" min={0} step={0.01} value={descontoReais} onChange={(e) => {
+                const val = Number(e.target.value) || 0;
+                setDescontoReais(val);
+                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
+                setDescontoPercent(bruto > 0 ? Math.round((val / bruto) * 100 * 100) / 100 : 0);
+              }} className="h-7 text-xs px-2" />
             </div>
             {credorRules?.indice_correcao_monetaria && (
               <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
