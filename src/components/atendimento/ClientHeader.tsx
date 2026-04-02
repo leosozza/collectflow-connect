@@ -35,14 +35,14 @@ interface ClientHeaderProps {
   hasActiveCall?: boolean;
 }
 
-const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
-  if (!value) return null;
+const InfoItem = ({ label, value, icon: Icon, forceRender }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean }) => {
+  if (!value && !forceRender) return null;
   return (
     <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
       <div className="min-w-0">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="text-sm text-foreground truncate">{value}</p>
+        <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
       </div>
     </div>
   );
