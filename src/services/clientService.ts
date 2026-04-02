@@ -407,6 +407,38 @@ export const bulkCreateClients = async (
       }
     }
 
+    // Consolidate client_profiles
+    try {
+      const cpfMap = new Map<string, any>();
+      for (const r of records) {
+        const c = cleanCPF(r.cpf);
+        if (!cpfMap.has(c)) cpfMap.set(c, r);
+        else {
+          const ex = cpfMap.get(c);
+          for (const f of ["nome_completo", "email", "phone", "phone2", "phone3", "cep", "endereco", "bairro", "cidade", "uf"]) {
+            if (!ex[f] && (r as any)[f]) ex[f] = (r as any)[f];
+          }
+        }
+      }
+      const tenantId = records[0]?.tenant_id;
+      if (tenantId) {
+        for (const [cpfVal, rec] of cpfMap) {
+          await upsertClientProfile(tenantId, cpfVal, {
+            nome_completo: rec.nome_completo || "",
+            email: rec.email || "",
+            phone: rec.phone || "",
+            cep: rec.cep || "",
+            endereco: rec.endereco || "",
+            bairro: rec.bairro || "",
+            cidade: rec.cidade || "",
+            uf: rec.uf || "",
+          }, options?.source || "import");
+        }
+      }
+    } catch (profileErr) {
+      logger.error(MODULE, "bulkCreate_profiles", profileErr);
+    }
+
     logger.info(MODULE, "bulkCreate", { inserted: totalInserted, updated: totalUpdated, total: records.length });
     return { inserted: totalInserted, updated: totalUpdated };
   } catch (error) {
