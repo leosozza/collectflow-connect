@@ -494,7 +494,9 @@ const CarteiraPage = () => {
   };
 
   const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
-  const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
+  const selectedCount = selectAllFiltered
+    ? selectedIds.size
+    : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
