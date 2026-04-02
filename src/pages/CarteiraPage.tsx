@@ -456,6 +456,17 @@ const CarteiraPage = () => {
     setSelectAllFiltered(false);
   }, [rpcFilters, currentPage]);
 
+  // Reset page and selection when pageSize changes
+  const prevPageSizeRef = useRef(pageSize);
+  useEffect(() => {
+    if (prevPageSizeRef.current !== pageSize) {
+      prevPageSizeRef.current = pageSize;
+      setUrlPage(1);
+      setSelectedIds(new Set());
+      setSelectAllFiltered(false);
+    }
+  }, [pageSize]);
+
   const handleSelectAllFiltered = async () => {
     if (!tenant?.id) return;
     setLoadingAllIds(true);
