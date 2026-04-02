@@ -20,7 +20,7 @@ export const useAtendimentoModal = () => {
 
 const noop = () => {};
 
-const defaultLiveState: ThreeCPlusAgentState = { status: undefined, callId: null, isOnline: false, lastPoll: null };
+const defaultLiveState: ThreeCPlusAgentState = { status: undefined, callId: null, isOnline: false, lastPoll: null, activeCallPhone: null, activeCallCpf: null, activeCallClientDbId: null };
 
 /** Safe version that returns no-op defaults when used outside the provider */
 export const useAtendimentoModalSafe = (): AtendimentoModalContextType => {
