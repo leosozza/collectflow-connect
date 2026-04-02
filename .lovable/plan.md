@@ -1,88 +1,63 @@
 
+Problema confirmado: a instância informada existe no banco e pertence ao tenant correto, com `supports_manual_bulk=true` e `is_default=true`, mas está salva com `status="connecting"`. O modal de disparo hoje só considera `active/connected`, então ela fica invisível mesmo estando operacional na interface.
 
-# Plano: Fechar fluxo de disparo WhatsApp em lote (multi-provider completo)
+## Causa raiz
+- `fetchEligibleInstances` filtra por status persistido no banco, não pela elegibilidade real.
+- A tela de Integrações mostra a instância como utilizável a partir de checagem em tempo real (`statusMap`), mas isso não é refletido em `whatsapp_instances.status`.
+- Resultado: há divergência entre “instância ativa para o usuário” e “instância elegível para campanha”.
 
-## Problemas Identificados
+## Ajuste proposto
+### 1) Corrigir a elegibilidade em `src/services/whatsappCampaignService.ts`
+- Parar de depender apenas de `.in("status", ["active", "connected"])`.
+- Buscar também os campos de capacidade:
+  - `supports_manual_bulk`
+  - `is_default`
+- Aplicar uma normalização de elegibilidade:
+  - incluir instâncias com `supports_manual_bulk = true`
+  - aceitar status operacionais como `active`, `connected`, `connecting`, `open`
+  - permitir fallback para instância padrão (`is_default`) quando ela for claramente a origem operacional do tenant
+- Manter Gupshup virtual como já está.
 
-1. **Gupshup invisível**: Configurado em `tenant.settings`, sem registro em `whatsapp_instances` — não aparece no seletor do modal
-2. **`provider_category` hardcoded**: `createCampaign` grava `"unofficial"` fixo independente do provider
-3. **Sem validação pré-envio**: O modal permite avançar sem validar se a instância suporta bulk ou se as credenciais estão configuradas
-4. **Auth fragil na Edge Function**: Usa `getClaims` que pode falhar — deve usar `getUser`
-
-## Solução por Arquivo
-
-### 1. `src/services/whatsappCampaignService.ts`
-
-**a) Gupshup como instância virtual**
-
-Alterar `fetchEligibleInstances` para, além de buscar `whatsapp_instances`, verificar se o tenant tem Gupshup configurado (`gupshup_api_key` + `gupshup_source_number` em `tenant.settings`). Se sim, injetar uma instância virtual com `id: "gupshup-official"`, `provider: "gupshup"`, `provider_category: "official_meta"`, `name: "Gupshup (Oficial)"`, `status: "active"`.
-
-Isso requer buscar `tenants.settings` nessa função — adicionar uma query ao tenant.
-
-**b) `provider_category` dinâmico**
-
-Alterar `CreateCampaignInput` para aceitar `provider_category?: string`. No `createCampaign`, derivar a categoria da lista de instâncias selecionadas:
-- Se todas são `official_meta` → `"official_meta"`
-- Se todas são `unofficial` → `"unofficial"`
-- Se misto → `"mixed"`
-
-**c) Validação de distribuição Gupshup**
-
-No `distributeRoundRobin`, a instância virtual Gupshup não tem `id` real — usar `"gupshup-official"` como ID e no `createRecipients`, se `assignedInstanceId === "gupshup-official"`, gravar `null` no `assigned_instance_id` com um campo extra de metadata ou gravar o ID virtual.
-
-### 2. `src/components/carteira/WhatsAppBulkDialog.tsx`
-
-**a) Validação pré-envio (Step 3)**
-
-Antes do botão "Criar Campanha e Enviar", validar:
-- Pelo menos 1 instância selecionada
-- Mensagem não vazia
-- Pelo menos 1 destinatário válido
-- Exibir alerta se instância Gupshup selecionada mas credenciais incompletas
-
-**b) Badge de provider correto**
-
-Já existe — apenas garantir que `"gupshup-official"` renderize corretamente com badge "Oficial".
-
-### 3. `supabase/functions/send-bulk-whatsapp/index.ts`
-
-**a) Suporte à instância virtual Gupshup**
-
-Quando `assigned_instance_id` for `null` ou `"gupshup-official"`, usar diretamente as credenciais Gupshup do `tenantSettings` (já implementado no `sendByProvider` com `provider === "gupshup"`). Criar um fallback: se a instância não for encontrada no `instanceMap` e o `campaign.provider_category` incluir `official_meta`, construir um objeto de instância virtual com `provider: "gupshup"`.
-
-**b) Auth robusta**
-
-Substituir `getClaims` por `getUser` (consistente com as outras edge functions do projeto).
-
-**c) Validação de credenciais antes do loop**
-
-Antes de iterar os recipients, verificar se todas as instâncias referenciadas existem e têm credenciais válidas. Se não, retornar erro 400 imediato em vez de falhar recipient por recipient.
-
-## Fluxo Resultante
-
+Regra prática:
 ```text
-Carteira → seleciona clientes → abre WhatsAppBulkDialog
-  ↓
-fetchEligibleInstances busca whatsapp_instances + verifica Gupshup no tenant.settings
-  ↓
-Modal mostra: [Baylers/Evolution] [WuzAPI] [Gupshup Oficial] ← todos que estiverem ativos
-  ↓
-Usuário seleciona instâncias + mensagem → Step 3 valida tudo
-  ↓
-createCampaign grava provider_category correto (official_meta/unofficial/mixed)
-  ↓
-send-bulk-whatsapp roteia por provider real de cada instância
-  ↓
-Resultado: completed / completed_with_errors / failed
+Elegível = suporta bulk E (
+  status em [active, connected, connecting, open]
+  OU é a instância padrão do tenant
+)
 ```
 
-## Arquivos Afetados
+### 2) Normalizar o retorno para o modal
+- Ordenar instâncias elegíveis com prioridade:
+  1. padrão
+  2. conectada/ativa
+  3. demais elegíveis
+- Expor um status normalizado para o `WhatsAppBulkDialog` sem mudar layout.
 
-| Arquivo | Mudança |
-|---|---|
-| `src/services/whatsappCampaignService.ts` | Gupshup virtual, provider_category dinâmico, validação |
-| `src/components/carteira/WhatsAppBulkDialog.tsx` | Validação pré-envio, badge oficial |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Suporte Gupshup virtual, auth via getUser, validação prévia |
+### 3) Reforçar validação no `src/components/carteira/WhatsAppBulkDialog.tsx`
+- Se não houver nenhuma instância elegível, mostrar motivo mais preciso:
+  - “Nenhuma instância habilitada para disparo em lote”
+  - em vez de mensagem genérica de “nenhuma instância ativa”
+- Manter mesma UX; só melhorar a lógica e o texto.
 
-Nenhuma alteração em banco, tabelas ou experiência do usuário.
+### 4) Preservar consistência do envio
+- Não mexer no fluxo de campanha nem no roteamento por provider.
+- O problema atual está antes do envio: seleção/elegibilidade.
+- O `send-bulk-whatsapp` permanece como executor multi-provider.
 
+## Resultado esperado
+```text
+Instância "Acordos Vitor Santana"
+  -> encontrada no banco
+  -> provider evolution
+  -> supports_manual_bulk = true
+  -> status = connecting
+  -> is_default = true
+  => passa a aparecer no modal de disparo
+```
+
+## Arquivos afetados
+- `src/services/whatsappCampaignService.ts`
+- `src/components/carteira/WhatsAppBulkDialog.tsx`
+
+## Observação técnica
+O ajuste corrige exatamente o caso informado sem mudar experiência do usuário: a origem continuará aparecendo no mesmo seletor do modal, apenas com regra de elegibilidade compatível com o estado real da integração.
