@@ -718,6 +718,61 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Boleto Pendente Missing Fields Dialog */}
+    <Dialog open={boletoPendenteMissingOpen} onOpenChange={(o) => !o && setBoletoPendenteMissingOpen(false)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="w-5 h-5" />
+            Complete os dados para gerar os boletos
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Preencha os campos faltantes para gerar os boletos deste acordo:
+        </p>
+
+        {(() => {
+          const found = Object.entries(boletoPendenteFound).filter(([key]) => !boletoPendenteMissing.hasOwnProperty(key));
+          return found.length > 0 ? (
+            <div className="bg-muted/50 rounded-md p-3 space-y-1">
+              <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
+              {found.map(([key, val]) => (
+                <div key={key} className="flex items-center gap-2 text-xs">
+                  <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+                  <span className="text-muted-foreground">{FIELD_LABELS[key] || key}:</span>
+                  <span className="font-medium truncate">{String(val)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null;
+        })()}
+
+        <div className="space-y-3 py-2">
+          <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
+          {Object.keys(boletoPendenteMissing).map((field) => (
+            <div key={field} className="space-y-1">
+              <Label className="text-xs font-medium">{FIELD_LABELS[field] || field}</Label>
+              <Input
+                value={boletoPendenteMissing[field]}
+                onChange={(e) => setBoletoPendenteMissing((prev) => ({ ...prev, [field]: e.target.value }))}
+                placeholder={`Informe o ${(FIELD_LABELS[field] || field).toLowerCase()}`}
+                className="h-9"
+              />
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setBoletoPendenteMissingOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSaveBoletoPendenteMissing} disabled={savingBoletoPendente}>
+            {savingBoletoPendente ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Salvar e Gerar Boletos
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };
