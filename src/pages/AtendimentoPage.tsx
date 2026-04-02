@@ -454,11 +454,10 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const handleFinishDisposition = async () => {
     setFinishingDisposition(true);
     try {
-      // Set flag BEFORE navigating back to prevent TelefoniaDashboard from showing ACW screen
-      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
       if (onFinishDisposition) await onFinishDisposition();
+      // Set flag AFTER successful finish, not before
+      sessionStorage.setItem("3cp_qualified_from_disposition", "true");
       toast.success("Tabulação finalizada — retornando à fila");
-      // Navigate back to the dashboard
       navigate(-1);
     } catch (e) {
       console.error("[Atendimento] Erro ao finalizar tabulação:", e);
