@@ -240,20 +240,43 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { isOut: reasons.length > 0, reasons };
   }, [credorRules, descontoPercent, numParcelas]);
 
-  /** Check required fields for boleto generation and return missing ones */
-  const checkRequiredFields = useCallback(() => {
-    const consolidated: Record<string, string> = {};
+  /** Check required fields for boleto generation using canonical profile */
+  const checkRequiredFields = useCallback(async () => {
+    let consolidated: Record<string, string> = {};
     const fields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
-    for (const field of fields) {
-      consolidated[field] = "";
-      for (const c of clients) {
-        const val = (c as any)[field];
-        if (val && String(val).trim()) {
-          consolidated[field] = String(val).trim();
-          break;
+
+    if (profile?.tenant_id) {
+      try {
+        const cp = await getClientProfile(profile.tenant_id, cpf);
+        for (const field of fields) {
+          consolidated[field] = (cp as any)[field] || "";
+        }
+      } catch {
+        // Fallback to clients array
+        for (const field of fields) {
+          consolidated[field] = "";
+          for (const c of clients) {
+            const val = (c as any)[field];
+            if (val && String(val).trim()) {
+              consolidated[field] = String(val).trim();
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      for (const field of fields) {
+        consolidated[field] = "";
+        for (const c of clients) {
+          const val = (c as any)[field];
+          if (val && String(val).trim()) {
+            consolidated[field] = String(val).trim();
+            break;
+          }
         }
       }
     }
+
     const missing: Record<string, string> = {};
     const labels: Record<string, string> = {
       email: "E-mail", phone: "Telefone", cep: "CEP",
@@ -263,7 +286,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       if (!consolidated[field]) missing[field] = "";
     }
     return { consolidated, missing, labels };
-  }, [clients]);
+  }, [clients, cpf, profile?.tenant_id]);
 
   /** Save missing fields to all client records of same CPF, then proceed with boletos */
   const handleSaveMissingFields = async () => {
