@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
@@ -68,7 +68,6 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     }
   };
 
-  // Resolve credor_id from credor name
   const { data: credorData } = useQuery({
     queryKey: ["credor-by-name", tenantId, client?.credor],
     queryFn: async () => {
@@ -94,7 +93,6 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch custom fields definitions for the tenant
   const { data: customFieldsDefs } = useQuery({
     queryKey: ["custom-fields", tenantId],
     queryFn: () => fetchCustomFields(tenantId!),
@@ -102,7 +100,6 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     staleTime: 5 * 60 * 1000,
   });
 
-  // Resolve lookup names for UUID fields
   const { data: tipoDevedorName } = useQuery({
     queryKey: ["tipo-devedor-name", client?.tipo_devedor_id],
     queryFn: async () => {
@@ -167,17 +164,13 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
   };
 
-  // Build a dynamic renderer for custom fields
   const getCustomFieldRenderer = (fieldKey: string): (() => { label: string; value: string | null; icon?: React.ElementType }) | null => {
     if (!fieldKey.startsWith("custom:")) return null;
     const realKey = fieldKey.replace("custom:", "");
     const customData = client.custom_data as Record<string, any> | null;
     const rawValue = customData?.[realKey];
-
-    // Find the label from custom fields definitions, or use the config label
     const cfDef = customFieldsDefs?.find((cf) => cf.field_key === realKey);
     const label = cfDef?.field_label || realKey;
-
     return () => ({
       label,
       value: rawValue != null && rawValue !== "" ? String(rawValue) : null,
@@ -187,10 +180,26 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
 
   const ALL_FIELD_KEYS = Object.keys(FIELD_RENDERERS);
 
-  // If config exists for this credor, use it; otherwise show all static fields
-  const visibleFields = fieldConfig && fieldConfig.length > 0
-    ? fieldConfig.filter((f) => f.visible).sort((a, b) => a.sort_order - b.sort_order)
-    : ALL_FIELD_KEYS.map((key, i) => ({ field_key: key, sort_order: i }));
+  // Default highlighted keys when no config exists
+  const DEFAULT_HIGHLIGHTED_KEYS = ["phone", "email", "valor_saldo", "valor_atualizado"];
+
+  // Split fields into highlighted (top) and expanded (collapsible)
+  const { highlightedFields, expandedFields } = useMemo(() => {
+    if (fieldConfig && fieldConfig.length > 0) {
+      const highlighted = fieldConfig
+        .filter((f) => f.is_highlighted)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      const expanded = fieldConfig
+        .filter((f) => !f.is_highlighted)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      return { highlightedFields: highlighted, expandedFields: expanded };
+    }
+
+    // Fallback: use defaults
+    const highlighted = DEFAULT_HIGHLIGHTED_KEYS.map((key, i) => ({ field_key: key, sort_order: i }));
+    const expanded = ALL_FIELD_KEYS.filter((k) => !DEFAULT_HIGHLIGHTED_KEYS.includes(k)).map((key, i) => ({ field_key: key, sort_order: i }));
+    return { highlightedFields: highlighted, expandedFields: expanded };
+  }, [fieldConfig]);
 
   const statusBadge = (() => {
     const s = client.status;
@@ -198,6 +207,14 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     if (s === "pendente") return { label: "PENDENTE", className: "bg-amber-500 text-white border-amber-500" };
     return { label: s?.toUpperCase() || "—", className: "bg-muted text-muted-foreground" };
   })();
+
+  const renderField = (f: { field_key: string }) => {
+    const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
+    if (!renderer) return null;
+    const { label, value, icon } = renderer();
+    if (!value) return null;
+    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} />;
+  };
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
@@ -281,6 +298,15 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
           </div>
         </div>
 
+        {/* Highlighted fields block */}
+        {highlightedFields.length > 0 && (
+          <div className="px-6 pb-4 -mt-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2">
+              {highlightedFields.map(renderField)}
+            </div>
+          </div>
+        )}
+
         {/* Expand trigger */}
         <CollapsibleTrigger asChild>
           <button className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors border-t border-border rounded-b-xl">
@@ -289,18 +315,11 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
           </button>
         </CollapsibleTrigger>
 
-        {/* Expanded content */}
+        {/* Expanded content — only non-highlighted fields */}
         <CollapsibleContent>
           <div className="px-6 py-4 border-t border-border">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
-              {visibleFields.map((f) => {
-                // Try static renderer first, then dynamic custom renderer
-                const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
-                if (!renderer) return null;
-                const { label, value, icon } = renderer();
-                if (!value) return null;
-                return <InfoItem key={f.field_key} label={label} value={value} icon={icon} />;
-              })}
+              {expandedFields.map(renderField)}
             </div>
           </div>
         </CollapsibleContent>
