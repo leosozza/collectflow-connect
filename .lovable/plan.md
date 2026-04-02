@@ -1,63 +1,171 @@
 
 
-# Plano: Corrigir formalização de acordos — dados não encontrados + falso "pago"
+# Plano: Fonte Canônica de Dados Cadastrais do Cliente
 
-## Diagnóstico da cliente Thais dos Santos Pereira
+## Análise do Problema
 
-**Dados no banco** (CPF 35535744883, 12 registros):
-- 7 registros com `status=pago` (títulos originais já quitados)
-- 5 registros com `status=em_acordo` (vinculados ao acordo pendente)
-- **Email vazio em TODOS os 12 registros**
-- Endereço, telefone, CEP, cidade, UF — todos preenchidos
+O sistema atual armazena dados cadastrais (email, phone, endereco, cep, cidade, uf, bairro) **repetidos em cada linha/parcela** da tabela `clients`. A consolidação acontece em runtime em pelo menos 3 lugares diferentes:
 
-### Problema 1: "Não encontrou informações da cliente"
+1. **`negociarieService.fetchClientAddress`** — consolida "primeiro não-vazio" por CPF
+2. **`AgreementCalculator.checkRequiredFields`** — mesma lógica duplicada
+3. **`ClientDetailHeader`** — usa `client.email`, `client.phone` do registro individual
 
-O campo **email** está vazio. Quando o operador tenta formalizar o acordo com boleto, o sistema abre o diálogo de "campos obrigatórios ausentes" pedindo o email. Isso funciona corretamente, mas dois problemas tornam a experiência confusa:
+Quando o MaxList importa, os campos de endereço (`endereco`, `bairro`, `cep`, `cidade`, `uf`) **nem sequer são mapeados** no `buildRecordFromMapping` — ficam vazios. Resultado: formalização falha por "dados faltantes" mesmo quando os dados existem em outro registro ou foram preenchidos manualmente.
 
-**a)** O diálogo não mostra os campos que JÁ foram encontrados — parece que o sistema "não encontrou nada", quando na verdade só falta o email.
+## Solução
 
-**b)** Se o operador clica "Pular (sem boleto)", o acordo é criado sem boleto, e em seguida o bug de pagamento (Problema 2) marca o acordo como pago.
+Criar tabela `client_profiles` (1 registro por CPF por tenant) como fonte canônica, com serviço centralizado e migração automática.
 
-### Problema 2: Acordo marcado como "pago" sem pagamento real
+---
 
-Já diagnosticado na conversa anterior — `AgreementInstallments` soma `valor_pago` de TODOS os registros do CPF (incluindo os 7 títulos originais pagos = R$ 722,50), superando o valor do acordo (R$ 400,01), marcando falsamente como pago.
+### 1. Criar tabela `client_profiles` (Migration)
 
-## Correções
+```sql
+CREATE TABLE public.client_profiles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  cpf text NOT NULL,
+  nome_completo text NOT NULL DEFAULT '',
+  email text,
+  phone text,
+  phone2 text,
+  phone3 text,
+  cep text,
+  endereco text,
+  numero text,
+  complemento text,
+  bairro text,
+  cidade text,
+  uf text,
+  source text DEFAULT 'system',
+  source_metadata jsonb DEFAULT '{}',
+  updated_at timestamptz DEFAULT now(),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (tenant_id, cpf)
+);
 
-### 1. `src/components/client-detail/AgreementCalculator.tsx`
+ALTER TABLE public.client_profiles ENABLE ROW LEVEL SECURITY;
 
-**Melhorar diálogo de campos faltantes:**
-- Mostrar os campos já encontrados (preenchidos) acima dos campos faltantes, para o operador ver que o sistema encontrou os dados e só precisa complementar
-- Alterar o texto do diálogo de "Preencha os dados do devedor" para "Quase lá! Apenas o campo abaixo precisa ser preenchido para gerar o boleto."
-- Manter funcionalidade idêntica
+-- RLS policies usando get_my_tenant_id()
+CREATE POLICY "tenant_isolation_select" ON public.client_profiles
+  FOR SELECT TO authenticated
+  USING (tenant_id = get_my_tenant_id());
 
-### 2. `src/components/client-detail/AgreementInstallments.tsx`
+CREATE POLICY "tenant_isolation_insert" ON public.client_profiles
+  FOR INSERT TO authenticated
+  WITH CHECK (tenant_id = get_my_tenant_id());
 
-**Corrigir fonte de pagamento do acordo:**
-- Parar de somar `clients.valor_pago` genérico como proxy de pagamento do acordo
-- Buscar pagamentos reais vinculados ao acordo via `client_events` com `event_type = 'payment_confirmed'` e `metadata->>'agreement_id'` correspondente
-- Fallback para `manual_payments` se existir tabela
-- Resultado: apenas pagamentos REAIS do acordo contam para marcar parcelas como pagas
+CREATE POLICY "tenant_isolation_update" ON public.client_profiles
+  FOR UPDATE TO authenticated
+  USING (tenant_id = get_my_tenant_id());
 
-### 3. `supabase/functions/auto-expire-agreements/index.ts`
+-- Trigger updated_at
+CREATE TRIGGER update_client_profiles_updated_at
+  BEFORE UPDATE ON public.client_profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-**Mesma correção de fonte de pagamento:**
-- Substituir query de `clients.valor_pago` por busca em `client_events` com `event_type = 'payment_confirmed'` filtrado por `agreement_id`
-- Garantir que acordos não sejam marcados como pagos por pagamentos de títulos originais
+-- Backfill: consolidar dados existentes da tabela clients
+INSERT INTO public.client_profiles (tenant_id, cpf, nome_completo, email, phone, phone2, phone3, cep, endereco, bairro, cidade, uf, source)
+SELECT DISTINCT ON (c.tenant_id, clean_cpf)
+  c.tenant_id,
+  clean_cpf,
+  c.nome_completo,
+  c.email,
+  c.phone,
+  c.phone2,
+  c.phone3,
+  c.cep,
+  c.endereco,
+  c.bairro,
+  c.cidade,
+  c.uf,
+  'backfill'
+FROM (
+  SELECT *,
+    REPLACE(REPLACE(cpf, '.', ''), '-', '') AS clean_cpf,
+    ROW_NUMBER() OVER (
+      PARTITION BY tenant_id, REPLACE(REPLACE(cpf, '.', ''), '-', '')
+      ORDER BY
+        CASE WHEN email IS NOT NULL AND email != '' THEN 0 ELSE 1 END,
+        CASE WHEN cep IS NOT NULL AND cep != '' THEN 0 ELSE 1 END,
+        updated_at DESC
+    ) AS rn
+  FROM public.clients
+  WHERE tenant_id IS NOT NULL
+) c
+WHERE c.rn = 1
+ON CONFLICT (tenant_id, cpf) DO NOTHING;
+```
 
-### 4. `src/components/client-detail/AgreementCalculator.tsx` (calculadora)
+### 2. Criar `src/services/clientProfileService.ts`
 
-**Mensagem quando todos os títulos estão em acordo:**
-- Quando `pendentes.length === 0` e `hasActiveAgreement === true`, exibir mensagem clara: "Todos os títulos deste credor estão vinculados ao acordo vigente. Cancele o acordo existente para renegociar."
-- Evitar que o operador fique confuso com calculadora vazia
+Serviço centralizado com função principal `getClientProfile(tenantId, cpf)`:
+
+- Busca em `client_profiles` primeiro
+- Fallback: consolida de `clients` e faz upsert automático em `client_profiles`
+- Retorna objeto padronizado com todos os campos cadastrais
+- Função `upsertClientProfile(tenantId, cpf, data, source)` para atualizações
+- Lógica de merge: só sobrescreve campo se o novo valor for não-vazio (nunca apaga dados existentes)
+
+### 3. Refatorar `negociarieService.ts`
+
+- Substituir `fetchClientAddress` interno por chamada a `clientProfileService.getClientProfile`
+- Remover consolidação duplicada
+- `buildBoletoPayload` recebe dados já consolidados do profile
+
+### 4. Refatorar `AgreementCalculator.tsx`
+
+- `checkRequiredFields` usa `clientProfileService.getClientProfile` em vez de iterar `clients[]`
+- `handleSaveMissingFields` faz upsert em `client_profiles` + update nos `clients` (para retrocompatibilidade)
+- Validação com erro específico por campo
+
+### 5. Ajustar MaxList Import (`MaxListPage.tsx`)
+
+- No `buildRecordFromMapping`, mapear campos de endereço mesmo quando vêm como `custom:*` (endereco, cep, cidade, uf, bairro)
+- Após upsert em `clients`, fazer upsert em `client_profiles` consolidando os dados do CPF
+- Source = `'maxlist'`
+
+### 6. Ajustar `ClientDetailHeader.tsx`
+
+- `handleSaveEdit` (edição manual de dados) faz upsert em `client_profiles` além de atualizar `clients`
+- Source = `'manual'`
+
+### 7. Ajustar importação via planilha (`clientService.ts`)
+
+- Após importação, consolidar dados em `client_profiles`
+- Source = `'import'`
+
+## Fluxo Resultante
+
+```text
+Importação (MaxList/Planilha/Manual)
+  ↓
+clients (parcelas) + client_profiles (upsert cadastral)
+  ↓
+Formalização de Acordo
+  ↓
+clientProfileService.getClientProfile(tenant_id, cpf)
+  ↓
+Dados completos → Negociarie boleto
+```
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/AgreementCalculator.tsx` | Diálogo mais claro + mensagem quando sem títulos disponíveis |
-| `src/components/client-detail/AgreementInstallments.tsx` | Corrigir fonte de pagamento — usar `client_events` em vez de `clients.valor_pago` |
-| `supabase/functions/auto-expire-agreements/index.ts` | Mesma correção de fonte de pagamento |
+| **Migration SQL** | Criar `client_profiles`, RLS, backfill |
+| `src/services/clientProfileService.ts` | **Novo** — serviço canônico |
+| `src/services/negociarieService.ts` | Usar `clientProfileService` em vez de consolidação local |
+| `src/components/client-detail/AgreementCalculator.tsx` | Usar `clientProfileService` para validação |
+| `src/components/client-detail/ClientDetailHeader.tsx` | Upsert em `client_profiles` ao editar |
+| `src/pages/MaxListPage.tsx` | Upsert em `client_profiles` após importação |
+| `src/services/clientService.ts` | Upsert em `client_profiles` após importação planilha |
 
-Nenhuma alteração em banco ou tabelas. O fluxo de formalização permanece idêntico.
+## Garantias
+
+- Isolamento total por `tenant_id` (RLS + filtro explícito)
+- Merge não-destrutivo (nunca apaga campo preenchido)
+- Retrocompatível: `clients` continua sendo atualizado para não quebrar queries existentes
+- Backfill automático na migration para dados já existentes
+- Apenas YBRASIL é impactado pela correção de MaxList; outros tenants continuam funcionando
 
