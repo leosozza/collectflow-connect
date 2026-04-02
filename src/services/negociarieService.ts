@@ -1,41 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { logger } from "@/lib/logger";
-import { formatCPFDisplay } from "@/lib/cpfUtils";
+import { getClientProfile } from "@/services/clientProfileService";
 
 /** Format CEP to XXXXX-XXX pattern expected by Negociarie API */
 function formatCepForApi(cep: string): string {
   const digits = (cep || "").replace(/\D/g, "");
   if (digits.length === 8) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
   return cep || "";
-}
-
-/** Fetch client address consolidating all records for the CPF */
-async function fetchClientAddress(cpf: string) {
-  const cleanCpf = cpf.replace(/[.\-]/g, "");
-  const formatted = formatCPFDisplay(cleanCpf);
-
-  const { data } = await supabase
-    .from("clients")
-    .select("nome_completo, cpf, email, phone, cep, endereco, bairro, cidade, uf")
-    .or(`cpf.eq.${cleanCpf},cpf.eq.${formatted}`);
-
-  if (!data || data.length === 0) return {};
-
-  // Consolidate: for each field, use the first non-empty value found across all records
-  const fields = ["nome_completo", "email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
-  const consolidated: Record<string, string> = {};
-  for (const field of fields) {
-    consolidated[field] = "";
-    for (const row of data) {
-      const val = (row as any)[field];
-      if (val && String(val).trim()) {
-        consolidated[field] = String(val).trim();
-        break;
-      }
-    }
-  }
-  return consolidated;
 }
 
 /** validateDevedorFields is now replaced by validateClienteFields in buildBoletoPayload */
