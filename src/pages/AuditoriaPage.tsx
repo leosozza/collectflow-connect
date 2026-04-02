@@ -60,9 +60,101 @@ const entityLabels: Record<string, string> = {
   operational: "Operacional",
 };
 
-/* ─── Logs Tab (existing content) ─── */
+/* ─── Detail renderers ─── */
+const ImportDetail = ({ details }: { details: Record<string, any> }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {[
+      { label: "Credor", value: details.credor },
+      { label: "Total Importado", value: details.total_records ?? details.total },
+      { label: "Inseridos", value: details.inserted ?? details.created },
+      { label: "Atualizados", value: details.updated },
+      { label: "Erros", value: details.errors ?? details.error_count },
+      { label: "Arquivo", value: details.file_name ?? details.filename },
+      { label: "Duração", value: details.duration ?? details.elapsed },
+    ]
+      .filter((item) => item.value !== undefined && item.value !== null)
+      .map((item) => (
+        <div key={item.label} className="bg-background rounded-lg border border-border p-2.5">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+          <p className="text-sm font-semibold text-foreground mt-0.5">{String(item.value)}</p>
+        </div>
+      ))}
+  </div>
+);
+
+const AgreementDetail = ({ details }: { details: Record<string, any> }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {[
+      { label: "CPF", value: details.cpf ?? details.client_cpf },
+      { label: "Credor", value: details.credor },
+      { label: "Valor Original", value: details.original_total != null ? `R$ ${Number(details.original_total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : undefined },
+      { label: "Valor Proposto", value: details.proposed_total != null ? `R$ ${Number(details.proposed_total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : undefined },
+      { label: "Parcelas", value: details.installments ?? details.new_installments },
+      { label: "Status", value: details.status },
+      { label: "Desconto", value: details.discount_percent != null ? `${details.discount_percent}%` : undefined },
+    ]
+      .filter((item) => item.value !== undefined && item.value !== null)
+      .map((item) => (
+        <div key={item.label} className="bg-background rounded-lg border border-border p-2.5">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+          <p className="text-sm font-semibold text-foreground mt-0.5">{String(item.value)}</p>
+        </div>
+      ))}
+  </div>
+);
+
+const OperationalDetail = ({ details }: { details: Record<string, any> }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {[
+      { label: "Módulo", value: details.module },
+      { label: "Resultado", value: details.success === true ? "Sucesso" : details.success === false ? "Erro" : details.result },
+      { label: "Duração", value: details.latency_ms != null ? `${details.latency_ms}ms` : details.duration },
+      { label: "Erro", value: details.error_message ?? details.error },
+    ]
+      .filter((item) => item.value !== undefined && item.value !== null)
+      .map((item) => (
+        <div key={item.label} className="bg-background rounded-lg border border-border p-2.5">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+          <p className={`text-sm font-semibold mt-0.5 ${item.label === "Erro" ? "text-destructive" : "text-foreground"}`}>{String(item.value)}</p>
+        </div>
+      ))}
+  </div>
+);
+
+const GenericDetail = ({ details }: { details: Record<string, any> }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+    {Object.entries(details).map(([key, value]) => (
+      <div key={key} className="bg-background rounded-lg border border-border p-2.5">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{key.replace(/_/g, " ")}</p>
+        <p className="text-sm text-foreground mt-0.5 break-all">
+          {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value ?? "—")}
+        </p>
+      </div>
+    ))}
+  </div>
+);
+
+const LogDetailPanel = ({ log }: { log: AuditLog }) => {
+  const details = log.details as Record<string, any> | null;
+  if (!details || Object.keys(details).length === 0) {
+    return <p className="text-xs text-muted-foreground italic">Nenhum detalhe registrado para esta ação.</p>;
+  }
+  if (log.action === "import_completed" || log.action === "import_started" || log.entity_type === "import") {
+    return <ImportDetail details={details} />;
+  }
+  if (log.entity_type === "agreement") {
+    return <AgreementDetail details={details} />;
+  }
+  if (log.entity_type === "operational") {
+    return <OperationalDetail details={details} />;
+  }
+  return <GenericDetail details={details} />;
+};
+
+/* ─── Logs Tab ─── */
 const LogsTab = () => {
   useScrollRestore();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useUrlState("dateFrom", "");
   const [dateTo, setDateTo] = useUrlState("dateTo", "");
   const [actionFilter, setActionFilter] = useUrlState("action", "todos");
@@ -131,6 +223,7 @@ const LogsTab = () => {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs w-8"></TableHead>
                   <TableHead className="text-xs">Data/Hora</TableHead>
                   <TableHead className="text-xs">Usuário</TableHead>
                   <TableHead className="text-xs">Ação</TableHead>
@@ -139,36 +232,60 @@ const LogsTab = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {format(parseISO(log.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <div className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-muted-foreground" />
-                        {log.user_name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-primary/10 text-primary border-primary/30">
-                        {actionLabels[log.action] || log.action}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {entityLabels[log.entity_type] || log.entity_type}
-                      {log.entity_id && <span className="text-[10px] ml-1 opacity-60">#{log.entity_id.slice(0, 8)}</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                      {Object.keys(log.details).length > 0
-                        ? Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(", ")
-                        : "-"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {logs.map((log) => {
+                  const isExpanded = expandedId === log.id;
+                  const hasDetails = log.details && Object.keys(log.details as Record<string, any>).length > 0;
+                  return (
+                    <>
+                      <TableRow
+                        key={log.id}
+                        className={`hover:bg-muted/30 ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-muted/20" : ""}`}
+                        onClick={() => hasDetails && setExpandedId(isExpanded ? null : log.id)}
+                      >
+                        <TableCell className="text-xs w-8 px-2">
+                          {hasDetails && (
+                            isExpanded
+                              ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {format(parseISO(log.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3 text-muted-foreground" />
+                            {log.user_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-primary/10 text-primary border-primary/30">
+                            {actionLabels[log.action] || log.action}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {entityLabels[log.entity_type] || log.entity_type}
+                          {log.entity_id && <span className="text-[10px] ml-1 opacity-60">#{log.entity_id.slice(0, 8)}</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                          {hasDetails
+                            ? Object.entries(log.details as Record<string, any>).map(([k, v]) => `${k}: ${v}`).join(", ")
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && (
+                        <TableRow key={`${log.id}-detail`} className="bg-muted/10 hover:bg-muted/10">
+                          <TableCell colSpan={6} className="p-4">
+                            <LogDetailPanel log={log} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
