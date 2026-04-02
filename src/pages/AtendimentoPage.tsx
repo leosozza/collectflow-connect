@@ -78,10 +78,14 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [callHungUp, setCallHungUp] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [lockOwner, setLockOwner] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'synced' | 'failed'>('idle');
   const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hungUpCallIdRef = useRef<string | number | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
+
+  // Extract CPF from navigation state for early query start
+  const initialCpf = (location.state as any)?.cpf || searchParams.get("cpf") || undefined;
 
   // Lock lifecycle
   useEffect(() => {
