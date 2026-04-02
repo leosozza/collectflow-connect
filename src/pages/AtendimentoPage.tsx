@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useSearchParams, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { normalizePhone } from "@/lib/cpfUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -116,6 +117,81 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       }
     };
   }, [id, tenant?.id, profile?.id]);
+
+  // ─── Auto-navigate when a NEW call arrives for a DIFFERENT client ───
+  const lastNavigatedCallRef = useRef<string | null>(null);
+
+  const resolveClientFromCall = useCallback(async (
+    clientDbId: string | null,
+    cpf: string | null,
+    phone: string | null,
+    tenantId: string
+  ): Promise<string | null> => {
+    // 1) Direct DB id
+    if (clientDbId) {
+      const { data } = await supabase.from("clients").select("id").eq("id", clientDbId).eq("tenant_id", tenantId).maybeSingle();
+      if (data?.id) return data.id;
+    }
+    // 2) CPF
+    if (cpf) {
+      const rawCpf = cpf.replace(/\D/g, "");
+      if (rawCpf.length >= 11) {
+        const { data } = await supabase.from("clients").select("id").eq("cpf", rawCpf).eq("tenant_id", tenantId).limit(1).maybeSingle();
+        if (data?.id) return data.id;
+      }
+    }
+    // 3) Phone suffix
+    if (phone) {
+      const normalized = normalizePhone(phone);
+      const suffix = normalized.length >= 8 ? normalized.slice(-8) : normalized;
+      if (suffix.length >= 8) {
+        const { data } = await supabase
+          .from("clients").select("id")
+          .eq("tenant_id", tenantId)
+          .or(`phone.ilike.%${suffix},phone2.ilike.%${suffix},phone3.ilike.%${suffix}`)
+          .limit(1).maybeSingle();
+        if (data?.id) return data.id;
+      }
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    if (!liveAgentState.isOnline || liveAgentState.status !== 2) return;
+    if (!tenant?.id) return;
+
+    const callKey = String(liveAgentState.callId || liveAgentState.activeCallPhone || "");
+    if (!callKey || callKey === lastNavigatedCallRef.current) return;
+
+    // Has call data to resolve?
+    const { activeCallClientDbId, activeCallCpf, activeCallPhone } = liveAgentState;
+    if (!activeCallClientDbId && !activeCallCpf && !activeCallPhone) return;
+
+    // Check if the call is for a different client
+    resolveClientFromCall(activeCallClientDbId, activeCallCpf, activeCallPhone, tenant.id)
+      .then((resolvedId) => {
+        if (!resolvedId) return;
+        if (resolvedId === id) {
+          // Same client — just update ref
+          lastNavigatedCallRef.current = callKey;
+          return;
+        }
+
+        // Different client → clean up state and navigate
+        console.log("[Atendimento] Nova ligação detectada — navegando de", id, "para", resolvedId);
+        lastNavigatedCallRef.current = callKey;
+
+        // Clear local state
+        setCallHungUp(false);
+        hungUpCallIdRef.current = null;
+        setActiveSessionId(null);
+        sessionStorage.removeItem("3cp_call_hung_up");
+        sessionStorage.removeItem("3cp_qualified_from_disposition");
+
+        navigate(`/atendimento/${resolvedId}?callId=${liveAgentState.callId || ""}&channel=call`, { replace: true });
+      })
+      .catch((err) => console.error("[Atendimento] Erro ao resolver cliente da nova ligação:", err));
+  }, [liveAgentState.status, liveAgentState.callId, liveAgentState.activeCallPhone, liveAgentState.activeCallClientDbId, tenant?.id, id, navigate, resolveClientFromCall]);
 
   // Fetch client
   const { data: client, isLoading: clientLoading } = useQuery<any>({
