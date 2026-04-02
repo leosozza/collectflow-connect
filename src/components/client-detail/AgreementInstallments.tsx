@@ -50,6 +50,13 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [editValueInput, setEditValueInput] = useState("");
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
 
+  // Boleto pendente states
+  const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
+  const [boletoPendenteMissingOpen, setBoletoPendenteMissingOpen] = useState(false);
+  const [boletoPendenteMissing, setBoletoPendenteMissing] = useState<Record<string, string>>({});
+  const [boletoPendenteFound, setBoletoPendenteFound] = useState<Record<string, string>>({});
+  const [savingBoletoPendente, setSavingBoletoPendente] = useState(false);
+
   // Date edit dialog state
   const [dateEditDialogOpen, setDateEditDialogOpen] = useState(false);
   const [selectedInstallmentForDateEdit, setSelectedInstallmentForDateEdit] = useState<any>(null);
