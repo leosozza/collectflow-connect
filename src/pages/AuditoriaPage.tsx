@@ -223,6 +223,7 @@ const LogsTab = () => {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs w-8"></TableHead>
                   <TableHead className="text-xs">Data/Hora</TableHead>
                   <TableHead className="text-xs">Usuário</TableHead>
                   <TableHead className="text-xs">Ação</TableHead>
@@ -231,36 +232,60 @@ const LogsTab = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {format(parseISO(log.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <div className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-muted-foreground" />
-                        {log.user_name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-primary/10 text-primary border-primary/30">
-                        {actionLabels[log.action] || log.action}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {entityLabels[log.entity_type] || log.entity_type}
-                      {log.entity_id && <span className="text-[10px] ml-1 opacity-60">#{log.entity_id.slice(0, 8)}</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                      {Object.keys(log.details).length > 0
-                        ? Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(", ")
-                        : "-"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {logs.map((log) => {
+                  const isExpanded = expandedId === log.id;
+                  const hasDetails = log.details && Object.keys(log.details as Record<string, any>).length > 0;
+                  return (
+                    <>
+                      <TableRow
+                        key={log.id}
+                        className={`hover:bg-muted/30 ${hasDetails ? "cursor-pointer" : ""} ${isExpanded ? "bg-muted/20" : ""}`}
+                        onClick={() => hasDetails && setExpandedId(isExpanded ? null : log.id)}
+                      >
+                        <TableCell className="text-xs w-8 px-2">
+                          {hasDetails && (
+                            isExpanded
+                              ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {format(parseISO(log.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3 text-muted-foreground" />
+                            {log.user_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-primary/10 text-primary border-primary/30">
+                            {actionLabels[log.action] || log.action}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {entityLabels[log.entity_type] || log.entity_type}
+                          {log.entity_id && <span className="text-[10px] ml-1 opacity-60">#{log.entity_id.slice(0, 8)}</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                          {hasDetails
+                            ? Object.entries(log.details as Record<string, any>).map(([k, v]) => `${k}: ${v}`).join(", ")
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && (
+                        <TableRow key={`${log.id}-detail`} className="bg-muted/10 hover:bg-muted/10">
+                          <TableCell colSpan={6} className="p-4">
+                            <LogDetailPanel log={log} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
