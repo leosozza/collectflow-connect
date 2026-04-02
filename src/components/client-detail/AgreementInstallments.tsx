@@ -132,10 +132,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const customKey = "entrada";
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     const value = customValues[customKey] ?? agreement.entrada_value;
-    const cobranca = cobrancas.find((c: any) => {
-      const cDate = new Date(c.data_vencimento);
-      return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
-    });
+    const expectedKey = `${agreementId}:0`;
+    const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
     installments.push({ number: 0, displayNumber: 1, dueDate, value, cobranca, isEntrada: true, customKey });
   }
 
