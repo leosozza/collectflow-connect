@@ -211,11 +211,14 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     enabled: !!id,
   });
 
+  // Use initialCpf from nav state for early query start, fallback to client.cpf
+  const activeCpf = client?.cpf || initialCpf;
+
   // Fetch all records for this CPF
   const { data: clientRecords = [] } = useQuery({
-    queryKey: ["atendimento-records", client?.cpf],
+    queryKey: ["atendimento-records", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("clients").select("*")
@@ -226,7 +229,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (error) throw error;
       return data || [];
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const { data: credorRules } = useQuery({
