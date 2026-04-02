@@ -787,7 +787,29 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             })}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => {
+            <Button variant="outline" onClick={async () => {
+              // Mark agreement as boleto_pendente
+              if (pendingAgreement?.id) {
+                try {
+                  await supabase
+                    .from("agreements")
+                    .update({ boleto_pendente: true } as any)
+                    .eq("id", pendingAgreement.id);
+                  const { logAction } = await import("@/services/auditService");
+                  logAction({
+                    action: "acordo_criado_sem_boleto",
+                    entity_type: "agreement",
+                    entity_id: pendingAgreement.id,
+                    details: {
+                      cpf,
+                      credor,
+                      campos_faltantes: Object.keys(missingFields),
+                    },
+                  });
+                } catch (e) {
+                  console.warn("Erro ao marcar boleto_pendente:", e);
+                }
+              }
               setMissingFieldsOpen(false);
               setPendingAgreement(null);
               onAgreementCreated();
