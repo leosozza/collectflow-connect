@@ -321,26 +321,46 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         // Use hungUpCallIdRef if sessionStorage was already cleared by hangup
         const qualifyCallId = callId || hungUpCallIdRef.current || undefined;
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId: qualifyCallId, tenantId: tenant?.id })
-          .then((success) => {
+          .then(async (success) => {
             if (success) {
-              // Only set flag AFTER confirmed success — not prematurely
               sessionStorage.setItem("3cp_qualified_from_disposition", "true");
               sessionStorage.removeItem("3cp_last_call_id");
+              setSyncStatus('synced');
               toast.success("Qualificação enviada automaticamente para a 3CPlus");
             } else {
-              console.warn("[Atendimento] qualifyOn3CPlus retornou false — ACW fallback será exibido");
-              toast.warning("Tabulação salva no RIVO, mas falhou ao sincronizar com a 3CPlus", {
-                description: "A qualificação pode precisar ser feita manualmente no discador.",
-                duration: 8000,
-              });
+              console.warn("[Atendimento] qualifyOn3CPlus retornou false — tentando forceRelease como fallback");
+              // Fallback: force release agent from TPA/ACW
+              const released = await forceReleaseAgent({ tenantSettings: settings, agentId: effectiveAgentId });
+              if (released) {
+                sessionStorage.removeItem("3cp_last_call_id");
+                setSyncStatus('synced');
+                toast.success("Tabulação salva. Agente liberado da fila.");
+              } else {
+                setSyncStatus('failed');
+                toast.warning("Tabulação salva no RIVO, mas falhou ao sincronizar com a 3CPlus", {
+                  description: "Use o botão 'Tentar Novamente' no banner para liberar o agente.",
+                  duration: 8000,
+                });
+              }
             }
           })
-          .catch((err) => {
+          .catch(async (err) => {
             console.error("[Atendimento] qualifyOn3CPlus error:", err);
-            toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+            // Fallback on error too
+            const released = await forceReleaseAgent({ tenantSettings: settings, agentId: effectiveAgentId }).catch(() => false);
+            if (released) {
+              setSyncStatus('synced');
+              toast.info("Tabulação salva. Agente liberado via fallback.");
+            } else {
+              setSyncStatus('failed');
+              toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+            }
           })
           .finally(() => {
             // Clean up hung up ref and flag after tabulation completes
+            if (hungUpCallIdRef.current) {
+              dismissCallId(hungUpCallIdRef.current);
+            }
             hungUpCallIdRef.current = null;
             sessionStorage.removeItem("3cp_call_hung_up");
           });
