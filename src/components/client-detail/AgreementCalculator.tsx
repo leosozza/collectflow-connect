@@ -743,20 +743,19 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
           {/* Show found fields */}
           {(() => {
-            const { consolidated } = checkRequiredFields();
             const labelMap: Record<string, string> = {
               email: "E-mail", phone: "Telefone", cep: "CEP",
               endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
             };
-            const foundFields = Object.entries(consolidated).filter(([key, val]) => val && !missingFields.hasOwnProperty(key));
-            return foundFields.length > 0 ? (
+            const found = Object.entries(foundFields).filter(([key, val]) => val && !missingFields.hasOwnProperty(key));
+            return found.length > 0 ? (
               <div className="bg-muted/50 rounded-md p-3 space-y-1">
                 <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
-                {foundFields.map(([key, val]) => (
+                {found.map(([key, val]) => (
                   <div key={key} className="flex items-center gap-2 text-xs">
                     <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
                     <span className="text-muted-foreground">{labelMap[key] || key}:</span>
-                    <span className="font-medium truncate">{val}</span>
+                    <span className="font-medium truncate">{String(val)}</span>
                   </div>
                 ))}
               </div>
