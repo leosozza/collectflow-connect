@@ -626,6 +626,49 @@ const CarteiraPage = () => {
         </div>
       )}
 
+      {/* Pagination controls - TOP */}
+      {hasActiveFilters && totalPages > 0 && viewMode !== "kanban" && (
+        <div className="flex items-center justify-between px-4 py-2 bg-card rounded-xl border border-border">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Itens por página:</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="w-[80px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[50, 100, 200, 500, 1000].map((size) => (
+                  <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setUrlPage(currentPage - 1)}
+              className="gap-1"
+            >
+              <ChevronLeft className="w-4 h-4" /> Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setUrlPage(currentPage + 1)}
+              className="gap-1"
+            >
+              Próxima <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {viewMode === "kanban" ? (
         <CarteiraKanban
           clients={displayClients as any[]}
