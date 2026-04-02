@@ -319,7 +319,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
         <CollapsibleContent>
           <div className="px-6 py-4 border-t border-border">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
-              {expandedFields.map(renderField)}
+              {expandedFields.map((f) => renderField(f))}
             </div>
           </div>
         </CollapsibleContent>
