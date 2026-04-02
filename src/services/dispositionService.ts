@@ -448,6 +448,55 @@ export const qualifyOn3CPlus = async (params: {
 /**
  * Fetch recent call data from 3CPlus for the given agent and save to call_logs.
  */
+/**
+ * Force-release an agent from TPA/ACW on 3CPlus by calling unpause_agent.
+ * Used as fallback when qualifyOn3CPlus fails and the agent is stuck.
+ */
+export const forceReleaseAgent = async (params: {
+  tenantSettings: Record<string, any>;
+  agentId: number;
+}): Promise<boolean> => {
+  try {
+    const domain = params.tenantSettings.threecplus_domain;
+    const apiToken = params.tenantSettings.threecplus_api_token;
+    if (!domain || !apiToken) return false;
+
+    const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
+      body: {
+        action: "unpause_agent",
+        domain,
+        api_token: apiToken,
+        agent_id: params.agentId,
+      },
+    });
+
+    if (error) {
+      logger.error("dispositionService", "forceReleaseAgent", error);
+      return false;
+    }
+
+    // Treat "agent is not paused" as success (already released)
+    if (data && data.success === false) {
+      const detail = String(data.detail || data.message || "").toLowerCase();
+      if (detail.includes("not paused") || detail.includes("não está em pausa") || detail.includes("is not on pause")) {
+        logger.info("dispositionService", "forceReleaseAgent", { message: "Agent already released" });
+        return true;
+      }
+      logger.error("dispositionService", "forceReleaseAgent", { detail });
+      return false;
+    }
+
+    logger.info("dispositionService", "forceReleaseAgent", { agentId: params.agentId, success: true });
+    return true;
+  } catch (err) {
+    logger.error("dispositionService", "forceReleaseAgent", err);
+    return false;
+  }
+};
+
+/**
+ * Fetch recent call data from 3CPlus for the given agent and save to call_logs.
+ */
 export const saveCallLog = async (params: {
   tenantId: string;
   clientId: string;
