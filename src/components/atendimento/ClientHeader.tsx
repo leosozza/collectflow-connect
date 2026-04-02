@@ -177,6 +177,9 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
   const getCustomFieldRenderer = (fieldKey: string): (() => { label: string; value: string | null; icon?: React.ElementType }) | null => {
     if (!fieldKey.startsWith("custom:")) return null;
     const realKey = fieldKey.replace("custom:", "");
+    // Se for alias de coluna direta, delegar ao FIELD_RENDERERS
+    const aliasKey = CUSTOM_FIELD_ALIASES[realKey];
+    if (aliasKey && FIELD_RENDERERS[aliasKey]) return FIELD_RENDERERS[aliasKey];
     const customData = client.custom_data as Record<string, any> | null;
     const rawValue = customData?.[realKey];
     const cfDef = customFieldsDefs?.find((cf) => cf.field_key === realKey);
