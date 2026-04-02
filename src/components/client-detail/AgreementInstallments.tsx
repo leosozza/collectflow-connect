@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { addMonths, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate, updateInstallmentValue } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
+import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
+import { logAction } from "@/services/auditService";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -17,6 +20,7 @@ import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
