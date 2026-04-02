@@ -10,6 +10,7 @@ import {
   createCampaign,
   createRecipients,
   startCampaign,
+  deriveProviderCategory,
   EligibleInstance,
 } from "@/services/whatsappCampaignService";
 import { useAuth } from "@/hooks/useAuth";
@@ -141,20 +142,32 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const canProceedStep1 = useCustom ? customMessage.trim().length > 0 : !!selectedTemplate;
   const canProceedStep2 = selectedInstanceIds.length > 0;
 
+  // Pre-send validation
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = [];
+    if (selectedInstanceIds.length === 0) errors.push("Selecione pelo menos uma instância");
+    if (!getMessageTemplate().trim()) errors.push("Defina uma mensagem antes de enviar");
+    if (dedup.recipients.length === 0) errors.push("Nenhum destinatário válido encontrado");
+    return errors;
+  };
+
   const handleSend = async () => {
     if (!tenant?.id || !user?.id) return;
-    const template = getMessageTemplate();
-    if (!template.trim()) {
-      toast.error("Defina uma mensagem antes de enviar");
+
+    const validationErrors = getValidationErrors();
+    if (validationErrors.length > 0) {
+      validationErrors.forEach((e) => toast.error(e));
       return;
     }
+
+    const template = getMessageTemplate();
     setSending(true);
     setStep(4);
 
     try {
       const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
+      const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
 
-      // Create campaign
       const campaign = await createCampaign({
         tenant_id: tenant.id,
         message_mode: useCustom ? "custom" : "template",
@@ -164,12 +177,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         total_selected: selectedClients.length,
         total_unique_recipients: dedup.recipients.length,
         created_by: user.id,
+        provider_category: providerCategory,
       });
 
-      // Create recipients
       await createRecipients(campaign.id, tenant.id, distributed, template);
-
-      // Start campaign (calls edge function)
       const data = await startCampaign(campaign.id);
 
       setResult({
@@ -201,6 +212,14 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       ))}
     </div>
   );
+
+  const getProviderBadge = (inst: EligibleInstance) => {
+    if (inst.provider_category === "official_meta" || inst.provider === "gupshup") {
+      return <Badge className="text-xs shrink-0 bg-green-100 text-green-800 border-green-300">Oficial</Badge>;
+    }
+    const label = inst.provider === "wuzapi" ? "WuzAPI" : inst.provider === "baylers" ? "Baylers" : inst.provider || "Evolution";
+    return <Badge variant="outline" className="text-xs shrink-0">{label}</Badge>;
+  };
 
   const renderStep1 = () => (
     <div className="space-y-4">
@@ -271,9 +290,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                   {inst.phone_number || inst.instance_name} · {inst.provider}
                 </p>
               </div>
-              <Badge variant="outline" className="text-xs shrink-0">
-                {inst.provider === "wuzapi" ? "WuzAPI" : inst.provider === "gupshup" ? "Gupshup" : inst.provider === "baylers" ? "Baylers" : inst.provider || "Evolution"}
-              </Badge>
+              {getProviderBadge(inst)}
             </label>
           ))}
         </div>
@@ -284,53 +301,68 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     </div>
   );
 
-  const renderStep3 = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="p-3 rounded-lg bg-muted/50 text-center">
-          <p className="text-2xl font-bold text-primary">{selectedClients.length}</p>
-          <p className="text-xs text-muted-foreground">Selecionados</p>
-        </div>
-        <div className="p-3 rounded-lg bg-muted/50 text-center">
-          <p className="text-2xl font-bold text-green-600">{dedup.recipients.length}</p>
-          <p className="text-xs text-muted-foreground">Destinatários únicos</p>
-        </div>
-      </div>
+  const renderStep3 = () => {
+    const validationErrors = getValidationErrors();
 
-      {dedup.excludedCount > 0 && (
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-yellow-500/10 text-yellow-700 text-sm">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {dedup.excludedCount} cliente(s) sem telefone válido (excluídos)
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-lg bg-muted/50 text-center">
+            <p className="text-2xl font-bold text-primary">{selectedClients.length}</p>
+            <p className="text-xs text-muted-foreground">Selecionados</p>
+          </div>
+          <div className="p-3 rounded-lg bg-muted/50 text-center">
+            <p className="text-2xl font-bold text-green-600">{dedup.recipients.length}</p>
+            <p className="text-xs text-muted-foreground">Destinatários únicos</p>
+          </div>
         </div>
-      )}
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Shuffle className="w-4 h-4 text-primary" />
-          <Label className="text-sm font-medium">Distribuição por instância</Label>
-        </div>
-        <div className="space-y-1">
-          {selectedInstanceIds.map((id) => {
-            const inst = instances.find((i) => i.id === id);
-            const count = distribution[id] || 0;
-            const pct = dedup.recipients.length > 0 ? Math.round((count / dedup.recipients.length) * 100) : 0;
-            return (
-              <div key={id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
-                <span className="truncate">{inst?.name || id}</span>
-                <span className="font-medium text-primary">{count} ({pct}%)</span>
+        {dedup.excludedCount > 0 && (
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-yellow-500/10 text-yellow-700 text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {dedup.excludedCount} cliente(s) sem telefone válido (excluídos)
+          </div>
+        )}
+
+        {validationErrors.length > 0 && (
+          <div className="space-y-1 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            {validationErrors.map((e, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm text-destructive">
+                <XCircle className="w-4 h-4 shrink-0" />
+                {e}
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Shuffle className="w-4 h-4 text-primary" />
+            <Label className="text-sm font-medium">Distribuição por instância</Label>
+          </div>
+          <div className="space-y-1">
+            {selectedInstanceIds.map((id) => {
+              const inst = instances.find((i) => i.id === id);
+              const count = distribution[id] || 0;
+              const pct = dedup.recipients.length > 0 ? Math.round((count / dedup.recipients.length) * 100) : 0;
+              return (
+                <div key={id} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
+                  <span className="truncate">{inst?.name || id}</span>
+                  <span className="font-medium text-primary">{count} ({pct}%)</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
+          <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
+          <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
+          <p><strong>Modo:</strong> Round-robin automático</p>
         </div>
       </div>
-
-      <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
-        <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
-        <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
-        <p><strong>Modo:</strong> Round-robin automático</p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const getCampaignStatusBadge = () => {
     if (!result?.finalStatus) return null;
@@ -433,7 +465,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
               </Button>
             )}
             {step === 3 && (
-              <Button onClick={handleSend} disabled={sending} className="gap-2">
+              <Button onClick={handleSend} disabled={sending || getValidationErrors().length > 0} className="gap-2">
                 <MessageSquare className="w-4 h-4" />
                 Criar Campanha e Enviar
               </Button>
