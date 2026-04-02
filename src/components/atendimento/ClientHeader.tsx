@@ -208,12 +208,12 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     return { label: s?.toUpperCase() || "—", className: "bg-muted text-muted-foreground" };
   })();
 
-  const renderField = (f: { field_key: string }) => {
+  const renderField = (f: { field_key: string }, forceRender = false) => {
     const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
     if (!renderer) return null;
     const { label, value, icon } = renderer();
-    if (!value) return null;
-    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} />;
+    if (!value && !forceRender) return null;
+    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} />;
   };
 
   return (
