@@ -494,7 +494,9 @@ const CarteiraPage = () => {
   };
 
   const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
-  const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
+  const selectedCount = selectAllFiltered
+    ? selectedIds.size
+    : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
@@ -541,21 +543,21 @@ const CarteiraPage = () => {
             <>
               <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
                 <MessageSquare className="w-4 h-4" />
-                <span className="hidden sm:inline">WhatsApp</span> ({uniqueSelectedCpfs})
+                <span className="hidden sm:inline">WhatsApp</span> ({selectedCount})
               </Button>
               <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
                 <Phone className="w-4 h-4" />
-                <span className="hidden sm:inline">Discador</span> ({uniqueSelectedCpfs})
+                <span className="hidden sm:inline">Discador</span> ({selectedCount})
               </Button>
               {hasAssignedCredor && (
                 <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)} className="gap-1.5 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950">
                   <UserPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Atribuir</span> ({uniqueSelectedCpfs})
+                  <span className="hidden sm:inline">Atribuir</span> ({selectedCount})
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
                 <Search className="w-4 h-4" />
-                <span className="hidden sm:inline">Higienizar</span> ({uniqueSelectedCpfs})
+                <span className="hidden sm:inline">Higienizar</span> ({selectedCount})
               </Button>
             </>
           )}
