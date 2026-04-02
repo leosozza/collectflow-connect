@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy, CheckCircle2 } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
+import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
 
@@ -76,6 +77,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   // Missing fields dialog for pre-boleto validation
   const [missingFieldsOpen, setMissingFieldsOpen] = useState(false);
   const [missingFields, setMissingFields] = useState<Record<string, string>>({});
+  const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
 
@@ -239,20 +241,43 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { isOut: reasons.length > 0, reasons };
   }, [credorRules, descontoPercent, numParcelas]);
 
-  /** Check required fields for boleto generation and return missing ones */
-  const checkRequiredFields = useCallback(() => {
-    const consolidated: Record<string, string> = {};
+  /** Check required fields for boleto generation using canonical profile */
+  const checkRequiredFields = useCallback(async () => {
+    let consolidated: Record<string, string> = {};
     const fields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
-    for (const field of fields) {
-      consolidated[field] = "";
-      for (const c of clients) {
-        const val = (c as any)[field];
-        if (val && String(val).trim()) {
-          consolidated[field] = String(val).trim();
-          break;
+
+    if (profile?.tenant_id) {
+      try {
+        const cp = await getClientProfile(profile.tenant_id, cpf);
+        for (const field of fields) {
+          consolidated[field] = (cp as any)[field] || "";
+        }
+      } catch {
+        // Fallback to clients array
+        for (const field of fields) {
+          consolidated[field] = "";
+          for (const c of clients) {
+            const val = (c as any)[field];
+            if (val && String(val).trim()) {
+              consolidated[field] = String(val).trim();
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      for (const field of fields) {
+        consolidated[field] = "";
+        for (const c of clients) {
+          const val = (c as any)[field];
+          if (val && String(val).trim()) {
+            consolidated[field] = String(val).trim();
+            break;
+          }
         }
       }
     }
+
     const missing: Record<string, string> = {};
     const labels: Record<string, string> = {
       email: "E-mail", phone: "Telefone", cep: "CEP",
@@ -262,9 +287,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       if (!consolidated[field]) missing[field] = "";
     }
     return { consolidated, missing, labels };
-  }, [clients]);
+  }, [clients, cpf, profile?.tenant_id]);
 
-  /** Save missing fields to all client records of same CPF, then proceed with boletos */
+  /** Save missing fields to all client records of same CPF + canonical profile, then proceed with boletos */
   const handleSaveMissingFields = async () => {
     if (!profile?.tenant_id || !pendingAgreement) return;
     setSavingMissingFields(true);
@@ -275,11 +300,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         if (val.trim()) updatePayload[key] = val.trim();
       }
       if (Object.keys(updatePayload).length > 0) {
+        // Update clients table for retrocompatibility
         await supabase
           .from("clients")
           .update(updatePayload)
           .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
           .eq("tenant_id", profile.tenant_id);
+
+        // Upsert canonical profile
+        await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
       }
       setMissingFieldsOpen(false);
       await generateBoletosForAgreement(pendingAgreement);
@@ -364,7 +393,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       // Generate boletos automatically via Negociarie
       if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
         // Check for missing required fields before generating boletos
-        const { missing, labels } = checkRequiredFields();
+        const { missing, consolidated } = await checkRequiredFields();
         if (Object.keys(missing).length > 0) {
           // Open dialog for user to fill missing fields
           const fieldsWithLabels: Record<string, string> = {};
@@ -372,6 +401,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             fieldsWithLabels[key] = "";
           }
           setMissingFields(fieldsWithLabels);
+          setFoundFields(consolidated);
           setPendingAgreement(agreement);
           setMissingFieldsOpen(true);
           setSubmitting(false);
@@ -717,20 +747,19 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
           {/* Show found fields */}
           {(() => {
-            const { consolidated } = checkRequiredFields();
             const labelMap: Record<string, string> = {
               email: "E-mail", phone: "Telefone", cep: "CEP",
               endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
             };
-            const foundFields = Object.entries(consolidated).filter(([key, val]) => val && !missingFields.hasOwnProperty(key));
-            return foundFields.length > 0 ? (
+            const found = Object.entries(foundFields).filter(([key, val]) => val && !missingFields.hasOwnProperty(key));
+            return found.length > 0 ? (
               <div className="bg-muted/50 rounded-md p-3 space-y-1">
                 <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
-                {foundFields.map(([key, val]) => (
+                {found.map(([key, val]) => (
                   <div key={key} className="flex items-center gap-2 text-xs">
                     <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
                     <span className="text-muted-foreground">{labelMap[key] || key}:</span>
-                    <span className="font-medium truncate">{val}</span>
+                    <span className="font-medium truncate">{String(val)}</span>
                   </div>
                 ))}
               </div>

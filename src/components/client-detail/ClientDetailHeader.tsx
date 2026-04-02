@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { upsertClientProfile } from "@/services/clientProfileService";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Phone as PhoneIcon, MessageCircle } from "lucide-react";
@@ -175,6 +176,25 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         external_id: data.external_id || null,
       } as any).eq("id", clientIds[0]);
       if (uniqueError) throw uniqueError;
+
+      // Sync to canonical client_profiles
+      if (tenant?.id) {
+        const cleanCpfVal = cpf?.replace(/\D/g, "") || "";
+        if (cleanCpfVal) {
+          await upsertClientProfile(tenant.id, cleanCpfVal, {
+            nome_completo: data.nome_completo,
+            phone: data.phone || "",
+            phone2: data.phone2 || "",
+            phone3: data.phone3 || "",
+            email: data.email || "",
+            endereco: (data.endereco || "").trim(),
+            bairro: (data.bairro || "").trim(),
+            cidade: (data.cidade || "").trim(),
+            uf: (normalizedUf || ""),
+            cep: normalizedCep || "",
+          }, "manual");
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });

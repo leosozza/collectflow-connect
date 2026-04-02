@@ -1268,6 +1268,80 @@ export type Database = {
           },
         ]
       }
+      client_profiles: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
+          cpf: string
+          created_at: string | null
+          email: string | null
+          endereco: string | null
+          id: string
+          nome_completo: string
+          numero: string | null
+          phone: string | null
+          phone2: string | null
+          phone3: string | null
+          source: string | null
+          source_metadata: Json | null
+          tenant_id: string
+          uf: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          cpf: string
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome_completo?: string
+          numero?: string | null
+          phone?: string | null
+          phone2?: string | null
+          phone3?: string | null
+          source?: string | null
+          source_metadata?: Json | null
+          tenant_id: string
+          uf?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          cpf?: string
+          created_at?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome_completo?: string
+          numero?: string | null
+          phone?: string | null
+          phone2?: string | null
+          phone3?: string | null
+          source?: string | null
+          source_metadata?: Json | null
+          tenant_id?: string
+          uf?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_update_logs: {
         Row: {
           changes: Json

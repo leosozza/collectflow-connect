@@ -435,6 +435,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === Consolidate client_profiles (canonical source) ===
+    try {
+      // Group records by CPF to consolidate
+      const cpfMap = new Map<string, any>();
+      for (const rec of finalRecords) {
+        const c = cleanCPF(rec.cpf);
+        if (!cpfMap.has(c)) {
+          cpfMap.set(c, rec);
+        } else {
+          // Merge: keep first non-empty value
+          const existing = cpfMap.get(c);
+          const fields = ["nome_completo", "email", "phone", "phone2", "phone3", "cep", "endereco", "bairro", "cidade", "uf"];
+          for (const f of fields) {
+            if (!existing[f] && rec[f]) existing[f] = rec[f];
+          }
+        }
+      }
+
+      const profileBatch: any[] = [];
+      for (const [cpfVal, rec] of cpfMap) {
+        profileBatch.push({
+          tenant_id,
+          cpf: cpfVal,
+          nome_completo: rec.nome_completo || "",
+          email: rec.email || null,
+          phone: rec.phone || null,
+          phone2: rec.phone2 || null,
+          phone3: rec.phone3 || null,
+          cep: rec.cep || null,
+          endereco: rec.endereco || null,
+          bairro: rec.bairro || null,
+          cidade: rec.cidade || null,
+          uf: rec.uf || null,
+          source: "maxlist",
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      // Upsert in batches — merge non-destructively via SQL COALESCE
+      const PROFILE_BATCH = 200;
+      for (let i = 0; i < profileBatch.length; i += PROFILE_BATCH) {
+        const batch = profileBatch.slice(i, i + PROFILE_BATCH);
+        const { error: profileErr } = await supabase
+          .from("client_profiles")
+          .upsert(batch, { onConflict: "tenant_id,cpf" });
+        if (profileErr) {
+          console.error("[maxlist-import] client_profiles upsert error:", profileErr.message);
+        }
+      }
+      console.log(`[maxlist-import] Consolidated ${profileBatch.length} client_profiles`);
+    } catch (profileErr: any) {
+      console.error("[maxlist-import] client_profiles consolidation error:", profileErr.message);
+    }
+
     // Auto-status-sync
     if (status_cobranca_id === "__auto__") {
       console.log(`[maxlist-import] Running auto-status-sync for tenant ${tenant_id}`);
