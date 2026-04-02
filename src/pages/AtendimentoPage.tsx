@@ -447,7 +447,8 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   // Show status banner when agentId is present OR live polling detects online agent
   const statusConfig = (agentId || liveAgentState.isOnline) ? getStatusConfig() : null;
   // Show "Finalizar Tabulação" only for TPA (status 4) or status 3 without manual pause name (ACW)
-  const isTPA = Number(agentStatus) === 4 || (Number(agentStatus) === 3 && !sessionStorage.getItem("3cp_active_pause_name"));
+  const liveS = Number(liveAgentState.isOnline ? liveAgentState.status : agentStatus);
+  const isTPA = liveS === 4 || (liveS === 3 && !sessionStorage.getItem("3cp_active_pause_name"));
   const showFinishButton = onFinishDisposition && isTPA;
 
   const handleFinishDisposition = async () => {
