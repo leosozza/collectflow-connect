@@ -52,6 +52,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [multaPercent, setMultaPercent] = useState<number>(0);
   const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
   const [descontoPercent, setDescontoPercent] = useState<number>(0);
+  const [descontoReais, setDescontoReais] = useState<number>(0);
 
   // Agreement form
   const [entradaDate, setEntradaDate] = useState("");
