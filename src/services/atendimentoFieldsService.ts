@@ -8,6 +8,7 @@ export interface FieldConfig {
   field_key: string;
   label: string;
   visible: boolean;
+  is_highlighted: boolean;
   sort_order: number;
 }
 
@@ -53,7 +54,6 @@ export const atendimentoFieldsService = {
   ): Promise<FieldConfig[]> {
     const allFields = [...DEFAULT_FIELDS];
 
-    // Append custom fields with "custom:" prefix
     if (customFields && customFields.length > 0) {
       for (const cf of customFields) {
         allFields.push({
@@ -69,6 +69,7 @@ export const atendimentoFieldsService = {
       field_key: f.field_key,
       label: f.label,
       visible: true,
+      is_highlighted: false,
       sort_order: i,
     }));
 
@@ -84,10 +85,6 @@ export const atendimentoFieldsService = {
     return (data as FieldConfig[]) || [];
   },
 
-  /**
-   * Sync custom fields into atendimento_field_config without resetting existing ones.
-   * Inserts only missing custom fields at the end of the sort order.
-   */
   async syncCustomFields(
     tenantId: string,
     credorId: string,
@@ -95,7 +92,6 @@ export const atendimentoFieldsService = {
   ): Promise<void> {
     if (!customFields || customFields.length === 0) return;
 
-    // Fetch existing config to find max sort_order and existing keys
     const existing = await this.fetchFieldConfig(credorId);
     const existingKeys = new Set(existing.map((f) => f.field_key));
     let maxSort = existing.reduce((max, f) => Math.max(max, f.sort_order), -1);
@@ -111,6 +107,7 @@ export const atendimentoFieldsService = {
           field_key: key,
           label: cf.field_label,
           visible: true,
+          is_highlighted: false,
           sort_order: maxSort,
         });
       }
@@ -128,6 +125,39 @@ export const atendimentoFieldsService = {
     }
   },
 
+  /**
+   * Set highlighted fields for a credor. Max 4 enforced by frontend.
+   * Sets is_highlighted=true for the given IDs and false for all others.
+   */
+  async setHighlightedBatch(credorId: string, highlightedIds: string[]): Promise<void> {
+    // First, set all fields for this credor to not highlighted
+    const { error: resetError } = await (supabase
+      .from("atendimento_field_config" as any)
+      .update({ is_highlighted: false })
+      .eq("credor_id", credorId) as any);
+
+    if (resetError) {
+      logger.error("atendimentoFieldsService", "setHighlightedBatch:reset", resetError);
+      throw resetError;
+    }
+
+    if (highlightedIds.length === 0) return;
+
+    // Then set the selected ones as highlighted with sort_order
+    for (let i = 0; i < highlightedIds.length; i++) {
+      const { error } = await (supabase
+        .from("atendimento_field_config" as any)
+        .update({ is_highlighted: true, sort_order: i })
+        .eq("id", highlightedIds[i]) as any);
+
+      if (error) {
+        logger.error("atendimentoFieldsService", "setHighlightedBatch:set", error);
+        throw error;
+      }
+    }
+  },
+
+  /** @deprecated Use setHighlightedBatch instead */
   async toggleFieldVisibility(id: string, visible: boolean): Promise<void> {
     const { error } = await (supabase
       .from("atendimento_field_config" as any)
