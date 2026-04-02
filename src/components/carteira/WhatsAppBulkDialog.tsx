@@ -252,7 +252,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       {instances.length === 0 ? (
         <div className="text-center py-6 text-muted-foreground text-sm">
           <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
-          Nenhuma instância não-oficial ativa encontrada. Configure instâncias em <strong>Integrações &gt; WhatsApp</strong>.
+          Nenhuma instância ativa encontrada. Configure instâncias em <strong>Integrações &gt; WhatsApp</strong>.
         </div>
       ) : (
         <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -272,7 +272,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                 </p>
               </div>
               <Badge variant="outline" className="text-xs shrink-0">
-                {inst.provider_category === "unofficial" ? "Não oficial" : "Oficial"}
+                {inst.provider === "wuzapi" ? "WuzAPI" : inst.provider === "gupshup" ? "Gupshup" : inst.provider === "baylers" ? "Baylers" : inst.provider || "Evolution"}
               </Badge>
             </label>
           ))}
