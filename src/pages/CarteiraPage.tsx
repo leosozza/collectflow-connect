@@ -35,6 +35,9 @@ import CarteiraKanban from "@/components/carteira/CarteiraKanban";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit, XCircle, Clock, CheckCircle, Download, Plus, FileSpreadsheet, Headset, Phone, MessageSquare, LayoutList, Kanban, MoreVertical, Brain, Loader2, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/supabaseUtils";
@@ -215,7 +218,8 @@ const CarteiraPage = () => {
   // Server-side page state
   const [urlPage, setUrlPage] = useUrlState("page", 1);
   const currentPage = Number(urlPage) || 1;
-  const PAGE_SIZE = 50;
+  const [pageSize, setPageSize] = useUrlState("pageSize", 50);
+  const PAGE_SIZE = pageSize;
 
   // Build RPC filter params
   const rpcFilters = useMemo(() => ({
@@ -451,6 +455,17 @@ const CarteiraPage = () => {
   useEffect(() => {
     setSelectAllFiltered(false);
   }, [rpcFilters, currentPage]);
+
+  // Reset page and selection when pageSize changes
+  const prevPageSizeRef = useRef(pageSize);
+  useEffect(() => {
+    if (prevPageSizeRef.current !== pageSize) {
+      prevPageSizeRef.current = pageSize;
+      setUrlPage(1);
+      setSelectedIds(new Set());
+      setSelectAllFiltered(false);
+    }
+  }, [pageSize]);
 
   const handleSelectAllFiltered = async () => {
     if (!tenant?.id) return;
@@ -739,6 +754,49 @@ const CarteiraPage = () => {
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/* Pagination controls */}
+          {hasActiveFilters && totalPages > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Itens por página:</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="w-[80px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[50, 100, 200, 500, 1000].map((size) => (
+                      <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setUrlPage(currentPage - 1)}
+                  className="gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setUrlPage(currentPage + 1)}
+                  className="gap-1"
+                >
+                  Próxima <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
