@@ -1,75 +1,35 @@
 
 
-# Plano: Otimizar performance e robustez da integração 3CPlus no Atendimento
+# Plano: Corrigir contagem nos botões WhatsApp/Discador/Higienizar
 
-## 1. Correção de lentidão (Waterfall de Queries)
+## Causa Raiz
 
-**Problema**: As queries de `clientRecords`, `agreements`, `callLogs` dependem de `client?.cpf` — só iniciam após o fetch do cliente completar. Isso cria um waterfall sequencial.
-
-**Solução**: Criar uma única query combinada que busca o cliente por ID e, na mesma resposta, já retorna o CPF. Usar `initialData` ou prefetch para iniciar as queries dependentes mais cedo. Concretamente:
-
-- Adicionar `placeholderData` nas queries dependentes para que o React Query não bloqueie a renderização
-- Usar `queryClient.prefetchQuery` para as queries de agreements/callLogs assim que o CPF estiver disponível no cache (via `onSuccess` implícito do React Query v5)
-- Agrupar `clientRecords` + `agreements` + `callLogs` em um único `useQueries` que roda em paralelo assim que `client?.cpf` existir (já é o comportamento atual do React Query — o problema real é que cada query espera `enabled: !!client?.cpf` individualmente, mas todas já rodam em paralelo quando habilitadas)
-
-**Análise real**: As 3 queries (`clientRecords`, `agreements`, `callLogs`) já são independentes entre si e todas têm `enabled: !!client?.cpf`. O React Query as dispara **em paralelo** assim que `client?.cpf` fica disponível. O waterfall real é apenas: fetch client → fetch CPF-based queries. Para otimizar:
-
-- Extrair o CPF do state/params da navegação (quando vindo da carteira/telefonia, o CPF geralmente está disponível)
-- Passar `cpf` como query param na navegação para `/atendimento` e usá-lo como `initialCpf` para iniciar as queries antes do client fetch completar
-
-**Arquivo**: `src/pages/AtendimentoPage.tsx`
-
-## 2. Force Release do Agente (forceReleaseAgent)
-
-**Problema**: Se `qualifyOn3CPlus` falha, o agente fica preso em TPA/ACW na 3CPlus.
-
-**Solução**: Criar `forceReleaseAgent` em `dispositionService.ts` que chama `unpause_agent` no proxy. Integrar no `handleFinishDisposition` como fallback.
+A contagem nos botões é calculada assim:
 
 ```typescript
-export async function forceReleaseAgent(params: {
-  tenantSettings: Record<string, any>;
-  agentId: number;
-}): Promise<boolean>
+const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
+const uniqueSelectedCpfs = new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
 ```
 
-**Arquivo**: `src/services/dispositionService.ts`
+`displayClients` contém apenas os registros da **página atual** (ex: 500). Quando o usuário clica "Selecionar todos os N filtrados", `selectedIds` recebe milhares de IDs via RPC, mas o `.filter()` só encontra os que estão em `displayClients`. Resultado: o contador mostra o tamanho da página, não o total selecionado.
 
-## 3. Fallback automático na tabulação
+## Solução
 
-**Problema**: Quando `qualifyOn3CPlus` retorna `false` ou erro, o operador vê um toast mas fica preso.
+Quando `selectAllFiltered === true`, usar `selectedIds.size` diretamente como contagem nos botões, já que nesse cenário todos os IDs filtrados já foram carregados e representam clientes únicos por CPF (a RPC `get_carteira_grouped` já agrupa por CPF).
 
-**Solução**: No `onSuccess` da `dispositionMutation`, após falha de qualify:
-- Chamar `forceReleaseAgent` automaticamente como fallback
-- Se o fallback também falhar, exibir botão "Tentar Novamente" persistente no banner de status
-- Adicionar estado `qualifyFailed` que ativa o botão de retry no banner
+Concretamente:
 
-**Arquivo**: `src/pages/AtendimentoPage.tsx`
+```typescript
+const selectedCount = selectAllFiltered
+  ? selectedIds.size
+  : new Set(displayClients.filter(c => selectedIds.has(c.id)).map(c => c.cpf.replace(/\D/g, ""))).size;
+```
 
-## 4. Proteção contra sobrescrita do polling
+Substituir `uniqueSelectedCpfs` por `selectedCount` nos 4 botões (WhatsApp, Discador, Atribuir, Higienizar).
 
-**Problema**: Após hangup, o polling pode sobrescrever o estado local com dados da chamada anterior.
-
-**Solução**: No `useThreeCPlusStatus`, comparar o `callId` detectado com o `hungUpCallIdRef`. Se for o mesmo, não atualizar o state. Adicionar guard no `AtendimentoPage` para ignorar transições de status que referenciem um callId já tabulado.
-
-**Arquivo**: `src/hooks/useThreeCPlusStatus.ts`, `src/pages/AtendimentoPage.tsx`
-
-## 5. Banner de feedback visual aprimorado
-
-**Problema**: O banner não indica se a última tabulação sincronizou ou falhou.
-
-**Solução**: Adicionar estado `syncStatus: 'idle' | 'synced' | 'failed'` e renderizar no banner:
-- `synced` → badge verde "✓ Sincronizado com 3CPlus"
-- `failed` → badge vermelho "✗ Falha na sincronização" + botão "Tentar Novamente" que chama `forceReleaseAgent`
-
-**Arquivo**: `src/pages/AtendimentoPage.tsx`
-
-## Resumo de arquivos afetados
+## Arquivo Afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/dispositionService.ts` | Adicionar `forceReleaseAgent` |
-| `src/pages/AtendimentoPage.tsx` | CPF via params, fallback qualify, banner sync status, retry button |
-| `src/hooks/useThreeCPlusStatus.ts` | Guard contra sobrescrita de chamada já tabulada |
-
-Nenhuma alteração em banco, tabelas ou edge functions.
+| `src/pages/CarteiraPage.tsx` | Calcular contagem correta quando `selectAllFiltered` está ativo |
 
