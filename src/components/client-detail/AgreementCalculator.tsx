@@ -478,7 +478,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       <Card>
         <CardContent className="p-0">
           {pendentes.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">Nenhum título pendente</div>
+            <div className="p-6 text-center text-muted-foreground text-sm">
+              {hasActiveAgreement
+                ? "Todos os títulos deste credor estão vinculados ao acordo vigente. Cancele o acordo existente para renegociar."
+                : "Nenhum título pendente"}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
