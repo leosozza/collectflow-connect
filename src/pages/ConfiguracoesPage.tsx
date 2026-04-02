@@ -15,7 +15,7 @@ const ConfiguracoesPage = () => {
   const [active, setActive] = useUrlState("tab", "integracao");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
   const permissions = usePermissions();
-  const [visited, setVisited] = useState<Set<string>>(new Set(["integracao"]));
+  const [visited, setVisited] = useState<Set<string>>(() => new Set(["integracao", active]));
 
   const isMaxList = ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
 
