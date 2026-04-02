@@ -1,63 +1,40 @@
 
 
-# Plano: Formalização de Acordo com Dados Incompletos (Boleto Pendente)
+# Plano: Corrigir erro "Já existe boleto gerado com o código 1"
 
-## Estado Atual
+## Causa Raiz
 
-O fluxo já existe parcialmente no `AgreementCalculator.tsx`:
-- Ao gravar acordo BOLETO, valida campos obrigatórios via `checkRequiredFields()`
-- Se faltam campos, abre dialog com "Pular (sem boleto)" e "Salvar e Gerar Boletos"
-- Ao pular, o acordo é criado mas não há flag `boleto_pendente` nem botão para gerar depois
+O campo `id_parcela` enviado à API Negociarie é apenas o número da parcela (ex: `"1"`). Esse valor precisa ser único por CPF/documento no sistema Negociarie. Se um boleto anterior já foi gerado com `id_parcela = "1"` para este CPF (mesmo de outro acordo ou tentativa anterior), a API rejeita com "Já existe boleto gerado com o código 1".
 
-**O que falta:**
-1. Coluna `boleto_pendente` na tabela `agreements` para marcar acordos sem boleto
-2. Ao clicar "Pular", gravar `boleto_pendente = true` no acordo
-3. Exibir badge "Boleto pendente" no painel de parcelas (`AgreementInstallments`)
-4. Botão "Gerar Boletos" no `AgreementInstallments` quando `boleto_pendente = true`
-5. Ao gerar boletos depois, revalidar dados e reabrir modal se necessário
-6. Logs de auditoria para cada etapa
-
-## Alterações
-
-### 1. Migration: adicionar coluna `boleto_pendente`
-
-```sql
-ALTER TABLE public.agreements ADD COLUMN boleto_pendente boolean NOT NULL DEFAULT false;
+No código atual (`negociarieService.ts`, linhas 279 e 356):
+```typescript
+const idParcela = installment.number === 0 ? "" : String(installment.number);
 ```
 
-### 2. `src/components/client-detail/AgreementCalculator.tsx`
+Isso gera `"1"`, `"2"`, etc. — colide com boletos anteriores do mesmo CPF.
 
-- No "Pular (sem boleto)": após fechar dialog, atualizar acordo com `boleto_pendente = true`
-- Registrar evento de auditoria `acordo_criado_sem_boleto` via `logAction` com campos faltantes nos details
+## Correção
 
-### 3. `src/components/client-detail/AgreementInstallments.tsx`
+Tornar `id_parcela` único por acordo + parcela + tentativa, usando o mesmo padrão já aplicado ao `id_geral`:
 
-- Detectar `agreement.boleto_pendente === true` e nenhuma cobrança existente
-- Exibir banner "Boleto pendente — dados incompletos na criação"
-- Adicionar botão "Gerar Boletos"
-- Ao clicar:
-  - Validar dados do cliente via `clientProfileService.getClientProfile`
-  - Se completos: gerar boletos para todas as parcelas via `negociarieService.generateAgreementBoletos`, atualizar `boleto_pendente = false`
-  - Se incompletos: abrir dialog de preenchimento (mesmo padrão do Calculator), salvar dados, gerar boletos, atualizar flag
-- Registrar auditoria `boleto_gerado_posteriormente` + `dados_cliente_atualizados`
+```typescript
+// Antes:
+const idParcela = installment.number === 0 ? "" : String(installment.number);
 
-### 4. `src/services/agreementService.ts`
+// Depois:
+const shortAgreementId = agreement.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6);
+const idParcela = installment.number === 0
+  ? String(Date.now()).slice(-8)
+  : `${shortAgreementId}-${installment.number}-${Date.now().toString(36)}`;
+```
 
-- Adicionar `boleto_pendente` ao tipo `Agreement`
+Isso garante que cada tentativa de geração de boleto tenha um `id_parcela` único, eliminando conflitos com boletos anteriores.
 
-### 5. Exibição na lista de acordos
-
-- `AgreementsList.tsx`: exibir badge "Boleto pendente" ao lado do status quando `boleto_pendente === true`
-
-## Arquivos Afetados
+## Arquivo Afetado
 
 | Arquivo | Mudança |
 |---|---|
-| Migration SQL | Adicionar coluna `boleto_pendente` |
-| `src/services/agreementService.ts` | Adicionar campo ao tipo |
-| `src/components/client-detail/AgreementCalculator.tsx` | Marcar `boleto_pendente=true` ao pular |
-| `src/components/client-detail/AgreementInstallments.tsx` | Banner + botão "Gerar Boletos" + dialog de dados faltantes |
-| `src/components/acordos/AgreementsList.tsx` | Badge "Boleto pendente" |
+| `src/services/negociarieService.ts` | Gerar `idParcela` único em `generateSingleBoleto` e `generateAgreementBoletos` |
 
-Nenhuma alteração visual desnecessária. Fluxo existente preservado.
+Nenhuma alteração em banco, UI ou fluxo do operador.
 
