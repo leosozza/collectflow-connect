@@ -35,14 +35,14 @@ interface ClientHeaderProps {
   hasActiveCall?: boolean;
 }
 
-const InfoItem = ({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: React.ElementType }) => {
-  if (!value) return null;
+const InfoItem = ({ label, value, icon: Icon, forceRender }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean }) => {
+  if (!value && !forceRender) return null;
   return (
     <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
       <div className="min-w-0">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="text-sm text-foreground truncate">{value}</p>
+        <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
       </div>
     </div>
   );
@@ -208,12 +208,12 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     return { label: s?.toUpperCase() || "—", className: "bg-muted text-muted-foreground" };
   })();
 
-  const renderField = (f: { field_key: string }) => {
+  const renderField = (f: { field_key: string }, forceRender = false) => {
     const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
     if (!renderer) return null;
     const { label, value, icon } = renderer();
-    if (!value) return null;
-    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} />;
+    if (!value && !forceRender) return null;
+    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} />;
   };
 
   return (
@@ -302,7 +302,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
         {highlightedFields.length > 0 && (
           <div className="px-6 pb-4 -mt-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2">
-              {highlightedFields.map(renderField)}
+              {highlightedFields.map((f) => renderField(f, true))}
             </div>
           </div>
         )}
@@ -319,7 +319,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
         <CollapsibleContent>
           <div className="px-6 py-4 border-t border-border">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
-              {expandedFields.map(renderField)}
+              {expandedFields.map((f) => renderField(f))}
             </div>
           </div>
         </CollapsibleContent>
