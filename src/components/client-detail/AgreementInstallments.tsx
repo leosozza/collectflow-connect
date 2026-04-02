@@ -327,8 +327,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
         boletoInstallments
       );
-      // Clear boleto_pendente flag
-      await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      // Clear boleto_pendente flag only if at least one boleto was generated
+      if (result.success > 0) {
+        await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      }
       logAction({
         action: "boleto_gerado_posteriormente",
         entity_type: "agreement",
