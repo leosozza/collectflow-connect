@@ -21,7 +21,7 @@ import { negociarieService, BoletoInstallment } from "@/services/negociarieServi
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
+import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy, CheckCircle2 } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";

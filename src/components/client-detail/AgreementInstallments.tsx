@@ -73,22 +73,40 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-  const { data: clientRecords = [] } = useQuery({
-    queryKey: ["agreement-client-payments", cpf, agreementId],
+  // Fetch real payments linked to THIS agreement via client_events + manual_payments
+  const { data: agreementPaymentsTotal = 0 } = useQuery({
+    queryKey: ["agreement-real-payments", agreementId],
     queryFn: async () => {
-      const rawCpf = cpf.replace(/\D/g, "");
-      const { data, error } = await supabase
-        .from("clients")
-        .select("valor_pago, valor_parcela, status")
-        .or(`cpf.eq.${rawCpf},cpf.eq.${cpf}`)
-        .in("status", ["em_acordo", "pago"]);
-      if (error) return [];
-      return (data as any[]) || [];
+      let total = 0;
+
+      // 1. Payment events from client_events
+      const { data: paymentEvents } = await supabase
+        .from("client_events")
+        .select("metadata")
+        .eq("event_type", "payment_confirmed")
+        .filter("metadata->>agreement_id", "eq", agreementId);
+
+      if (paymentEvents) {
+        total += paymentEvents.reduce((sum: number, ev: any) => {
+          const val = Number(ev.metadata?.valor_pago || 0);
+          return sum + val;
+        }, 0);
+      }
+
+      // 2. Confirmed manual payments
+      const confirmedManual = manualPayments.filter((mp: any) => mp.status === "confirmed");
+      total += confirmedManual.reduce((sum: number, mp: any) => sum + Number(mp.amount || 0), 0);
+
+      // 3. Paid cobrancas from negociarie
+      const paidCobrancas = cobrancas.filter((c: any) => c.status === "pago");
+      total += paidCobrancas.reduce((sum: number, c: any) => sum + Number(c.valor || 0), 0);
+
+      return total;
     },
-    enabled: !!cpf,
+    enabled: !!agreementId,
   });
 
-  const totalPaidFromClients = clientRecords.reduce((sum: number, c: any) => sum + Number(c.valor_pago || 0), 0);
+  const totalPaidFromClients = agreementPaymentsTotal;
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
