@@ -267,7 +267,7 @@ export const negociarieService = {
   ) {
     let clientData: any = {};
     try {
-      clientData = await fetchClientAddress(agreement.client_cpf);
+      clientData = await getClientProfile(agreement.tenant_id, agreement.client_cpf);
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_single_boleto", e);
     }
