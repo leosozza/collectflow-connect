@@ -272,7 +272,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                 </p>
               </div>
               <Badge variant="outline" className="text-xs shrink-0">
-                {inst.provider_category === "unofficial" ? "Não oficial" : "Oficial"}
+                {inst.provider === "wuzapi" ? "WuzAPI" : inst.provider === "gupshup" ? "Gupshup" : inst.provider === "baylers" ? "Baylers" : inst.provider || "Evolution"}
               </Badge>
             </label>
           ))}

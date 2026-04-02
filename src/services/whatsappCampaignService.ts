@@ -129,14 +129,12 @@ export function distributeRoundRobin(
 // ---- Fetch eligible instances ----
 
 export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
-  // All unofficial instances that are active or connected are eligible for manual bulk
-  // supports_manual_bulk filter removed — legacy instances may not have this flag set
+  // All active/connected instances are eligible for manual bulk — no provider_category filter
   const { data, error } = await supabase
     .from("whatsapp_instances" as any)
     .select("id, name, instance_name, phone_number, provider, status, provider_category")
     .eq("tenant_id", tenantId)
-    .in("status", ["active", "connected"])
-    .eq("provider_category", "unofficial");
+    .in("status", ["active", "connected"]);
 
   if (error) throw error;
   return (data || []) as unknown as EligibleInstance[];

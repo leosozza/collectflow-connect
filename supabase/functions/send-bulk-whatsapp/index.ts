@@ -6,6 +6,72 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ===== Multi-provider send helper =====
+async function sendByProvider(
+  inst: any,
+  phone: string,
+  message: string,
+  tenantSettings: Record<string, any>,
+  fallbackEvolutionUrl: string,
+  fallbackEvolutionKey: string,
+  wuzapiUrl: string,
+  wuzapiAdminToken: string
+): Promise<{ ok: boolean; result: any; providerMessageId: string | null }> {
+  const provider = (inst.provider || "").toLowerCase();
+
+  if (provider === "wuzapi") {
+    const baseUrl = inst.instance_url || wuzapiUrl;
+    const token = inst.api_key || wuzapiAdminToken;
+    if (!baseUrl || !token) {
+      return { ok: false, result: { error: "WuzAPI URL ou token não configurado" }, providerMessageId: null };
+    }
+    const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
+      method: "POST",
+      headers: { "Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
+    });
+    const result = await resp.json();
+    return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null };
+  }
+
+  if (provider === "gupshup") {
+    const apiKey = tenantSettings.gupshup_api_key;
+    const sourceNumber = tenantSettings.gupshup_source_number;
+    const appName = tenantSettings.gupshup_app_name || "";
+    if (!apiKey || !sourceNumber) {
+      return { ok: false, result: { error: "Credenciais Gupshup não configuradas no tenant" }, providerMessageId: null };
+    }
+    const formBody = new URLSearchParams({
+      channel: "whatsapp",
+      source: sourceNumber,
+      destination: phone,
+      "src.name": appName,
+      message: JSON.stringify({ type: "text", text: message }),
+    });
+    const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/x-www-form-urlencoded" },
+      body: formBody.toString(),
+    });
+    const result = await resp.json();
+    return { ok: resp.ok, result, providerMessageId: result?.messageId || null };
+  }
+
+  // Default: Evolution / Baylers
+  const instanceUrl = (inst.instance_url || fallbackEvolutionUrl).replace(/\/+$/, "");
+  const instanceKey = inst.api_key || fallbackEvolutionKey;
+  if (!instanceUrl) {
+    return { ok: false, result: { error: "URL da instância Evolution não configurada" }, providerMessageId: null };
+  }
+  const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
+    method: "POST",
+    headers: { apikey: instanceKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ number: phone, text: message }),
+  });
+  const result = await resp.json();
+  return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -97,6 +163,14 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     });
   }
 
+  // Load tenant settings for Gupshup credentials
+  const { data: tenantData } = await supabase
+    .from("tenants")
+    .select("settings")
+    .eq("id", tenantId)
+    .single();
+  const tenantSettings = (tenantData?.settings || {}) as Record<string, any>;
+
   // Update campaign status to sending
   await supabase
     .from("whatsapp_campaigns")
@@ -125,9 +199,11 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     instanceMap.set(inst.id, inst);
   }
 
-  // Global Evolution API fallback
+  // Global fallback env vars
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+  const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
+  const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
   let sent = 0;
   let failed = 0;
@@ -171,22 +247,13 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           .replace(/\{\{credor\}\}/g, client.credor || "");
       }
 
-      const instanceUrl = inst.instance_url || evolutionUrl;
-      const instanceKey = inst.api_key || evolutionKey;
-
       try {
-        const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
-          method: "POST",
-          headers: {
-            apikey: instanceKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ number: recipient.phone, text: message }),
-        });
+        const { ok, result, providerMessageId } = await sendByProvider(
+          inst, recipient.phone, message, tenantSettings,
+          evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
+        );
 
-        const result = await resp.json();
-        const status = resp.ok ? "sent" : "failed";
-        const providerMessageId = result?.key?.id || result?.messageId || null;
+        const status = ok ? "sent" : "failed";
 
         await supabase
           .from("whatsapp_campaign_recipients")
@@ -215,6 +282,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
             campaign_id: campaignId,
             instance_id: recipient.assigned_instance_id,
             instance_name: inst.instance_name,
+            provider: inst.provider,
             provider_message_id: providerMessageId,
           },
         });
@@ -247,6 +315,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
             campaign_id: campaignId,
             instance_id: recipient.assigned_instance_id,
             instance_name: inst.instance_name,
+            provider: inst.provider,
           },
         });
 
@@ -258,7 +327,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       await new Promise((r) => setTimeout(r, 200));
     }
   } catch (globalErr: any) {
-    // If the loop itself throws unexpectedly, mark remaining as context error
     console.error("Campaign processing global error:", globalErr);
     errors.push(`Erro global no processamento: ${globalErr.message}`);
   }
@@ -267,11 +335,8 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   let finalStatus = "completed";
   if (sent === 0 && failed > 0) finalStatus = "failed";
   else if (sent > 0 && failed > 0) finalStatus = "completed_with_errors";
-  // If sent === 0 && failed === 0, campaign had no recipients — still "completed"
 
   // Update campaign with final counters
-  // NOTE: delivered_count and read_count remain at 0 — they depend on
-  // future webhook-based delivery/read tracking (Phase 2)
   await supabase
     .from("whatsapp_campaigns")
     .update({
