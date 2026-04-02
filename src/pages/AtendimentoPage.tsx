@@ -245,9 +245,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   });
 
   const { data: agreements = [] } = useQuery({
-    queryKey: ["atendimento-agreements", client?.cpf],
+    queryKey: ["atendimento-agreements", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("agreements").select("*, profiles:created_by(full_name)")
@@ -262,13 +262,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         profiles: undefined,
       }));
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const { data: callLogs = [] } = useQuery({
-    queryKey: ["atendimento-call-logs", client?.cpf],
+    queryKey: ["atendimento-call-logs", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("call_logs" as any).select("*")
@@ -279,7 +279,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (error) throw error;
       return (data || []) as any[];
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
