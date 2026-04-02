@@ -286,6 +286,106 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     return <Clock className="w-3.5 h-3.5 text-warning" />;
   };
 
+  const REQUIRED_FIELDS = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"] as const;
+  const FIELD_LABELS: Record<string, string> = {
+    email: "E-mail", phone: "Telefone", cep: "CEP",
+    endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+  };
+
+  const handleGenerateAllBoletos = async () => {
+    if (!tenantId) return;
+    setGeneratingAllBoletos(true);
+    try {
+      const profileData = await getClientProfile(tenantId, cpf);
+      const missing: Record<string, string> = {};
+      const found: Record<string, string> = {};
+      for (const f of REQUIRED_FIELDS) {
+        const val = (profileData as any)[f] || "";
+        if (val) found[f] = val;
+        else missing[f] = "";
+      }
+      if (Object.keys(missing).length > 0) {
+        setBoletoPendenteMissing(missing);
+        setBoletoPendenteFound(found);
+        setBoletoPendenteMissingOpen(true);
+        setGeneratingAllBoletos(false);
+        return;
+      }
+      await executeBoletosGeneration();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      setGeneratingAllBoletos(false);
+    }
+  };
+
+  const executeBoletosGeneration = async () => {
+    if (!tenantId) return;
+    setGeneratingAllBoletos(true);
+    try {
+      const boletoInstallments = installments.map((inst: any) => ({
+        number: inst.number,
+        value: inst.value,
+        dueDate: inst.dueDate.toISOString().split("T")[0],
+      }));
+      const result = await negociarieService.generateAgreementBoletos(
+        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
+        boletoInstallments
+      );
+      // Clear boleto_pendente flag
+      await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      logAction({
+        action: "boleto_gerado_posteriormente",
+        entity_type: "agreement",
+        entity_id: agreementId,
+        details: { cpf, credor: agreement.credor, success: result.success, failed: result.failed },
+      });
+      if (result.success > 0) {
+        toast({ title: `${result.success} boleto(s) gerado(s) com sucesso!` });
+      }
+      if (result.failed > 0) {
+        toast({ title: "Falha parcial", description: result.errors[0], variant: "destructive" });
+      }
+      refetchCobrancas();
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar boletos", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAllBoletos(false);
+    }
+  };
+
+  const handleSaveBoletoPendenteMissing = async () => {
+    if (!tenantId) return;
+    setSavingBoletoPendente(true);
+    try {
+      const rawCpf = cpf.replace(/\D/g, "");
+      const updatePayload: Record<string, string> = {};
+      for (const [key, val] of Object.entries(boletoPendenteMissing)) {
+        if (val.trim()) updatePayload[key] = val.trim();
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from("clients")
+          .update(updatePayload)
+          .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
+          .eq("tenant_id", tenantId);
+        await upsertClientProfile(tenantId, rawCpf, updatePayload, "manual");
+        logAction({
+          action: "dados_cliente_atualizados",
+          entity_type: "agreement",
+          entity_id: agreementId,
+          details: { cpf, campos_atualizados: Object.keys(updatePayload) },
+        });
+      }
+      setBoletoPendenteMissingOpen(false);
+      await executeBoletosGeneration();
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar dados", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingBoletoPendente(false);
+    }
+  };
+
   const [open, setOpen] = useState(false);
 
   return (
