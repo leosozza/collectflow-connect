@@ -266,6 +266,7 @@ export type Database = {
         Row: {
           approval_reason: string | null
           approved_by: string | null
+          boleto_pendente: boolean
           checkout_token: string | null
           client_cpf: string
           client_name: string
@@ -294,6 +295,7 @@ export type Database = {
         Insert: {
           approval_reason?: string | null
           approved_by?: string | null
+          boleto_pendente?: boolean
           checkout_token?: string | null
           client_cpf: string
           client_name: string
@@ -322,6 +324,7 @@ export type Database = {
         Update: {
           approval_reason?: string | null
           approved_by?: string | null
+          boleto_pendente?: boolean
           checkout_token?: string | null
           client_cpf?: string
           client_name?: string

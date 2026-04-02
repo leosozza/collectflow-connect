@@ -1,0 +1,1 @@
+ALTER TABLE public.agreements ADD COLUMN boleto_pendente boolean NOT NULL DEFAULT false;
