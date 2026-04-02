@@ -311,6 +311,26 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </span>
       </div>
 
+      {/* Boleto Pendente Banner */}
+      {(agreement as any).boleto_pendente && cobrancas.length === 0 && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span className="text-xs">Boletos pendentes — dados incompletos na criação do acordo.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-3 gap-1.5 text-xs h-7"
+              disabled={generatingAllBoletos}
+              onClick={handleGenerateAllBoletos}
+            >
+              {generatingAllBoletos ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileBarChart className="w-3 h-3" />}
+              Gerar Boletos
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <CollapsibleContent>
 
       <Table>
