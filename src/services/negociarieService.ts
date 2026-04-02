@@ -276,7 +276,10 @@ export const negociarieService = {
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
-    const idParcela = installment.number === 0 ? "" : String(installment.number);
+    const shortAgreementId = agreement.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6);
+    const idParcela = installment.number === 0
+      ? String(Date.now()).slice(-8)
+      : `${shortAgreementId}-${installment.number}-${Date.now().toString(36)}`;
     const payload = buildBoletoPayload(cleanCpf, clientData, agreement.client_name, agreement.id, {
       value: installment.value,
       dueDate: installment.dueDate,
