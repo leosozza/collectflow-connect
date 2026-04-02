@@ -8,13 +8,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useAtendimentoModalSafe } from "@/hooks/useAtendimentoModal";
 import { formatCPF } from "@/lib/formatters";
-import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, type DispositionType } from "@/services/dispositionService";
+import { createDisposition, fetchDispositions, qualifyOn3CPlus, saveCallLog, forceReleaseAgent, type DispositionType } from "@/services/dispositionService";
+import { dismissCallId, clearDismissedCallIds } from "@/hooks/useThreeCPlusStatus";
 import { executeAutomations } from "@/services/dispositionAutomationService";
 import { fetchCredorRules } from "@/services/cadastrosService";
 import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
 import { acquireLock, renewLock, releaseLock, takeoverLock } from "@/services/lockService";
 import { logAction } from "@/services/auditService";
-import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot, Lock } from "lucide-react";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot, Lock, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -77,10 +78,14 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const [callHungUp, setCallHungUp] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [lockOwner, setLockOwner] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'synced' | 'failed'>('idle');
   const lockRenewalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hungUpCallIdRef = useRef<string | number | null>(null);
   const settings = (tenant?.settings as Record<string, any>) || {};
   const effectiveCallId = callId || sessionStorage.getItem("3cp_last_call_id");
+
+  // Extract CPF from navigation state for early query start
+  const initialCpf = (location.state as any)?.cpf || searchParams.get("cpf") || undefined;
 
   // Lock lifecycle
   useEffect(() => {
@@ -206,11 +211,14 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     enabled: !!id,
   });
 
+  // Use initialCpf from nav state for early query start, fallback to client.cpf
+  const activeCpf = client?.cpf || initialCpf;
+
   // Fetch all records for this CPF
   const { data: clientRecords = [] } = useQuery({
-    queryKey: ["atendimento-records", client?.cpf],
+    queryKey: ["atendimento-records", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("clients").select("*")
@@ -221,7 +229,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (error) throw error;
       return data || [];
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const { data: credorRules } = useQuery({
@@ -237,9 +245,9 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   });
 
   const { data: agreements = [] } = useQuery({
-    queryKey: ["atendimento-agreements", client?.cpf],
+    queryKey: ["atendimento-agreements", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("agreements").select("*, profiles:created_by(full_name)")
@@ -254,13 +262,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         profiles: undefined,
       }));
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const { data: callLogs = [] } = useQuery({
-    queryKey: ["atendimento-call-logs", client?.cpf],
+    queryKey: ["atendimento-call-logs", activeCpf],
     queryFn: async () => {
-      const cpf = client!.cpf;
+      const cpf = activeCpf!;
       const rawCpf = cpf.replace(/\D/g, "");
       let q = supabase
         .from("call_logs" as any).select("*")
@@ -271,7 +279,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       if (error) throw error;
       return (data || []) as any[];
     },
-    enabled: !!client?.cpf,
+    enabled: !!activeCpf,
   });
 
   const effectiveAgentId = agentId || ((profile as any)?.threecplus_agent_id as number | undefined);
@@ -313,26 +321,46 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         // Use hungUpCallIdRef if sessionStorage was already cleared by hangup
         const qualifyCallId = callId || hungUpCallIdRef.current || undefined;
         qualifyOn3CPlus({ dispositionType: variables.type, tenantSettings: settings, agentId: effectiveAgentId, callId: qualifyCallId, tenantId: tenant?.id })
-          .then((success) => {
+          .then(async (success) => {
             if (success) {
-              // Only set flag AFTER confirmed success — not prematurely
               sessionStorage.setItem("3cp_qualified_from_disposition", "true");
               sessionStorage.removeItem("3cp_last_call_id");
+              setSyncStatus('synced');
               toast.success("Qualificação enviada automaticamente para a 3CPlus");
             } else {
-              console.warn("[Atendimento] qualifyOn3CPlus retornou false — ACW fallback será exibido");
-              toast.warning("Tabulação salva no RIVO, mas falhou ao sincronizar com a 3CPlus", {
-                description: "A qualificação pode precisar ser feita manualmente no discador.",
-                duration: 8000,
-              });
+              console.warn("[Atendimento] qualifyOn3CPlus retornou false — tentando forceRelease como fallback");
+              // Fallback: force release agent from TPA/ACW
+              const released = await forceReleaseAgent({ tenantSettings: settings, agentId: effectiveAgentId });
+              if (released) {
+                sessionStorage.removeItem("3cp_last_call_id");
+                setSyncStatus('synced');
+                toast.success("Tabulação salva. Agente liberado da fila.");
+              } else {
+                setSyncStatus('failed');
+                toast.warning("Tabulação salva no RIVO, mas falhou ao sincronizar com a 3CPlus", {
+                  description: "Use o botão 'Tentar Novamente' no banner para liberar o agente.",
+                  duration: 8000,
+                });
+              }
             }
           })
-          .catch((err) => {
+          .catch(async (err) => {
             console.error("[Atendimento] qualifyOn3CPlus error:", err);
-            toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+            // Fallback on error too
+            const released = await forceReleaseAgent({ tenantSettings: settings, agentId: effectiveAgentId }).catch(() => false);
+            if (released) {
+              setSyncStatus('synced');
+              toast.info("Tabulação salva. Agente liberado via fallback.");
+            } else {
+              setSyncStatus('failed');
+              toast.warning("Tabulação salva no RIVO, mas erro ao enviar para 3CPlus");
+            }
           })
           .finally(() => {
             // Clean up hung up ref and flag after tabulation completes
+            if (hungUpCallIdRef.current) {
+              dismissCallId(hungUpCallIdRef.current);
+            }
             hungUpCallIdRef.current = null;
             sessionStorage.removeItem("3cp_call_hung_up");
           });
@@ -472,11 +500,13 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
       } else {
         toast.success("Ligação encerrada");
         setCallHungUp(true);
+        setSyncStatus('idle');
         // Save call_id in ref for later tabulation, then clear sessionStorage immediately
         hungUpCallIdRef.current = activeCallId;
+        dismissCallId(activeCallId);
         sessionStorage.removeItem("3cp_last_call_id");
         sessionStorage.setItem("3cp_call_hung_up", "true");
-        console.log("[Hangup] call_id salvo em ref:", activeCallId, "— sessionStorage limpo");
+        console.log("[Hangup] call_id salvo em ref:", activeCallId, "— sessionStorage limpo, dismissedCallId definido");
         // Register call_hangup event
         if (tenant?.id && client?.cpf) {
           supabase.from("client_events").insert({
@@ -587,6 +617,36 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
         <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold ${statusConfig.bgClass} ${statusConfig.pulse ? "animate-pulse" : ""}`}>
           <statusConfig.icon className="w-4 h-4" />
           {statusConfig.label}
+          {syncStatus === 'synced' && (
+            <Badge variant="outline" className="ml-2 bg-white/20 text-white border-white/30 text-[10px]">
+              <CheckCircle2 className="w-3 h-3 mr-1" /> Sincronizado
+            </Badge>
+          )}
+          {syncStatus === 'failed' && (
+            <>
+              <Badge variant="outline" className="ml-2 bg-destructive/20 text-white border-white/30 text-[10px]">
+                <AlertTriangle className="w-3 h-3 mr-1" /> Falha na sincronização
+              </Badge>
+              <Button
+                onClick={async () => {
+                  if (!effectiveAgentId) return;
+                  const released = await forceReleaseAgent({ tenantSettings: settings, agentId: effectiveAgentId });
+                  if (released) {
+                    setSyncStatus('synced');
+                    toast.success("Agente liberado com sucesso");
+                  } else {
+                    toast.error("Falha ao liberar agente. Tente novamente.");
+                  }
+                }}
+                size="sm"
+                variant="secondary"
+                className="ml-1 gap-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Tentar Novamente
+              </Button>
+            </>
+          )}
           {showFinishButton && (
             <Button
               onClick={handleFinishDisposition}

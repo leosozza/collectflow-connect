@@ -14,6 +14,20 @@ export interface ThreeCPlusAgentState {
 }
 
 /**
+ * Mark a callId as "hung up" so the polling won't overwrite local state
+ * with stale data from a call that the operator already handled.
+ */
+let _dismissedCallIds = new Set<string>();
+
+export function dismissCallId(callId: string | number | null) {
+  if (callId) _dismissedCallIds.add(String(callId));
+}
+
+export function clearDismissedCallIds() {
+  _dismissedCallIds.clear();
+}
+
+/**
  * Shared hook that polls the 3CPlus agents_status + company_calls endpoints independently.
  * Works regardless of whether TelefoniaDashboard is mounted.
  * Polls every 5s when on call, 10s otherwise.
@@ -107,16 +121,31 @@ export function useThreeCPlusStatus(): ThreeCPlusAgentState {
         if (activeCall) {
           const telephonyId = activeCall.telephony_id || activeCall.call_id || activeCall.id;
           if (telephonyId) {
-            callId = telephonyId;
-            sessionStorage.setItem("3cp_last_call_id", String(telephonyId));
+            // Guard: skip if this callId was already dismissed (hung up / tabulated)
+            if (_dismissedCallIds.has(String(telephonyId))) {
+              // Don't update callId or contact info — stale data
+              callId = null;
+              activeCallPhone = null;
+              activeCallCpf = null;
+              activeCallClientDbId = null;
+            } else {
+              callId = telephonyId;
+              sessionStorage.setItem("3cp_last_call_id", String(telephonyId));
+              activeCallPhone = activeCall.phone || myAgent?.phone || myAgent?.remote_phone || null;
+              activeCallCpf = activeCall.identifier || activeCall.mailing_identifier || null;
+              activeCallClientDbId = activeCall.Extra3 || activeCall.extra3 || activeCall.mailing_extra3 || null;
+            }
           }
-          activeCallPhone = activeCall.phone || myAgent?.phone || myAgent?.remote_phone || null;
-          activeCallCpf = activeCall.identifier || activeCall.mailing_identifier || null;
-          activeCallClientDbId = activeCall.Extra3 || activeCall.extra3 || activeCall.mailing_extra3 || null;
         }
       }
 
       setState({ status, callId, isOnline, lastPoll: new Date(), activeCallPhone, activeCallCpf, activeCallClientDbId });
+      lastStatusRef.current = status;
+
+      // Auto-clear dismissed IDs when agent goes back to idle (status 1) — fresh cycle
+      if (status === 1 || status === undefined) {
+        _dismissedCallIds.clear();
+      }
       lastStatusRef.current = status;
     } catch {
       // silent — network errors shouldn't break the UI
