@@ -60,7 +60,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
   const { tenant, tenantUser } = useTenant();
   const queryClient = useQueryClient();
   const { trackAction } = useActivityTracker();
-  const { agentStatus, onFinishDisposition } = useAtendimentoModalSafe();
+  const { agentStatus, onFinishDisposition, liveAgentState } = useAtendimentoModalSafe();
 
   // Read agentId/callId/channel from URL params when not provided as props
   const agentId = propAgentId || (searchParams.get("agentId") ? Number(searchParams.get("agentId")) : undefined);
