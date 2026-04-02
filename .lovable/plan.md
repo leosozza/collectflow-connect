@@ -1,47 +1,79 @@
 
 
-# Plano: Detalhes expandíveis nos logs de auditoria + rotas nas abas de Configurações
+# Plano: Atualizar ficha do cliente quando nova ligação chega em /atendimento
 
-## Problemas
+## Causa Raiz
 
-1. **Logs sem detalhes**: A coluna "Detalhes" mostra texto truncado sem possibilidade de expandir e ver o conteúdo completo (ex: métricas de importação, campos alterados).
-2. **Sem rota nas abas**: `/configuracoes` usa `?tab=auditoria` via query string, mas ao navegar diretamente não há rota dedicada — o `useUrlState` já resolve isso via query param, porém a URL não reflete a aba ativa de forma persistente ao compartilhar links.
+Quando o operador já está em `/atendimento/clienteA` e uma nova ligação entra pela 3CPlus:
+
+1. O `TelefoniaDashboard` (que resolve o cliente e navega) está em `/contact-center` — **não está montado**
+2. O `useThreeCPlusStatus` polling detecta que o agente voltou ao status 2, mas **não extrai dados da chamada** (telefone, CPF, mailing) — só retorna `status` e `isOnline`
+3. Não existe nenhuma lógica em `AtendimentoPage` para detectar "nova ligação com outro cliente" e navegar
+
+Resultado: a ficha anterior permanece aberta indefinidamente.
 
 ## Solução
 
-### 1. Linhas expandíveis na tabela de Logs (`AuditoriaPage.tsx` — `LogsTab`)
+### 1. `useThreeCPlusStatus.ts` — Expor dados da chamada ativa
 
-Adicionar um estado `expandedLogId` e tornar cada linha clicável. Ao clicar, expande uma linha extra abaixo com os detalhes completos formatados:
+Adicionar um segundo request ao polling: `company_calls` (igual ao TelefoniaDashboard faz). Do resultado, extrair a chamada ativa do agente e expor no estado:
 
-- **Detalhes genéricos**: Renderizar cada chave/valor do objeto `details` em formato legível (grid de 2-3 colunas)
-- **Importação** (`action: import_completed`): Mostrar cards com métricas — total importado, inseridos, atualizados, erros, credor, duração
-- **Operacional** (`entity_type: operational`): Mostrar módulo, sucesso/erro, duração, mensagem de erro se houver
-- **Acordo** (`entity_type: agreement`): Mostrar CPF, credor, valor
-- **Fallback**: JSON formatado para detalhes não mapeados
-
-UI da expansão:
-- Ícone `ChevronDown/ChevronUp` na primeira coluna
-- Linha expandida com `colSpan=5`, fundo `bg-muted/20`, padding generoso
-- Detalhes em grid com labels em `text-muted-foreground` e valores em `text-foreground`
-
-### 2. Rotas nas abas de Configurações (`ConfiguracoesPage.tsx`)
-
-O `useUrlState("tab", "integracao")` já sincroniza com `?tab=xxx` na URL. Isso já funciona — ao acessar `/configuracoes?tab=auditoria` a aba correta abre.
-
-**Melhoria**: Garantir que ao clicar numa aba o `visited` set seja populado a partir do valor inicial da URL (não só do default). Atualmente, se o usuário acessa `/configuracoes?tab=auditoria` diretamente, o `visited` começa com `Set(["integracao"])` e não inclui `"auditoria"`, então a aba não renderiza.
-
-**Fix**: Inicializar `visited` incluindo o valor ativo vindo da URL:
 ```typescript
-const [active, setActive] = useUrlState("tab", "integracao");
-const [visited, setVisited] = useState<Set<string>>(() => new Set(["integracao", active]));
+export interface ThreeCPlusAgentState {
+  status: number | undefined;
+  callId: string | number | null;
+  isOnline: boolean;
+  lastPoll: Date | null;
+  // NOVOS campos:
+  activeCallPhone: string | null;
+  activeCallCpf: string | null;
+  activeCallClientDbId: string | null;
+}
+```
+
+No poll, após obter `myAgent` do `agents_status`, também invocar `company_calls`, filtrar pela chamada ativa do agente (mesma lógica do TelefoniaDashboard), e extrair `phone`, `identifier/mailing_identifier` (CPF) e `Extra3/mailing_extra3` (client DB id).
+
+### 2. `AtendimentoPage.tsx` — Detectar nova chamada e navegar
+
+Adicionar um `useEffect` que observa `liveAgentState`. Quando detectar:
+- `status === 2` (em ligação)
+- `activeCallClientDbId` ou `activeCallCpf` ou `activeCallPhone` presentes
+- O cliente resolvido é **diferente** do `id` atual
+
+→ Navegar para `/atendimento/:novoClientId` com os params corretos (`callId`, `channel=call`).
+
+Para resolver o cliente a partir de CPF/phone, usar uma query simples ao banco (mesma lógica do `TelefoniaAtendimentoWrapper`).
+
+### 3. Limpeza de estado na troca de cliente
+
+Ao detectar navegação para novo cliente, limpar:
+- `callHungUp`
+- `hungUpCallIdRef`
+- `activeSessionId`
+- `sessionStorage` flags (`3cp_call_hung_up`, `3cp_qualified_from_disposition`)
+
+## Fluxo Novo
+
+```text
+Operador em /atendimento/clienteA
+   ↓
+3CPlus envia nova ligação (status → 2)
+   ↓
+useThreeCPlusStatus detecta status=2 + phone/CPF do novo cliente
+   ↓
+AtendimentoPage detecta clienteB ≠ clienteA
+   ↓
+Navega para /atendimento/clienteB?callId=X&channel=call
+   ↓
+Ficha atualiza automaticamente
 ```
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/AuditoriaPage.tsx` | Linhas expandíveis com detalhes formatados no `LogsTab` |
-| `src/pages/ConfiguracoesPage.tsx` | Inicializar `visited` com aba ativa da URL |
+| `src/hooks/useThreeCPlusStatus.ts` | Polling de `company_calls` + expor phone/CPF/clientDbId |
+| `src/pages/AtendimentoPage.tsx` | Effect para detectar nova chamada e navegar ao novo cliente |
 
-Nenhuma alteração em banco, serviços ou fluxos operacionais.
+Nenhuma alteração em banco, serviços ou fluxos operacionais. O TelefoniaDashboard continua funcionando igual quando montado.
 
