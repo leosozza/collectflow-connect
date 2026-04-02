@@ -1,63 +1,63 @@
 
-Problema confirmado: a instância informada existe no banco e pertence ao tenant correto, com `supports_manual_bulk=true` e `is_default=true`, mas está salva com `status="connecting"`. O modal de disparo hoje só considera `active/connected`, então ela fica invisível mesmo estando operacional na interface.
 
-## Causa raiz
-- `fetchEligibleInstances` filtra por status persistido no banco, não pela elegibilidade real.
-- A tela de Integrações mostra a instância como utilizável a partir de checagem em tempo real (`statusMap`), mas isso não é refletido em `whatsapp_instances.status`.
-- Resultado: há divergência entre “instância ativa para o usuário” e “instância elegível para campanha”.
+# Plano: Corrigir formalização de acordos — dados não encontrados + falso "pago"
 
-## Ajuste proposto
-### 1) Corrigir a elegibilidade em `src/services/whatsappCampaignService.ts`
-- Parar de depender apenas de `.in("status", ["active", "connected"])`.
-- Buscar também os campos de capacidade:
-  - `supports_manual_bulk`
-  - `is_default`
-- Aplicar uma normalização de elegibilidade:
-  - incluir instâncias com `supports_manual_bulk = true`
-  - aceitar status operacionais como `active`, `connected`, `connecting`, `open`
-  - permitir fallback para instância padrão (`is_default`) quando ela for claramente a origem operacional do tenant
-- Manter Gupshup virtual como já está.
+## Diagnóstico da cliente Thais dos Santos Pereira
 
-Regra prática:
-```text
-Elegível = suporta bulk E (
-  status em [active, connected, connecting, open]
-  OU é a instância padrão do tenant
-)
-```
+**Dados no banco** (CPF 35535744883, 12 registros):
+- 7 registros com `status=pago` (títulos originais já quitados)
+- 5 registros com `status=em_acordo` (vinculados ao acordo pendente)
+- **Email vazio em TODOS os 12 registros**
+- Endereço, telefone, CEP, cidade, UF — todos preenchidos
 
-### 2) Normalizar o retorno para o modal
-- Ordenar instâncias elegíveis com prioridade:
-  1. padrão
-  2. conectada/ativa
-  3. demais elegíveis
-- Expor um status normalizado para o `WhatsAppBulkDialog` sem mudar layout.
+### Problema 1: "Não encontrou informações da cliente"
 
-### 3) Reforçar validação no `src/components/carteira/WhatsAppBulkDialog.tsx`
-- Se não houver nenhuma instância elegível, mostrar motivo mais preciso:
-  - “Nenhuma instância habilitada para disparo em lote”
-  - em vez de mensagem genérica de “nenhuma instância ativa”
-- Manter mesma UX; só melhorar a lógica e o texto.
+O campo **email** está vazio. Quando o operador tenta formalizar o acordo com boleto, o sistema abre o diálogo de "campos obrigatórios ausentes" pedindo o email. Isso funciona corretamente, mas dois problemas tornam a experiência confusa:
 
-### 4) Preservar consistência do envio
-- Não mexer no fluxo de campanha nem no roteamento por provider.
-- O problema atual está antes do envio: seleção/elegibilidade.
-- O `send-bulk-whatsapp` permanece como executor multi-provider.
+**a)** O diálogo não mostra os campos que JÁ foram encontrados — parece que o sistema "não encontrou nada", quando na verdade só falta o email.
 
-## Resultado esperado
-```text
-Instância "Acordos Vitor Santana"
-  -> encontrada no banco
-  -> provider evolution
-  -> supports_manual_bulk = true
-  -> status = connecting
-  -> is_default = true
-  => passa a aparecer no modal de disparo
-```
+**b)** Se o operador clica "Pular (sem boleto)", o acordo é criado sem boleto, e em seguida o bug de pagamento (Problema 2) marca o acordo como pago.
 
-## Arquivos afetados
-- `src/services/whatsappCampaignService.ts`
-- `src/components/carteira/WhatsAppBulkDialog.tsx`
+### Problema 2: Acordo marcado como "pago" sem pagamento real
 
-## Observação técnica
-O ajuste corrige exatamente o caso informado sem mudar experiência do usuário: a origem continuará aparecendo no mesmo seletor do modal, apenas com regra de elegibilidade compatível com o estado real da integração.
+Já diagnosticado na conversa anterior — `AgreementInstallments` soma `valor_pago` de TODOS os registros do CPF (incluindo os 7 títulos originais pagos = R$ 722,50), superando o valor do acordo (R$ 400,01), marcando falsamente como pago.
+
+## Correções
+
+### 1. `src/components/client-detail/AgreementCalculator.tsx`
+
+**Melhorar diálogo de campos faltantes:**
+- Mostrar os campos já encontrados (preenchidos) acima dos campos faltantes, para o operador ver que o sistema encontrou os dados e só precisa complementar
+- Alterar o texto do diálogo de "Preencha os dados do devedor" para "Quase lá! Apenas o campo abaixo precisa ser preenchido para gerar o boleto."
+- Manter funcionalidade idêntica
+
+### 2. `src/components/client-detail/AgreementInstallments.tsx`
+
+**Corrigir fonte de pagamento do acordo:**
+- Parar de somar `clients.valor_pago` genérico como proxy de pagamento do acordo
+- Buscar pagamentos reais vinculados ao acordo via `client_events` com `event_type = 'payment_confirmed'` e `metadata->>'agreement_id'` correspondente
+- Fallback para `manual_payments` se existir tabela
+- Resultado: apenas pagamentos REAIS do acordo contam para marcar parcelas como pagas
+
+### 3. `supabase/functions/auto-expire-agreements/index.ts`
+
+**Mesma correção de fonte de pagamento:**
+- Substituir query de `clients.valor_pago` por busca em `client_events` com `event_type = 'payment_confirmed'` filtrado por `agreement_id`
+- Garantir que acordos não sejam marcados como pagos por pagamentos de títulos originais
+
+### 4. `src/components/client-detail/AgreementCalculator.tsx` (calculadora)
+
+**Mensagem quando todos os títulos estão em acordo:**
+- Quando `pendentes.length === 0` e `hasActiveAgreement === true`, exibir mensagem clara: "Todos os títulos deste credor estão vinculados ao acordo vigente. Cancele o acordo existente para renegociar."
+- Evitar que o operador fique confuso com calculadora vazia
+
+## Arquivos Afetados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/components/client-detail/AgreementCalculator.tsx` | Diálogo mais claro + mensagem quando sem títulos disponíveis |
+| `src/components/client-detail/AgreementInstallments.tsx` | Corrigir fonte de pagamento — usar `client_events` em vez de `clients.valor_pago` |
+| `supabase/functions/auto-expire-agreements/index.ts` | Mesma correção de fonte de pagamento |
+
+Nenhuma alteração em banco ou tabelas. O fluxo de formalização permanece idêntico.
+
