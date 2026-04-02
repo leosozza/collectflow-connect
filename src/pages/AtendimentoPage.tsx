@@ -15,7 +15,7 @@ import { fetchCredorRules } from "@/services/cadastrosService";
 import { findOrCreateSession, type SessionChannel } from "@/services/atendimentoSessionService";
 import { acquireLock, renewLock, releaseLock, takeoverLock } from "@/services/lockService";
 import { logAction } from "@/services/auditService";
-import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot, Lock } from "lucide-react";
+import { ArrowLeft, Home, Phone, PhoneOff, Coffee, Clock, CheckCircle2, Loader2, MessageSquare, Globe, Bot, Lock, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
