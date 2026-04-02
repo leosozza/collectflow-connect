@@ -302,7 +302,7 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
         {highlightedFields.length > 0 && (
           <div className="px-6 pb-4 -mt-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2">
-              {highlightedFields.map(renderField)}
+              {highlightedFields.map((f) => renderField(f, true))}
             </div>
           </div>
         )}
