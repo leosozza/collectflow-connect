@@ -56,6 +56,8 @@ export interface EligibleInstance {
   provider: string;
   status: string;
   provider_category: string;
+  is_default?: boolean;
+  supports_manual_bulk?: boolean;
 }
 
 export interface DeduplicatedRecipient {
