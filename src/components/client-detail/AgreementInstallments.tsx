@@ -132,10 +132,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const customKey = "entrada";
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     const value = customValues[customKey] ?? agreement.entrada_value;
-    const cobranca = cobrancas.find((c: any) => {
-      const cDate = new Date(c.data_vencimento);
-      return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
-    });
+    const expectedKey = `${agreementId}:0`;
+    const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
     installments.push({ number: 0, displayNumber: 1, dueDate, value, cobranca, isEntrada: true, customKey });
   }
 
@@ -145,10 +143,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const customKey = String(instNum);
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     const value = customValues[customKey] ?? agreement.new_installment_value;
-    const cobranca = cobrancas.find((c: any) => {
-      const cDate = new Date(c.data_vencimento);
-      return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
-    });
+    const expectedKey = `${agreementId}:${instNum}`;
+    const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
     installments.push({ number: instNum, displayNumber: instNum, dueDate, value, cobranca, isEntrada: false, customKey });
   }
 
@@ -331,8 +327,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
         boletoInstallments
       );
-      // Clear boleto_pendente flag
-      await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      // Clear boleto_pendente flag only if at least one boleto was generated
+      if (result.success > 0) {
+        await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
+      }
       logAction({
         action: "boleto_gerado_posteriormente",
         entity_type: "agreement",
