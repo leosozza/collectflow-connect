@@ -94,19 +94,32 @@ Deno.serve(async (req) => {
 
         const expectedPaid = pastDueEntries[pastDueEntries.length - 1].cumulative;
 
-        // Normalize CPF for matching (DB may store with dots/dashes)
-        const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
-        const fmtCpf = rawCpf.length === 11
-          ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
-          : rawCpf;
+        // Fetch REAL payments linked to THIS agreement via client_events
+        let totalPaid = 0;
 
-        const { data: clientRecords } = await supabase
-          .from("clients")
-          .select("valor_pago")
+        const { data: paymentEvents } = await supabase
+          .from("client_events")
+          .select("metadata")
           .eq("tenant_id", a.tenant_id)
-          .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf},cpf.eq.${a.client_cpf}`);
+          .eq("event_type", "payment_confirmed")
+          .filter("metadata->>agreement_id", "eq", a.id);
 
-        const totalPaid = (clientRecords || []).reduce((sum: number, c: any) => sum + (c.valor_pago || 0), 0);
+        if (paymentEvents) {
+          totalPaid += paymentEvents.reduce((sum: number, ev: any) => {
+            return sum + Number(ev.metadata?.valor_pago || 0);
+          }, 0);
+        }
+
+        // Also check negociarie cobrancas paid for this agreement
+        const { data: paidCobrancas } = await supabase
+          .from("negociarie_cobrancas" as any)
+          .select("valor, status")
+          .eq("agreement_id", a.id)
+          .eq("status", "pago");
+
+        if (paidCobrancas) {
+          totalPaid += (paidCobrancas as any[]).reduce((sum: number, c: any) => sum + Number(c.valor || 0), 0);
+        }
 
         const isOverdue = totalPaid < expectedPaid - 0.01;
 

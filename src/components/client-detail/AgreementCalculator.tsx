@@ -21,7 +21,7 @@ import { negociarieService, BoletoInstallment } from "@/services/negociarieServi
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy } from "lucide-react";
+import { Calculator, FileCheck, Loader2, AlertTriangle, Play, Copy, CheckCircle2 } from "lucide-react";
 import { enrichClientAddress } from "@/services/addressEnrichmentService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
@@ -478,7 +478,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       <Card>
         <CardContent className="p-0">
           {pendentes.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">Nenhum título pendente</div>
+            <div className="p-6 text-center text-muted-foreground text-sm">
+              {hasActiveAgreement
+                ? "Todos os títulos deste credor estão vinculados ao acordo vigente. Cancele o acordo existente para renegociar."
+                : "Nenhum título pendente"}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -702,13 +706,39 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-warning">
               <AlertTriangle className="w-5 h-5" />
-              Dados incompletos para emissão de boleto
+              Quase lá! Complete os dados para gerar o boleto
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            O acordo foi criado, mas faltam dados obrigatórios para gerar os boletos. Preencha os campos abaixo:
+            O acordo foi criado com sucesso. {Object.keys(missingFields).length === 1
+              ? "Apenas o campo abaixo precisa ser preenchido para gerar o boleto:"
+              : "Preencha os campos faltantes abaixo para gerar os boletos:"}
           </p>
+
+          {/* Show found fields */}
+          {(() => {
+            const { consolidated } = checkRequiredFields();
+            const labelMap: Record<string, string> = {
+              email: "E-mail", phone: "Telefone", cep: "CEP",
+              endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+            };
+            const foundFields = Object.entries(consolidated).filter(([key, val]) => val && !missingFields.hasOwnProperty(key));
+            return foundFields.length > 0 ? (
+              <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
+                {foundFields.map(([key, val]) => (
+                  <div key={key} className="flex items-center gap-2 text-xs">
+                    <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+                    <span className="text-muted-foreground">{labelMap[key] || key}:</span>
+                    <span className="font-medium truncate">{val}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
+
           <div className="space-y-3 py-2">
+            <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
             {Object.keys(missingFields).map((field) => {
               const labelMap: Record<string, string> = {
                 email: "E-mail", phone: "Telefone", cep: "CEP",
