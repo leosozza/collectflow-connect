@@ -1,79 +1,52 @@
 
 
-# Plano: Atualizar ficha do cliente quando nova ligação chega em /atendimento
+# Plano: Paginação configurável e sem limite de seleção na Carteira
 
-## Causa Raiz
+## Problema
 
-Quando o operador já está em `/atendimento/clienteA` e uma nova ligação entra pela 3CPlus:
-
-1. O `TelefoniaDashboard` (que resolve o cliente e navega) está em `/contact-center` — **não está montado**
-2. O `useThreeCPlusStatus` polling detecta que o agente voltou ao status 2, mas **não extrai dados da chamada** (telefone, CPF, mailing) — só retorna `status` e `isOnline`
-3. Não existe nenhuma lógica em `AtendimentoPage` para detectar "nova ligação com outro cliente" e navegar
-
-Resultado: a ficha anterior permanece aberta indefinidamente.
+1. `PAGE_SIZE = 50` é hardcoded — não há seletor para o usuário escolher quantos registros ver por página
+2. Não existem controles de paginação (botões anterior/próxima) renderizados na UI, apesar das variáveis `totalPages` e `setUrlPage` existirem no código
+3. O discador mostra o count baseado nos selecionados da página atual (máx 50), mas o botão "Selecionar todos os N filtrados" já funciona corretamente
 
 ## Solução
 
-### 1. `useThreeCPlusStatus.ts` — Expor dados da chamada ativa
+### `src/pages/CarteiraPage.tsx`
 
-Adicionar um segundo request ao polling: `company_calls` (igual ao TelefoniaDashboard faz). Do resultado, extrair a chamada ativa do agente e expor no estado:
+1. **Substituir `PAGE_SIZE = 50` por estado URL-synced**:
+   - Adicionar `useUrlState("pageSize", 50)` 
+   - Opções: 50, 100, 200, 500, 1000
 
-```typescript
-export interface ThreeCPlusAgentState {
-  status: number | undefined;
-  callId: string | number | null;
-  isOnline: boolean;
-  lastPoll: Date | null;
-  // NOVOS campos:
-  activeCallPhone: string | null;
-  activeCallCpf: string | null;
-  activeCallClientDbId: string | null;
-}
-```
+2. **Adicionar seletor de itens por página**: Um `Select` compacto ao lado dos controles de paginação com as opções acima
 
-No poll, após obter `myAgent` do `agents_status`, também invocar `company_calls`, filtrar pela chamada ativa do agente (mesma lógica do TelefoniaDashboard), e extrair `phone`, `identifier/mailing_identifier` (CPF) e `Extra3/mailing_extra3` (client DB id).
+3. **Adicionar controles de paginação**: Renderizar abaixo da tabela:
+   - Botão "Anterior" (desabilitado na página 1)
+   - Indicador "Página X de Y" 
+   - Botão "Próxima" (desabilitado na última página)
+   - Ao trocar `pageSize`, resetar para página 1
 
-### 2. `AtendimentoPage.tsx` — Detectar nova chamada e navegar
+4. **Reset de página ao trocar pageSize**: Quando o usuário muda o tamanho da página, voltar para `page=1`
 
-Adicionar um `useEffect` que observa `liveAgentState`. Quando detectar:
-- `status === 2` (em ligação)
-- `activeCallClientDbId` ou `activeCallCpf` ou `activeCallPhone` presentes
-- O cliente resolvido é **diferente** do `id` atual
+5. **Limpar seleção ao trocar página/pageSize**: Já existe o `useEffect` que limpa `selectAllFiltered` — adicionar limpeza de `selectedIds` também ao trocar `pageSize`
 
-→ Navegar para `/atendimento/:novoClientId` com os params corretos (`callId`, `channel=call`).
-
-Para resolver o cliente a partir de CPF/phone, usar uma query simples ao banco (mesma lógica do `TelefoniaAtendimentoWrapper`).
-
-### 3. Limpeza de estado na troca de cliente
-
-Ao detectar navegação para novo cliente, limpar:
-- `callHungUp`
-- `hungUpCallIdRef`
-- `activeSessionId`
-- `sessionStorage` flags (`3cp_call_hung_up`, `3cp_qualified_from_disposition`)
-
-## Fluxo Novo
+## Fluxo
 
 ```text
-Operador em /atendimento/clienteA
-   ↓
-3CPlus envia nova ligação (status → 2)
-   ↓
-useThreeCPlusStatus detecta status=2 + phone/CPF do novo cliente
-   ↓
-AtendimentoPage detecta clienteB ≠ clienteA
-   ↓
-Navega para /atendimento/clienteB?callId=X&channel=call
-   ↓
-Ficha atualiza automaticamente
+Usuário filtra → vê 50 por página (default)
+  ↓
+Muda para 500 por página via Select
+  ↓
+Página reseta para 1, RPC busca 500 registros
+  ↓
+Seleciona todos da página (500) → banner "Selecionar todos os N filtrados"
+  ↓
+Clica → todos os IDs carregados → Discador/WhatsApp recebe todos
 ```
 
-## Arquivos Afetados
+## Arquivo Afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/useThreeCPlusStatus.ts` | Polling de `company_calls` + expor phone/CPF/clientDbId |
-| `src/pages/AtendimentoPage.tsx` | Effect para detectar nova chamada e navegar ao novo cliente |
+| `src/pages/CarteiraPage.tsx` | `pageSize` via URL state, seletor de tamanho, controles de paginação |
 
-Nenhuma alteração em banco, serviços ou fluxos operacionais. O TelefoniaDashboard continua funcionando igual quando montado.
+Nenhuma alteração em banco, RPC ou serviços.
 
