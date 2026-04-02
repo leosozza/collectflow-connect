@@ -146,6 +146,11 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     cep: () => ({ label: "CEP", value: client.cep ? formatCEP(client.cep) : null }),
     external_id: () => ({ label: "Cód. Devedor", value: client.external_id, icon: Tag }),
     cod_contrato: () => ({ label: "Cód. Contrato", value: client.cod_contrato, icon: FileText }),
+    model_name: () => {
+      const records = clientRecords.length > 0 ? clientRecords : [client];
+      const names = [...new Set(records.map((r: any) => r.model_name).filter(Boolean))].join(" / ");
+      return { label: "Nome do Modelo", value: names || null, icon: Tag };
+    },
     valor_saldo: () => {
       const records = clientRecords.length > 0 ? clientRecords : [client];
       const pending = records.filter((r) => r.status === "pendente");
@@ -162,6 +167,11 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     tipo_devedor: () => ({ label: "Perfil Devedor", value: tipoDevedorName || null }),
     tipo_divida: () => ({ label: "Tipo de Dívida", value: tipoDividaName || null }),
     status_cobranca: () => ({ label: "Status Cobrança", value: statusCobrancaName || null }),
+  };
+
+  // Mapeamento de aliases: custom fields que na verdade são colunas diretas
+  const CUSTOM_FIELD_ALIASES: Record<string, string> = {
+    "nome_do_modelo": "model_name",
   };
 
   const getCustomFieldRenderer = (fieldKey: string): (() => { label: string; value: string | null; icon?: React.ElementType }) | null => {
