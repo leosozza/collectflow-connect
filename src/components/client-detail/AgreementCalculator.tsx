@@ -388,7 +388,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       // Generate boletos automatically via Negociarie
       if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
         // Check for missing required fields before generating boletos
-        const { missing, labels } = checkRequiredFields();
+        const { missing, labels } = await checkRequiredFields();
         if (Object.keys(missing).length > 0) {
           // Open dialog for user to fill missing fields
           const fieldsWithLabels: Record<string, string> = {};
