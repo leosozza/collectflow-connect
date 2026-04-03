@@ -276,6 +276,20 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
               </span>
             </button>
           ))}
+          {/* Não lidas — toggle independente */}
+          <button
+            onClick={() => setUnreadOnly(!unreadOnly)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all justify-center ${
+              unreadOnly
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <EyeOff className="w-3 h-3" />
+            <span className={`font-bold ${unreadOnly ? "text-white" : "text-foreground"}`}>
+              {statusCounts.unread}
+            </span>
+          </button>
         </div>
 
         {/* Row 4: Tag + Instance filters */}
