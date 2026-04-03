@@ -176,11 +176,12 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
 
   // Status counts
   const statusCounts = useMemo(() => {
-    const counts = { open: 0, waiting: 0, closed: 0 };
+    const counts = { open: 0, waiting: 0, closed: 0, unread: 0 };
     for (const c of conversations) {
       if (c.status === "open") counts.open++;
       else if (c.status === "waiting") counts.waiting++;
       else if (c.status === "closed") counts.closed++;
+      if (c.unread_count > 0) counts.unread++;
     }
     return counts;
   }, [conversations]);
