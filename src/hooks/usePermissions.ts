@@ -177,6 +177,7 @@ export function usePermissions() {
     canViewAcordos: hasAny("acordos"),
     canCreateAcordos: has("acordos", "create"),
     canApproveAcordos: has("acordos", "approve"),
+    canBreakAcordos: has("acordos", "break"),
 
     // Relatórios
     canViewRelatorios: hasAny("relatorios"),
