@@ -1,9 +1,11 @@
 import { ChatMessage as ChatMessageType } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle, StickyNote } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply } from "lucide-react";
 import { format } from "date-fns";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onReply?: (message: ChatMessageType) => void;
+  allMessages?: ChatMessageType[];
 }
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -14,9 +16,14 @@ const statusIcons: Record<string, React.ReactNode> = {
   failed: <AlertCircle className="w-3 h-3 text-destructive" />,
 };
 
-const ChatMessageBubble = ({ message }: ChatMessageProps) => {
+const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessageProps) => {
   const isOutbound = message.direction === "outbound";
   const isInternal = message.is_internal;
+
+  // Find replied message
+  const repliedMessage = message.reply_to_message_id
+    ? allMessages.find((m) => m.id === message.reply_to_message_id)
+    : null;
 
   const renderContent = () => {
     switch (message.message_type) {
@@ -93,22 +100,61 @@ const ChatMessageBubble = ({ message }: ChatMessageProps) => {
   }
 
   return (
-    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} mb-[2px]`}>
-      <div
-        className={`relative max-w-[65%] px-[9px] pt-[6px] pb-[8px] shadow-sm ${
-          isOutbound
-            ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none"
-            : "bg-card text-foreground border border-border/40 rounded-lg rounded-tl-none"
-        }`}
-      >
-        {renderContent()}
-        <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
-          isOutbound ? "text-[#667781] dark:text-[#ffffff99]" : "text-muted-foreground"
-        }`}>
-          <span className="text-[11px] leading-none">
-            {format(new Date(message.created_at), "HH:mm")}
-          </span>
-          {isOutbound && statusIcons[message.status]}
+    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} mb-[2px] group`}>
+      <div className="flex items-center gap-1">
+        {/* Reply button for inbound messages — appears on hover */}
+        {!isOutbound && onReply && (
+          <button
+            onClick={() => onReply(message)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 order-2"
+            title="Responder"
+          >
+            <Reply className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+        {/* Reply button for outbound messages — appears on hover, on the left side */}
+        {isOutbound && onReply && (
+          <button
+            onClick={() => onReply(message)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
+            title="Responder"
+          >
+            <Reply className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+        <div
+          className={`relative max-w-[65%] px-[9px] pt-[6px] pb-[8px] shadow-sm ${
+            isOutbound
+              ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none"
+              : "bg-card text-foreground border border-border/40 rounded-lg rounded-tl-none"
+          } ${!isOutbound ? "order-1" : ""}`}
+        >
+          {/* Reply preview */}
+          {repliedMessage && (
+            <div
+              className={`mb-1 px-2 py-1 rounded text-[12px] leading-[16px] border-l-[3px] ${
+                isOutbound
+                  ? "bg-[#c8efc3] dark:bg-[#004a3f] border-l-[#25d366]"
+                  : "bg-muted/50 border-l-primary"
+              }`}
+            >
+              <span className="font-medium text-[11px] block">
+                {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
+              </span>
+              <span className="line-clamp-2 text-muted-foreground">
+                {repliedMessage.content || `[${repliedMessage.message_type}]`}
+              </span>
+            </div>
+          )}
+          {renderContent()}
+          <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
+            isOutbound ? "text-[#667781] dark:text-[#ffffff99]" : "text-muted-foreground"
+          }`}>
+            <span className="text-[11px] leading-none">
+              {format(new Date(message.created_at), "HH:mm")}
+            </span>
+            {isOutbound && statusIcons[message.status]}
+          </div>
         </div>
       </div>
     </div>

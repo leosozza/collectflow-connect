@@ -28,6 +28,7 @@ export interface ChatMessage {
   status: "pending" | "sent" | "delivered" | "read" | "failed";
   external_id: string | null;
   is_internal: boolean;
+  reply_to_message_id: string | null;
   created_at: string;
 }
 
@@ -125,18 +126,20 @@ export async function sendTextMessage(
   conversationId: string,
   tenantId: string,
   content: string,
-  instanceName: string
+  instanceName: string,
+  replyToMessageId?: string | null
 ): Promise<ChatMessage> {
-  // Get conversation phone
+  // Get conversation phone + status
   const { data: conv } = await supabase
     .from("conversations" as any)
-    .select("remote_phone")
+    .select("remote_phone, status")
     .eq("id", conversationId)
     .eq("tenant_id", tenantId)
     .single();
 
   if (!conv) throw new Error("Conversa não encontrada");
   const phone = (conv as any).remote_phone;
+  const convStatus = (conv as any).status;
 
   // Send via evolution-proxy
   const { data: sessionData } = await supabase.auth.getSession();
@@ -157,26 +160,36 @@ export async function sendTextMessage(
   if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mensagem");
 
   // Insert local message
+  const insertData: any = {
+    conversation_id: conversationId,
+    tenant_id: tenantId,
+    direction: "outbound",
+    message_type: "text",
+    content,
+    status: "sent",
+    external_id: result?.key?.id || null,
+  };
+  if (replyToMessageId) {
+    insertData.reply_to_message_id = replyToMessageId;
+  }
+
   const { data: msg, error } = await supabase
     .from("chat_messages" as any)
-    .insert({
-      conversation_id: conversationId,
-      tenant_id: tenantId,
-      direction: "outbound",
-      message_type: "text",
-      content,
-      status: "sent",
-      external_id: result?.key?.id || null,
-    } as any)
+    .insert(insertData)
     .select()
     .single();
 
   if (error) throw error;
 
-  // Update conversation last_message_at
+  // Update conversation last_message_at + auto-accept if waiting
+  const updatePayload: any = { last_message_at: new Date().toISOString() };
+  if (convStatus === "waiting") {
+    updatePayload.status = "open";
+  }
+
   await supabase
     .from("conversations" as any)
-    .update({ last_message_at: new Date().toISOString() } as any)
+    .update(updatePayload)
     .eq("id", conversationId);
 
   return msg as unknown as ChatMessage;

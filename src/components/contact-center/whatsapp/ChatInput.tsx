@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, StickyNote, Zap } from "lucide-react";
+import { Send, Paperclip, StickyNote, Zap, X } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
 import AudioRecorder from "./AudioRecorder";
-import { QuickReply } from "@/services/conversationService";
+import { QuickReply, ChatMessage } from "@/services/conversationService";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -27,9 +27,11 @@ interface ChatInputProps {
   disabled?: boolean;
   clientInfo?: ClientInfo | null;
   operatorName?: string;
+  replyTo?: ChatMessage | null;
+  onCancelReply?: () => void;
 }
 
-const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled, clientInfo, operatorName }: ChatInputProps) => {
+const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled, clientInfo, operatorName, replyTo, onCancelReply }: ChatInputProps) => {
   const [text, setText] = useState("");
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [filteredReplies, setFilteredReplies] = useState<QuickReply[]>([]);
@@ -138,6 +140,28 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
               </button>
             ))}
           </ScrollArea>
+        </div>
+      )}
+
+      {/* Reply preview bar */}
+      {replyTo && (
+        <div className="flex items-center gap-2 mb-1.5 px-2 py-1.5 bg-card rounded-lg border border-border/50">
+          <div className="flex-1 min-w-0 border-l-[3px] border-l-[#25d366] pl-2">
+            <span className="text-[11px] font-medium text-[#25d366] block">
+              {replyTo.direction === "inbound" ? "Cliente" : "Operador"}
+            </span>
+            <span className="text-xs text-muted-foreground line-clamp-1">
+              {replyTo.content || `[${replyTo.message_type}]`}
+            </span>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0"
+            onClick={onCancelReply}
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
         </div>
       )}
 
