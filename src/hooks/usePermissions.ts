@@ -265,6 +265,7 @@ export const MODULE_LABELS: Record<string, string> = {
   auditoria: "Auditoria",
   liberacoes: "Liberações",
   agendados: "Agendados",
+  campanhas_whatsapp: "Campanhas WhatsApp",
 };
 
 export const ACTION_LABELS: Record<string, string> = {
