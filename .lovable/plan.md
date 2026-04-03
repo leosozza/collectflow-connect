@@ -1,157 +1,118 @@
 
 
-# Plano: Gestão de Campanhas WhatsApp
+# Plano: Correção e Blindagem da Gestão de Campanhas
 
-## Escopo
+## Problemas Identificados
 
-Novo módulo "Gestão de Campanhas" como aba dentro de WhatsApp no Contact Center. Frontend + backend + permissões granulares. Dados reais das tabelas `whatsapp_campaigns` e `whatsapp_campaign_recipients` já existentes.
+1. **Dashboard mostra métricas falsas**: `responseRate` calcula entrega como resposta, `totalResponded` e `totalAgreements` hardcoded em 0
+2. **Respostas frágeis**: qualquer conversa criada após a campanha no mesmo telefone conta como "resposta" — falsos positivos óbvios
+3. **Acordos frágeis**: qualquer acordo com mesmo CPF após campanha é atribuído — ignora origem real
+4. **N+1 pesado**: `fetchCampaignAgreements` chama `fetchManagedRecipients` (que já enriquece clients + instances) + `fetchCampaignDetail` separadamente; `fetchInstanceMetrics` e `CampaignSummaryTab` cada um carrega todos os recipients de novo; `CampaignMetricsTab` carrega recipients DUAS vezes
+5. **Sem paginação**: recipients, respostas e acordos carregam tudo de uma vez
+6. **Detalhe sem proteção**: `fetchCampaignDetail` não valida `tenant_id` nem `created_by`
+7. **Filtro de instância quebrado**: dropdown de instâncias no RecipientsTab não tem opções reais
+8. **SummaryTab exibe "Taxa Entrega" mas label diz "resposta"** — confuso
 
-## Fase 1 — Esta implementação
+## Alterações
 
-Devido ao tamanho do pedido, esta implementação foca em entregar o módulo completo e funcional com todas as abas e permissões. Segue o detalhamento.
+### 1. Service `campaignManagementService.ts` — Refatoração completa
 
----
+**Dashboard stats** — remover métricas falsas:
+- `responseRate` → `null` (não disponível ainda)
+- `agreementRate` → `null`
+- Remover `totalResponded` e `totalAgreements` do dashboard (ou mostrar "—")
+- Manter apenas: `totalCampaigns`, `totalSent`, `totalDelivered`, `totalFailed`
 
-## 1. Migration: Colunas extras + Permissões
+**Respostas** — reduzir falsos positivos:
+- Em vez de buscar TODAS conversas do tenant após `started_at`, buscar apenas `chat_messages` com `direction = 'inbound'` para os phones da campanha
+- Filtrar por janela temporal: mensagem recebida entre `started_at` e `completed_at + 72h` (ou `started_at + 7 dias` se não completada)
+- Documentar no código que é correlação temporal, não prova causal
+- Adicionar comentário `// LIMITATION: correlation by phone+time window, not causal link`
 
-**Tabela `whatsapp_campaigns`** — adicionar campos de origem e nome:
+**Acordos** — reduzir falsos positivos:
+- Manter filtro por CPF + data, mas adicionar janela máxima de 30 dias após campanha (em vez de infinito)
+- Não recarregar recipients inteiros: buscar CPFs direto de `whatsapp_campaign_recipients` + `clients` com query única
+- Não rechamar `fetchCampaignDetail` — receber `startDate` como parâmetro
+
+**Eliminar N+1**:
+- `fetchCampaignAgreements(campaignId, tenantId, startDate)` — receber startDate, não rechamar detail
+- `fetchInstanceMetrics(campaignId)` — query direta em `whatsapp_campaign_recipients` com `GROUP BY assigned_instance_id` + join `whatsapp_instances` em batch — sem carregar todos recipients
+- `CampaignSummaryTab` e `CampaignMetricsTab` compartilhar cache via `queryKey` — evitar duplicação
+
+**Paginação**:
+- `fetchManagedRecipients` — adicionar `page` e `pageSize` (default 50), usar `.range()`
+- `fetchCampaignResponses` — limitar a 200 resultados
+- `fetchCampaignAgreements` — limitar a 200 resultados
+- `fetchManagedCampaigns` — adicionar `.range()` com limit 100
+
+**Proteção do detalhe**:
+- `fetchCampaignDetail` — adicionar `.eq("tenant_id", tenantId)` obrigatório
+- Receber `tenantId` e `userId` + `onlyOwn` como parâmetros
+- Se `onlyOwn`, adicionar `.eq("created_by", userId)`
+
+### 2. `CampaignManagementTab.tsx` — Dashboard honesto
+
+- Remover cards de "Respostas" e "Taxa de Resposta" que não existem no backend
+- Manter apenas 4 cards: Campanhas, Enviadas, Entregues, Falhas
+- Adicionar debounce de 500ms na busca textual
+
+### 3. `CampaignDetailView.tsx` — Proteção por permissão
+
+- Passar `tenantId` e permissões para `fetchCampaignDetail`
+- Se campanha retornar null (tenant/permissão), mostrar "Sem acesso"
+- Receber `onlyOwn` e `userId` da tab pai
+
+### 4. `CampaignSummaryTab.tsx` — Métricas honestas
+
+- Renomear "Taxa Entrega" para label correto
+- Remover cálculo falso de `responseRate`
+- Não carregar todos recipients para gráficos — usar `fetchInstanceMetrics` (já otimizado) para distribuição por instância
+- Para pie chart de status, fazer query leve: `SELECT status, count(*) FROM whatsapp_campaign_recipients WHERE campaign_id = ? GROUP BY status`
+
+### 5. `CampaignRecipientsTab.tsx` — Paginação + filtros funcionais
+
+- Implementar paginação com botões Anterior/Próximo
+- Corrigir dropdown de instâncias: popular a partir da campanha `selected_instance_ids` + join `whatsapp_instances`
+- Mostrar total real (não apenas da página)
+
+### 6. `CampaignResponsesTab.tsx` — Indicador de correlação
+
+- Adicionar aviso visual: "Respostas identificadas por correlação (telefone + janela temporal). Pode incluir conversas não diretamente relacionadas à campanha."
+- Usar Badge "Correlação" em vez de apresentar como certeza
+
+### 7. `CampaignAgreementsTab.tsx` — Indicador de correlação
+
+- Header: "Acordos possivelmente vinculados à campanha" (em vez de "gerados após")
+- Aviso: "Vinculação por CPF e período. Acordos podem ter outras origens."
+
+### 8. `CampaignMetricsTab.tsx` — Eliminar dupla carga
+
+- Usar `fetchInstanceMetrics` otimizado (query direta, sem carregar recipients)
+- Remover segunda query de `fetchManagedRecipients` — usar contadores da campanha (`campaign.sent_count`, etc.)
+
+### 9. Nova função auxiliar no service
+
+`fetchRecipientStatusCounts(campaignId)` — query leve:
 ```sql
-ALTER TABLE public.whatsapp_campaigns
-  ADD COLUMN IF NOT EXISTS name text,
-  ADD COLUMN IF NOT EXISTS description text,
-  ADD COLUMN IF NOT EXISTS origin_type text DEFAULT 'carteira',
-  ADD COLUMN IF NOT EXISTS origin_id uuid,
-  ADD COLUMN IF NOT EXISTS workflow_id uuid,
-  ADD COLUMN IF NOT EXISTS rule_id uuid,
-  ADD COLUMN IF NOT EXISTS trigger_type text;
+SELECT status, count(*)::int as count 
+FROM whatsapp_campaign_recipients 
+WHERE campaign_id = ? 
+GROUP BY status
 ```
-
-**Novo módulo de permissões: `campanhas_whatsapp`**
-
-Actions: `view_own`, `view_all`, `create`, `start`, `pause`, `edit`, `export`, `view_metrics`, `view_recipients`
-
-Adicionado nos `ROLE_DEFAULTS`:
-- **admin/super_admin**: todas as actions
-- **gerente/supervisor**: `view_all`, `view_metrics`
-- **operador**: `view_own`
-
-## 2. Permissões (`usePermissions.ts`)
-
-Adicionar módulo `campanhas_whatsapp` com 9 actions:
-
-```typescript
-campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"]
-```
-
-Expor helpers:
-- `canViewCampanhasWhatsApp` — hasAny
-- `canViewAllCampanhas` — has view_all
-- `canViewOwnCampanhas` — has view_own
-- `canCreateCampanhas` — has create
-- `canStartCampanhas` — has start
-- `canPauseCampanhas` — has pause
-- `canEditCampanhas` — has edit
-- `canExportCampanhas` — has export
-- `canViewCampaignMetrics` — has view_metrics
-- `canViewCampaignRecipients` — has view_recipients
-
-Adicionar labels em `MODULE_LABELS`, `ACTION_LABELS`, `MODULE_AVAILABLE_ACTIONS`.
-
-## 3. Aba no Contact Center (`ContactCenterPage.tsx`)
-
-Adicionar tab "Campanhas" (ícone `Megaphone`) entre "Conversas" e "Agente IA". Visível quando `canViewCampanhasWhatsApp`. Renderiza `<CampaignManagementTab />`.
-
-## 4. Service (`src/services/campaignManagementService.ts`)
-
-Funções que consomem dados reais:
-
-- `fetchCampaignsWithStats(tenantId, filters, userId?)` — lista campanhas com contadores agregados
-- `fetchCampaignDetail(campaignId)` — detalhes completos
-- `fetchCampaignRecipients(campaignId, filters)` — recipients com dados de clients (score, perfil, status)
-- `fetchCampaignResponses(campaignId)` — recipients com `status = 'replied'` ou que possuem conversa vinculada por phone
-- `fetchCampaignAgreements(campaignId)` — join recipients → clients → agreements pelo CPF
-- `fetchCampaignMetrics(campaignId)` — agregações por instância e por operador
-- `fetchCampaignDashboardStats(tenantId, userId?)` — cards de resumo do topo
-
-Todas as queries incluem `.eq('tenant_id', tenantId)` explícito.
-
-## 5. Componentes Frontend
-
-### 5a. `CampaignManagementTab.tsx` — Tela principal
-- **Dashboard cards no topo**: total campanhas, mensagens enviadas, respostas, acordos, taxa resposta, taxa conversão
-- **Filtros**: período, status, criado por, origem, instância, própria/todas, com resposta, com acordo, busca textual
-- **Tabela de campanhas**: nome, origem, criado por, data, status (badge colorido), tipo, provider, totais, progresso (barra), última atualização
-- Click na linha abre detalhe
-
-### 5b. `CampaignDetailView.tsx` — Detalhe com 5 abas
-- Tabs: Resumo | Destinatários | Respostas | Acordos | Métricas
-
-### 5c. `CampaignSummaryTab.tsx` — Aba Resumo
-- Cards com KPIs principais (enviados, falhas, respostas, acordos, taxas)
-- Info da campanha (nome, descrição, status, origem, criador, datas, template/mensagem, instâncias)
-- Gráficos simples: distribuição por instância (bar), envio x resposta x acordo (funnel), status dos recipients (pie)
-- Score médio e distribuição por perfil/status de cobrança
-
-### 5d. `CampaignRecipientsTab.tsx` — Aba Destinatários
-- Tabela paginada com: nome, telefone, instância, status, erro, provider_message_id, data envio, respondeu, operador, acordo, score, perfil
-- Filtros: status, instância, respondeu, com erro, com acordo, score, perfil
-- Visível apenas com `canViewCampaignRecipients`
-
-### 5e. `CampaignResponsesTab.tsx` — Aba Respostas
-- Filtra recipients que responderam (vinculo: phone do recipient → conversations.phone)
-- Mostra: cliente, telefone, instância, quando respondeu, status conversa, operador, se virou acordo
-
-### 5f. `CampaignAgreementsTab.tsx` — Aba Acordos
-- Join recipients → clients (por representative_client_id) → agreements (por CPF + tenant)
-- Mostra: cliente, telefone, data acordo, valor, status, operador, origem
-
-### 5g. `CampaignMetricsTab.tsx` — Aba Métricas
-- Métricas globais da campanha
-- Tabela por instância: recipients, enviados, falhas, respostas, acordos
-- Tabela por operador: leads, atendimentos, acordos, taxa conversão
-- Visível apenas com `canViewCampaignMetrics`
-
-## 6. Lógica de Respostas
-
-Para vincular respostas à campanha sem alterar o chat:
-- Buscar `conversations` cujo `phone` (normalizado) corresponde a um `recipient.phone` da campanha
-- Filtrar por `conversations` criadas **após** o `started_at` da campanha
-- Não criar FK nem alterar tabelas de conversations/chat_messages
-
-## 7. Lógica de Acordos
-
-- Do recipient pegar `representative_client_id` → buscar `clients.cpf`
-- Buscar `agreements` com mesmo CPF + tenant + criados após campanha
-- Relação indireta mas segura, sem alterar a tabela de agreements
-
-## 8. Backfill do campo `name`
-
-Na migration, preencher campanhas existentes:
-```sql
-UPDATE whatsapp_campaigns SET name = 'Campanha #' || EXTRACT(EPOCH FROM created_at)::int
-WHERE name IS NULL;
-```
-
-No `WhatsAppBulkDialog` / `createCampaign`, começar a gravar `name` com valor descritivo.
-
----
+Usada pelo SummaryTab para pie chart sem carregar todos recipients.
 
 ## Arquivos Afetados
 
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---|---|
-| Migration SQL | Colunas extras em `whatsapp_campaigns` |
-| `src/hooks/usePermissions.ts` | Novo módulo `campanhas_whatsapp` |
-| `src/pages/ContactCenterPage.tsx` | Nova aba "Campanhas" |
-| `src/services/campaignManagementService.ts` | **Novo** — queries reais |
-| `src/components/contact-center/whatsapp/CampaignManagementTab.tsx` | **Novo** — tela principal |
-| `src/components/contact-center/whatsapp/campaigns/CampaignDetailView.tsx` | **Novo** — detalhe |
-| `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` | **Novo** |
-| `src/components/contact-center/whatsapp/campaigns/CampaignRecipientsTab.tsx` | **Novo** |
-| `src/components/contact-center/whatsapp/campaigns/CampaignResponsesTab.tsx` | **Novo** |
-| `src/components/contact-center/whatsapp/campaigns/CampaignAgreementsTab.tsx` | **Novo** |
-| `src/components/contact-center/whatsapp/campaigns/CampaignMetricsTab.tsx` | **Novo** |
-| `src/services/whatsappCampaignService.ts` | Adicionar campo `name` ao `createCampaign` |
+| `src/services/campaignManagementService.ts` | Refatorar queries, paginação, proteção tenant, eliminar N+1, janela temporal |
+| `src/components/contact-center/whatsapp/CampaignManagementTab.tsx` | Remover cards falsos, debounce busca |
+| `src/components/contact-center/whatsapp/campaigns/CampaignDetailView.tsx` | Proteção tenant/permissão no detalhe |
+| `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` | Métricas honestas, query leve |
+| `src/components/contact-center/whatsapp/campaigns/CampaignRecipientsTab.tsx` | Paginação, filtro instâncias funcional |
+| `src/components/contact-center/whatsapp/campaigns/CampaignResponsesTab.tsx` | Aviso correlação |
+| `src/components/contact-center/whatsapp/campaigns/CampaignAgreementsTab.tsx` | Aviso correlação, janela temporal |
+| `src/components/contact-center/whatsapp/campaigns/CampaignMetricsTab.tsx` | Eliminar dupla carga |
 
-Nenhuma alteração em: disparo da carteira, `send-bulk-whatsapp`, conversations, chat_messages, whatsapp-webhook, automação, atendimento, acordos existentes.
+Nenhuma migration. Nenhuma alteração em tabelas, edge functions, disparo, conversas ou automação.
 
