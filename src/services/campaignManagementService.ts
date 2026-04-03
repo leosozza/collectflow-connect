@@ -509,10 +509,10 @@ export async function fetchCampaignResponses(campaignId: string, tenantId: strin
     if (normalized) phoneMap.set(normalized, r);
   }
 
-  // Find conversations with inbound messages in the time window
+  // Find conversations with matching remote_phone in the time window
   const { data: conversations } = await supabase
-    .from("conversations")
-    .select("id, phone, status, assigned_to, created_at, client_id")
+    .from("conversations" as any)
+    .select("id, remote_phone, status, assigned_to, created_at, client_id")
     .eq("tenant_id", tenantId)
     .gte("created_at", startDate)
     .lte("created_at", endDate.toISOString())
@@ -521,18 +521,41 @@ export async function fetchCampaignResponses(campaignId: string, tenantId: strin
   if (!conversations || conversations.length === 0) return [];
 
   // Match conversations to recipients by normalized phone
-  const responses: any[] = [];
+  const matchedConvIds: string[] = [];
+  const convRecipientMap = new Map<string, { conv: any; recipient: any }>();
+
   for (const conv of conversations as any[]) {
-    const normalized = conv.phone?.replace(/\D/g, "") || "";
+    const normalized = conv.remote_phone?.replace(/\D/g, "") || "";
     const recipient = phoneMap.get(normalized);
     if (!recipient) continue;
+    matchedConvIds.push(conv.id);
+    convRecipientMap.set(conv.id, { conv, recipient });
+  }
 
+  if (matchedConvIds.length === 0) return [];
+
+  // Verify real inbound messages exist in these conversations (eliminates system-only convos)
+  const { data: inboundMessages } = await supabase
+    .from("chat_messages" as any)
+    .select("conversation_id")
+    .in("conversation_id", matchedConvIds)
+    .eq("direction", "inbound")
+    .gte("created_at", startDate)
+    .lte("created_at", endDate.toISOString());
+
+  const convsWithInbound = new Set(((inboundMessages || []) as any[]).map((m) => m.conversation_id));
+
+  // Build responses only for conversations with real inbound messages
+  const responses: any[] = [];
+  for (const convId of convsWithInbound) {
+    const match = convRecipientMap.get(convId);
+    if (!match) continue;
     responses.push({
-      ...recipient,
-      conversation_id: conv.id,
-      conversation_status: conv.status,
-      conversation_assigned_to: conv.assigned_to,
-      responded_at: conv.created_at,
+      ...match.recipient,
+      conversation_id: match.conv.id,
+      conversation_status: match.conv.status,
+      conversation_assigned_to: match.conv.assigned_to,
+      responded_at: match.conv.created_at,
     });
   }
 
