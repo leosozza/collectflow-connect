@@ -162,6 +162,7 @@ const statusLabels: Record<string, string> = {
 const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false, dispositionAssignments = [], dispositionTypes = [] }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
