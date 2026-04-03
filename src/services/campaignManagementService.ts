@@ -92,14 +92,21 @@ export async function fetchManagedCampaigns(
     createdBy?: string;
     onlyOwn?: boolean;
     userId?: string;
+    page?: number;
+    pageSize?: number;
   }
-): Promise<CampaignWithStats[]> {
+): Promise<PaginatedResult<CampaignWithStats>> {
+  const page = filters?.page || 1;
+  const pageSize = filters?.pageSize || 50;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabase
     .from("whatsapp_campaigns" as any)
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
-    .range(0, 99);
+    .range(from, to);
 
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
