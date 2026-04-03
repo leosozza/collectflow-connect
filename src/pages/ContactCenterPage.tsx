@@ -1,10 +1,11 @@
 import { usePermissions } from "@/hooks/usePermissions";
-import { MessageSquare, Bot, Tag, Zap } from "lucide-react";
+import { MessageSquare, Bot, Tag, Zap, Megaphone } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
 import AIAgentTab from "@/components/contact-center/whatsapp/AIAgentTab";
 import TagsManagementTab from "@/components/contact-center/whatsapp/TagsManagementTab";
 import QuickRepliesTab from "@/components/contact-center/whatsapp/QuickRepliesTab";
+import CampaignManagementTab from "@/components/contact-center/whatsapp/CampaignManagementTab";
 import { useUrlState } from "@/hooks/useUrlState";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +26,12 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   }
 
   const tabs = [
-    { id: "conversas", label: "Conversas", icon: MessageSquare, adminOnly: false },
-    { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true },
-    { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true },
-    { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true },
-  ].filter((tab) => !tab.adminOnly || permissions.canManageContactCenterAdmin);
+    { id: "conversas", label: "Conversas", icon: MessageSquare, adminOnly: false, show: true },
+    { id: "campanhas", label: "Campanhas", icon: Megaphone, adminOnly: false, show: permissions.canViewCampanhasWhatsApp },
+    { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+    { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+    { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+  ].filter((tab) => tab.show);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -61,6 +63,9 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === "conversas" && <WhatsAppChatLayout />}
+        {activeTab === "campanhas" && permissions.canViewCampanhasWhatsApp && (
+          <CampaignManagementTab />
+        )}
         {activeTab === "agente" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <AIAgentTab />

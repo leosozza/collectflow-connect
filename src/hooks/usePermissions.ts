@@ -24,6 +24,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
   },
   admin: {
     dashboard: ["view_all"],
@@ -43,6 +44,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
   },
   gerente: {
     dashboard: ["view_all"],
@@ -62,6 +64,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_all", "view_metrics"],
   },
   supervisor: {
     dashboard: ["view_all"],
@@ -81,6 +84,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: [],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_all", "view_metrics"],
   },
   operador: {
     dashboard: ["view_own"],
@@ -100,6 +104,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: [],
     liberacoes: ["view"],
     agendados: ["view_own"],
+    campanhas_whatsapp: ["view_own"],
   },
 };
 
@@ -222,6 +227,18 @@ export function usePermissions() {
     // Agendados
     canViewOwnAgendados: has("agendados", "view_own") || has("agendados", "view_all"),
     canViewAllAgendados: has("agendados", "view_all"),
+
+    // Campanhas WhatsApp
+    canViewCampanhasWhatsApp: hasAny("campanhas_whatsapp"),
+    canViewAllCampanhas: has("campanhas_whatsapp", "view_all"),
+    canViewOwnCampanhas: has("campanhas_whatsapp", "view_own") || has("campanhas_whatsapp", "view_all"),
+    canCreateCampanhas: has("campanhas_whatsapp", "create"),
+    canStartCampanhas: has("campanhas_whatsapp", "start"),
+    canPauseCampanhas: has("campanhas_whatsapp", "pause"),
+    canEditCampanhas: has("campanhas_whatsapp", "edit"),
+    canExportCampanhas: has("campanhas_whatsapp", "export"),
+    canViewCampaignMetrics: has("campanhas_whatsapp", "view_metrics"),
+    canViewCampaignRecipients: has("campanhas_whatsapp", "view_recipients"),
   };
 }
 
@@ -248,6 +265,7 @@ export const MODULE_LABELS: Record<string, string> = {
   auditoria: "Auditoria",
   liberacoes: "Liberações",
   agendados: "Agendados",
+  campanhas_whatsapp: "Campanhas WhatsApp",
 };
 
 export const ACTION_LABELS: Record<string, string> = {
@@ -263,6 +281,10 @@ export const ACTION_LABELS: Record<string, string> = {
   manage: "Gerenciar",
   filter: "Filtros Avançados",
   manage_admin: "Gerenciar (Administrativo)",
+  start: "Iniciar/Disparar",
+  pause: "Pausar/Cancelar",
+  view_metrics: "Ver Métricas",
+  view_recipients: "Ver Destinatários",
 };
 
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
@@ -283,4 +305,5 @@ export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   auditoria: ["view"],
   liberacoes: ["view", "approve"],
   agendados: ["view_own", "view_all"],
+  campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
 };

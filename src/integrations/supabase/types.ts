@@ -5506,13 +5506,18 @@ export type Database = {
           created_at: string
           created_by: string
           delivered_count: number
+          description: string | null
           failed_count: number
           id: string
           message_body: string | null
           message_mode: string
+          name: string | null
+          origin_id: string | null
+          origin_type: string | null
           provider_category: string
           read_count: number
           routing_mode: string | null
+          rule_id: string | null
           selected_instance_ids: string[]
           sent_count: number
           source: string
@@ -5523,7 +5528,9 @@ export type Database = {
           tenant_id: string
           total_selected: number
           total_unique_recipients: number
+          trigger_type: string | null
           updated_at: string
+          workflow_id: string | null
         }
         Insert: {
           allowed_operator_ids?: string[] | null
@@ -5533,13 +5540,18 @@ export type Database = {
           created_at?: string
           created_by: string
           delivered_count?: number
+          description?: string | null
           failed_count?: number
           id?: string
           message_body?: string | null
           message_mode?: string
+          name?: string | null
+          origin_id?: string | null
+          origin_type?: string | null
           provider_category?: string
           read_count?: number
           routing_mode?: string | null
+          rule_id?: string | null
           selected_instance_ids?: string[]
           sent_count?: number
           source?: string
@@ -5550,7 +5562,9 @@ export type Database = {
           tenant_id: string
           total_selected?: number
           total_unique_recipients?: number
+          trigger_type?: string | null
           updated_at?: string
+          workflow_id?: string | null
         }
         Update: {
           allowed_operator_ids?: string[] | null
@@ -5560,13 +5574,18 @@ export type Database = {
           created_at?: string
           created_by?: string
           delivered_count?: number
+          description?: string | null
           failed_count?: number
           id?: string
           message_body?: string | null
           message_mode?: string
+          name?: string | null
+          origin_id?: string | null
+          origin_type?: string | null
           provider_category?: string
           read_count?: number
           routing_mode?: string | null
+          rule_id?: string | null
           selected_instance_ids?: string[]
           sent_count?: number
           source?: string
@@ -5577,7 +5596,9 @@ export type Database = {
           tenant_id?: string
           total_selected?: number
           total_unique_recipients?: number
+          trigger_type?: string | null
           updated_at?: string
+          workflow_id?: string | null
         }
         Relationships: [
           {
