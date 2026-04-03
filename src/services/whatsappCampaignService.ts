@@ -215,6 +215,7 @@ export interface CreateCampaignInput {
   total_unique_recipients: number;
   created_by: string;
   provider_category?: string;
+  name?: string;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<WhatsAppCampaign> {
