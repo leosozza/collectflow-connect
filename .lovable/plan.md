@@ -1,45 +1,56 @@
 
 
-# Plano: Ação "Quebrar Acordo" para Admin na Gestão de Acordos
+# Plano: Separar Cancelamento Manual de Quebra Automática no Dashboard
 
-## Contexto
+## Problema
 
-Hoje os acordos vigentes (`pending`) e vencidos (`overdue`) só podem ser aprovados/rejeitados na aba "Aguardando Liberação". Não existe botão para o admin (ou usuário autorizado) **quebrar** manualmente um acordo vigente/vencido. A quebra manual deve usar `cancellation_type = 'manual'` (já implementado no plano anterior) e funcionar no mesmo padrão visual das ações de aprovação.
+A RPC `get_dashboard_stats` soma **todos** os acordos com `status = 'cancelled'` no campo `total_quebra`. Isso inclui acordos cancelados manualmente pelo operador (renegociação, erro, desistência) — que não deveriam contar como quebra. Quebra real é apenas quando o sistema cancela automaticamente por falta de pagamento após o prazo configurado em `credores.prazo_dias_acordo`.
+
+A coluna `cancellation_type` ainda **não existe** no banco. Precisa ser criada.
+
+## Sobre o prazo de dias
+
+Sim, o campo `credores.prazo_dias_acordo` já existe e é usado pela edge function `auto-expire-agreements` para decidir quando quebrar um acordo automaticamente. Ele é editável no Cadastro do Credor.
 
 ## Alterações
 
-### 1. Nova permissão: `acordos.break`
+### 1. Migration: adicionar coluna `cancellation_type`
 
-**`src/hooks/usePermissions.ts`**
-- Adicionar `"break"` nas actions de `acordos` para `super_admin` e `admin` nos `ROLE_DEFAULTS`
-- Expor `canBreakAcordos: has("acordos", "break")` no retorno do hook
+```sql
+ALTER TABLE public.agreements ADD COLUMN cancellation_type text DEFAULT NULL;
+COMMENT ON COLUMN public.agreements.cancellation_type IS 'manual = operador cancelou, auto_expired = sistema quebrou por falta de pagamento';
+```
 
-### 2. AcordosPage — mostrar botão de quebra nas abas Vigentes e Vencidos
+### 2. Edge Function `auto-expire-agreements/index.ts`
 
-**`src/pages/AcordosPage.tsx`**
-- Passar nova prop `onBreak` para `AgreementsList` quando o usuário tem permissão `canBreakAcordos`
-- Mostrar ações (coluna Ações) nas abas `vigentes` e `overdue` para quem tem permissão de quebra
-- Handler `handleBreak` chama `cancelAgreement(id)` (que já grava `cancellation_type = 'manual'`)
+Na linha que cancela acordos vencidos (~linha 200), gravar `cancellation_type`:
 
-### 3. AgreementsList — botão "Quebrar Acordo"
+```typescript
+await supabase.from("agreements")
+  .update({ status: "cancelled", cancellation_type: "auto_expired" })
+  .in("id", ids);
+```
 
-**`src/components/acordos/AgreementsList.tsx`**
-- Nova prop `onBreak?: (id: string) => void`
-- Exibir botão com ícone de quebra (ex: `Ban` do lucide) nos acordos `pending` e `overdue` quando `onBreak` está definido
-- Ao clicar, abrir AlertDialog de confirmação com texto "Quebrar Acordo — parcelas pendentes serão marcadas como Quebra de Acordo"
-- Ajustar lógica de `hasActions` para considerar também `onBreak`
+### 3. Service `agreementService.ts` — `cancelAgreement()`
 
-### 4. Permissão configurável na UI
+Marcar cancelamentos manuais (~linha 375):
 
-O admin já pode configurar permissões granulares por módulo na tela de Usuários. A action `break` ficará disponível automaticamente no módulo `acordos`, permitindo que o admin conceda essa permissão a qualquer usuário.
+```typescript
+.update({ status: "cancelled", cancellation_type: "manual" })
+```
+
+### 4. RPC `get_dashboard_stats` — filtrar `_quebra`
+
+Adicionar `AND a.cancellation_type = 'auto_expired'` nos dois blocos WHERE do cálculo de `_quebra` (entrada + parcelas regulares), para que apenas quebras automáticas sejam contabilizadas.
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/usePermissions.ts` | Adicionar `break` nos defaults de admin/super_admin + expor `canBreakAcordos` |
-| `src/pages/AcordosPage.tsx` | Handler `handleBreak` + passar prop `onBreak` + expandir abas com ações |
-| `src/components/acordos/AgreementsList.tsx` | Botão "Quebrar" + AlertDialog de confirmação |
+| Migration SQL | Adicionar coluna `cancellation_type` |
+| `supabase/functions/auto-expire-agreements/index.ts` | Gravar `cancellation_type = 'auto_expired'` |
+| `src/services/agreementService.ts` | Gravar `cancellation_type = 'manual'` |
+| Migration SQL (RPC) | Atualizar `get_dashboard_stats` para filtrar por `auto_expired` |
 
-Nenhuma alteração em banco. Usa `cancelAgreement` existente (que já grava `cancellation_type = 'manual'`).
+Nenhuma alteração visual. Acordos cancelados pelo operador deixam de aparecer em "Total de Quebra".
 
