@@ -130,7 +130,7 @@ export async function fetchManagedCampaigns(
     query = query.or(`name.ilike.%${filters.search}%`);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
   const campaigns = (data || []) as unknown as CampaignWithStats[];
@@ -149,7 +149,7 @@ export async function fetchManagedCampaigns(
     });
   }
 
-  return campaigns;
+  return { data: campaigns, total: count || 0, page, pageSize };
 }
 
 // ---- Dashboard stats (honest — no fake response/agreement rates) ----
