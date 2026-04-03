@@ -113,16 +113,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
             <Reply className="w-4 h-4 text-muted-foreground" />
           </button>
         )}
-        {/* Reply button for outbound messages — appears on hover, on the left side */}
-        {isOutbound && onReply && (
-          <button
-            onClick={() => onReply(message)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
-            title="Responder"
-          >
-            <Reply className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
+        {/* Reply button removed for outbound — reply only allowed on inbound messages */}
         <div
           className={`relative max-w-[65%] px-[9px] pt-[6px] pb-[8px] shadow-sm ${
             isOutbound
