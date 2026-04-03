@@ -1,86 +1,87 @@
 
 
-# Plano: Melhorias Operacionais WhatsApp — Fila, SLA Timer, Filtro Não Lidas, Reply
+# Plano: Ajustes Finais WhatsApp — 4 Fases
 
-## Resumo
+## Fase 1 — Ajuste do SLA
 
-4 melhorias operacionais independentes no módulo WhatsApp. Nenhuma alteração em campanhas, automação, templates ou permissões.
+### Problemas encontrados
 
-## Parte 1 — Fila de Conversas (waiting → open)
+1. **Percentual baseado em `created_at`** (ChatPanel linha 94): `totalMs = deadlineMs - createdMs` — isso é errado porque o SLA é recalculado a cada inbound, então `created_at` não representa o início do SLA atual.
+2. **Mesmo bug na ConversationList** (linha 387): `totalMs = deadlineDate.getTime() - createdAt.getTime()` — mesma lógica incorreta para o ícone amarelo na lista.
+3. **Webhook zera SLA em outbound** (linha 261): `updateData.sla_deadline_at = null` — ao responder, o SLA desaparece imediatamente. Isso é comportamentalmente correto (operador respondeu, SLA cumprido), mas conflita com o timer visual que some abruptamente.
 
-**Webhook (`whatsapp-webhook/index.ts`)**:
-- Linha 232: incluir `status` no select da conversa existente
-- Linha 251: substituir `updateData.status = "open"` por lógica condicional:
-  - `closed` → `waiting`
-  - `waiting` → manter
-  - `open` → manter
-- Linha 290: nova conversa inbound → `status: "waiting"` (era `"open"`)
-- SLA continua recalculando normalmente
+### Solução
 
-**ChatPanel (`ChatPanel.tsx`)**:
-- Quando `conversation.status === "waiting"`, renderizar banner entre header e mensagens:
-  - Texto: "Conversa aguardando atendimento"
-  - Botão: "Aceitar Conversa" → `onStatusChange("open")`
-  - Estilo discreto (bg-amber-50, ícone Clock)
+**Webhook**: manter `sla_deadline_at = null` em outbound — operador respondeu, SLA cumprido. Isso é a regra correta.
 
-**Service (`conversationService.ts`)**:
-- `sendTextMessage()`: incluir `status` no select da conversa
-- Após envio bem-sucedido, se `status === "waiting"`, atualizar para `"open"` (auto-aceitar)
+**ChatPanel (timer)**: remover cálculo de percentual baseado em `created_at`. Usar faixas absolutas de tempo restante:
+- Verde: > 4h restantes
+- Amarelo: ≤ 1h restante
+- Vermelho: expirado
+- Remover estado `slaPercent`, substituir por lógica direta no cálculo do `slaColor`
 
-## Parte 2 — Timer SLA no Header
+**ConversationList (ícone SLA)**: mesma correção — substituir cálculo relativo por faixa absoluta de tempo (ícone amarelo quando ≤ 1h, vermelho quando expirado).
 
-**ChatPanel (`ChatPanel.tsx`)**:
-- Novo estado `slaRemaining` com `useEffect` + `setInterval` a cada 30s
-- Quando `slaDeadline` existe e não expirou: badge discreta `⏱ HH:MM`
-  - Verde (>50% restante), Amarelo (≤25%), Vermelho ao expirar
-- Quando expirado: manter badge "SLA Expirado" existente (sem mudança)
+### Arquivos
+- `src/components/contact-center/whatsapp/ChatPanel.tsx` — remover `slaPercent`, cor por faixa absoluta
+- `src/components/contact-center/whatsapp/ConversationList.tsx` — ícone SLA por faixa absoluta
 
-## Parte 3 — Filtro "Não Lidas"
+---
 
-**ConversationList (`ConversationList.tsx`)**:
-- Adicionar pill "Não lidas" ao array `statusPills` com contagem de `unread_count > 0`
-- No filtro: quando `statusFilter === "unread"`, filtrar por `c.unread_count > 0`
-- Manter todos os outros filtros funcionando
+## Fase 2 — Ajuste do Reply
 
-## Parte 4 — Responder Mensagem Específica
+### Problemas encontrados
 
-**Migration**: Adicionar coluna `reply_to_message_id uuid REFERENCES chat_messages(id) ON DELETE SET NULL` à tabela `chat_messages`.
+1. **Botão reply em todas as mensagens**: o `ChatMessage.tsx` já mostra reply em inbound E outbound (linhas 96-112). Manter ambos — faz sentido operacional responder qualquer mensagem.
+2. **Fallback de preview ausente**: quando `allMessages.find()` não encontra a mensagem original (ex: paginação), o preview simplesmente não aparece.
 
-**ChatMessage (`ChatMessage.tsx`)**:
-- Adicionar botão de reply (ícone Reply) visível ao hover em mensagens inbound
-- Prop `onReply(message)` para notificar o pai
-- Quando mensagem tem `reply_to_message_id`: renderizar bloco de preview acima da bolha (barra lateral colorida + trecho da mensagem original)
-- Receber `allMessages` como prop para lookup local do conteúdo original
+### Solução
 
-**ChatInput (`ChatInput.tsx`)**:
-- Nova prop `replyTo?: ChatMessage | null` + `onCancelReply?: () => void`
-- Quando `replyTo` definido: renderizar barra acima do input com trecho + botão X
-- Estilo WhatsApp: barra lateral verde, texto truncado
+**ChatMessage.tsx**: quando `reply_to_message_id` existe mas a mensagem original não foi encontrada em `allMessages`, mostrar fallback: "Mensagem respondida" em itálico com indicador visual.
 
-**ChatPanel (`ChatPanel.tsx`)**:
-- Estado `replyTo` para mensagem selecionada
-- Passar `onReply` ao `ChatMessageBubble`, `replyTo`/`onCancelReply` ao `ChatInput`
-- Ao enviar, incluir `reply_to_message_id` e limpar estado
-- Passar `messages` como `allMessages` para lookup de reply
+### Arquivos
+- `src/components/contact-center/whatsapp/ChatMessage.tsx` — fallback no preview de reply
 
-**Service (`conversationService.ts`)**:
-- `ChatMessage` interface: adicionar `reply_to_message_id?: string | null`
-- `sendTextMessage()`: aceitar `replyToMessageId` opcional, gravar no insert
-- `sendInternalNote()`: sem mudança (notas não usam reply)
+---
 
-**Webhook**: sem mudança (campo nullable, webhook não precisa gravar reply)
+## Fase 3 — Revisão do Filtro "Não Lidas"
 
-## Arquivos Afetados
+### Problema atual
 
-| Arquivo | Mudança |
-|---|---|
-| Migration SQL | `ALTER TABLE chat_messages ADD COLUMN reply_to_message_id uuid REFERENCES chat_messages(id) ON DELETE SET NULL` |
-| `supabase/functions/whatsapp-webhook/index.ts` | Status `waiting` para inbound, lógica condicional em existente |
-| `src/components/contact-center/whatsapp/ChatPanel.tsx` | Banner waiting, timer SLA, estado replyTo |
-| `src/components/contact-center/whatsapp/ChatInput.tsx` | Preview de reply acima do input |
-| `src/components/contact-center/whatsapp/ChatMessage.tsx` | Botão reply ao hover, preview de mensagem respondida |
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Pill "Não lidas" |
-| `src/services/conversationService.ts` | Auto-aceitar waiting, `reply_to_message_id` no envio e interface |
+"Não lidas" está no `statusFilter` junto com `open/waiting/closed`. Funciona, mas mistura conceitos (status vs leitura).
 
-Nenhuma alteração em: campanhas, automação, templates, permissões, disparo da carteira, acordos.
+### Solução
+
+Separar em estado independente `unreadOnly` (boolean). Os pills de status continuam funcionando normalmente. "Não lidas" vira um toggle independente que pode ser combinado com qualquer status.
+
+**ConversationList.tsx**:
+- Novo estado `unreadOnly` (boolean, default false)
+- Remover `"unread"` do `statusFilter`
+- Pill "Não lidas" alterna `unreadOnly` em vez de `setStatusFilter("unread")`
+- No filtro: `unreadOnly ? c.unread_count > 0 : true`
+- Isso permite combinações como "Aguardando + Não lidas"
+
+### Arquivos
+- `src/components/contact-center/whatsapp/ConversationList.tsx` — separar `unreadOnly` de `statusFilter`
+
+---
+
+## Fase 4 — Acabamento Final
+
+Revisão de consistência:
+- Verificar que fila `waiting → open` funciona (banner + aceitar + auto-aceitar)
+- Verificar que SLA visual está coerente após Fase 1
+- Verificar que reply com fallback funciona após Fase 2
+- Verificar que filtro combinado funciona após Fase 3
+- Sem refatoração grande, apenas ajustes pontuais se necessário
+
+### Arquivos afetados no total
+
+| Arquivo | Fase | Mudança |
+|---|---|---|
+| `ChatPanel.tsx` | 1 | Remover `slaPercent`, cor SLA por faixa absoluta |
+| `ConversationList.tsx` | 1, 3 | Ícone SLA por faixa absoluta + separar `unreadOnly` |
+| `ChatMessage.tsx` | 2 | Fallback no preview de reply |
+
+Nenhuma migration. Nenhuma alteração no webhook, serviço, campanhas, automação ou permissões.
 
