@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchManagedRecipients } from "@/services/campaignManagementService";
+import { fetchManagedRecipients, fetchCampaignInstances } from "@/services/campaignManagementService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -27,28 +29,42 @@ const recipientStatusColors: Record<string, string> = {
 
 interface Props {
   campaignId: string;
+  selectedInstanceIds?: string[];
 }
 
-export default function CampaignRecipientsTab({ campaignId }: Props) {
+const PAGE_SIZE = 50;
+
+export default function CampaignRecipientsTab({ campaignId, selectedInstanceIds }: Props) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [instanceFilter, setInstanceFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
-  const { data: recipients = [], isLoading } = useQuery({
-    queryKey: ["campaign-recipients", campaignId, statusFilter, instanceFilter],
-    queryFn: () =>
-      fetchManagedRecipients(campaignId, {
-        status: statusFilter,
-        instanceId: instanceFilter,
-      }),
+  // Fetch real instances for filter dropdown
+  const { data: instances = [] } = useQuery({
+    queryKey: ["campaign-instances", selectedInstanceIds],
+    queryFn: () => fetchCampaignInstances(selectedInstanceIds || []),
+    enabled: !!selectedInstanceIds && selectedInstanceIds.length > 0,
   });
 
-  // Extract unique instances for filter
-  const instances = [...new Set(recipients.map((r) => r.instance_name).filter(Boolean))];
+  const { data: result, isLoading } = useQuery({
+    queryKey: ["campaign-recipients", campaignId, statusFilter, instanceFilter, page],
+    queryFn: () =>
+      fetchManagedRecipients(
+        campaignId,
+        { status: statusFilter, instanceId: instanceFilter },
+        page,
+        PAGE_SIZE
+      ),
+  });
+
+  const recipients = result?.data || [];
+  const total = result?.total || 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div className="p-4 space-y-3">
-      <div className="flex items-center gap-3">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -63,18 +79,20 @@ export default function CampaignRecipientsTab({ campaignId }: Props) {
         </Select>
 
         {instances.length > 1 && (
-          <Select value={instanceFilter} onValueChange={setInstanceFilter}>
+          <Select value={instanceFilter} onValueChange={(v) => { setInstanceFilter(v); setPage(1); }}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Instância" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas instâncias</SelectItem>
-              {/* Instance filter works by name display but we'd need ID; simplified */}
+              {instances.map((inst) => (
+                <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         )}
 
-        <span className="text-sm text-muted-foreground ml-auto">{recipients.length} destinatários</span>
+        <span className="text-sm text-muted-foreground ml-auto">{total} destinatários</span>
       </div>
 
       <Card>
@@ -125,6 +143,23 @@ export default function CampaignRecipientsTab({ campaignId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Página {page} de {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+            </Button>
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+              Próximo <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

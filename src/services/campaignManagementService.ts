@@ -56,10 +56,6 @@ export interface CampaignDashboardStats {
   totalSent: number;
   totalDelivered: number;
   totalFailed: number;
-  totalResponded: number;
-  totalAgreements: number;
-  responseRate: number;
-  agreementRate: number;
 }
 
 export interface InstanceMetric {
@@ -71,7 +67,19 @@ export interface InstanceMetric {
   delivered: number;
 }
 
-// ---- Fetch campaigns list ----
+export interface RecipientStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ---- Fetch campaigns list (paginated, limit 100) ----
 
 export async function fetchManagedCampaigns(
   tenantId: string,
@@ -90,7 +98,8 @@ export async function fetchManagedCampaigns(
     .from("whatsapp_campaigns" as any)
     .select("*")
     .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(0, 99);
 
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
@@ -119,7 +128,7 @@ export async function fetchManagedCampaigns(
 
   const campaigns = (data || []) as unknown as CampaignWithStats[];
 
-  // Enrich with creator names
+  // Enrich with creator names in batch
   const creatorIds = [...new Set(campaigns.map((c) => c.created_by).filter(Boolean))];
   if (creatorIds.length > 0) {
     const { data: profiles } = await supabase
@@ -136,7 +145,7 @@ export async function fetchManagedCampaigns(
   return campaigns;
 }
 
-// ---- Dashboard stats ----
+// ---- Dashboard stats (honest — no fake response/agreement rates) ----
 
 export async function fetchCampaignDashboardStats(
   tenantId: string,
@@ -155,34 +164,40 @@ export async function fetchCampaignDashboardStats(
   if (error) throw error;
 
   const campaigns = (data || []) as any[];
-  const totalCampaigns = campaigns.length;
-  const totalSent = campaigns.reduce((s, c) => s + (c.sent_count || 0), 0);
-  const totalDelivered = campaigns.reduce((s, c) => s + (c.delivered_count || 0), 0);
-  const totalFailed = campaigns.reduce((s, c) => s + (c.failed_count || 0), 0);
 
-  // For responded/agreements we'd need recipient-level data; approximate from delivered
   return {
-    totalCampaigns,
-    totalSent,
-    totalDelivered,
-    totalFailed,
-    totalResponded: 0, // Will be calculated per-campaign in detail view
-    totalAgreements: 0,
-    responseRate: totalSent > 0 ? (totalDelivered / totalSent) * 100 : 0,
-    agreementRate: 0,
+    totalCampaigns: campaigns.length,
+    totalSent: campaigns.reduce((s, c) => s + (c.sent_count || 0), 0),
+    totalDelivered: campaigns.reduce((s, c) => s + (c.delivered_count || 0), 0),
+    totalFailed: campaigns.reduce((s, c) => s + (c.failed_count || 0), 0),
   };
 }
 
-// ---- Campaign detail ----
+// ---- Campaign detail (with tenant + ownership protection) ----
 
-export async function fetchCampaignDetail(campaignId: string): Promise<CampaignWithStats | null> {
-  const { data, error } = await supabase
+export async function fetchCampaignDetail(
+  campaignId: string,
+  tenantId?: string,
+  options?: { onlyOwn?: boolean; userId?: string }
+): Promise<CampaignWithStats | null> {
+  let query = supabase
     .from("whatsapp_campaigns" as any)
     .select("*")
-    .eq("id", campaignId)
-    .single();
+    .eq("id", campaignId);
 
+  // Tenant protection
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  // Ownership protection
+  if (options?.onlyOwn && options?.userId) {
+    query = query.eq("created_by", options.userId);
+  }
+
+  const { data, error } = await query.single();
   if (error) return null;
+
   const campaign = data as unknown as CampaignWithStats;
 
   // Enrich creator name
@@ -196,7 +211,7 @@ export async function fetchCampaignDetail(campaignId: string): Promise<CampaignW
   return campaign;
 }
 
-// ---- Campaign recipients ----
+// ---- Campaign recipients (paginated) ----
 
 export async function fetchManagedRecipients(
   campaignId: string,
@@ -204,13 +219,19 @@ export async function fetchManagedRecipients(
     status?: string;
     instanceId?: string;
     hasError?: boolean;
-  }
-): Promise<CampaignRecipientWithClient[]> {
+  },
+  page = 1,
+  pageSize = 50
+): Promise<PaginatedResult<CampaignRecipientWithClient>> {
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabase
     .from("whatsapp_campaign_recipients" as any)
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("campaign_id", campaignId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .range(from, to);
 
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
@@ -222,12 +243,12 @@ export async function fetchManagedRecipients(
     query = query.not("error_message", "is", null);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
   const recipients = (data || []) as unknown as CampaignRecipientWithClient[];
 
-  // Enrich with client data
+  // Enrich with client data in batch
   const clientIds = [...new Set(recipients.map((r) => r.representative_client_id).filter(Boolean))];
   if (clientIds.length > 0) {
     const { data: clients } = await supabase
@@ -247,7 +268,7 @@ export async function fetchManagedRecipients(
     });
   }
 
-  // Enrich with instance names
+  // Enrich with instance names in batch
   const instanceIds = [...new Set(recipients.map((r) => r.assigned_instance_id).filter(Boolean))];
   if (instanceIds.length > 0) {
     const { data: instances } = await supabase
@@ -263,61 +284,42 @@ export async function fetchManagedRecipients(
     });
   }
 
-  return recipients;
+  return { data: recipients, total: count || 0, page, pageSize };
 }
 
-// ---- Campaign agreements (indirect: recipient → client → cpf → agreements) ----
+// ---- Recipient status counts (lightweight — no full load) ----
 
-export async function fetchCampaignAgreements(campaignId: string, tenantId: string) {
-  // Get recipients with client CPFs
-  const recipients = await fetchManagedRecipients(campaignId);
-  const cpfs = [...new Set(recipients.map((r) => r.client_cpf).filter(Boolean))] as string[];
-  if (cpfs.length === 0) return [];
+export async function fetchRecipientStatusCounts(campaignId: string): Promise<RecipientStatusCount[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .select("status")
+    .eq("campaign_id", campaignId);
 
-  // Get campaign start date
-  const campaign = await fetchCampaignDetail(campaignId);
-  const startDate = campaign?.started_at || campaign?.created_at;
+  if (error) throw error;
 
-  // Fetch agreements for these CPFs created after campaign start
-  let query = supabase
-    .from("agreements")
-    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by")
-    .eq("tenant_id", tenantId);
-
-  if (startDate) {
-    query = query.gte("created_at", startDate);
+  const counts: Record<string, number> = {};
+  for (const r of (data || []) as any[]) {
+    const s = r.status || "pending";
+    counts[s] = (counts[s] || 0) + 1;
   }
 
-  const { data, error } = await query;
-  if (error) return [];
-
-  // Filter to only CPFs from the campaign (normalize for comparison)
-  const normalizedCpfs = new Set(cpfs.map((c) => c.replace(/\D/g, "")));
-  const agreements = (data || []).filter((a: any) =>
-    normalizedCpfs.has(a.client_cpf?.replace(/\D/g, "") || "")
-  );
-
-  // Enrich with creator names
-  const creatorIds = [...new Set(agreements.map((a: any) => a.created_by).filter(Boolean))];
-  if (creatorIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id, full_name")
-      .in("user_id", creatorIds);
-    const nameMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
-    agreements.forEach((a: any) => {
-      a.creator_name = nameMap.get(a.created_by) || "—";
-    });
-  }
-
-  return agreements;
+  return Object.entries(counts).map(([status, count]) => ({ status, count }));
 }
 
-// ---- Instance metrics ----
+// ---- Instance metrics (direct GROUP BY — no N+1) ----
 
 export async function fetchInstanceMetrics(campaignId: string): Promise<InstanceMetric[]> {
-  const recipients = await fetchManagedRecipients(campaignId);
+  // Get all recipients with only the fields we need
+  const { data: rawRecipients, error } = await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .select("assigned_instance_id, status")
+    .eq("campaign_id", campaignId);
 
+  if (error) throw error;
+
+  const recipients = (rawRecipients || []) as any[];
+
+  // Aggregate manually (avoids loading full recipient objects)
   const metricMap = new Map<string, InstanceMetric>();
 
   for (const r of recipients) {
@@ -325,7 +327,7 @@ export async function fetchInstanceMetrics(campaignId: string): Promise<Instance
     if (!metricMap.has(key)) {
       metricMap.set(key, {
         instance_id: key,
-        instance_name: r.instance_name || "Sem instância",
+        instance_name: "—",
         recipients: 0,
         sent: 0,
         failed: 0,
@@ -334,57 +336,212 @@ export async function fetchInstanceMetrics(campaignId: string): Promise<Instance
     }
     const m = metricMap.get(key)!;
     m.recipients++;
-    if (r.status === "sent" || r.status === "delivered" || r.status === "read") m.sent++;
+    if (["sent", "delivered", "read"].includes(r.status)) m.sent++;
     if (r.status === "failed") m.failed++;
-    if (r.status === "delivered" || r.status === "read") m.delivered++;
+    if (["delivered", "read"].includes(r.status)) m.delivered++;
   }
+
+  // Enrich instance names in single batch query
+  const instanceIds = [...metricMap.keys()].filter((k) => k !== "unassigned");
+  if (instanceIds.length > 0) {
+    const { data: instances } = await supabase
+      .from("whatsapp_instances" as any)
+      .select("id, name")
+      .in("id", instanceIds);
+
+    for (const inst of (instances || []) as any[]) {
+      const m = metricMap.get(inst.id);
+      if (m) m.instance_name = inst.name;
+    }
+  }
+
+  const unassigned = metricMap.get("unassigned");
+  if (unassigned) unassigned.instance_name = "Sem instância";
 
   return Array.from(metricMap.values());
 }
 
-// ---- Responses: recipients that got a reply (conversation created after campaign) ----
+// ---- Fetch campaign instances (for filter dropdowns) ----
+
+export async function fetchCampaignInstances(
+  selectedInstanceIds: string[]
+): Promise<{ id: string; name: string }[]> {
+  if (!selectedInstanceIds || selectedInstanceIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("whatsapp_instances" as any)
+    .select("id, name")
+    .in("id", selectedInstanceIds);
+
+  if (error) return [];
+  return (data || []) as any[];
+}
+
+// ---- Campaign agreements (optimized — no N+1, 30-day window) ----
+// LIMITATION: correlation by CPF + time window, not causal link
+
+export async function fetchCampaignAgreements(
+  campaignId: string,
+  tenantId: string,
+  campaignStartDate?: string
+) {
+  // If no start date provided, fetch campaign to get it
+  let startDate = campaignStartDate;
+  if (!startDate) {
+    const { data: cData } = await supabase
+      .from("whatsapp_campaigns" as any)
+      .select("started_at, created_at")
+      .eq("id", campaignId)
+      .single();
+    const cd = cData as any;
+    startDate = cd?.started_at || cd?.created_at;
+  }
+
+  if (!startDate) return [];
+
+  // Calculate 30-day window
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 30);
+
+  // Get CPFs directly from recipients + clients (no full enrichment)
+  const { data: recipientClients } = await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .select("representative_client_id")
+    .eq("campaign_id", campaignId);
+
+  const clientIds = [...new Set(
+    ((recipientClients || []) as any[])
+      .map((r) => r.representative_client_id)
+      .filter(Boolean)
+  )];
+
+  if (clientIds.length === 0) return [];
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("cpf")
+    .in("id", clientIds);
+
+  const cpfs = [...new Set(((clients || []) as any[]).map((c) => c.cpf).filter(Boolean))];
+  if (cpfs.length === 0) return [];
+
+  const normalizedCpfs = new Set(cpfs.map((c: string) => c.replace(/\D/g, "")));
+
+  // Fetch agreements within 30-day window (limit 200)
+  const { data: agreements, error } = await supabase
+    .from("agreements")
+    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by")
+    .eq("tenant_id", tenantId)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate.toISOString())
+    .order("created_at", { ascending: false })
+    .range(0, 199);
+
+  if (error) return [];
+
+  // Filter to only CPFs from the campaign
+  const filtered = (agreements || []).filter((a: any) =>
+    normalizedCpfs.has(a.client_cpf?.replace(/\D/g, "") || "")
+  );
+
+  // Enrich with creator names in batch
+  const creatorIds = [...new Set(filtered.map((a: any) => a.created_by).filter(Boolean))];
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name")
+      .in("user_id", creatorIds);
+    const nameMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
+    filtered.forEach((a: any) => {
+      a.creator_name = nameMap.get(a.created_by) || "—";
+    });
+  }
+
+  return filtered;
+}
+
+// ---- Responses: recipients with inbound messages in time window ----
+// LIMITATION: correlation by phone + time window, not causal link
 
 export async function fetchCampaignResponses(campaignId: string, tenantId: string) {
-  const recipients = await fetchManagedRecipients(campaignId);
-  const campaign = await fetchCampaignDetail(campaignId);
-  const startDate = campaign?.started_at || campaign?.created_at;
+  // Fetch campaign dates
+  const { data: cRaw } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .select("started_at, created_at, completed_at")
+    .eq("id", campaignId)
+    .single();
 
-  // Get all conversations for tenant after start
-  let convQuery = supabase
+  const cData = cRaw as any;
+  const startDate = cData?.started_at || cData?.created_at;
+  if (!startDate) return [];
+
+  // Time window: started_at to completed_at + 72h (or started_at + 7 days)
+  let endDate: Date;
+  if (cData?.completed_at) {
+    endDate = new Date(cData.completed_at);
+    endDate.setHours(endDate.getHours() + 72);
+  } else {
+    endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 7);
+  }
+
+  // Get recipient phones (lightweight)
+  const { data: recipientData } = await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .select("id, phone, recipient_name, assigned_instance_id, status")
+    .eq("campaign_id", campaignId)
+    .range(0, 999);
+
+  const recipients = (recipientData || []) as any[];
+  if (recipients.length === 0) return [];
+
+  // Normalize phones for lookup
+  const phoneMap = new Map<string, any>();
+  for (const r of recipients) {
+    const normalized = r.phone?.replace(/\D/g, "") || "";
+    if (normalized) phoneMap.set(normalized, r);
+  }
+
+  // Find conversations with inbound messages in the time window
+  const { data: conversations } = await supabase
     .from("conversations")
     .select("id, phone, status, assigned_to, created_at, client_id")
-    .eq("tenant_id", tenantId);
+    .eq("tenant_id", tenantId)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate.toISOString())
+    .range(0, 499);
 
-  if (startDate) {
-    convQuery = convQuery.gte("created_at", startDate);
-  }
+  if (!conversations || conversations.length === 0) return [];
 
-  const { data: conversations } = await convQuery;
-
-  // Build phone→conversation map (normalize phones)
-  const convByPhone = new Map<string, any>();
-  for (const conv of (conversations || []) as any[]) {
+  // Match conversations to recipients by normalized phone
+  const responses: any[] = [];
+  for (const conv of conversations as any[]) {
     const normalized = conv.phone?.replace(/\D/g, "") || "";
-    if (normalized) {
-      convByPhone.set(normalized, conv);
-    }
+    const recipient = phoneMap.get(normalized);
+    if (!recipient) continue;
+
+    responses.push({
+      ...recipient,
+      conversation_id: conv.id,
+      conversation_status: conv.status,
+      conversation_assigned_to: conv.assigned_to,
+      responded_at: conv.created_at,
+    });
   }
 
-  // Match recipients to conversations
-  const responses = recipients
-    .map((r) => {
-      const normalized = r.phone?.replace(/\D/g, "") || "";
-      const conv = convByPhone.get(normalized);
-      if (!conv) return null;
-      return {
-        ...r,
-        conversation_id: conv.id,
-        conversation_status: conv.status,
-        conversation_assigned_to: conv.assigned_to,
-        responded_at: conv.created_at,
-      };
-    })
-    .filter(Boolean);
+  // Enrich instance names
+  const instanceIds = [...new Set(responses.map((r) => r.assigned_instance_id).filter(Boolean))];
+  if (instanceIds.length > 0) {
+    const { data: instances } = await supabase
+      .from("whatsapp_instances" as any)
+      .select("id, name")
+      .in("id", instanceIds);
 
-  return responses;
+    const instMap = new Map(((instances || []) as any[]).map((i) => [i.id, i.name]));
+    responses.forEach((r) => {
+      r.instance_name = instMap.get(r.assigned_instance_id) || "—";
+    });
+  }
+
+  return responses.slice(0, 200);
 }
