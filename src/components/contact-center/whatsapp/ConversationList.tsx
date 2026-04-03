@@ -192,12 +192,13 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
       !search ||
       displayName.toLowerCase().includes(search.toLowerCase()) ||
       c.remote_phone.includes(search);
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchStatus = statusFilter === "all" || statusFilter === "unread" || c.status === statusFilter;
+    const matchUnread = statusFilter !== "unread" || c.unread_count > 0;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
     const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
     const matchLink = linkFilter === "all" || (linkFilter === "linked" ? !!c.client_id : !c.client_id);
-    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator && matchLink;
+    return matchSearch && matchStatus && matchUnread && matchInstance && matchTag && matchOperator && matchLink;
   });
 
   const statusColors: Record<string, string> = {
