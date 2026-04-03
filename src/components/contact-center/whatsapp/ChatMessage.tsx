@@ -22,8 +22,9 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
 
   // Find replied message
   const repliedMessage = message.reply_to_message_id
-    ? allMessages.find((m) => m.id === message.reply_to_message_id)
+    ? allMessages.find((m) => m.id === message.reply_to_message_id) ?? null
     : null;
+  const hasReplyRef = !!message.reply_to_message_id;
 
   const renderContent = () => {
     switch (message.message_type) {
