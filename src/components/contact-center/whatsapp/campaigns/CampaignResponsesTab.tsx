@@ -12,7 +12,8 @@ interface Props {
 }
 
 export default function CampaignResponsesTab({ campaignId }: Props) {
-  const { tenantId } = useTenant();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
 
   const { data: responses = [], isLoading } = useQuery({
     queryKey: ["campaign-responses", campaignId],

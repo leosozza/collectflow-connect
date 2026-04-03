@@ -26,7 +26,8 @@ const tabs = [
 ];
 
 export default function CampaignDetailView({ campaignId, onBack }: Props) {
-  const { tenantId } = useTenant();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const permissions = usePermissions();
   const [activeTab, setActiveTab] = useState("resumo");
 

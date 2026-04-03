@@ -43,10 +43,13 @@ const originLabels: Record<string, string> = {
 };
 
 export default function CampaignManagementTab() {
-  const { tenantId, tenantUser } = useTenant();
+  const { tenant, tenantUser } = useTenant();
   const permissions = usePermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+
+  const tenantId = tenant?.id;
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const onlyOwn = !permissions.canViewAllCampanhas && permissions.canViewOwnCampanhas;

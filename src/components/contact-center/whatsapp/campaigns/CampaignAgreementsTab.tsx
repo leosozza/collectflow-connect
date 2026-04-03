@@ -28,7 +28,8 @@ interface Props {
 }
 
 export default function CampaignAgreementsTab({ campaignId }: Props) {
-  const { tenantId } = useTenant();
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
 
   const { data: agreements = [], isLoading } = useQuery({
     queryKey: ["campaign-agreements", campaignId],
