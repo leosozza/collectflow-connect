@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       // Find or create conversation
       const { data: existingConv } = await supabase
         .from("conversations")
-        .select("id, unread_count, assigned_to, client_id")
+        .select("id, unread_count, assigned_to, client_id, status")
         .eq("tenant_id", tenantId)
         .eq("instance_id", instanceId)
         .eq("remote_phone", remotePhone)
