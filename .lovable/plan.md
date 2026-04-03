@@ -1,61 +1,45 @@
 
 
-# Plano: Corrigir exibição de boletos gerados nas parcelas do acordo
+# Plano: Ação "Quebrar Acordo" para Admin na Gestão de Acordos
 
-## Problema
+## Contexto
 
-Dois problemas distintos afetam a exibição de boletos:
+Hoje os acordos vigentes (`pending`) e vencidos (`overdue`) só podem ser aprovados/rejeitados na aba "Aguardando Liberação". Não existe botão para o admin (ou usuário autorizado) **quebrar** manualmente um acordo vigente/vencido. A quebra manual deve usar `cancellation_type = 'manual'` (já implementado no plano anterior) e funcionar no mesmo padrão visual das ações de aprovação.
 
-### 1. Matching frágil entre cobrança e parcela
-O código atual em `AgreementInstallments.tsx` (linhas 135-151) associa cobrancas a parcelas comparando **mês/ano** da data de vencimento:
-```typescript
-const cobranca = cobrancas.find((c: any) => {
-  const cDate = new Date(c.data_vencimento);
-  return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
-});
-```
-Isso falha quando duas parcelas caem no mesmo mês, ou quando a data do boleto difere da parcela (ex: reemissão). O campo `installment_key` já é gravado corretamente na cobrança (ex: `agreementId:0` para entrada, `agreementId:1` para parcela 1) — basta usar esse campo no match.
+## Alterações
 
-### 2. Caso Thais: acordo sem cobrancas
-O acordo `ae3f2595` tem `boleto_pendente = false` e 0 cobrancas. Isso indica que a geração falhou mas o flag não refletiu. O fluxo precisa de proteção: após `generateAgreementBoletos`, se nenhum boleto foi gerado com sucesso, manter `boleto_pendente = true`.
+### 1. Nova permissão: `acordos.break`
 
-## Correções
+**`src/hooks/usePermissions.ts`**
+- Adicionar `"break"` nas actions de `acordos` para `super_admin` e `admin` nos `ROLE_DEFAULTS`
+- Expor `canBreakAcordos: has("acordos", "break")` no retorno do hook
 
-### Arquivo: `src/components/client-detail/AgreementInstallments.tsx`
+### 2. AcordosPage — mostrar botão de quebra nas abas Vigentes e Vencidos
 
-**Correção 1 — Matching por `installment_key`**
+**`src/pages/AcordosPage.tsx`**
+- Passar nova prop `onBreak` para `AgreementsList` quando o usuário tem permissão `canBreakAcordos`
+- Mostrar ações (coluna Ações) nas abas `vigentes` e `overdue` para quem tem permissão de quebra
+- Handler `handleBreak` chama `cancelAgreement(id)` (que já grava `cancellation_type = 'manual'`)
 
-Substituir o matching por mês/ano por matching exato via `installment_key`:
+### 3. AgreementsList — botão "Quebrar Acordo"
 
-```typescript
-// Antes (frágil):
-const cobranca = cobrancas.find((c: any) => {
-  const cDate = new Date(c.data_vencimento);
-  return cDate.getMonth() === dueDate.getMonth() && cDate.getFullYear() === dueDate.getFullYear();
-});
+**`src/components/acordos/AgreementsList.tsx`**
+- Nova prop `onBreak?: (id: string) => void`
+- Exibir botão com ícone de quebra (ex: `Ban` do lucide) nos acordos `pending` e `overdue` quando `onBreak` está definido
+- Ao clicar, abrir AlertDialog de confirmação com texto "Quebrar Acordo — parcelas pendentes serão marcadas como Quebra de Acordo"
+- Ajustar lógica de `hasActions` para considerar também `onBreak`
 
-// Depois (exato):
-const expectedKey = `${agreementId}:${instNumber}`;
-const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
-```
+### 4. Permissão configurável na UI
 
-Aplicar nos dois pontos onde o matching ocorre (entrada e parcelas regulares).
-
-**Correção 2 — Proteção no `executeBoletosGeneration`**
-
-Após chamar `generateAgreementBoletos`, só limpar `boleto_pendente` se `result.success > 0`:
-
-```typescript
-if (result.success > 0) {
-  await supabase.from("agreements").update({ boleto_pendente: false }).eq("id", agreementId);
-}
-```
+O admin já pode configurar permissões granulares por módulo na tela de Usuários. A action `break` ficará disponível automaticamente no módulo `acordos`, permitindo que o admin conceda essa permissão a qualquer usuário.
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | Matching por `installment_key` + proteção no flag `boleto_pendente` |
+| `src/hooks/usePermissions.ts` | Adicionar `break` nos defaults de admin/super_admin + expor `canBreakAcordos` |
+| `src/pages/AcordosPage.tsx` | Handler `handleBreak` + passar prop `onBreak` + expandir abas com ações |
+| `src/components/acordos/AgreementsList.tsx` | Botão "Quebrar" + AlertDialog de confirmação |
 
-Nenhuma alteração em banco, serviços ou identidade visual.
+Nenhuma alteração em banco. Usa `cancelAgreement` existente (que já grava `cancellation_type = 'manual'`).
 
