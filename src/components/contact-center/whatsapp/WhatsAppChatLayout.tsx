@@ -248,7 +248,7 @@ const WhatsAppChatLayout = () => {
     return instances.find((i) => i.id === selectedConv.instance_id) || null;
   };
 
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, replyToMessageId?: string | null) => {
     if (!selectedConv || !tenantId) return;
     const instance = getInstanceForConv();
     if (!instance) {
@@ -257,7 +257,7 @@ const WhatsAppChatLayout = () => {
     }
     setSending(true);
     try {
-      await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name);
+      await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name, replyToMessageId);
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mensagem");
     } finally {
