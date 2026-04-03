@@ -94,7 +94,7 @@ const ChatPanel = ({
     update();
     const interval = setInterval(update, 30000);
     return () => clearInterval(interval);
-  }, [slaDeadline, conversation?.created_at]);
+  }, [slaDeadline]);
 
   const handleOpenAtendimento = async () => {
     if (!conversation) return;
