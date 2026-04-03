@@ -372,7 +372,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     const { error } = await supabase
       .from("agreements")
-      .update({ status: "cancelled" } as any)
+      .update({ status: "cancelled", cancellation_type: "manual" } as any)
       .eq("id", id);
 
     if (error) throw error;

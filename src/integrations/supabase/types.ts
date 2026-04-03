@@ -267,6 +267,7 @@ export type Database = {
           approval_reason: string | null
           approved_by: string | null
           boleto_pendente: boolean
+          cancellation_type: string | null
           checkout_token: string | null
           client_cpf: string
           client_name: string
@@ -296,6 +297,7 @@ export type Database = {
           approval_reason?: string | null
           approved_by?: string | null
           boleto_pendente?: boolean
+          cancellation_type?: string | null
           checkout_token?: string | null
           client_cpf: string
           client_name: string
@@ -325,6 +327,7 @@ export type Database = {
           approval_reason?: string | null
           approved_by?: string | null
           boleto_pendente?: boolean
+          cancellation_type?: string | null
           checkout_token?: string | null
           client_cpf?: string
           client_name?: string

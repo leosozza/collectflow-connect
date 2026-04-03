@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
 
       if (toCancel.length > 0) {
         const ids = toCancel.map((a: any) => a.id);
-        await supabase.from("agreements").update({ status: "cancelled" }).in("id", ids);
+        await supabase.from("agreements").update({ status: "cancelled", cancellation_type: "auto_expired" }).in("id", ids);
 
         const tenantIdsForCancel = [...new Set(toCancel.map((a: any) => a.tenant_id))];
         const { data: quebraStatusList } = await supabase
