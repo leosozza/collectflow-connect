@@ -92,14 +92,21 @@ export async function fetchManagedCampaigns(
     createdBy?: string;
     onlyOwn?: boolean;
     userId?: string;
+    page?: number;
+    pageSize?: number;
   }
-): Promise<CampaignWithStats[]> {
+): Promise<PaginatedResult<CampaignWithStats>> {
+  const page = filters?.page || 1;
+  const pageSize = filters?.pageSize || 50;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabase
     .from("whatsapp_campaigns" as any)
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
-    .range(0, 99);
+    .range(from, to);
 
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
@@ -123,7 +130,7 @@ export async function fetchManagedCampaigns(
     query = query.or(`name.ilike.%${filters.search}%`);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
   const campaigns = (data || []) as unknown as CampaignWithStats[];
@@ -142,7 +149,7 @@ export async function fetchManagedCampaigns(
     });
   }
 
-  return campaigns;
+  return { data: campaigns, total: count || 0, page, pageSize };
 }
 
 // ---- Dashboard stats (honest — no fake response/agreement rates) ----
@@ -293,7 +300,8 @@ export async function fetchRecipientStatusCounts(campaignId: string): Promise<Re
   const { data, error } = await supabase
     .from("whatsapp_campaign_recipients" as any)
     .select("status")
-    .eq("campaign_id", campaignId);
+    .eq("campaign_id", campaignId)
+    .limit(50000);
 
   if (error) throw error;
 
@@ -427,13 +435,15 @@ export async function fetchCampaignAgreements(
 
   const normalizedCpfs = new Set(cpfs.map((c: string) => c.replace(/\D/g, "")));
 
-  // Fetch agreements within 30-day window (limit 200)
+  // Fetch agreements within 30-day window, exclude portal_origin and rejected (limit 200)
   const { data: agreements, error } = await supabase
     .from("agreements")
-    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by")
+    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by, portal_origin")
     .eq("tenant_id", tenantId)
     .gte("created_at", startDate)
     .lte("created_at", endDate.toISOString())
+    .neq("status", "rejected")
+    .neq("portal_origin", true)
     .order("created_at", { ascending: false })
     .range(0, 199);
 
@@ -502,10 +512,10 @@ export async function fetchCampaignResponses(campaignId: string, tenantId: strin
     if (normalized) phoneMap.set(normalized, r);
   }
 
-  // Find conversations with inbound messages in the time window
+  // Find conversations with matching remote_phone in the time window
   const { data: conversations } = await supabase
-    .from("conversations")
-    .select("id, phone, status, assigned_to, created_at, client_id")
+    .from("conversations" as any)
+    .select("id, remote_phone, status, assigned_to, created_at, client_id")
     .eq("tenant_id", tenantId)
     .gte("created_at", startDate)
     .lte("created_at", endDate.toISOString())
@@ -514,18 +524,41 @@ export async function fetchCampaignResponses(campaignId: string, tenantId: strin
   if (!conversations || conversations.length === 0) return [];
 
   // Match conversations to recipients by normalized phone
-  const responses: any[] = [];
+  const matchedConvIds: string[] = [];
+  const convRecipientMap = new Map<string, { conv: any; recipient: any }>();
+
   for (const conv of conversations as any[]) {
-    const normalized = conv.phone?.replace(/\D/g, "") || "";
+    const normalized = conv.remote_phone?.replace(/\D/g, "") || "";
     const recipient = phoneMap.get(normalized);
     if (!recipient) continue;
+    matchedConvIds.push(conv.id);
+    convRecipientMap.set(conv.id, { conv, recipient });
+  }
 
+  if (matchedConvIds.length === 0) return [];
+
+  // Verify real inbound messages exist in these conversations (eliminates system-only convos)
+  const { data: inboundMessages } = await supabase
+    .from("chat_messages" as any)
+    .select("conversation_id")
+    .in("conversation_id", matchedConvIds)
+    .eq("direction", "inbound")
+    .gte("created_at", startDate)
+    .lte("created_at", endDate.toISOString());
+
+  const convsWithInbound = new Set(((inboundMessages || []) as any[]).map((m) => m.conversation_id));
+
+  // Build responses only for conversations with real inbound messages
+  const responses: any[] = [];
+  for (const convId of convsWithInbound) {
+    const match = convRecipientMap.get(convId);
+    if (!match) continue;
     responses.push({
-      ...recipient,
-      conversation_id: conv.id,
-      conversation_status: conv.status,
-      conversation_assigned_to: conv.assigned_to,
-      responded_at: conv.created_at,
+      ...match.recipient,
+      conversation_id: match.conv.id,
+      conversation_status: match.conv.status,
+      conversation_assigned_to: match.conv.assigned_to,
+      responded_at: match.conv.created_at,
     });
   }
 

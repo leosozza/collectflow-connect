@@ -1,14 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchManagedCampaigns, fetchCampaignDashboardStats } from "@/services/campaignManagementService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Search, Send, CheckCircle, XCircle, BarChart3 } from "lucide-react";
+import { Search, Send, CheckCircle, XCircle, BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import CampaignDetailView from "./campaigns/CampaignDetailView";
@@ -42,42 +43,49 @@ const originLabels: Record<string, string> = {
   ia: "IA",
 };
 
+const PAGE_SIZE = 50;
+
 export default function CampaignManagementTab() {
   const { tenant, tenantUser } = useTenant();
   const permissions = usePermissions();
   const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const tenantId = tenant?.id;
   const onlyOwn = !permissions.canViewAllCampanhas && permissions.canViewOwnCampanhas;
 
-  // Debounce search by 500ms
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const debounceTimer = useMemo(() => {
-    return (value: string) => {
-      const timer = setTimeout(() => setDebouncedSearch(value), 500);
-      return () => clearTimeout(timer);
-    };
-  }, []);
+  // Proper debounce with cleanup
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    debounceTimer(value);
-  };
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter]);
 
-  const { data: campaigns = [], isLoading } = useQuery({
-    queryKey: ["managed-campaigns", tenantId, statusFilter, debouncedSearch, onlyOwn],
+  const { data: campaignsResult, isLoading } = useQuery({
+    queryKey: ["managed-campaigns", tenantId, statusFilter, debouncedSearch, onlyOwn, page],
     queryFn: () =>
       fetchManagedCampaigns(tenantId!, {
         status: statusFilter,
         search: debouncedSearch || undefined,
         onlyOwn,
         userId: onlyOwn ? tenantUser?.user_id : undefined,
+        page,
+        pageSize: PAGE_SIZE,
       }),
     enabled: !!tenantId,
     refetchInterval: 30000,
   });
+
+  const campaigns = campaignsResult?.data || [];
+  const totalCampaigns = campaignsResult?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalCampaigns / PAGE_SIZE));
 
   const { data: stats } = useQuery({
     queryKey: ["campaign-dashboard-stats", tenantId, onlyOwn],
@@ -99,7 +107,7 @@ export default function CampaignManagementTab() {
 
   return (
     <div className="p-4 space-y-4 h-full overflow-auto">
-      {/* Dashboard cards — only reliable metrics */}
+      {/* Dashboard cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
@@ -154,7 +162,7 @@ export default function CampaignManagementTab() {
           <Input
             placeholder="Buscar campanha..."
             value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -245,6 +253,34 @@ export default function CampaignManagementTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{totalCampaigns} campanhas encontradas</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+            </Button>
+            <span className="px-2">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
