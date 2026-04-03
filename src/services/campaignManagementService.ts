@@ -434,13 +434,15 @@ export async function fetchCampaignAgreements(
 
   const normalizedCpfs = new Set(cpfs.map((c: string) => c.replace(/\D/g, "")));
 
-  // Fetch agreements within 30-day window (limit 200)
+  // Fetch agreements within 30-day window, exclude portal_origin and rejected (limit 200)
   const { data: agreements, error } = await supabase
     .from("agreements")
-    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by")
+    .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by, portal_origin")
     .eq("tenant_id", tenantId)
     .gte("created_at", startDate)
     .lte("created_at", endDate.toISOString())
+    .neq("status", "rejected")
+    .neq("portal_origin", true)
     .order("created_at", { ascending: false })
     .range(0, 199);
 
