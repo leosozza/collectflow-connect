@@ -393,7 +393,8 @@ export async function fetchCampaignAgreements(
       .select("started_at, created_at")
       .eq("id", campaignId)
       .single();
-    startDate = cData?.started_at || cData?.created_at;
+    const cd = cData as any;
+    startDate = cd?.started_at || cd?.created_at;
   }
 
   if (!startDate) return [];
