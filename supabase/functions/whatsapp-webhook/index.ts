@@ -248,7 +248,11 @@ Deno.serve(async (req) => {
         };
 
         if (direction === "inbound") {
-          updateData.status = "open";
+          // Queue flow: closed → waiting, waiting stays waiting, open stays open
+          if (existingConv.status === "closed") {
+            updateData.status = "waiting";
+          }
+          // If already "waiting" or "open", don't change status
           const linkedClientId = existingConv.client_id || updateData.client_id || null;
           const slaMinutes = await getSlaMinutes(linkedClientId);
           updateData.sla_deadline_at = new Date(Date.now() + slaMinutes * 60 * 1000).toISOString();
