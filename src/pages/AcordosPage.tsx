@@ -88,6 +88,13 @@ const AcordosPage = () => {
     load();
   };
 
+  const handleBreak = async (id: string) => {
+    await cancelAgreement(id);
+    trackAction("quebrar_acordo", { acordo_id: id });
+    toast({ title: "Acordo quebrado com sucesso." });
+    load();
+  };
+
   const credores = useMemo(() => {
     const set = new Set(agreements.map(a => a.credor));
     return Array.from(set).sort();
