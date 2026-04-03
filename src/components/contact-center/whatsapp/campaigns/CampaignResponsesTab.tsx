@@ -3,7 +3,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { fetchCampaignResponses } from "@/services/campaignManagementService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { MessageSquare, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -24,9 +25,18 @@ export default function CampaignResponsesTab({ campaignId }: Props) {
   return (
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Respostas vinculadas à campanha</h3>
+        <h3 className="text-sm font-medium">Respostas possivelmente vinculadas</h3>
         <span className="text-sm text-muted-foreground">{responses.length} respostas</span>
       </div>
+
+      {/* Correlation warning */}
+      <Alert variant="default" className="bg-muted/50 border-muted-foreground/20">
+        <Info className="h-4 w-4" />
+        <AlertDescription className="text-xs">
+          Respostas identificadas por correlação (telefone + janela temporal após a campanha).
+          Pode incluir conversas não diretamente relacionadas à campanha.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardContent className="p-0">
@@ -36,7 +46,7 @@ export default function CampaignResponsesTab({ campaignId }: Props) {
             <div className="p-8 text-center text-muted-foreground">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p>Nenhuma resposta identificada ainda</p>
-              <p className="text-xs mt-1">Respostas são vinculadas por telefone após o início da campanha</p>
+              <p className="text-xs mt-1">Respostas são vinculadas por telefone dentro da janela temporal da campanha</p>
             </div>
           ) : (
             <div className="overflow-auto max-h-[60vh]">
@@ -48,6 +58,7 @@ export default function CampaignResponsesTab({ campaignId }: Props) {
                     <th className="text-left p-3 font-medium">Instância</th>
                     <th className="text-left p-3 font-medium">Respondeu em</th>
                     <th className="text-left p-3 font-medium">Status Conversa</th>
+                    <th className="text-left p-3 font-medium">Tipo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -63,6 +74,9 @@ export default function CampaignResponsesTab({ campaignId }: Props) {
                         <Badge variant="outline" className="text-xs">
                           {r.conversation_status || "—"}
                         </Badge>
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="secondary" className="text-xs">Correlação</Badge>
                       </td>
                     </tr>
                   ))}

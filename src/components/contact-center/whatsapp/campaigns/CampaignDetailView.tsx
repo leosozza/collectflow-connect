@@ -4,7 +4,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCampaignDetail } from "@/services/campaignManagementService";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CampaignSummaryTab from "./CampaignSummaryTab";
 import CampaignRecipientsTab from "./CampaignRecipientsTab";
@@ -15,6 +15,8 @@ import CampaignMetricsTab from "./CampaignMetricsTab";
 interface Props {
   campaignId: string;
   onBack: () => void;
+  onlyOwn?: boolean;
+  userId?: string;
 }
 
 const tabs = [
@@ -25,16 +27,16 @@ const tabs = [
   { id: "metricas", label: "Métricas" },
 ];
 
-export default function CampaignDetailView({ campaignId, onBack }: Props) {
+export default function CampaignDetailView({ campaignId, onBack, onlyOwn, userId }: Props) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const permissions = usePermissions();
   const [activeTab, setActiveTab] = useState("resumo");
 
   const { data: campaign, isLoading } = useQuery({
-    queryKey: ["campaign-detail", campaignId],
-    queryFn: () => fetchCampaignDetail(campaignId),
-    enabled: !!campaignId,
+    queryKey: ["campaign-detail", campaignId, tenantId],
+    queryFn: () => fetchCampaignDetail(campaignId, tenantId!, { onlyOwn, userId }),
+    enabled: !!campaignId && !!tenantId,
   });
 
   const visibleTabs = tabs.filter((t) => {
@@ -48,7 +50,16 @@ export default function CampaignDetailView({ campaignId, onBack }: Props) {
   }
 
   if (!campaign) {
-    return <div className="p-8 text-center text-muted-foreground">Campanha não encontrada</div>;
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        <ShieldAlert className="w-10 h-10 mx-auto mb-3 opacity-50" />
+        <p className="font-medium">Campanha não encontrada ou sem acesso</p>
+        <p className="text-xs mt-1">Verifique suas permissões ou volte à listagem.</p>
+        <Button variant="ghost" className="mt-4" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -88,12 +99,17 @@ export default function CampaignDetailView({ campaignId, onBack }: Props) {
       <div className="flex-1 overflow-auto">
         {activeTab === "resumo" && <CampaignSummaryTab campaign={campaign} />}
         {activeTab === "destinatarios" && permissions.canViewCampaignRecipients && (
-          <CampaignRecipientsTab campaignId={campaignId} />
+          <CampaignRecipientsTab campaignId={campaignId} selectedInstanceIds={campaign.selected_instance_ids} />
         )}
         {activeTab === "respostas" && <CampaignResponsesTab campaignId={campaignId} />}
-        {activeTab === "acordos" && <CampaignAgreementsTab campaignId={campaignId} />}
+        {activeTab === "acordos" && (
+          <CampaignAgreementsTab
+            campaignId={campaignId}
+            campaignStartDate={campaign.started_at || campaign.created_at}
+          />
+        )}
         {activeTab === "metricas" && permissions.canViewCampaignMetrics && (
-          <CampaignMetricsTab campaignId={campaignId} />
+          <CampaignMetricsTab campaignId={campaignId} campaign={campaign} />
         )}
       </div>
     </div>

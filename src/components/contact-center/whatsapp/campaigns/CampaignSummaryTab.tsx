@@ -1,12 +1,11 @@
-import { CampaignWithStats } from "@/services/campaignManagementService";
+import { CampaignWithStats, fetchRecipientStatusCounts, fetchInstanceMetrics } from "@/services/campaignManagementService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, CheckCircle, XCircle, Clock, Users, Zap } from "lucide-react";
+import { Send, CheckCircle, XCircle, Users, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import { fetchManagedRecipients } from "@/services/campaignManagementService";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -27,6 +26,15 @@ const originLabels: Record<string, string> = {
   ia: "IA",
 };
 
+const recipientStatusLabels: Record<string, string> = {
+  pending: "Pendente",
+  sent: "Enviado",
+  delivered: "Entregue",
+  read: "Lido",
+  failed: "Falhou",
+  skipped: "Ignorado",
+};
+
 const PIE_COLORS = ["hsl(var(--primary))", "hsl(142 76% 36%)", "hsl(0 84% 60%)", "hsl(45 93% 47%)", "hsl(var(--muted-foreground))"];
 
 interface Props {
@@ -34,30 +42,31 @@ interface Props {
 }
 
 export default function CampaignSummaryTab({ campaign }: Props) {
-  const { data: recipients = [] } = useQuery({
-    queryKey: ["campaign-recipients-summary", campaign.id],
-    queryFn: () => fetchManagedRecipients(campaign.id),
+  // Lightweight status counts (no full recipient load)
+  const { data: statusCounts = [] } = useQuery({
+    queryKey: ["campaign-status-counts", campaign.id],
+    queryFn: () => fetchRecipientStatusCounts(campaign.id),
   });
 
-  const responseRate = campaign.sent_count > 0 ? ((campaign.delivered_count / campaign.sent_count) * 100).toFixed(1) : "0";
+  // Instance metrics (lightweight aggregation)
+  const { data: instanceMetrics = [] } = useQuery({
+    queryKey: ["campaign-instance-metrics", campaign.id],
+    queryFn: () => fetchInstanceMetrics(campaign.id),
+  });
 
-  // Recipient status distribution
-  const statusDist = recipients.reduce((acc, r) => {
-    const s = r.status || "pending";
-    acc[s] = (acc[s] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const deliveryRate = campaign.sent_count > 0
+    ? ((campaign.delivered_count / campaign.sent_count) * 100).toFixed(1)
+    : "—";
 
-  const pieData = Object.entries(statusDist).map(([name, value]) => ({ name, value }));
+  const pieData = statusCounts.map((s) => ({
+    name: recipientStatusLabels[s.status] || s.status,
+    value: s.count,
+  }));
 
-  // Instance distribution
-  const instDist = recipients.reduce((acc, r) => {
-    const name = r.instance_name || "Sem instância";
-    acc[name] = (acc[name] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const barData = Object.entries(instDist).map(([name, count]) => ({ name, count }));
+  const barData = instanceMetrics.map((m) => ({
+    name: m.instance_name,
+    count: m.recipients,
+  }));
 
   return (
     <div className="p-4 space-y-4">
@@ -93,9 +102,9 @@ export default function CampaignSummaryTab({ campaign }: Props) {
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <Zap className="w-5 h-5 mx-auto mb-1 text-yellow-500" />
-            <p className="text-xl font-bold">{responseRate}%</p>
-            <p className="text-xs text-muted-foreground">Taxa Entrega</p>
+            <TrendingUp className="w-5 h-5 mx-auto mb-1 text-yellow-500" />
+            <p className="text-xl font-bold">{deliveryRate}{deliveryRate !== "—" ? "%" : ""}</p>
+            <p className="text-xs text-muted-foreground">Taxa de Entrega</p>
           </CardContent>
         </Card>
       </div>

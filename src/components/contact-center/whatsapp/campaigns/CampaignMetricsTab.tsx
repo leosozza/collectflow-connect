@@ -1,33 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchInstanceMetrics, fetchManagedRecipients } from "@/services/campaignManagementService";
+import { fetchInstanceMetrics, CampaignWithStats } from "@/services/campaignManagementService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface Props {
   campaignId: string;
+  campaign: CampaignWithStats;
 }
 
-export default function CampaignMetricsTab({ campaignId }: Props) {
+export default function CampaignMetricsTab({ campaignId, campaign }: Props) {
+  // Reuse same queryKey as SummaryTab to share cache
   const { data: instanceMetrics = [], isLoading: metricsLoading } = useQuery({
     queryKey: ["campaign-instance-metrics", campaignId],
     queryFn: () => fetchInstanceMetrics(campaignId),
   });
 
-  const { data: recipients = [] } = useQuery({
-    queryKey: ["campaign-recipients-metrics", campaignId],
-    queryFn: () => fetchManagedRecipients(campaignId),
-  });
-
-  // Global metrics
-  const total = recipients.length;
-  const sent = recipients.filter((r) => ["sent", "delivered", "read"].includes(r.status)).length;
-  const failed = recipients.filter((r) => r.status === "failed").length;
-  const delivered = recipients.filter((r) => ["delivered", "read"].includes(r.status)).length;
-  const pending = recipients.filter((r) => r.status === "pending").length;
+  // Use campaign-level counters instead of loading all recipients again
+  const total = campaign.total_unique_recipients;
+  const sent = campaign.sent_count;
+  const delivered = campaign.delivered_count;
+  const failed = campaign.failed_count;
+  const pending = total - sent - failed;
 
   return (
     <div className="p-4 space-y-4">
-      {/* Global metrics */}
+      {/* Global metrics from campaign counters */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Métricas Globais</CardTitle>
@@ -51,7 +48,7 @@ export default function CampaignMetricsTab({ campaignId }: Props) {
               <p className="text-xs text-muted-foreground">Falhas</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-muted-foreground">{pending}</p>
+              <p className="text-2xl font-bold text-muted-foreground">{Math.max(pending, 0)}</p>
               <p className="text-xs text-muted-foreground">Pendentes</p>
             </div>
           </div>

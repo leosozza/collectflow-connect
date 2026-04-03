@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Search, Send, CheckCircle, XCircle, MessageSquare, BarChart3 } from "lucide-react";
+import { Search, Send, CheckCircle, XCircle, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import CampaignDetailView from "./campaigns/CampaignDetailView";
@@ -45,20 +45,33 @@ const originLabels: Record<string, string> = {
 export default function CampaignManagementTab() {
   const { tenant, tenantUser } = useTenant();
   const permissions = usePermissions();
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const tenantId = tenant?.id;
-
   const onlyOwn = !permissions.canViewAllCampanhas && permissions.canViewOwnCampanhas;
 
+  // Debounce search by 500ms
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceTimer = useMemo(() => {
+    return (value: string) => {
+      const timer = setTimeout(() => setDebouncedSearch(value), 500);
+      return () => clearTimeout(timer);
+    };
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    debounceTimer(value);
+  };
+
   const { data: campaigns = [], isLoading } = useQuery({
-    queryKey: ["managed-campaigns", tenantId, statusFilter, search, onlyOwn],
+    queryKey: ["managed-campaigns", tenantId, statusFilter, debouncedSearch, onlyOwn],
     queryFn: () =>
       fetchManagedCampaigns(tenantId!, {
         status: statusFilter,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         onlyOwn,
         userId: onlyOwn ? tenantUser?.user_id : undefined,
       }),
@@ -78,13 +91,15 @@ export default function CampaignManagementTab() {
       <CampaignDetailView
         campaignId={selectedCampaignId}
         onBack={() => setSelectedCampaignId(null)}
+        onlyOwn={onlyOwn}
+        userId={tenantUser?.user_id}
       />
     );
   }
 
   return (
     <div className="p-4 space-y-4 h-full overflow-auto">
-      {/* Dashboard cards */}
+      {/* Dashboard cards — only reliable metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
@@ -100,7 +115,7 @@ export default function CampaignManagementTab() {
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-500/10">
-              <MessageSquare className="w-4 h-4 text-blue-500" />
+              <Send className="w-4 h-4 text-blue-500" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Enviadas</p>
@@ -138,8 +153,8 @@ export default function CampaignManagementTab() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar campanha..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
           />
         </div>

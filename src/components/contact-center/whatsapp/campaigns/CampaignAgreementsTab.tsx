@@ -3,7 +3,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { fetchCampaignAgreements } from "@/services/campaignManagementService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Handshake } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Handshake, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -25,24 +26,33 @@ const agreementStatusColors: Record<string, string> = {
 
 interface Props {
   campaignId: string;
+  campaignStartDate?: string;
 }
 
-export default function CampaignAgreementsTab({ campaignId }: Props) {
+export default function CampaignAgreementsTab({ campaignId, campaignStartDate }: Props) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
 
   const { data: agreements = [], isLoading } = useQuery({
     queryKey: ["campaign-agreements", campaignId],
-    queryFn: () => fetchCampaignAgreements(campaignId, tenantId!),
+    queryFn: () => fetchCampaignAgreements(campaignId, tenantId!, campaignStartDate),
     enabled: !!tenantId,
   });
 
   return (
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Acordos gerados após a campanha</h3>
+        <h3 className="text-sm font-medium">Acordos possivelmente vinculados à campanha</h3>
         <span className="text-sm text-muted-foreground">{agreements.length} acordos</span>
       </div>
+
+      {/* Correlation warning */}
+      <Alert variant="default" className="bg-muted/50 border-muted-foreground/20">
+        <Info className="h-4 w-4" />
+        <AlertDescription className="text-xs">
+          Vinculação por CPF e período (até 30 dias após a campanha). Acordos podem ter outras origens.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardContent className="p-0">
@@ -52,7 +62,7 @@ export default function CampaignAgreementsTab({ campaignId }: Props) {
             <div className="p-8 text-center text-muted-foreground">
               <Handshake className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p>Nenhum acordo vinculado a esta campanha</p>
-              <p className="text-xs mt-1">Acordos são vinculados por CPF dos clientes da campanha</p>
+              <p className="text-xs mt-1">Acordos são vinculados por CPF dos clientes da campanha dentro de 30 dias</p>
             </div>
           ) : (
             <div className="overflow-auto max-h-[60vh]">
