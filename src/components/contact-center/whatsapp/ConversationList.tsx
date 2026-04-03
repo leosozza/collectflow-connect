@@ -212,7 +212,6 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
     { key: "open", label: "Aberta", count: statusCounts.open, color: "bg-[#25d366]" },
     { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
     { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
-    { key: "unread", label: "Não lidas", count: statusCounts.unread, color: "bg-blue-500" },
   ];
 
   const handleConfirmDelete = () => {
