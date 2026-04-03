@@ -24,6 +24,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
   },
   admin: {
     dashboard: ["view_all"],
@@ -43,6 +44,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
   },
   gerente: {
     dashboard: ["view_all"],
@@ -62,6 +64,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: ["view"],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_all", "view_metrics"],
   },
   supervisor: {
     dashboard: ["view_all"],
@@ -81,6 +84,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: [],
     liberacoes: ["view", "approve"],
     agendados: ["view_own", "view_all"],
+    campanhas_whatsapp: ["view_all", "view_metrics"],
   },
   operador: {
     dashboard: ["view_own"],
@@ -100,6 +104,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     auditoria: [],
     liberacoes: ["view"],
     agendados: ["view_own"],
+    campanhas_whatsapp: ["view_own"],
   },
 };
 
