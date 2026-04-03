@@ -26,11 +26,12 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
   }
 
   const tabs = [
-    { id: "conversas", label: "Conversas", icon: MessageSquare, adminOnly: false },
-    { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true },
-    { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true },
-    { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true },
-  ].filter((tab) => !tab.adminOnly || permissions.canManageContactCenterAdmin);
+    { id: "conversas", label: "Conversas", icon: MessageSquare, adminOnly: false, show: true },
+    { id: "campanhas", label: "Campanhas", icon: Megaphone, adminOnly: false, show: permissions.canViewCampanhasWhatsApp },
+    { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+    { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+    { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+  ].filter((tab) => tab.show);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
