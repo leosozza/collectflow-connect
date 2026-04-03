@@ -29,7 +29,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
     carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
-    acordos: ["view", "create", "approve"],
+    acordos: ["view", "create", "approve", "break"],
     relatorios: ["view"],
     analytics: ["view_all"],
     automacao: ["view", "manage"],
