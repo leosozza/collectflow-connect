@@ -63,6 +63,9 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === "conversas" && <WhatsAppChatLayout />}
+        {activeTab === "campanhas" && permissions.canViewCampanhasWhatsApp && (
+          <CampaignManagementTab />
+        )}
         {activeTab === "agente" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <AIAgentTab />

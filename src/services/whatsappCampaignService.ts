@@ -235,6 +235,8 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       total_selected: input.total_selected,
       total_unique_recipients: input.total_unique_recipients,
       created_by: input.created_by,
+      name: input.name || `Disparo Carteira ${new Date().toLocaleDateString("pt-BR")}`,
+      origin_type: "carteira",
     } as any)
     .select()
     .single();
