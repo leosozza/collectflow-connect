@@ -227,6 +227,18 @@ export function usePermissions() {
     // Agendados
     canViewOwnAgendados: has("agendados", "view_own") || has("agendados", "view_all"),
     canViewAllAgendados: has("agendados", "view_all"),
+
+    // Campanhas WhatsApp
+    canViewCampanhasWhatsApp: hasAny("campanhas_whatsapp"),
+    canViewAllCampanhas: has("campanhas_whatsapp", "view_all"),
+    canViewOwnCampanhas: has("campanhas_whatsapp", "view_own") || has("campanhas_whatsapp", "view_all"),
+    canCreateCampanhas: has("campanhas_whatsapp", "create"),
+    canStartCampanhas: has("campanhas_whatsapp", "start"),
+    canPauseCampanhas: has("campanhas_whatsapp", "pause"),
+    canEditCampanhas: has("campanhas_whatsapp", "edit"),
+    canExportCampanhas: has("campanhas_whatsapp", "export"),
+    canViewCampaignMetrics: has("campanhas_whatsapp", "view_metrics"),
+    canViewCampaignRecipients: has("campanhas_whatsapp", "view_recipients"),
   };
 }
 
