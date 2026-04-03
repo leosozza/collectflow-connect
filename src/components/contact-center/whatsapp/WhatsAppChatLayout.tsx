@@ -332,10 +332,20 @@ const WhatsAppChatLayout = () => {
         external_id: result?.key?.id || null,
       } as any);
 
+      // Auto-accept: waiting -> open when operator sends media/audio
+      const convUpdatePayload: any = { last_message_at: new Date().toISOString() };
+      if (selectedConv.status === "waiting") {
+        convUpdatePayload.status = "open";
+      }
       await supabase
         .from("conversations" as any)
-        .update({ last_message_at: new Date().toISOString() } as any)
+        .update(convUpdatePayload)
         .eq("id", conv.id);
+
+      if (selectedConv.status === "waiting") {
+        setSelectedConv({ ...selectedConv, status: "open" as any });
+        setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: "open" as any } : c));
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mídia");
     } finally {
