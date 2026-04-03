@@ -1,65 +1,86 @@
 
 
-# Plano: Ajustes Finais da Gestão de Campanhas
+# Plano: Melhorias Operacionais WhatsApp — Fila, SLA Timer, Filtro Não Lidas, Reply
 
-## Problemas Identificados
+## Resumo
 
-1. **Debounce quebrado**: `useMemo` retorna uma função que cria timer mas nunca limpa o anterior — cada keystroke empilha timeouts
-2. **Campo `phone` errado em `conversations`**: a tabela usa `remote_phone`, não `phone` — a aba de Respostas está **100% quebrada** (nunca encontra match)
-3. **Listagem sem paginação real**: `fetchManagedCampaigns` usa `.range(0, 99)` fixo, sem controle de página no frontend
-4. **`fetchRecipientStatusCounts` carrega todos os registros**: seleciona `status` de TODOS recipients para agregar no JS — ineficiente com campanhas grandes
-5. **Acordos sem refinamento adicional possível** sem alterar schema — manter correlação mas com janela ajustada
+4 melhorias operacionais independentes no módulo WhatsApp. Nenhuma alteração em campanhas, automação, templates ou permissões.
 
-## Alterações
+## Parte 1 — Fila de Conversas (waiting → open)
 
-### 1. Debounce correto (`CampaignManagementTab.tsx`)
+**Webhook (`whatsapp-webhook/index.ts`)**:
+- Linha 232: incluir `status` no select da conversa existente
+- Linha 251: substituir `updateData.status = "open"` por lógica condicional:
+  - `closed` → `waiting`
+  - `waiting` → manter
+  - `open` → manter
+- Linha 290: nova conversa inbound → `status: "waiting"` (era `"open"`)
+- SLA continua recalculando normalmente
 
-Substituir o `useMemo`/`setTimeout` por `useEffect` com cleanup:
+**ChatPanel (`ChatPanel.tsx`)**:
+- Quando `conversation.status === "waiting"`, renderizar banner entre header e mensagens:
+  - Texto: "Conversa aguardando atendimento"
+  - Botão: "Aceitar Conversa" → `onStatusChange("open")`
+  - Estilo discreto (bg-amber-50, ícone Clock)
 
-```typescript
-const [debouncedSearch, setDebouncedSearch] = useState("");
-useEffect(() => {
-  const timer = setTimeout(() => setDebouncedSearch(searchInput), 500);
-  return () => clearTimeout(timer);
-}, [searchInput]);
-```
+**Service (`conversationService.ts`)**:
+- `sendTextMessage()`: incluir `status` no select da conversa
+- Após envio bem-sucedido, se `status === "waiting"`, atualizar para `"open"` (auto-aceitar)
 
-Remover `debounceTimer`, `handleSearchChange`. Input usa `setSearchInput` direto.
+## Parte 2 — Timer SLA no Header
 
-### 2. Corrigir `fetchCampaignResponses` — usar `remote_phone`
+**ChatPanel (`ChatPanel.tsx`)**:
+- Novo estado `slaRemaining` com `useEffect` + `setInterval` a cada 30s
+- Quando `slaDeadline` existe e não expirou: badge discreta `⏱ HH:MM`
+  - Verde (>50% restante), Amarelo (≤25%), Vermelho ao expirar
+- Quando expirado: manter badge "SLA Expirado" existente (sem mudança)
 
-Na query de conversations (linha 506-512):
-- Trocar `.select("id, phone, ...")` para `.select("id, remote_phone, ...")`
-- No matching (linha 519): usar `conv.remote_phone` em vez de `conv.phone`
+## Parte 3 — Filtro "Não Lidas"
 
-Adicionalmente, melhorar a confiabilidade buscando apenas conversas que tiveram mensagem inbound real (via `chat_messages`) em vez de confiar só na existência da conversa. Buscar `chat_messages` com `direction = 'inbound'` para os `conversation_id` encontrados, dentro da janela temporal.
+**ConversationList (`ConversationList.tsx`)**:
+- Adicionar pill "Não lidas" ao array `statusPills` com contagem de `unread_count > 0`
+- No filtro: quando `statusFilter === "unread"`, filtrar por `c.unread_count > 0`
+- Manter todos os outros filtros funcionando
 
-### 3. Paginação real na listagem (`CampaignManagementTab` + service)
+## Parte 4 — Responder Mensagem Específica
 
-**Service**: `fetchManagedCampaigns` recebe `page` e `pageSize`, usa `.range()` dinâmico. Retorna `PaginatedResult<CampaignWithStats>`.
+**Migration**: Adicionar coluna `reply_to_message_id uuid REFERENCES chat_messages(id) ON DELETE SET NULL` à tabela `chat_messages`.
 
-Adicionar `{ count: "exact" }` à query para retornar o total.
+**ChatMessage (`ChatMessage.tsx`)**:
+- Adicionar botão de reply (ícone Reply) visível ao hover em mensagens inbound
+- Prop `onReply(message)` para notificar o pai
+- Quando mensagem tem `reply_to_message_id`: renderizar bloco de preview acima da bolha (barra lateral colorida + trecho da mensagem original)
+- Receber `allMessages` como prop para lookup local do conteúdo original
 
-**Frontend**: Adicionar estado `page`, botões Anterior/Próximo, mostrar "Página X de Y".
+**ChatInput (`ChatInput.tsx`)**:
+- Nova prop `replyTo?: ChatMessage | null` + `onCancelReply?: () => void`
+- Quando `replyTo` definido: renderizar barra acima do input com trecho + botão X
+- Estilo WhatsApp: barra lateral verde, texto truncado
 
-### 4. Otimizar `fetchRecipientStatusCounts`
+**ChatPanel (`ChatPanel.tsx`)**:
+- Estado `replyTo` para mensagem selecionada
+- Passar `onReply` ao `ChatMessageBubble`, `replyTo`/`onCancelReply` ao `ChatInput`
+- Ao enviar, incluir `reply_to_message_id` e limpar estado
+- Passar `messages` como `allMessages` para lookup de reply
 
-Atualmente seleciona TODOS os `status` e agrega em JS. Com campanhas de 10k+ recipients, isso é pesado. Otimizar selecionando apenas `status` e mantendo a agregação JS (Supabase JS client não suporta GROUP BY direto), mas adicionar `.limit(50000)` como safety net.
+**Service (`conversationService.ts`)**:
+- `ChatMessage` interface: adicionar `reply_to_message_id?: string | null`
+- `sendTextMessage()`: aceitar `replyToMessageId` opcional, gravar no insert
+- `sendInternalNote()`: sem mudança (notas não usam reply)
 
-### 5. Acordos — refinar correlação
-
-Adicionar filtro para excluir acordos com `portal_origin = true` (vieram do portal, não da campanha) e acordos com `status = 'rejected'` para reduzir ruído.
-
-### 6. Respostas — melhorar confiabilidade
-
-Após encontrar conversas por `remote_phone`, verificar se existe pelo menos 1 `chat_message` com `direction = 'inbound'` nessa conversa dentro da janela temporal. Isso elimina conversas criadas automaticamente pelo sistema que nunca tiveram resposta real do cliente.
+**Webhook**: sem mudança (campo nullable, webhook não precisa gravar reply)
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/services/campaignManagementService.ts` | Corrigir `remote_phone`, paginação em `fetchManagedCampaigns`, refinar respostas com inbound check, excluir portal_origin em acordos |
-| `src/components/contact-center/whatsapp/CampaignManagementTab.tsx` | Debounce correto com `useEffect`, paginação com controles |
+| Migration SQL | `ALTER TABLE chat_messages ADD COLUMN reply_to_message_id uuid REFERENCES chat_messages(id) ON DELETE SET NULL` |
+| `supabase/functions/whatsapp-webhook/index.ts` | Status `waiting` para inbound, lógica condicional em existente |
+| `src/components/contact-center/whatsapp/ChatPanel.tsx` | Banner waiting, timer SLA, estado replyTo |
+| `src/components/contact-center/whatsapp/ChatInput.tsx` | Preview de reply acima do input |
+| `src/components/contact-center/whatsapp/ChatMessage.tsx` | Botão reply ao hover, preview de mensagem respondida |
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Pill "Não lidas" |
+| `src/services/conversationService.ts` | Auto-aceitar waiting, `reply_to_message_id` no envio e interface |
 
-Nenhuma migration. Nenhuma alteração em tabelas, edge functions, disparo ou automação.
+Nenhuma alteração em: campanhas, automação, templates, permissões, disparo da carteira, acordos.
 
