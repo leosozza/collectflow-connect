@@ -1,10 +1,11 @@
 import { usePermissions } from "@/hooks/usePermissions";
-import { MessageSquare, Bot, Tag, Zap } from "lucide-react";
+import { MessageSquare, Bot, Tag, Zap, Megaphone } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
 import AIAgentTab from "@/components/contact-center/whatsapp/AIAgentTab";
 import TagsManagementTab from "@/components/contact-center/whatsapp/TagsManagementTab";
 import QuickRepliesTab from "@/components/contact-center/whatsapp/QuickRepliesTab";
+import CampaignManagementTab from "@/components/contact-center/whatsapp/CampaignManagementTab";
 import { useUrlState } from "@/hooks/useUrlState";
 import { cn } from "@/lib/utils";
 
