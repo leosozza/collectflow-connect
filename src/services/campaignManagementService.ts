@@ -300,7 +300,8 @@ export async function fetchRecipientStatusCounts(campaignId: string): Promise<Re
   const { data, error } = await supabase
     .from("whatsapp_campaign_recipients" as any)
     .select("status")
-    .eq("campaign_id", campaignId);
+    .eq("campaign_id", campaignId)
+    .limit(50000);
 
   if (error) throw error;
 
