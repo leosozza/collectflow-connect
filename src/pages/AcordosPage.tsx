@@ -212,6 +212,7 @@ const AcordosPage = () => {
           onApprove={handleApprove}
           onReject={handleReject}
           onCancel={isOperationalFilter ? handleCancel : undefined}
+          onBreak={permissions.canBreakAcordos && (statusFilter === "vigentes" || statusFilter === "overdue") ? handleBreak : undefined}
           showOperationalActions={isOperationalFilter}
         />
       )}

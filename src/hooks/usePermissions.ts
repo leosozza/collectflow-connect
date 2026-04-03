@@ -259,6 +259,7 @@ export const ACTION_LABELS: Record<string, string> = {
   import: "Importar",
   delete: "Excluir",
   approve: "Aprovar/Rejeitar",
+  break: "Quebrar Acordo",
   manage: "Gerenciar",
   filter: "Filtros Avançados",
   manage_admin: "Gerenciar (Administrativo)",

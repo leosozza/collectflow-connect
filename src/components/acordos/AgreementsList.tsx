@@ -4,7 +4,7 @@ import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X } from "lucide-react";
+import { Check, X, Ban } from "lucide-react";
 import { formatCPF } from "@/lib/formatters";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -17,6 +17,7 @@ interface AgreementsListProps {
   onApprove: (agreement: Agreement) => void;
   onReject: (id: string) => void;
   onCancel?: (id: string) => void;
+  onBreak?: (id: string) => void;
   showOperationalActions?: boolean;
 }
 
@@ -38,8 +39,9 @@ const statusLabels: Record<string, string> = {
   overdue: "Vencido",
 };
 
-const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, showOperationalActions }: AgreementsListProps) => {
+const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, onBreak, showOperationalActions }: AgreementsListProps) => {
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const [breakId, setBreakId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   if (agreements.length === 0) {
@@ -51,7 +53,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
     navigate(`/carteira/${rawCpf}?tab=acordo`);
   };
 
-  const hasActions = isAdmin && showOperationalActions;
+  const hasActions = (isAdmin && showOperationalActions) || !!onBreak;
 
   return (
     <>
@@ -96,7 +98,7 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
                 {hasActions && (
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
-                      {(a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
+                      {isAdmin && showOperationalActions && (a.status === "pending" || a.status === "pending_approval" || a.status === "overdue") && (
                         <>
                           <Button size="sm" variant="ghost" onClick={() => onApprove(a)} title="Aprovar">
                             <Check className="w-4 h-4 text-green-600" />
@@ -105,6 +107,11 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
                             <X className="w-4 h-4 text-red-600" />
                           </Button>
                         </>
+                      )}
+                      {onBreak && (a.status === "pending" || a.status === "overdue") && (
+                        <Button size="sm" variant="ghost" onClick={() => setBreakId(a.id)} title="Quebrar Acordo">
+                          <Ban className="w-4 h-4 text-destructive" />
+                        </Button>
                       )}
                     </div>
                   </TableCell>
@@ -136,6 +143,33 @@ const AgreementsList = ({ agreements, isAdmin, onApprove, onReject, onCancel, sh
                 }}
               >
                 Sim, cancelar acordo
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {onBreak && (
+        <AlertDialog open={!!breakId} onOpenChange={(open) => !open && setBreakId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Quebrar Acordo</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja quebrar este acordo? As parcelas pendentes serão marcadas como <strong>Quebra de Acordo</strong> e o acordo será cancelado.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Não, manter</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (breakId && onBreak) {
+                    onBreak(breakId);
+                    setBreakId(null);
+                  }
+                }}
+              >
+                Sim, quebrar acordo
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
