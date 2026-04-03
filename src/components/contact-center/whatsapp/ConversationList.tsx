@@ -176,11 +176,12 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
 
   // Status counts
   const statusCounts = useMemo(() => {
-    const counts = { open: 0, waiting: 0, closed: 0 };
+    const counts = { open: 0, waiting: 0, closed: 0, unread: 0 };
     for (const c of conversations) {
       if (c.status === "open") counts.open++;
       else if (c.status === "waiting") counts.waiting++;
       else if (c.status === "closed") counts.closed++;
+      if (c.unread_count > 0) counts.unread++;
     }
     return counts;
   }, [conversations]);
@@ -191,12 +192,13 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
       !search ||
       displayName.toLowerCase().includes(search.toLowerCase()) ||
       c.remote_phone.includes(search);
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchStatus = statusFilter === "all" || statusFilter === "unread" || c.status === statusFilter;
+    const matchUnread = statusFilter !== "unread" || c.unread_count > 0;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
     const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
     const matchLink = linkFilter === "all" || (linkFilter === "linked" ? !!c.client_id : !c.client_id);
-    return matchSearch && matchStatus && matchInstance && matchTag && matchOperator && matchLink;
+    return matchSearch && matchStatus && matchUnread && matchInstance && matchTag && matchOperator && matchLink;
   });
 
   const statusColors: Record<string, string> = {
@@ -209,6 +211,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
     { key: "open", label: "Aberta", count: statusCounts.open, color: "bg-[#25d366]" },
     { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
     { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
+    { key: "unread", label: "Não lidas", count: statusCounts.unread, color: "bg-blue-500" },
   ];
 
   const handleConfirmDelete = () => {

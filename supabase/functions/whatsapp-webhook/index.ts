@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       // Find or create conversation
       const { data: existingConv } = await supabase
         .from("conversations")
-        .select("id, unread_count, assigned_to, client_id")
+        .select("id, unread_count, assigned_to, client_id, status")
         .eq("tenant_id", tenantId)
         .eq("instance_id", instanceId)
         .eq("remote_phone", remotePhone)
@@ -248,7 +248,11 @@ Deno.serve(async (req) => {
         };
 
         if (direction === "inbound") {
-          updateData.status = "open";
+          // Queue flow: closed → waiting, waiting stays waiting, open stays open
+          if (existingConv.status === "closed") {
+            updateData.status = "waiting";
+          }
+          // If already "waiting" or "open", don't change status
           const linkedClientId = existingConv.client_id || updateData.client_id || null;
           const slaMinutes = await getSlaMinutes(linkedClientId);
           updateData.sla_deadline_at = new Date(Date.now() + slaMinutes * 60 * 1000).toISOString();
@@ -287,7 +291,7 @@ Deno.serve(async (req) => {
             instance_id: instanceId,
             remote_phone: remotePhone,
             remote_name: pushName || remotePhone,
-            status: "open",
+            status: "waiting",
             unread_count: direction === "inbound" ? 1 : 0,
             last_message_at: new Date().toISOString(),
             assigned_to: assignedTo,

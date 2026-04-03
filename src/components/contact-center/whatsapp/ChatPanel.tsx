@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2 } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
@@ -18,7 +18,7 @@ import { toast } from "sonner";
 interface ChatPanelProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
-  onSend: (text: string) => void;
+  onSend: (text: string, replyToMessageId?: string | null) => void;
   onSendMedia: (file: File) => void;
   onSendAudio: (blob: Blob) => void;
   onSendInternalNote?: (text: string) => void;
@@ -59,10 +59,50 @@ const ChatPanel = ({
   const { tenant } = useTenant();
   const { profile } = useAuth();
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
+  const [slaPercent, setSlaPercent] = useState<number>(100);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
+
+  // SLA countdown timer
+  useEffect(() => {
+    if (!slaDeadline) {
+      setSlaRemaining(null);
+      return;
+    }
+
+    const update = () => {
+      const deadlineMs = new Date(slaDeadline).getTime();
+      const now = Date.now();
+      const remaining = deadlineMs - now;
+
+      if (remaining <= 0) {
+        setSlaRemaining(null);
+        setSlaPercent(0);
+        return;
+      }
+
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      setSlaRemaining(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
+
+      // Estimate total SLA from conversation created_at
+      if (conversation) {
+        const createdMs = new Date(conversation.created_at).getTime();
+        const totalMs = deadlineMs - createdMs;
+        if (totalMs > 0) {
+          setSlaPercent(Math.max(0, Math.min(100, (remaining / totalMs) * 100)));
+        }
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [slaDeadline, conversation?.created_at]);
 
   const handleOpenAtendimento = async () => {
     if (!conversation) return;
@@ -76,7 +116,6 @@ const ChatPanel = ({
 
     setOpeningAtendimento(true);
     try {
-      // Get client info for session
       const { data: clientData } = await (await import("@/integrations/supabase/client")).supabase
         .from("clients").select("cpf, credor").eq("id", conversation.client_id).single();
 
@@ -105,6 +144,11 @@ const ChatPanel = ({
     }
   };
 
+  const handleSend = (text: string) => {
+    onSend(text, replyTo?.id || null);
+    setReplyTo(null);
+  };
+
   if (!conversation) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#f0f2f5] dark:bg-[#222e35]">
@@ -121,6 +165,9 @@ const ChatPanel = ({
     waiting: "Aguardando",
     closed: "Fechada",
   };
+
+  const slaExpired = slaDeadline && new Date(slaDeadline) < new Date();
+  const slaColor = slaPercent > 50 ? "text-[#25d366]" : slaPercent > 25 ? "text-yellow-500" : "text-destructive";
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -149,7 +196,24 @@ const ChatPanel = ({
                   );
                 });
               })()}
-              {slaDeadline && new Date(slaDeadline) < new Date() && (
+              {/* SLA countdown timer */}
+              {slaRemaining && !slaExpired && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className={`text-[10px] h-4 gap-0.5 cursor-help ${slaColor} border-current`}>
+                        <Clock className="w-2.5 h-2.5" />
+                        {slaRemaining}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Tempo restante do SLA: {slaRemaining}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {/* SLA expired badge */}
+              {slaExpired && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -159,7 +223,7 @@ const ChatPanel = ({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-[200px] text-center">
-                      <p>Prazo de atendimento (SLA) expirado em {new Date(slaDeadline).toLocaleString("pt-BR")}</p>
+                      <p>Prazo de atendimento (SLA) expirado em {new Date(slaDeadline!).toLocaleString("pt-BR")}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -215,6 +279,24 @@ const ChatPanel = ({
         </div>
       </div>
 
+      {/* Waiting banner */}
+      {conversation.status === "waiting" && (
+        <div className="flex items-center justify-between px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm text-amber-700 dark:text-amber-300">Conversa aguardando atendimento</span>
+          </div>
+          <Button
+            size="sm"
+            className="h-7 gap-1.5 text-xs bg-[#25d366] hover:bg-[#20bd5a] text-white"
+            onClick={() => onStatusChange("open")}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            Aceitar Conversa
+          </Button>
+        </div>
+      )}
+
       {/* Messages - WhatsApp wallpaper bg */}
       <div
         className="flex-1 overflow-hidden"
@@ -226,7 +308,12 @@ const ChatPanel = ({
         <ScrollArea className="h-full px-[5%] py-3">
           <div className="space-y-[1px]">
             {messages.map((msg) => (
-              <ChatMessageBubble key={msg.id} message={msg} />
+              <ChatMessageBubble
+                key={msg.id}
+                message={msg}
+                onReply={(m) => setReplyTo(m)}
+                allMessages={messages}
+              />
             ))}
             <div ref={bottomRef} />
           </div>
@@ -236,12 +323,23 @@ const ChatPanel = ({
       {/* AI Suggestion */}
       {conversation && messages.length > 0 && (
         <div className="px-4 py-1.5 border-t border-border/50 bg-card">
-          <AISuggestion messages={messages} clientInfo={clientInfo} onSend={onSend} disabled={sending} />
+          <AISuggestion messages={messages} clientInfo={clientInfo} onSend={(text) => handleSend(text)} disabled={sending} />
         </div>
       )}
 
       {/* Input - WhatsApp style */}
-      <ChatInput onSend={onSend} onSendMedia={onSendMedia} onSendAudio={onSendAudio} onSendInternalNote={onSendInternalNote} quickReplies={quickReplies} disabled={sending} clientInfo={clientInfo} operatorName={operatorName} />
+      <ChatInput
+        onSend={handleSend}
+        onSendMedia={onSendMedia}
+        onSendAudio={onSendAudio}
+        onSendInternalNote={onSendInternalNote}
+        quickReplies={quickReplies}
+        disabled={sending}
+        clientInfo={clientInfo}
+        operatorName={operatorName}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
+      />
     </div>
   );
 };
