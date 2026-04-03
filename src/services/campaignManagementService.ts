@@ -465,12 +465,13 @@ export async function fetchCampaignAgreements(
 
 export async function fetchCampaignResponses(campaignId: string, tenantId: string) {
   // Fetch campaign dates
-  const { data: cData } = await supabase
+  const { data: cRaw } = await supabase
     .from("whatsapp_campaigns" as any)
     .select("started_at, created_at, completed_at")
     .eq("id", campaignId)
     .single();
 
+  const cData = cRaw as any;
   const startDate = cData?.started_at || cData?.created_at;
   if (!startDate) return [];
 
