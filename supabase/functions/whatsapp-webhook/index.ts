@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
             instance_id: instanceId,
             remote_phone: remotePhone,
             remote_name: pushName || remotePhone,
-            status: "open",
+            status: "waiting",
             unread_count: direction === "inbound" ? 1 : 0,
             last_message_at: new Date().toISOString(),
             assigned_to: assignedTo,
