@@ -305,4 +305,5 @@ export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   auditoria: ["view"],
   liberacoes: ["view", "approve"],
   agendados: ["view_own", "view_all"],
+  campanhas_whatsapp: ["view_own", "view_all", "create", "start", "pause", "edit", "export", "view_metrics", "view_recipients"],
 };
