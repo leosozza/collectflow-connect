@@ -81,22 +81,14 @@ const ChatPanel = ({
 
       if (remaining <= 0) {
         setSlaRemaining(null);
-        setSlaPercent(0);
+        setSlaRemainingMs(0);
         return;
       }
 
       const h = Math.floor(remaining / 3600000);
       const m = Math.floor((remaining % 3600000) / 60000);
       setSlaRemaining(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
-
-      // Estimate total SLA from conversation created_at
-      if (conversation) {
-        const createdMs = new Date(conversation.created_at).getTime();
-        const totalMs = deadlineMs - createdMs;
-        if (totalMs > 0) {
-          setSlaPercent(Math.max(0, Math.min(100, (remaining / totalMs) * 100)));
-        }
-      }
+      setSlaRemainingMs(remaining);
     };
 
     update();
