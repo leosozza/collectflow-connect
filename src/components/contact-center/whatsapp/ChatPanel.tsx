@@ -61,7 +61,7 @@ const ChatPanel = ({
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
-  const [slaPercent, setSlaPercent] = useState<number>(100);
+  const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -81,28 +81,20 @@ const ChatPanel = ({
 
       if (remaining <= 0) {
         setSlaRemaining(null);
-        setSlaPercent(0);
+        setSlaRemainingMs(0);
         return;
       }
 
       const h = Math.floor(remaining / 3600000);
       const m = Math.floor((remaining % 3600000) / 60000);
       setSlaRemaining(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
-
-      // Estimate total SLA from conversation created_at
-      if (conversation) {
-        const createdMs = new Date(conversation.created_at).getTime();
-        const totalMs = deadlineMs - createdMs;
-        if (totalMs > 0) {
-          setSlaPercent(Math.max(0, Math.min(100, (remaining / totalMs) * 100)));
-        }
-      }
+      setSlaRemainingMs(remaining);
     };
 
     update();
     const interval = setInterval(update, 30000);
     return () => clearInterval(interval);
-  }, [slaDeadline, conversation?.created_at]);
+  }, [slaDeadline]);
 
   const handleOpenAtendimento = async () => {
     if (!conversation) return;
@@ -167,7 +159,9 @@ const ChatPanel = ({
   };
 
   const slaExpired = slaDeadline && new Date(slaDeadline) < new Date();
-  const slaColor = slaPercent > 50 ? "text-[#25d366]" : slaPercent > 25 ? "text-yellow-500" : "text-destructive";
+  const FOUR_HOURS = 4 * 3600000;
+  const ONE_HOUR = 3600000;
+  const slaColor = slaRemainingMs > FOUR_HOURS ? "text-[#25d366]" : slaRemainingMs > ONE_HOUR ? "text-yellow-500" : "text-destructive";
 
   return (
     <div className="flex-1 flex flex-col h-full">

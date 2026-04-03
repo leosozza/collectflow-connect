@@ -162,6 +162,7 @@ const statusLabels: Record<string, string> = {
 const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false, dispositionAssignments = [], dispositionTypes = [] }: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
@@ -192,8 +193,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
       !search ||
       displayName.toLowerCase().includes(search.toLowerCase()) ||
       c.remote_phone.includes(search);
-    const matchStatus = statusFilter === "all" || statusFilter === "unread" || c.status === statusFilter;
-    const matchUnread = statusFilter !== "unread" || c.unread_count > 0;
+    const matchStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchUnread = !unreadOnly || c.unread_count > 0;
     const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
     const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
     const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
@@ -211,7 +212,6 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
     { key: "open", label: "Aberta", count: statusCounts.open, color: "bg-[#25d366]" },
     { key: "waiting", label: "Aguardando", count: statusCounts.waiting, color: "bg-yellow-500" },
     { key: "closed", label: "Fechada", count: statusCounts.closed, color: "bg-muted-foreground" },
-    { key: "unread", label: "Não lidas", count: statusCounts.unread, color: "bg-blue-500" },
   ];
 
   const handleConfirmDelete = () => {
@@ -276,6 +276,20 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
               </span>
             </button>
           ))}
+          {/* Não lidas — toggle independente */}
+          <button
+            onClick={() => setUnreadOnly(!unreadOnly)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all justify-center ${
+              unreadOnly
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <EyeOff className="w-3 h-3" />
+            <span className={`font-bold ${unreadOnly ? "text-white" : "text-foreground"}`}>
+              {statusCounts.unread}
+            </span>
+          </button>
         </div>
 
         {/* Row 4: Tag + Instance filters */}
@@ -383,10 +397,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                                   </TooltipProvider>
                                 );
                               }
-                              const createdAt = new Date(conv.created_at);
-                              const totalMs = deadlineDate.getTime() - createdAt.getTime();
                               const remainingMs = deadlineDate.getTime() - now.getTime();
-                              if (totalMs > 0 && remainingMs < totalMs * 0.25) {
+                              if (remainingMs <= 3600000) {
                                 const mins = Math.round(remainingMs / 60000);
                                 return (
                                   <TooltipProvider>
