@@ -61,7 +61,7 @@ const ChatPanel = ({
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
-  const [slaPercent, setSlaPercent] = useState<number>(100);
+  const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
