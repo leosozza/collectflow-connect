@@ -281,6 +281,10 @@ export const ACTION_LABELS: Record<string, string> = {
   manage: "Gerenciar",
   filter: "Filtros Avançados",
   manage_admin: "Gerenciar (Administrativo)",
+  start: "Iniciar/Disparar",
+  pause: "Pausar/Cancelar",
+  view_metrics: "Ver Métricas",
+  view_recipients: "Ver Destinatários",
 };
 
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
