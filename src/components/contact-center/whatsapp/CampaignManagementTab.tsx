@@ -50,7 +50,6 @@ export default function CampaignManagementTab() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const tenantId = tenant?.id;
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const onlyOwn = !permissions.canViewAllCampanhas && permissions.canViewOwnCampanhas;
 
