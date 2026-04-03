@@ -131,7 +131,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
           } ${!isOutbound ? "order-1" : ""}`}
         >
           {/* Reply preview */}
-          {repliedMessage && (
+          {hasReplyRef && (
             <div
               className={`mb-1 px-2 py-1 rounded text-[12px] leading-[16px] border-l-[3px] ${
                 isOutbound
@@ -139,12 +139,18 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
                   : "bg-muted/50 border-l-primary"
               }`}
             >
-              <span className="font-medium text-[11px] block">
-                {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
-              </span>
-              <span className="line-clamp-2 text-muted-foreground">
-                {repliedMessage.content || `[${repliedMessage.message_type}]`}
-              </span>
+              {repliedMessage ? (
+                <>
+                  <span className="font-medium text-[11px] block">
+                    {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
+                  </span>
+                  <span className="line-clamp-2 text-muted-foreground">
+                    {repliedMessage.content || `[${repliedMessage.message_type}]`}
+                  </span>
+                </>
+              ) : (
+                <span className="italic text-muted-foreground">Mensagem respondida</span>
+              )}
             </div>
           )}
           {renderContent()}

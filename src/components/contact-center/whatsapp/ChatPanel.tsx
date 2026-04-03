@@ -159,7 +159,9 @@ const ChatPanel = ({
   };
 
   const slaExpired = slaDeadline && new Date(slaDeadline) < new Date();
-  const slaColor = slaPercent > 50 ? "text-[#25d366]" : slaPercent > 25 ? "text-yellow-500" : "text-destructive";
+  const FOUR_HOURS = 4 * 3600000;
+  const ONE_HOUR = 3600000;
+  const slaColor = slaRemainingMs > FOUR_HOURS ? "text-[#25d366]" : slaRemainingMs > ONE_HOUR ? "text-yellow-500" : "text-destructive";
 
   return (
     <div className="flex-1 flex flex-col h-full">

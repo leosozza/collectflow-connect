@@ -383,10 +383,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                                   </TooltipProvider>
                                 );
                               }
-                              const createdAt = new Date(conv.created_at);
-                              const totalMs = deadlineDate.getTime() - createdAt.getTime();
                               const remainingMs = deadlineDate.getTime() - now.getTime();
-                              if (totalMs > 0 && remainingMs < totalMs * 0.25) {
+                              if (remainingMs <= 3600000) {
                                 const mins = Math.round(remainingMs / 60000);
                                 return (
                                   <TooltipProvider>
