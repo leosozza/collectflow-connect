@@ -3,11 +3,11 @@
  * Centralizados aqui para reutilização em CredorForm, ClientDocuments e DocumentTemplatesPage.
  */
 
-export const TEMPLATE_ACORDO_DEFAULT = "Pelo presente instrumento, {razao_social_credor}, CNPJ {cnpj_credor}, e {nome_devedor}, CPF {cpf_devedor}, acordam o pagamento da dívida no valor de R$ {valor_divida}, com desconto de {desconto_concedido}%, totalizando R$ {valor_acordo}, em {quantidade_parcelas} parcelas de R$ {valor_parcela}, vencendo a primeira em {data_vencimento}.";
+export const TEMPLATE_ACORDO_DEFAULT = "Pelo presente instrumento, {razao_social_credor}, CNPJ {cnpj_credor}, e {nome_devedor}, CPF {cpf_devedor}, acordam o pagamento da dívida no valor de {valor_divida}, com desconto de {desconto_concedido}%, totalizando {valor_acordo}, em {quantidade_parcelas} parcelas de {valor_parcela}, vencendo a primeira em {data_vencimento}.";
 
-export const TEMPLATE_RECIBO_DEFAULT = "Recebi de {nome_devedor}, CPF {cpf_devedor}, a quantia de R$ {valor_pago}, referente à parcela {numero_parcela}/{total_parcelas} do acordo firmado em {data_acordo}. {razao_social_credor} - CNPJ {cnpj_credor}. Data: {data_pagamento}";
+export const TEMPLATE_RECIBO_DEFAULT = "Recebi de {nome_devedor}, CPF {cpf_devedor}, a quantia de {valor_pago}, referente à parcela {numero_parcela}/{total_parcelas} do acordo firmado em {data_acordo}. {razao_social_credor} - CNPJ {cnpj_credor}. Data: {data_pagamento}";
 
-export const TEMPLATE_QUITACAO_DEFAULT = "{razao_social_credor}, CNPJ {cnpj_credor}, declara para os devidos fins que {nome_devedor}, CPF {cpf_devedor}, quitou integralmente o débito no valor original de R$ {valor_divida}, mediante acordo de {quantidade_parcelas} parcelas. Nada mais há a reclamar. Data: {data_atual}";
+export const TEMPLATE_QUITACAO_DEFAULT = "{razao_social_credor}, CNPJ {cnpj_credor}, declara para os devidos fins que {nome_devedor}, CPF {cpf_devedor}, quitou integralmente o débito no valor original de {valor_divida}, mediante acordo de {quantidade_parcelas} parcelas. Nada mais há a reclamar. Data: {data_atual}";
 
 export const TEMPLATE_DESCRICAO_DIVIDA_DEFAULT = `DESCRIÇÃO DE DÍVIDA
 
@@ -16,10 +16,10 @@ Devedor: {nome_devedor} - CPF: {cpf_devedor}
 
 Informamos que consta em nossos registros o seguinte débito em nome do devedor acima qualificado:
 
-Valor Original: R$ {valor_divida}
+Valor Original: {valor_divida}
 Data de Vencimento: {data_vencimento}
 Parcela: {numero_parcela}/{total_parcelas}
-Valor da Parcela: R$ {valor_parcela}
+Valor da Parcela: {valor_parcela}
 
 O débito acima descrito encontra-se vencido e não quitado até a presente data ({data_atual}), estando sujeito à incidência de juros, multa e correção monetária conforme previsto contratualmente.
 
@@ -36,10 +36,10 @@ CPF: {cpf_devedor}
 
 NOTIFICANTE: {razao_social_credor}, inscrita no CNPJ sob o nº {cnpj_credor}, vem, por meio desta, NOTIFICAR Vossa Senhoria acerca do débito abaixo discriminado:
 
-VALOR DO DÉBITO: R$ {valor_divida}
+VALOR DO DÉBITO: {valor_divida}
 DATA DE VENCIMENTO: {data_vencimento}
 PARCELA: {numero_parcela}/{total_parcelas}
-VALOR DA PARCELA: R$ {valor_parcela}
+VALOR DA PARCELA: {valor_parcela}
 
 Informamos que, apesar das tentativas de contato anteriores, o débito acima referido permanece em aberto, encontrando-se vencido e não quitado até a presente data ({data_atual}).
 

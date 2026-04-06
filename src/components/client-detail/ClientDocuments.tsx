@@ -79,7 +79,8 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     return null;
   };
 
-  const handleGenerate = (credorKey: string, docType: string, label: string) => {
+  const handleGenerate = (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
+    if (!canGenerate) return;
     const validation = validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
     if (!validation.isValid) {
       toast.error(validation.reason);
@@ -141,6 +142,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
       });
     } catch (err) {
       console.error("Erro ao salvar histórico do documento:", err);
+      toast.warning("Documento gerado, mas houve um erro ao salvar o histórico. Tente novamente ou contate o suporte.");
     }
 
     toast.success(`${preview.label} gerado com sucesso!`);
@@ -174,7 +176,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
                   <Tooltip key={doc.credorKey}>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={() => handleGenerate(doc.credorKey, doc.type, doc.label)}
+                        onClick={() => handleGenerate(doc.credorKey, doc.type, doc.label, canGenerate)}
                         className={`flex items-center gap-4 p-4 rounded-xl border border-border bg-card transition-colors text-left group ${
                           canGenerate ? "hover:bg-muted/50 cursor-pointer" : "opacity-60 cursor-not-allowed"
                         }`}
