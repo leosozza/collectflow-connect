@@ -79,7 +79,8 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     return null;
   };
 
-  const handleGenerate = (credorKey: string, docType: string, label: string) => {
+  const handleGenerate = (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
+    if (!canGenerate) return;
     const validation = validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
     if (!validation.isValid) {
       toast.error(validation.reason);
