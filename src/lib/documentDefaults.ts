@@ -16,10 +16,10 @@ Devedor: {nome_devedor} - CPF: {cpf_devedor}
 
 Informamos que consta em nossos registros o seguinte débito em nome do devedor acima qualificado:
 
-Valor Original: R$ {valor_divida}
+Valor Original: {valor_divida}
 Data de Vencimento: {data_vencimento}
 Parcela: {numero_parcela}/{total_parcelas}
-Valor da Parcela: R$ {valor_parcela}
+Valor da Parcela: {valor_parcela}
 
 O débito acima descrito encontra-se vencido e não quitado até a presente data ({data_atual}), estando sujeito à incidência de juros, multa e correção monetária conforme previsto contratualmente.
 
