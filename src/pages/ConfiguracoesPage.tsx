@@ -5,6 +5,7 @@ import IntegracaoPage from "@/pages/IntegracaoPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
 import AuditoriaPage from "@/pages/AuditoriaPage";
+import DocumentTemplatesPage from "@/pages/DocumentTemplatesPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
