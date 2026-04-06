@@ -585,7 +585,7 @@ export const fetchAllCarteiraClients = async (
 
     const allClients: GroupedClient[] = [];
     let page = 1;
-    const pageSize = 5000;
+    const pageSize = 1000;
 
     while (true) {
       const params: Record<string, any> = {

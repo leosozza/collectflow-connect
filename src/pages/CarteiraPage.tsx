@@ -689,7 +689,7 @@ const CarteiraPage = () => {
       )}
       {selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
-          Todos os {selectedIds.size.toLocaleString("pt-BR")} clientes filtrados estão selecionados.{" "}
+          Todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados estão selecionados.{" "}
           <Button
             variant="link"
             size="sm"
