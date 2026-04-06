@@ -1,69 +1,34 @@
 
 
-# Plano: Corrigir prioridade de status `vencido` no agrupamento da Carteira
+# Plano: Corrigir seleção global para Discador, WhatsApp e Higienizar
 
-## Problema
+## Problema confirmado
 
-A cliente Angélica de Jesus Santos tem 11 parcelas:
-- 3 com status `pago` (Quitado)
-- 4 com status `vencido` (Aguardando acionamento)
-- 4 com status `pendente` (Em dia)
-
-Na função `get_carteira_grouped`, o CASE que define a prioridade do `status_cobranca_id` é:
-
-```sql
-CASE f.status
-  WHEN 'em_acordo' THEN 1
-  WHEN 'pendente' THEN 2
-  WHEN 'quebrado' THEN 3
-  WHEN 'pago' THEN 4
-  ELSE 5
-END
-```
-
-O status `vencido` cai no ELSE (prioridade 5), ou seja, fica **depois** de `pendente` (prioridade 2). Resultado: o grupo pega o `status_cobranca_id` das parcelas `pendente` ("Em dia") em vez das parcelas `vencido` ("Aguardando acionamento").
-
-O mesmo problema existe no campo `status` agregado — `vencido` não é tratado e cai no ELSE que retorna `'pago'`.
+Todas as ações em massa (Discador, WhatsApp **e Higienizar**) usam `selectedClients`, que é filtrado de `displayClients` (apenas a página atual). Quando `selectAllFiltered` está ativo, apenas ~1.000 registros da página corrente são passados, em vez dos 11.137 filtrados.
 
 ## Correção
 
-Uma única migration SQL alterando a função `get_carteira_grouped` em dois pontos:
+### 1. Nova função `fetchAllCarteiraClients` em `src/services/clientService.ts`
 
-### 1. Prioridade do `status_cobranca_id`
+Busca todos os dados completos dos clientes filtrados via RPC `get_carteira_grouped` em loop paginado (5.000 por batch). Retorna os campos necessários: `representative_id`, `cpf`, `nome_completo`, `phone`, `credor`, `valor_parcela`.
 
-```sql
-CASE f.status
-  WHEN 'vencido' THEN 1
-  WHEN 'em_acordo' THEN 2
-  WHEN 'pendente' THEN 3
-  WHEN 'quebrado' THEN 4
-  WHEN 'pago' THEN 5
-  ELSE 6
-END
-```
+### 2. Atualizar `src/pages/CarteiraPage.tsx`
 
-`vencido` passa a ter a maior prioridade — parcelas em atraso sempre determinam o status do grupo.
+Quando `selectAllFiltered=true` e o usuário abre Discador, WhatsApp ou Higienizar:
+- Buscar todos os clientes filtrados via `fetchAllCarteiraClients`
+- Mostrar loading durante a busca
+- Passar os dados completos para o dialog
 
-### 2. Campo `status` agregado
-
-```sql
-CASE
-  WHEN bool_or(f.status = 'vencido') THEN 'vencido'
-  WHEN bool_or(f.status = 'em_acordo') THEN 'em_acordo'
-  WHEN bool_or(f.status = 'pendente') THEN 'pendente'
-  WHEN bool_or(f.status = 'quebrado') THEN 'quebrado'
-  ELSE 'pago'
-END AS status
-```
+Quando `selectAllFiltered=false`, manter comportamento atual (filtrar de `displayClients`).
 
 ### Impacto
 
-- Todos os clientes com parcelas vencidas passarão a mostrar "Aguardando acionamento" na listagem
-- Filtros por status de cobrança refletirão o estado real
-- Nenhuma alteração no frontend — apenas na função SQL
-- A Angélica e qualquer outro cliente na mesma situação será corrigido automaticamente
+- Discador, WhatsApp e Higienizar receberão todos os registros selecionados
+- Nenhuma alteração nos componentes dos dialogs
+- Nenhuma alteração no SQL
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL (`get_carteira_grouped`) | Adicionar `vencido` na prioridade do CASE |
+| `src/services/clientService.ts` | Nova função `fetchAllCarteiraClients` |
+| `src/pages/CarteiraPage.tsx` | Fetch completo quando selectAllFiltered=true |
 
