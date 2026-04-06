@@ -4,6 +4,19 @@
  * Extraído de send-bulk-whatsapp para reutilização em campanhas e workflows.
  */
 
+function normalizePhoneBR(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return digits.slice(0, 4) + "9" + digits.slice(4);
+  }
+  if (digits.length === 11) return "55" + digits;
+  if (digits.length === 10) {
+    return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
+  }
+  return digits;
+}
+
 export interface SendResult {
   ok: boolean;
   result: any;
@@ -22,6 +35,7 @@ export async function sendByProvider(
   wuzapiAdminToken: string
 ): Promise<SendResult> {
   const provider = (inst.provider || "").toLowerCase();
+  const normalizedPhone = normalizePhoneBR(phone);
 
   if (provider === "wuzapi") {
     const baseUrl = inst.instance_url || wuzapiUrl;
@@ -32,7 +46,7 @@ export async function sendByProvider(
     const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
       method: "POST",
       headers: { "Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
+      body: JSON.stringify({ phone: `${normalizedPhone}@s.whatsapp.net`, body: message }),
     });
     const result = await resp.json();
     return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider };
@@ -48,7 +62,7 @@ export async function sendByProvider(
     const formBody = new URLSearchParams({
       channel: "whatsapp",
       source: sourceNumber,
-      destination: phone,
+      destination: normalizedPhone,
       "src.name": appName,
       message: JSON.stringify({ type: "text", text: message }),
     });
@@ -71,7 +85,7 @@ export async function sendByProvider(
   const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
     method: "POST",
     headers: { apikey: instanceKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ number: phone, text: message }),
+    body: JSON.stringify({ number: normalizedPhone, text: message }),
   });
   const result = await resp.json();
   return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider: resolvedProvider };
