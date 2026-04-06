@@ -1,62 +1,37 @@
 
 
-# Plano: Adicionar filtro "Sem disparo de WhatsApp" na Carteira
+# Plano: Corrigir função duplicada `get_carteira_grouped`
 
-## Resumo
+## Problema
 
-Adicionar um checkbox "Sem disparo de WhatsApp" no mesmo grupo visual dos filtros existentes (Sem acordo, Sem contato, Higienizados). O filtro exclui clientes que já foram incluídos como destinatários em qualquer campanha de WhatsApp, verificando por CPF + credor.
+A migration que adicionou `_sem_whatsapp` usou `CREATE OR REPLACE`, mas como a assinatura (parâmetros) mudou, o PostgreSQL criou uma **segunda versão** da função em vez de substituir a original. Agora existem duas overloads e o PostgREST retorna erro `PGRST203` ("Could not choose the best candidate function").
 
-## Análise técnica
+Isso quebra **todos** os filtros da carteira, não apenas o novo.
 
-A tabela `whatsapp_campaign_recipients` armazena `representative_client_id` (UUID do cliente), não CPF/credor diretamente. Para verificar CPF + credor, o SQL precisa fazer JOIN com `clients` para obter esses campos.
+## Correção
 
-## Alterações
+Uma única migration SQL que:
 
-### 1. SQL — Alterar RPC `get_carteira_grouped`
+1. `DROP FUNCTION` da versão antiga (sem `_sem_whatsapp`) explicitamente pela assinatura completa
+2. Manter a versão nova intacta (já está no banco)
 
-Adicionar novo parâmetro `_sem_whatsapp boolean DEFAULT false` e uma nova CTE `sem_whatsapp_filter` após `sem_acordo_filter`:
+### Migration SQL
 
 ```sql
-sem_whatsapp_filter AS (
-  SELECT s.*
-  FROM sem_acordo_filter s
-  WHERE NOT _sem_whatsapp OR NOT EXISTS (
-    SELECT 1 FROM whatsapp_campaign_recipients r
-    JOIN clients cl ON cl.id = r.representative_client_id
-    WHERE cl.tenant_id = _tenant_id
-      AND replace(replace(cl.cpf, '.', ''), '-', '') = replace(replace(s.cpf, '.', ''), '-', '')
-      AND cl.credor = s.credor
-  )
-)
+DROP FUNCTION IF EXISTS public.get_carteira_grouped(
+  uuid, integer, integer, text, text, date, date, 
+  uuid[], uuid[], uuid[], integer, integer, text[], 
+  text, text, uuid, boolean, date, date
+);
 ```
 
-A CTE `counted` passa a referenciar `sem_whatsapp_filter` em vez de `sem_acordo_filter`.
+Isso remove apenas a overload antiga (19 parâmetros) e preserva a nova (20 parâmetros, com `_sem_whatsapp`).
 
-### 2. Frontend — `ClientFilters.tsx`
+## Nenhuma alteração de código frontend necessária
 
-Adicionar `semWhatsapp: boolean` ao interface `Filters` e um novo checkbox no grupo dos filtros rápidos (linha 4, após "Higienizados"):
-
-```
-☐ Sem disparo de WhatsApp
-```
-
-### 3. Frontend — `CarteiraPage.tsx`
-
-- Adicionar `urlSemWhatsapp` via `useUrlState`
-- Incluir no objeto `filters` e `rpcFilters`
-- Incluir no `FILTER_DEFAULTS`
-- Incluir no `hasActiveFilters`
-
-### 4. Frontend — `clientService.ts`
-
-Adicionar `semWhatsapp` ao type `CarteiraFilters` e passar `_sem_whatsapp` nos params do RPC.
-
-## Arquivos alterados
+O frontend já passa `_sem_whatsapp` corretamente. O problema é exclusivamente no banco.
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL (nova) | Recriar `get_carteira_grouped` com parâmetro `_sem_whatsapp` e CTE |
-| `src/components/clients/ClientFilters.tsx` | Adicionar campo `semWhatsapp` no interface e checkbox na UI |
-| `src/pages/CarteiraPage.tsx` | URL state, filters, rpcFilters, hasActiveFilters, defaults |
-| `src/services/clientService.ts` | Adicionar ao type e passar param ao RPC |
+| Migration SQL (nova) | DROP da overload antiga de `get_carteira_grouped` |
 
