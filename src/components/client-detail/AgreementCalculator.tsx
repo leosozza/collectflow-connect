@@ -26,6 +26,7 @@ import { enrichClientAddress } from "@/services/addressEnrichmentService";
 import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
+import SimpleCalculator from "./SimpleCalculator";
 
 interface AgreementCalculatorProps {
   clients: any[];
