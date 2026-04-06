@@ -13,6 +13,7 @@ import {
   fetchClients,
   fetchCarteiraGrouped,
   fetchAllCarteiraIds,
+  fetchAllCarteiraClients,
   createClient,
   updateClient,
   bulkCreateClients,
