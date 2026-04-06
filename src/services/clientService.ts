@@ -685,6 +685,7 @@ export const fetchCarteiraGrouped = async (
     if (filters.semAcordo) params._sem_acordo = true;
     if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
     if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
+    if (filters.semWhatsapp) params._sem_whatsapp = true;
     if (scoreMin !== null) params._score_min = scoreMin;
     if (scoreMax !== null) params._score_max = scoreMax;
 
