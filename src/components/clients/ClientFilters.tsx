@@ -51,6 +51,7 @@ interface Filters {
   higienizados: boolean;
   scoreRange: string;
   debtorProfile: string;
+  semWhatsapp: boolean;
 }
 
 interface ClientFiltersProps {
@@ -240,6 +241,13 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
                   onCheckedChange={(checked) => update("higienizados", !!checked)}
                 />
                 <span className="text-sm text-foreground">Higienizados</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.semWhatsapp || false}
+                  onCheckedChange={(checked) => update("semWhatsapp", !!checked)}
+                />
+                <span className="text-sm text-foreground">Sem disparo de WhatsApp</span>
               </label>
             </div>
           </div>

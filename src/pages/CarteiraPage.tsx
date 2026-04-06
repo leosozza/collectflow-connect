@@ -82,6 +82,7 @@ const CarteiraPage = () => {
   const [urlSemContato, setUrlSemContato] = useUrlState("semContato", false);
   const [urlEmDia, setUrlEmDia] = useUrlState("emDia", false);
   const [urlHigienizados, setUrlHigienizados] = useUrlState("higienizados", false);
+  const [urlSemWhatsapp, setUrlSemWhatsapp] = useUrlState("semWhatsapp", false);
   const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
   const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
   const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
@@ -106,9 +107,10 @@ const CarteiraPage = () => {
     semContato: urlSemContato,
     emDia: urlEmDia,
     higienizados: urlHigienizados,
+    semWhatsapp: urlSemWhatsapp,
     scoreRange: urlScoreRange,
     debtorProfile: urlDebtorProfile,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlScoreRange, urlDebtorProfile]);
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlSemWhatsapp, urlScoreRange, urlDebtorProfile]);
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -129,6 +131,7 @@ const CarteiraPage = () => {
       filters.semContato === true ||
       filters.emDia === true ||
       filters.higienizados === true ||
+      filters.semWhatsapp === true ||
       filters.scoreRange !== "" ||
       filters.debtorProfile !== ""
     );
@@ -141,7 +144,7 @@ const CarteiraPage = () => {
     tipoDevedorId: "", tipoDividaId: "", statusCobrancaId: "", semAcordo: false,
     cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
     valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
-    scoreRange: "", debtorProfile: "",
+    semWhatsapp: false, scoreRange: "", debtorProfile: "",
   }), []);
 
   const setFilters = useCallback(
@@ -236,6 +239,7 @@ const CarteiraPage = () => {
     debtorProfile: filters.debtorProfile || undefined,
     operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
     semAcordo: filters.semAcordo || undefined,
+    semWhatsapp: filters.semWhatsapp || undefined,
     cadastroDe: filters.cadastroDe || undefined,
     cadastroAte: filters.cadastroAte || undefined,
   }), [filters, permissions.canViewFullData, profileId]);
