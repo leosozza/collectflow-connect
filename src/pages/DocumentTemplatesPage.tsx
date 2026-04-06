@@ -80,7 +80,17 @@ const A4Preview = ({ content, className = "" }: { content: string; className?: s
 /* ---- Editor preview (with placeholders highlighted) ---- */
 const EditorPreview = ({ content }: { content: string }) => {
   const resolved = replaceVars(content, SAMPLE_DATA);
-  const html = markdownToHtml(resolved, { highlightPlaceholders: false });
+  // Handle HTML blocks (tables)
+  const htmlBlocks: string[] = [];
+  let textForMd = resolved.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `<!--HTML_BLOCK_${htmlBlocks.length - 1}-->`;
+  });
+  let html = markdownToHtml(textForMd, { highlightPlaceholders: false });
+  htmlBlocks.forEach((block, i) => {
+    html = html.replace(`<!--HTML_BLOCK_${i}-->`, block);
+  });
+
   return (
     <div
       className="mx-auto bg-white rounded-lg border border-border shadow-sm"
