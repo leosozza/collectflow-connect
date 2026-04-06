@@ -17,18 +17,18 @@ export function validateDocumentGeneration(
   switch (docType) {
     case "acordo": {
       if (!agreement) {
-        return { isValid: false, reason: "Sem acordo disponível", status: "unavailable" };
+        return { isValid: false, reason: "Sem acordo vigente para gerar carta de acordo", status: "unavailable" };
       }
       const status = agreement.status?.toLowerCase();
       if (status === "cancelado" || status === "cancelled") {
-        return { isValid: false, reason: "Acordo cancelado", status: "unavailable" };
+        return { isValid: false, reason: "Acordo cancelado — não é possível gerar documento", status: "unavailable" };
       }
       return { isValid: true, reason: "Documento disponível para geração", status: "available" };
     }
 
     case "recibo": {
       if (totalPago <= 0) {
-        return { isValid: false, reason: "Nenhum pagamento encontrado", status: "unavailable" };
+        return { isValid: false, reason: "Nenhum pagamento confirmado para gerar recibo", status: "unavailable" };
       }
       return { isValid: true, reason: "Documento disponível para geração", status: "available" };
     }
@@ -36,21 +36,21 @@ export function validateDocumentGeneration(
     case "quitacao": {
       const agreementPaid = agreement?.status?.toLowerCase() === "pago";
       if (totalAberto > 0 && !agreementPaid) {
-        return { isValid: false, reason: "Saldo ainda em aberto", status: "unavailable" };
+        return { isValid: false, reason: "Quitação disponível apenas para débito liquidado", status: "unavailable" };
       }
       return { isValid: true, reason: "Documento disponível para geração", status: "available" };
     }
 
     case "divida": {
       if (totalAberto <= 0) {
-        return { isValid: false, reason: "Sem débito em aberto", status: "unavailable" };
+        return { isValid: false, reason: "Sem débito em aberto para gerar descrição de dívida", status: "unavailable" };
       }
       return { isValid: true, reason: "Documento disponível para geração", status: "available" };
     }
 
     case "notificacao": {
       if (totalAberto <= 0) {
-        return { isValid: false, reason: "Sem débito ativo", status: "unavailable" };
+        return { isValid: false, reason: "Sem débito ativo para gerar notificação", status: "unavailable" };
       }
       return { isValid: true, reason: "Documento disponível para geração", status: "available" };
     }

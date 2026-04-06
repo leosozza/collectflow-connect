@@ -79,7 +79,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     return null;
   };
 
-  const handleGenerate = (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
+  const handleGenerate = async (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
     if (!canGenerate) return;
     const validation = validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
     if (!validation.isValid) {
@@ -102,6 +102,24 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
       templateSource: result.templateSource,
       templateContent: resolved.content,
     });
+
+    // Register preview event
+    try {
+      await supabase.from("client_events").insert({
+        tenant_id: tenantId!,
+        client_cpf: cpf,
+        client_id: client.id,
+        event_type: "document_previewed",
+        event_source: "system",
+        event_value: label,
+        metadata: {
+          document_type: docType,
+          template_source: result.templateSource,
+        },
+      });
+    } catch (err) {
+      console.error("Erro ao registrar visualização:", err);
+    }
   };
 
   const handleDownloadPdf = async () => {
@@ -247,6 +265,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
           onOpenChange={(open) => !open && setPreview(null)}
           html={preview.html}
           label={preview.label}
+          templateSource={preview.templateSource}
           onDownloadPdf={handleDownloadPdf}
         />
       )}

@@ -11,6 +11,7 @@ import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
 import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import CredorDebtorCategoriesConfig from "./CredorDebtorCategoriesConfig";
+import CredorDocumentTemplates from "./CredorDocumentTemplates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -576,78 +577,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
               </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4 space-y-3">
-                {TEMPLATES.map(t => (
-                  <Card key={t.key} className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{t.label}</span>
-                    </div>
-                    <Button variant="outline" size="sm" type="button" onClick={() => setOpenTemplateDialog(t.key)} className="gap-1">
-                      <Pencil className="w-3 h-3" /> Editar
-                    </Button>
-                  </Card>
-                ))}
-
-                {TEMPLATES.map(t => (
-                  <Dialog key={t.key} open={openTemplateDialog === t.key} onOpenChange={open => setOpenTemplateDialog(open ? t.key : null)}>
-                    <DialogContent className="sm:max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Editar: {t.label}</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" size="sm" type="button">
-                                Inserir Variável <ChevronDown className="w-3 h-3 ml-1" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2">
-                              <div className="space-y-1">
-                                {VARIAVEIS.map(v => (
-                                  <button key={v} className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors font-mono" onClick={() => insertVariable(t.key, v)}>{v}</button>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-
-                          <div className="h-6 w-px bg-border mx-1" />
-
-                          <TooltipProvider delayDuration={300}>
-                            {FORMATTING_TOOLS.map(tool => (
-                              <Tooltip key={tool.label}>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    type="button"
-                                    className="h-8 w-8"
-                                    onClick={() => applyFormatting(t.key, tool.prefix, tool.suffix)}
-                                  >
-                                    <tool.icon className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom"><p className="text-xs">{tool.label}</p></TooltipContent>
-                              </Tooltip>
-                            ))}
-                          </TooltipProvider>
-                        </div>
-
-                        <Textarea
-                          rows={12}
-                          value={form[t.key] || ""}
-                          onChange={e => set(t.key, e.target.value)}
-                          className="font-mono text-xs"
-                          ref={el => { textareaRefs.current[t.key] = el; }}
-                        />
-                      </div>
-                      <DialogFooter>
-                        <Button type="button" onClick={() => setOpenTemplateDialog(null)}>Concluir</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                ))}
+              <CollapsibleContent className="pt-4">
+                <CredorDocumentTemplates form={form} set={set} credorId={editing?.id} />
               </CollapsibleContent>
             </Collapsible>
 

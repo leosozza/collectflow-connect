@@ -1,13 +1,21 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, X, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
+
+const SOURCE_LABELS: Record<string, string> = {
+  credor: "Modelo: Credor",
+  tenant: "Modelo: Tenant",
+  default: "Modelo: Padrão",
+};
 
 interface DocumentPreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   html: string;
   label: string;
+  templateSource?: "credor" | "tenant" | "default";
   onDownloadPdf: () => Promise<void>;
 }
 
@@ -16,6 +24,7 @@ const DocumentPreviewDialog = ({
   onOpenChange,
   html,
   label,
+  templateSource,
   onDownloadPdf,
 }: DocumentPreviewDialogProps) => {
   const [downloading, setDownloading] = useState(false);
@@ -33,7 +42,14 @@ const DocumentPreviewDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b border-border flex flex-row items-center justify-between">
-          <DialogTitle className="text-base font-semibold">{label}</DialogTitle>
+          <div className="flex items-center gap-3">
+            <DialogTitle className="text-base font-semibold">{label}</DialogTitle>
+            {templateSource && (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                {SOURCE_LABELS[templateSource] || templateSource}
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleDownload} disabled={downloading}>
               {downloading ? (
