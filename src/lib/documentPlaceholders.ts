@@ -37,6 +37,7 @@ export const DOCUMENT_PLACEHOLDERS: PlaceholderInfo[] = [
   { key: "{desconto_concedido}", label: "Desconto Concedido (%)", description: "Percentual de desconto aplicado", category: "acordo" },
   { key: "{primeiro_vencimento}", label: "Primeiro Vencimento", description: "Data do primeiro vencimento do acordo", category: "acordo" },
   { key: "{data_acordo}", label: "Data do Acordo", description: "Data de formalização do acordo", category: "acordo" },
+  { key: "{tabela_parcelas}", label: "Tabela de Parcelas", description: "Tabela automática com parcelas do acordo (parcela, vencimento, valor)", category: "acordo" },
 ];
 
 export const PLACEHOLDER_CATEGORIES = [
