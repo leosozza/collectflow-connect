@@ -1,30 +1,34 @@
 
 
-# Plano: Permissão para Disparo WhatsApp na Carteira
+# Plano: Calculadora Simples no Formalizar Acordo
 
-## Situação Atual
+## Objetivo
 
-O botão de disparo WhatsApp na Carteira (`CarteiraPage.tsx`, linha 544) aparece para qualquer usuário que selecione clientes. Não há verificação de permissão.
+Adicionar um botão de calculadora (estilo iOS, como na referência) dentro do `AgreementCalculator`. O botão fica discreto no header do card. Ao clicar, abre um Popover com uma calculadora básica (4 operações + %). Não altera nada da lógica de parcelas, simulações ou formalização.
 
-O módulo `campanhas_whatsapp` já existe no sistema de permissões com a ação `create` — que só está liberada para `admin` e `super_admin` por padrão. Operadores têm apenas `view_own`.
+## Implementação
 
-## Solução
+### 1. Criar componente `SimpleCalculator`
 
-Reutilizar a permissão `canCreateCampanhas` (que verifica `campanhas_whatsapp.create`) para controlar a visibilidade do botão de disparo.
+**Novo arquivo**: `src/components/client-detail/SimpleCalculator.tsx`
 
-## Alteração
+- Calculadora com display e teclado numérico (AC, +/-, %, ÷, ×, −, +, =, vírgula)
+- Visual inspirado na referência (botões redondos, operadores em laranja)
+- Lógica simples com useState: `display`, `previousValue`, `operation`, `waitingForOperand`
+- Envolvida em um Popover que abre/fecha ao clicar no botão
 
-**Arquivo**: `src/pages/CarteiraPage.tsx`
+### 2. Integrar no `AgreementCalculator.tsx`
 
-1. Importar `usePermissions` (se ainda não estiver importado)
-2. Extrair `canCreateCampanhas` do hook
-3. Condicionar o botão WhatsApp: só renderizar se `canCreateCampanhas === true`
+- Importar `SimpleCalculator`
+- Adicionar o botão no header do card (ao lado do título ou dos botões existentes), usando o ícone `Calculator` já importado
+- O Popover abre sobre o conteúdo sem interferir no layout
 
-Isso significa que o admin pode ir em **Permissões** e adicionar a ação `create` no módulo `Campanhas WhatsApp` para qualquer operador ou perfil que desejar liberar.
+### Arquivos afetados
 
-## Nenhuma alteração em
+| Arquivo | Mudança |
+|---|---|
+| `src/components/client-detail/SimpleCalculator.tsx` | **Novo** — calculadora simples |
+| `src/components/client-detail/AgreementCalculator.tsx` | Adicionar botão que abre a calculadora |
 
-- `usePermissions.ts` (a permissão já existe)
-- Perfis de permissão (admin configura pela interface)
-- Campanhas, automação, webhook, Contact Center
+Nenhuma alteração em parcelas, simulações, formalização, serviços ou backend.
 
