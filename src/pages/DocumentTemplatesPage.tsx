@@ -39,7 +39,17 @@ const replaceVars = (text: string, vars: Record<string, string>) => {
 
 /* ---- A4 preview component ---- */
 const A4Preview = ({ content, className = "" }: { content: string; className?: string }) => {
-  const html = markdownToHtml(content, { highlightPlaceholders: false });
+  // Extract HTML blocks (like tables from {tabela_parcelas}) before markdown conversion
+  const htmlBlocks: string[] = [];
+  let textForMd = content.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `<!--HTML_BLOCK_${htmlBlocks.length - 1}-->`;
+  });
+  let html = markdownToHtml(textForMd, { highlightPlaceholders: false });
+  htmlBlocks.forEach((block, i) => {
+    html = html.replace(`<!--HTML_BLOCK_${i}-->`, block);
+  });
+
   return (
     <div className={`mx-auto bg-white shadow-lg border border-border/50 ${className}`}
       style={{
