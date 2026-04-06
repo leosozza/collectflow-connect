@@ -1,4 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendByProvider } from "../_shared/whatsapp-sender.ts";
+import { resolveTemplate } from "../_shared/template-resolver.ts";
+import { logMessage } from "../_shared/message-logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,7 +42,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Find workflow whose trigger node has matching webhook_token
       let matchedWf: any = null;
       for (const wf of wfs) {
         const nodes: any[] = wf.nodes || [];
@@ -62,7 +64,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check duplicate
       const { count } = await supabase
         .from("workflow_executions")
         .select("id", { count: "exact", head: true })
@@ -143,7 +144,6 @@ Deno.serve(async (req) => {
     // Find start node
     let currentNodeId = resume_from_node;
     if (!currentNodeId) {
-      // Find trigger node (no incoming edges)
       const targetIds = new Set(edges.map((e: any) => e.target));
       const triggerNode = nodes.find((n: any) => !targetIds.has(n.id));
       currentNodeId = triggerNode?.id;
@@ -160,7 +160,6 @@ Deno.serve(async (req) => {
       const logEntry: any = { node_id: node.id, nodeType, timestamp: new Date().toISOString() };
 
       try {
-        // Update current node
         await supabase
           .from("workflow_executions")
           .update({ current_node_id: currentNodeId })
@@ -168,45 +167,101 @@ Deno.serve(async (req) => {
 
         if (nodeType?.startsWith("trigger_")) {
           logEntry.result = "trigger_fired";
+
+        // Fase 5: action_whatsapp usando motor unificado
         } else if (nodeType === "action_whatsapp") {
           const template = node.data?.message_template || "";
-          const message = template
-            .replace(/\{\{nome\}\}/g, client.nome_completo)
-            .replace(/\{\{cpf\}\}/g, client.cpf)
-            .replace(/\{\{valor\}\}/g, String(client.valor_parcela));
+          // Fase 2: resolvedor unificado (suporta {{valor}}, {{valor_parcela}}, etc.)
+          const message = resolveTemplate(template, client);
 
-          // Try to send via evolution-proxy
-          try {
-            const phone = (client.phone || "").replace(/\D/g, "");
-            if (phone) {
-              const { data: instances } = await supabase
-                .from("whatsapp_instances")
-                .select("instance_name")
-                .eq("tenant_id", workflow.tenant_id)
-                .eq("status", "connected")
-                .limit(1);
+          const phone = (client.phone || "").replace(/\D/g, "");
+          let sendOk = false;
+          let sendError = "";
+          let providerMessageId: string | null = null;
+          let providerUsed = "";
+          let instanceName = "";
+          let instanceId: string | null = null;
 
-              if (instances && instances.length > 0) {
-                await fetch(`${supabaseUrl}/functions/v1/evolution-proxy`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${supabaseKey}`,
-                  },
-                  body: JSON.stringify({
-                    endpoint: `/message/sendText/${instances[0].instance_name}`,
-                    method: "POST",
-                    body: { number: phone, text: message },
-                    tenant_id: workflow.tenant_id,
-                  }),
-                });
+          if (phone) {
+            // Load tenant settings for provider credentials
+            const { data: tenantData } = await supabase
+              .from("tenants")
+              .select("settings")
+              .eq("id", workflow.tenant_id)
+              .single();
+            const tenantSettings = (tenantData?.settings || {}) as Record<string, any>;
+
+            // Find default instance (any provider, not just Evolution)
+            const { data: instances } = await supabase
+              .from("whatsapp_instances")
+              .select("id, instance_name, instance_url, api_key, provider")
+              .eq("tenant_id", workflow.tenant_id)
+              .in("status", ["connected", "active", "open"])
+              .order("is_default", { ascending: false })
+              .limit(1);
+
+            const inst = instances?.[0] || null;
+
+            // Check Gupshup fallback if no DB instance
+            const gupshupConfigured = !!(tenantSettings.gupshup_api_key && tenantSettings.gupshup_source_number);
+
+            const resolvedInst = inst || (gupshupConfigured
+              ? { provider: "gupshup", instance_name: tenantSettings.gupshup_app_name || "gupshup" }
+              : null);
+
+            if (resolvedInst) {
+              const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
+              const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+              const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
+              const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
+
+              // Fase 1: motor unificado de envio
+              const sendResult = await sendByProvider(
+                resolvedInst, phone, message, tenantSettings,
+                evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
+              );
+
+              sendOk = sendResult.ok;
+              providerMessageId = sendResult.providerMessageId;
+              providerUsed = sendResult.provider;
+              instanceName = resolvedInst.instance_name || "";
+              instanceId = inst?.id || null;
+
+              if (!sendOk) {
+                sendError = JSON.stringify(sendResult.result);
               }
+            } else {
+              sendError = "Nenhuma instância WhatsApp configurada";
             }
-            logEntry.result = "whatsapp_sent";
-          } catch (e: any) {
-            logEntry.result = "whatsapp_error";
-            logEntry.error = e.message;
+          } else {
+            sendError = "Cliente sem telefone";
           }
+
+          // Fase 3: logger unificado com rastreabilidade de workflow
+          await logMessage(supabase, {
+            tenant_id: workflow.tenant_id,
+            client_id: client_id,
+            client_cpf: client.cpf,
+            phone: phone || null,
+            status: sendOk ? "sent" : "failed",
+            message_body: message,
+            error_message: sendError || null,
+            sent_at: sendOk ? new Date().toISOString() : null,
+            metadata: {
+              source_type: "workflow",
+              workflow_id,
+              execution_id: execId!,
+              node_id: node.id,
+              provider: providerUsed,
+              provider_message_id: providerMessageId,
+              instance_id: instanceId,
+              instance_name: instanceName,
+            },
+          });
+
+          logEntry.result = sendOk ? "whatsapp_sent" : "whatsapp_error";
+          if (sendError) logEntry.error = sendError;
+
         } else if (nodeType === "action_sms") {
           logEntry.result = "sms_queued";
         } else if (nodeType === "action_wait") {
@@ -214,7 +269,6 @@ Deno.serve(async (req) => {
           const nextRun = new Date();
           nextRun.setDate(nextRun.getDate() + days);
 
-          // Find next node
           const outEdge = edges.find((e: any) => e.source === currentNodeId);
           const nextNodeId = outEdge?.target || null;
 
