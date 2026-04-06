@@ -13,6 +13,7 @@ import {
   fetchClients,
   fetchCarteiraGrouped,
   fetchAllCarteiraIds,
+  fetchAllCarteiraClients,
   createClient,
   updateClient,
   bulkCreateClients,
@@ -180,7 +181,8 @@ const CarteiraPage = () => {
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
-
+  const [loadingBulkClients, setLoadingBulkClients] = useState(false);
+  const [bulkClients, setBulkClients] = useState<GroupedClient[] | null>(null);
   const toggleSort = (field: string) => {
     if (sortField === field) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -244,6 +246,7 @@ const CarteiraPage = () => {
     setUrlPage(1);
     setSelectedIds(new Set());
     setSelectAllFiltered(false);
+    setBulkClients(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rpcFiltersKey]);
 
@@ -502,6 +505,22 @@ const CarteiraPage = () => {
     setSelectedIds(next);
   };
 
+  // When selectAllFiltered, fetch ALL clients from DB for bulk actions
+  const fetchBulkIfNeeded = async (): Promise<GroupedClient[]> => {
+    if (!selectAllFiltered) {
+      return displayClients.filter((c) => selectedIds.has(c.id));
+    }
+    if (bulkClients) return bulkClients;
+    setLoadingBulkClients(true);
+    try {
+      const all = await fetchAllCarteiraClients(tenant!.id, rpcFilters, sortField, sortDir);
+      setBulkClients(all);
+      return all;
+    } finally {
+      setLoadingBulkClients(false);
+    }
+  };
+
   const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
   const selectedCount = selectAllFiltered
     ? selectedIds.size
@@ -516,6 +535,46 @@ const CarteiraPage = () => {
     }
     return Array.from(cpfMap.values());
   }, [selectedClients]);
+
+  // State for resolved bulk data passed to dialogs
+  const [resolvedDialerClients, setResolvedDialerClients] = useState<GroupedClient[]>([]);
+  const [resolvedWhatsappClients, setResolvedWhatsappClients] = useState<GroupedClient[]>([]);
+  const [resolvedEnrichClients, setResolvedEnrichClients] = useState<{ id: string; cpf: string; credor?: string }[]>([]);
+
+  const handleOpenDialer = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      setResolvedDialerClients(all);
+    } else {
+      setResolvedDialerClients(selectedClients);
+    }
+    setDialerOpen(true);
+  };
+
+  const handleOpenWhatsapp = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      const cpfMap = new Map<string, GroupedClient>();
+      for (const c of all) {
+        const cpf = c.cpf.replace(/\D/g, "");
+        if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
+      }
+      setResolvedWhatsappClients(Array.from(cpfMap.values()));
+    } else {
+      setResolvedWhatsappClients(uniqueSelectedClients);
+    }
+    setWhatsappOpen(true);
+  };
+
+  const handleOpenEnrich = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      setResolvedEnrichClients(all.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
+    } else {
+      setResolvedEnrichClients(selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
+    }
+    setEnrichOpen(true);
+  };
 
 
   return (
@@ -551,12 +610,14 @@ const CarteiraPage = () => {
           {selectedIds.size > 0 && (
             <>
               {permissions.canCreateCampanhas && (
-                <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
+                <Button variant="outline" size="sm" onClick={handleOpenWhatsapp} disabled={loadingBulkClients} className="gap-1.5 border-success text-success">
+                  {loadingBulkClients && <Loader2 className="w-3 h-3 animate-spin" />}
                   <MessageSquare className="w-4 h-4" />
                   <span className="hidden sm:inline">WhatsApp</span> ({selectedCount})
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
+              <Button variant="outline" size="sm" onClick={handleOpenDialer} disabled={loadingBulkClients} className="gap-1.5 border-primary text-primary">
+                {loadingBulkClients && <Loader2 className="w-3 h-3 animate-spin" />}
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedCount})
               </Button>
@@ -566,7 +627,8 @@ const CarteiraPage = () => {
                   <span className="hidden sm:inline">Atribuir</span> ({selectedCount})
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => setEnrichOpen(true)} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
+              <Button variant="outline" size="sm" onClick={handleOpenEnrich} disabled={loadingBulkClients} className="gap-1.5 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950">
+                {loadingBulkClients && <Loader2 className="w-3 h-3 animate-spin" />}
                 <Search className="w-4 h-4" />
                 <span className="hidden sm:inline">Higienizar</span> ({selectedCount})
               </Button>
@@ -880,15 +942,15 @@ const CarteiraPage = () => {
       {/* Dialer export dialog */}
       <DialerExportDialog
         open={dialerOpen}
-        onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients as any[]}
+        onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); setBulkClients(null); }}
+        selectedClients={resolvedDialerClients as any[]}
       />
 
       {/* WhatsApp bulk dialog */}
       <WhatsAppBulkDialog
         open={whatsappOpen}
-        onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={uniqueSelectedClients as any[]}
+        onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); setBulkClients(null); }}
+        selectedClients={resolvedWhatsappClients as any[]}
       />
 
       {/* Assign operator dialog */}
@@ -906,7 +968,7 @@ const CarteiraPage = () => {
       <EnrichmentConfirmDialog
         open={enrichOpen}
         onOpenChange={setEnrichOpen}
-        selectedClients={selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor }))}
+        selectedClients={resolvedEnrichClients}
         onComplete={() => {
           queryClient.invalidateQueries({ queryKey: ["clients"] });
           setSelectedIds(new Set());
