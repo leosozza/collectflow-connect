@@ -8,7 +8,10 @@ import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
 import { resolveDocumentData } from "@/services/documentDataResolver";
 import { renderDocument } from "@/services/documentRenderer";
 import { validateDocumentGeneration, type ValidationResult } from "@/services/documentValidationService";
+import { downloadPdf } from "@/services/documentPdfService";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import DocumentPreviewDialog from "./DocumentPreviewDialog";
+import { useState } from "react";
 
 interface ClientDocumentsProps {
   client: any;
@@ -18,9 +21,18 @@ interface ClientDocumentsProps {
   lastAgreement: any;
 }
 
+interface PreviewState {
+  html: string;
+  label: string;
+  docType: string;
+  templateSource: "credor" | "tenant" | "default";
+  templateContent: string;
+}
+
 const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: ClientDocumentsProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const [preview, setPreview] = useState<PreviewState | null>(null);
 
   const { data: credor } = useQuery({
     queryKey: ["credor-templates", client.credor],
@@ -48,7 +60,6 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     enabled: !!tenantId,
   });
 
-  // Resolve all template vars centrally via service
   const totalPago = clients.reduce((s: number, c: any) => s + (Number(c.valor_pago) || 0), 0);
   const docData = resolveDocumentData({
     client,
@@ -58,61 +69,85 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     totalAberto,
   });
 
-  /**
-   * 3-level fallback: credor → tenant → default
-   * Returns { content, source }
-   */
   const resolveTemplate = (credorKey: string, docType: string): { content: string; source: "credor" | "tenant" | "default" } | null => {
     const credorTemplate = credor?.[credorKey as keyof typeof credor] as string;
     if (credorTemplate?.trim()) return { content: credorTemplate, source: "credor" };
-
     const tenantTpl = tenantTemplates?.find((t) => t.type === docType);
     if (tenantTpl?.content?.trim()) return { content: tenantTpl.content, source: "tenant" };
-
     const defaultTpl = TEMPLATE_DEFAULTS[credorKey];
     if (defaultTpl) return { content: defaultTpl, source: "default" };
-
     return null;
   };
 
-  const handleDownload = (credorKey: string, docType: string, label: string) => {
-    // Validate first
+  const handleGenerate = (credorKey: string, docType: string, label: string) => {
     const validation = validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
     if (!validation.isValid) {
       toast.error(validation.reason);
       return;
     }
-
     const resolved = resolveTemplate(credorKey, docType);
     if (!resolved) {
       toast.error(`Modelo de "${label}" não configurado.`);
       return;
     }
-
     const result = renderDocument(resolved.content, docData.vars, resolved.source);
-
     if (result.missingPlaceholders.length > 0) {
       console.warn("Placeholders não resolvidos:", result.missingPlaceholders);
     }
-
-    const blob = new Blob([result.text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${label.replace(/ /g, "_")}_${client.nome_completo?.replace(/ /g, "_") || "devedor"}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`${label} gerado com sucesso!`);
+    setPreview({
+      html: result.html,
+      label,
+      docType,
+      templateSource: result.templateSource,
+      templateContent: resolved.content,
+    });
   };
 
-  const isConfigured = (credorKey: string, docType: string) => {
-    return !!resolveTemplate(credorKey, docType);
+  const handleDownloadPdf = async () => {
+    if (!preview) return;
+    const safeName = client.nome_completo?.replace(/ /g, "_") || "devedor";
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `${preview.docType}_${safeName}_${date}.pdf`;
+
+    await downloadPdf(preview.html, filename);
+
+    // Save to history
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      await supabase.from("client_generated_documents").insert({
+        tenant_id: tenantId!,
+        client_id: client.id,
+        client_cpf: cpf,
+        credor: client.credor,
+        type: preview.docType,
+        template_source: preview.templateSource,
+        template_snapshot: preview.templateContent,
+        rendered_html: preview.html,
+        created_by: userData?.user?.id,
+      });
+
+      // Register client event
+      await supabase.from("client_events").insert({
+        tenant_id: tenantId!,
+        client_cpf: cpf,
+        client_id: client.id,
+        event_type: "document_generated",
+        event_source: "system",
+        event_value: preview.label,
+        metadata: {
+          document_type: preview.docType,
+          template_source: preview.templateSource,
+        },
+      });
+    } catch (err) {
+      console.error("Erro ao salvar histórico do documento:", err);
+    }
+
+    toast.success(`${preview.label} gerado com sucesso!`);
   };
 
-  const getValidation = (docType: string): ValidationResult => {
-    return validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
-  };
-
+  const isConfigured = (credorKey: string, docType: string) => !!resolveTemplate(credorKey, docType);
+  const getValidation = (docType: string): ValidationResult => validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
   const configuredCount = DOCUMENT_TYPES.filter((d) => isConfigured(d.credorKey, d.type)).length;
 
   const getStatusIcon = (validation: ValidationResult, configured: boolean) => {
@@ -130,29 +165,25 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
             Gere e baixe os documentos com os dados preenchidos automaticamente. Os modelos são definidos no cadastro do credor.
           </p>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Lista de documentos para download */}
             <div className="lg:col-span-2 flex flex-col gap-3">
               {DOCUMENT_TYPES.map((doc) => {
                 const validation = getValidation(doc.type);
                 const configured = isConfigured(doc.credorKey, doc.type);
                 const canGenerate = configured && validation.isValid;
-
                 return (
                   <Tooltip key={doc.credorKey}>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={() => handleDownload(doc.credorKey, doc.type, doc.label)}
+                        onClick={() => handleGenerate(doc.credorKey, doc.type, doc.label)}
                         className={`flex items-center gap-4 p-4 rounded-xl border border-border bg-card transition-colors text-left group ${
-                          canGenerate
-                            ? "hover:bg-muted/50 cursor-pointer"
-                            : "opacity-60 cursor-not-allowed"
+                          canGenerate ? "hover:bg-muted/50 cursor-pointer" : "opacity-60 cursor-not-allowed"
                         }`}
                       >
                         <span className="text-2xl">{doc.icon}</span>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">{doc.label}</p>
                           <p className="text-xs text-muted-foreground">
-                            {canGenerate ? "Clique para gerar e baixar" : validation.reason}
+                            {canGenerate ? "Clique para visualizar e baixar" : validation.reason}
                           </p>
                         </div>
                         {canGenerate ? (
@@ -172,7 +203,6 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
               })}
             </div>
 
-            {/* Painel lateral de status */}
             <div className="space-y-3">
               <div className="rounded-xl border border-border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -208,6 +238,16 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
           </div>
         </CardContent>
       </Card>
+
+      {preview && (
+        <DocumentPreviewDialog
+          open={!!preview}
+          onOpenChange={(open) => !open && setPreview(null)}
+          html={preview.html}
+          label={preview.label}
+          onDownloadPdf={handleDownloadPdf}
+        />
+      )}
     </TooltipProvider>
   );
 };
