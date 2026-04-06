@@ -968,7 +968,7 @@ const CarteiraPage = () => {
       <EnrichmentConfirmDialog
         open={enrichOpen}
         onOpenChange={setEnrichOpen}
-        selectedClients={selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor }))}
+        selectedClients={resolvedEnrichClients}
         onComplete={() => {
           queryClient.invalidateQueries({ queryKey: ["clients"] });
           setSelectedIds(new Set());
