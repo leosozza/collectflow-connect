@@ -1,92 +1,57 @@
 
 
-# Plano: Módulo "Modelos de Documentos" — 5 Fases
+# Plano: Fase 3 — Evolução do Editor e Preview
 
-## Situação atual
+## Escopo
 
-- Templates hardcoded em `CredorForm.tsx` (linhas 33-90), com variáveis `{nome_devedor}` etc.
-- `ClientDocuments.tsx` busca templates apenas da tabela `credores` — se não encontra, mostra erro
-- Não existe fallback para tenant nem para defaults do sistema
-- `ConfiguracoesPage.tsx` tem 4 abas (Integração, Auditoria, API REST, MaxList)
+Evoluir `DocumentTemplatesPage.tsx` sem trocar textarea, sem bibliotecas pesadas, sem alterar `ClientDocuments.tsx`.
 
-## FASE 1 — Base estrutural
+## Alterações
 
-### Migration SQL
-Criar tabela `document_templates` com RLS:
-- SELECT: `tenant_id = get_my_tenant_id()`
-- INSERT/UPDATE/DELETE: `tenant_id = get_my_tenant_id() AND is_tenant_admin(auth.uid(), tenant_id)`
-- Trigger `updated_at`
+### 1. Novo utilitário: `src/lib/markdownLight.ts`
 
-### Novos arquivos
-| Arquivo | Conteúdo |
-|---|---|
-| `src/lib/documentDefaults.ts` | 5 templates padrão extraídos do `CredorForm.tsx` + mapa `TEMPLATE_DEFAULTS` + array `DOCUMENT_TYPES` com key/label/icon/type/description |
-| `src/lib/documentPlaceholders.ts` | Lista oficial de placeholders com nome, descrição e categoria (credor, devedor, financeiro, acordo) |
+Parser simples de markdown leve para HTML:
+- `**texto**` → `<strong>`
+- `*texto*` → `<em>`
+- `## Título` → `<h2>`
+- `### Subtítulo` → `<h3>`
+- `- item` → `<ul><li>`
+- `---` → `<hr>`
+- Linhas vazias → separação de parágrafos (`<p>`)
+- Placeholders `{variavel}` destacados com `<span>` colorido no preview
 
-### Alterações
-| Arquivo | Mudança |
-|---|---|
-| `CredorForm.tsx` | Importar defaults de `documentDefaults.ts`, remover hardcoded (linhas 33-90) |
-| `ClientDocuments.tsx` | Adicionar query à `document_templates` do tenant; resolver template com fallback: credor → tenant → default. Manter comportamento atual intacto |
+Função pura, ~50 linhas, sem dependências.
 
----
+### 2. Evoluir `DocumentTemplatesPage.tsx`
 
-## FASE 2 — Módulo de gestão
+**Editor (Sheet lateral):**
+- Adicionar guia visual de formatação acima do textarea: "Formatação: **negrito**, *itálico*, ## título, - lista, --- separador"
+- Aumentar textarea para `min-h-[450px]`
+- Adicionar tooltips nos botões de placeholder (já existe `title`, migrar para `Tooltip` component)
+- Placeholders agrupados por categoria com ícones (já implementado, melhorar visual com accordion colapsável)
 
-### Novos arquivos
-| Arquivo | Conteúdo |
-|---|---|
-| `src/pages/DocumentTemplatesPage.tsx` | Lista dos 5 modelos em cards com: nome, descrição, badge (Padrão/Personalizado), botões Editar/Visualizar/Restaurar. Seed automático dos faltantes ao abrir. Editor via Sheet com textarea. Restaurar = resetar content + `is_customized = false`. Preview com dados fictícios |
+**Preview (Dialog):**
+- Substituir o `<div>` simples por layout estilo folha A4:
+  - Container com `max-w-[210mm]`, `min-h-[297mm]`, `bg-white`, `shadow-lg`, padding de margens reais (~25mm)
+  - Tipografia serifada (`font-serif`), `leading-relaxed`, tamanho adequado
+- Renderizar conteúdo usando `markdownLight` → HTML via `dangerouslySetInnerHTML`
+- Preview em tempo real no editor: adicionar aba "Preview" dentro do Sheet que mostra o resultado formatado ao lado/abaixo do textarea
 
-### Alterações
-| Arquivo | Mudança |
-|---|---|
-| `ConfiguracoesPage.tsx` | Nova aba "Modelos de Documentos" (ícone FileText, visível para `isTenantAdmin`) |
+**Preview no editor (layout responsivo):**
+- No Sheet, adicionar toggle "Editor / Preview" para alternar entre textarea e preview formatado
+- Preview usa o mesmo parser + `SAMPLE_DATA` para substituir variáveis
 
----
+### 3. Nenhuma alteração em outros arquivos
 
-## FASE 3 — Experiência profissional
+- `ClientDocuments.tsx` — intocado
+- `documentPlaceholders.ts` — intocado
+- `documentDefaults.ts` — intocado
+- Lógica de geração — intocada
 
-### Alterações em `DocumentTemplatesPage.tsx`
-- Editor evoluído com toolbar: negrito, itálico, títulos, listas, alinhamento, separadores
-- Layout em duas colunas: editor (esquerda) + preview em tempo real (direita)
-- Preview estilo A4 com margens, tipografia profissional
-- Painel de placeholders clicável organizado por categoria (credor, devedor, financeiro, acordo)
-
----
-
-## FASE 4 — Componentes dinâmicos
-
-### Alterações
-- Implementar `{{tabela_parcelas}}` com renderização automática (Parcela | Vencimento | Valor)
-- Substituição de variáveis com fallback seguro (variável não encontrada = string vazia, sem erro)
-- Cláusulas numeradas automáticas
-
----
-
-## FASE 5 — Uso real (produção)
-
-### Novos arquivos/alterações
-- Edge Function para gerar PDF com logo do tenant
-- Botões de download PDF, envio por WhatsApp e e-mail
-- Tabela `generated_documents` para histórico
-- Vincular documentos gerados ao perfil do cliente e ao acordo
-
----
-
-## Execução
-
-Vou implementar **FASE 1 e FASE 2 juntas** nesta execução (base + UI de gestão). As fases 3-5 ficam para prompts futuros.
-
-### Arquivos da execução atual
+## Arquivos
 
 | Arquivo | Tipo |
 |---|---|
-| Migration SQL | Tabela `document_templates` + RLS + trigger |
-| `src/lib/documentDefaults.ts` | Novo |
-| `src/lib/documentPlaceholders.ts` | Novo |
-| `src/pages/DocumentTemplatesPage.tsx` | Novo |
-| `src/components/cadastros/CredorForm.tsx` | Importar defaults |
-| `src/components/client-detail/ClientDocuments.tsx` | Fallback 3 níveis |
-| `src/pages/ConfiguracoesPage.tsx` | Nova aba |
+| `src/lib/markdownLight.ts` | Novo — parser simples |
+| `src/pages/DocumentTemplatesPage.tsx` | Evoluir editor e preview |
 
