@@ -23,7 +23,7 @@ const ConfiguracoesPage = () => {
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
     ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
-    
+    ...(isTenantAdmin ? [{ key: "documentos", label: "Modelos de Documentos", icon: FileText }] : []),
     ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
     ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
   ];
