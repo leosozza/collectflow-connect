@@ -1,59 +1,48 @@
 
 
-# Plano: Normalizar telefones com validação completa (DDI + DDD + 9 dígitos)
+# Plano: Corrigir erro de número e criar conversas nos disparos em lote
 
-## Problema
+## Dois problemas identificados
 
-Os telefones no banco podem estar em diversos formatos:
-- `11972583005` (11 dígitos — DDD + número com 9)
-- `1172583005` (10 dígitos — DDD + número sem 9, fixo ou celular antigo)
-- `5511972583005` (13 dígitos — já com DDI)
-- `972583005` (9 dígitos — só o número sem DDD)
+### 1. Erro no número da Pamela (5596981237461)
 
-Atualmente o `whatsapp-sender.ts` envia o número bruto, sem normalização. Precisa garantir que o número final tenha **13 dígitos**: `55` + DDD(2) + número com 9(9).
+O número `5596981237461` tem 13 dígitos e começa com `55`, então `normalizePhoneBR` o retorna sem alteração. Porém a Evolution API responde `"exists": false` — isso significa que **o número simplesmente não existe no WhatsApp**. Não é bug de formatação.
 
-## Correção
+Possível causa: o número original no banco pode ter um dígito a mais (o `9` inserido indevidamente em telefone fixo ou de região que não usa 9). DDD 96 (Amapá) usa 9 em celulares, mas se o número original era `96981237461` (11 dígitos), o sistema prefixou `55` corretamente para `5596981237461`. O problema é que esse número não está registrado no WhatsApp.
 
-**Arquivo**: `supabase/functions/_shared/whatsapp-sender.ts`
+**Ação**: Nenhuma correção de código necessária — o número não existe no WhatsApp. Esse tipo de falha é esperado e já é registrado como `failed` nos logs.
 
-Adicionar função `normalizePhoneBR` no topo e aplicar antes do envio em cada provedor:
+### 2. Conversas não aparecem na aba WhatsApp CRM
 
-```typescript
-function normalizePhoneBR(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
+**Causa raiz**: O `send-bulk-whatsapp` envia a mensagem via API da Evolution mas **não cria um registro na tabela `conversations`** nem insere a mensagem em `chat_messages`. Conversas só são criadas pelo webhook (`whatsapp-webhook`) quando chega uma mensagem **inbound** ou quando a Evolution envia um evento `messages.upsert` com `fromMe: true`.
 
-  // Já tem 13 dígitos (55 + DDD + 9 dígitos) — ok
-  if (digits.length === 13 && digits.startsWith("55")) return digits;
+O webhook depende de receber o evento da Evolution. Se o webhook não está configurado na instância "DISPAROS VITOR 1", ou se a Evolution não dispara eventos para mensagens enviadas via API, as conversas nunca são criadas.
 
-  // 12 dígitos com 55 — celular sem o 9 → inserir 9
-  if (digits.length === 12 && digits.startsWith("55")) {
-    return digits.slice(0, 4) + "9" + digits.slice(4);
-  }
+**Correção proposta**: Após cada envio bem-sucedido no `send-bulk-whatsapp`, criar ou atualizar a conversa e inserir a mensagem outbound em `chat_messages`. Isso garante que toda mensagem enviada apareça no CRM.
 
-  // 11 dígitos — DDD + 9 dígitos → prefixar 55
-  if (digits.length === 11) return "55" + digits;
+### Alterações em `supabase/functions/send-bulk-whatsapp/index.ts`
 
-  // 10 dígitos — DDD + 8 dígitos (sem 9) → prefixar 55 + inserir 9
-  if (digits.length === 10) {
-    return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
-  }
+Criar uma função auxiliar `ensureConversationAndMessage` que:
+1. Busca a conversa existente por `tenant_id` + `instance_id` + `remote_phone` (telefone normalizado)
+2. Se não existir, cria com status `"open"`, vinculando ao `client_id` se disponível
+3. Insere a mensagem outbound em `chat_messages` com `external_id` do provider
+4. Atualiza `last_message_at` da conversa
 
-  // 9 dígitos — só número sem DDD → não tem como resolver, retorna como está
-  // 8 dígitos — fixo sem DDD → idem
-  return digits;
-}
+Chamar essa função após cada envio bem-sucedido, tanto no `handleCampaignFlow` quanto no `handleLegacyFlow`.
+
+```text
+Envio OK → ensureConversationAndMessage(tenantId, instanceId, normalizedPhone, clientName, clientId, message, providerMessageId)
+         → conversations: upsert (create if missing, update last_message_at)
+         → chat_messages: insert outbound record
 ```
 
-Aplicar nos 3 pontos de envio:
-- **Linha 35** (WuzAPI): `phone: \`${normalizePhoneBR(phone)}@s.whatsapp.net\``
-- **Linha 51** (Gupshup): `destination: normalizePhoneBR(phone)`
-- **Linha 74** (Evolution): `number: normalizePhoneBR(phone)`
+### Impacto
 
-## Resumo
+- Todas as mensagens enviadas em lote passarão a aparecer na aba Conversas do WhatsApp CRM
+- O operador poderá ver o histórico de disparos e continuar a conversa
+- Nenhuma alteração no frontend ou no banco de dados (tabelas `conversations` e `chat_messages` já existem)
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/_shared/whatsapp-sender.ts` | Adicionar `normalizePhoneBR` e aplicar nos 3 provedores |
-
-Nenhuma alteração no frontend ou banco de dados.
+| `supabase/functions/send-bulk-whatsapp/index.ts` | Adicionar `ensureConversationAndMessage` e chamar após envio OK |
 
