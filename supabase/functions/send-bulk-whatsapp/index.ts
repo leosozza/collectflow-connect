@@ -3,6 +3,86 @@ import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { resolveTemplate } from "../_shared/template-resolver.ts";
 import { logMessage } from "../_shared/message-logger.ts";
 
+// ===== Helper: persist conversation + outbound message in CRM =====
+async function ensureConversationAndMessage(
+  supabase: any,
+  tenantId: string,
+  instanceId: string | null,
+  normalizedPhone: string,
+  recipientName: string,
+  clientId: string | null,
+  messageBody: string,
+  providerMessageId: string | null,
+) {
+  try {
+    // Normalize phone for remote_phone (strip 55 prefix for display, keep full)
+    const remotePhone = normalizedPhone.replace(/\D/g, "");
+
+    // Try to find existing conversation
+    let query = supabase
+      .from("conversations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("remote_phone", remotePhone);
+
+    if (instanceId) {
+      query = query.eq("instance_id", instanceId);
+    }
+
+    const { data: existing } = await query.limit(1).maybeSingle();
+
+    let conversationId: string;
+    const now = new Date().toISOString();
+
+    if (existing) {
+      conversationId = existing.id;
+      // Update last_message_at
+      await supabase
+        .from("conversations")
+        .update({ last_message_at: now, updated_at: now })
+        .eq("id", conversationId);
+    } else {
+      // Create new conversation
+      const insertData: any = {
+        tenant_id: tenantId,
+        remote_phone: remotePhone,
+        remote_name: recipientName || remotePhone,
+        status: "open",
+        last_message_at: now,
+        unread_count: 0,
+      };
+      if (instanceId) insertData.instance_id = instanceId;
+      if (clientId) insertData.client_id = clientId;
+
+      const { data: newConv, error: convErr } = await supabase
+        .from("conversations")
+        .insert(insertData)
+        .select("id")
+        .single();
+
+      if (convErr) {
+        console.error("Error creating conversation:", convErr);
+        return;
+      }
+      conversationId = newConv.id;
+    }
+
+    // Insert outbound message
+    await supabase.from("chat_messages").insert({
+      conversation_id: conversationId,
+      tenant_id: tenantId,
+      direction: "outbound",
+      content: messageBody,
+      message_type: "text",
+      status: "sent",
+      external_id: providerMessageId || null,
+      is_internal: false,
+    });
+  } catch (err) {
+    console.error("ensureConversationAndMessage error:", err);
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -259,8 +339,16 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           },
         });
 
-        if (status === "sent") sent++;
-        else {
+        if (status === "sent") {
+          sent++;
+          // Persist conversation + outbound message in CRM
+          await ensureConversationAndMessage(
+            supabase, tenantId, recipient.assigned_instance_id,
+            recipient.phone, recipient.recipient_name,
+            recipient.representative_client_id, message,
+            sendResult.providerMessageId
+          );
+        } else {
           failed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
         }
@@ -461,8 +549,15 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
         },
       });
 
-      if (status === "sent") sent++;
-      else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
+      if (status === "sent") {
+        sent++;
+        // Persist conversation + outbound message in CRM
+        await ensureConversationAndMessage(
+          supabase, tenantUser.tenant_id, inst?.id || null,
+          phone, client.nome_completo, client.id, message,
+          sendResult.providerMessageId
+        );
+      } else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
 
       await new Promise((r) => setTimeout(r, 100));
     } catch (err: any) {
