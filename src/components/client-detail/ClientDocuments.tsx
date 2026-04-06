@@ -265,6 +265,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
           onOpenChange={(open) => !open && setPreview(null)}
           html={preview.html}
           label={preview.label}
+          templateSource={preview.templateSource}
           onDownloadPdf={handleDownloadPdf}
         />
       )}
