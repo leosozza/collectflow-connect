@@ -391,25 +391,31 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
 
-      // Generate boletos automatically via Negociarie
-      if (formaPagto === "BOLETO" && agreement && !outOfStandard.isOut) {
-        // Check for missing required fields before generating boletos
-        const { missing, consolidated } = await checkRequiredFields();
-        if (Object.keys(missing).length > 0) {
-          // Open dialog for user to fill missing fields
-          const fieldsWithLabels: Record<string, string> = {};
-          for (const key of Object.keys(missing)) {
-            fieldsWithLabels[key] = "";
+      // Generate boletos automatically via Edge Function (for non-approval agreements)
+      if (agreement && !outOfStandard.isOut) {
+        try {
+          setGeneratingBoletos(true);
+          const { data: boletoResult, error: boletoError } = await supabase.functions.invoke("generate-agreement-boletos", {
+            body: { agreement_id: agreement.id },
+          });
+          if (boletoError) {
+            console.error("Boleto generation error:", boletoError);
+            toast.error("Acordo criado, mas falha ao gerar boletos automaticamente.");
+          } else if (boletoResult?.boleto_pendente) {
+            toast.info("Acordo criado! Boletos pendentes — preencha os dados cadastrais do cliente.");
+          } else if (boletoResult?.success > 0 && boletoResult?.failed === 0) {
+            toast.success(`${boletoResult.success} boleto(s) gerado(s) automaticamente!`);
+          } else if (boletoResult?.success > 0 && boletoResult?.failed > 0) {
+            toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s).`);
+          } else if (boletoResult?.failed > 0) {
+            toast.error(`Falha ao gerar boletos: ${boletoResult.errors?.[0] || "Erro desconhecido"}`);
           }
-          setMissingFields(fieldsWithLabels);
-          setFoundFields(consolidated);
-          setPendingAgreement(agreement);
-          setMissingFieldsOpen(true);
-          setSubmitting(false);
-          return; // Don't call onAgreementCreated yet — wait for dialog
+        } catch (boletoErr: any) {
+          console.error("Boleto edge function error:", boletoErr);
+          toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
+        } finally {
+          setGeneratingBoletos(false);
         }
-
-        await generateBoletosForAgreement(agreement);
       }
 
       onAgreementCreated();

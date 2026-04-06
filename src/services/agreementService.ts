@@ -318,6 +318,25 @@ export const approveAgreement = async (
     } catch (e) {
       logger.error(MODULE, "auto_cancel_serasa", e);
     }
+
+    // Generate boletos automatically after approval
+    try {
+      const { data: boletoResult, error: boletoError } = await supabase.functions.invoke("generate-agreement-boletos", {
+        body: { agreement_id: agreement.id },
+      });
+      if (boletoError) {
+        logger.error(MODULE, "auto_generate_boletos_after_approval", boletoError);
+      } else {
+        logger.info(MODULE, "auto_generate_boletos_after_approval", {
+          id: agreement.id,
+          success: boletoResult?.success,
+          failed: boletoResult?.failed,
+          boleto_pendente: boletoResult?.boleto_pendente,
+        });
+      }
+    } catch (e) {
+      logger.error(MODULE, "auto_generate_boletos_after_approval", e);
+    }
   } catch (error) {
     handleServiceError(error, MODULE);
   }
