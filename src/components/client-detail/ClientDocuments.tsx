@@ -176,7 +176,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
                   <Tooltip key={doc.credorKey}>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={() => handleGenerate(doc.credorKey, doc.type, doc.label)}
+                        onClick={() => handleGenerate(doc.credorKey, doc.type, doc.label, canGenerate)}
                         className={`flex items-center gap-4 p-4 rounded-xl border border-border bg-card transition-colors text-left group ${
                           canGenerate ? "hover:bg-muted/50 cursor-pointer" : "opacity-60 cursor-not-allowed"
                         }`}

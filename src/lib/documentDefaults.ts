@@ -36,10 +36,10 @@ CPF: {cpf_devedor}
 
 NOTIFICANTE: {razao_social_credor}, inscrita no CNPJ sob o nº {cnpj_credor}, vem, por meio desta, NOTIFICAR Vossa Senhoria acerca do débito abaixo discriminado:
 
-VALOR DO DÉBITO: R$ {valor_divida}
+VALOR DO DÉBITO: {valor_divida}
 DATA DE VENCIMENTO: {data_vencimento}
 PARCELA: {numero_parcela}/{total_parcelas}
-VALOR DA PARCELA: R$ {valor_parcela}
+VALOR DA PARCELA: {valor_parcela}
 
 Informamos que, apesar das tentativas de contato anteriores, o débito acima referido permanece em aberto, encontrando-se vencido e não quitado até a presente data ({data_atual}).
 
