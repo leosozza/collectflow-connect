@@ -137,7 +137,66 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!["admin", "super_admin"].includes(tenantUser.role)) {
+    // Check admin role OR granular RBAC permission
+    const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
+    let hasPermission = isAdmin;
+
+    if (!isAdmin) {
+      // Check permission_profiles via the user's profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("permission_profile_id")
+        .eq("user_id", userId)
+        .single();
+
+      if (profile?.permission_profile_id) {
+        const { data: permProfile } = await supabase
+          .from("permission_profiles")
+          .select("permissions")
+          .eq("id", profile.permission_profile_id)
+          .single();
+
+        if (permProfile?.permissions) {
+          const perms = permProfile.permissions as Record<string, string[]>;
+          if (perms.campanhas_whatsapp?.includes("create")) {
+            hasPermission = true;
+          }
+        }
+      }
+
+      // Also check user_permissions overrides
+      if (!hasPermission) {
+        const { data: userPerms } = await supabase
+          .from("user_permissions")
+          .select("actions")
+          .eq("profile_id", profile?.permission_profile_id ? undefined : "")
+          .eq("tenant_id", tenantUser.tenant_id)
+          .eq("module", "campanhas_whatsapp");
+
+        // Better: query by profile_id from profiles table
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
+
+        if (profileData) {
+          const { data: overrides } = await supabase
+            .from("user_permissions")
+            .select("actions")
+            .eq("profile_id", profileData.id)
+            .eq("tenant_id", tenantUser.tenant_id)
+            .eq("module", "campanhas_whatsapp")
+            .single();
+
+          if (overrides?.actions && (overrides.actions as string[]).includes("create")) {
+            hasPermission = true;
+          }
+        }
+      }
+    }
+
+    if (!hasPermission) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
