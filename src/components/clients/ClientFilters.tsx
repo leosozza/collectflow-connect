@@ -51,6 +51,7 @@ interface Filters {
   higienizados: boolean;
   scoreRange: string;
   debtorProfile: string;
+  semWhatsapp: boolean;
 }
 
 interface ClientFiltersProps {
