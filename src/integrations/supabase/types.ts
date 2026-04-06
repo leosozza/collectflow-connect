@@ -1234,6 +1234,63 @@ export type Database = {
           },
         ]
       }
+      client_generated_documents: {
+        Row: {
+          client_cpf: string
+          client_id: string | null
+          created_at: string | null
+          created_by: string | null
+          credor: string | null
+          id: string
+          rendered_html: string
+          template_snapshot: string
+          template_source: string
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          client_cpf: string
+          client_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credor?: string | null
+          id?: string
+          rendered_html: string
+          template_snapshot: string
+          template_source: string
+          tenant_id: string
+          type: string
+        }
+        Update: {
+          client_cpf?: string
+          client_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credor?: string | null
+          id?: string
+          rendered_html?: string
+          template_snapshot?: string
+          template_source?: string
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_generated_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_generated_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_phones: {
         Row: {
           cpf: string
