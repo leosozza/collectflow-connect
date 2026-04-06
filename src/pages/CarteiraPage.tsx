@@ -610,7 +610,8 @@ const CarteiraPage = () => {
           {selectedIds.size > 0 && (
             <>
               {permissions.canCreateCampanhas && (
-                <Button variant="outline" size="sm" onClick={() => setWhatsappOpen(true)} className="gap-1.5 border-success text-success">
+                <Button variant="outline" size="sm" onClick={handleOpenWhatsapp} disabled={loadingBulkClients} className="gap-1.5 border-success text-success">
+                  {loadingBulkClients && <Loader2 className="w-3 h-3 animate-spin" />}
                   <MessageSquare className="w-4 h-4" />
                   <span className="hidden sm:inline">WhatsApp</span> ({selectedCount})
                 </Button>
