@@ -1,48 +1,55 @@
 
 
-# Plano: Corrigir erro de número e criar conversas nos disparos em lote
+# Plano: Geração automática de boletos ao formalizar acordo + geração manual para todos os perfis
 
-## Dois problemas identificados
+## Problemas identificados
 
-### 1. Erro no número da Pamela (5596981237461)
+1. **Boletos só são gerados quando `formaPagto === "BOLETO"` e o acordo NÃO é fora do padrão** (linha 395 do AgreementCalculator). Se o acordo vai para `pending_approval` (fora do padrão), boletos nunca são gerados — nem na criação, nem na aprovação posterior.
 
-O número `5596981237461` tem 13 dígitos e começa com `55`, então `normalizePhoneBR` o retorna sem alteração. Porém a Evolution API responde `"exists": false` — isso significa que **o número simplesmente não existe no WhatsApp**. Não é bug de formatação.
+2. **Na aprovação (`approveAgreement` em agreementService.ts)**, apenas o status muda para `approved` — nenhuma lógica de geração de boletos é executada.
 
-Possível causa: o número original no banco pode ter um dígito a mais (o `9` inserido indevidamente em telefone fixo ou de região que não usa 9). DDD 96 (Amapá) usa 9 em celulares, mas se o número original era `96981237461` (11 dígitos), o sistema prefixou `55` corretamente para `5596981237461`. O problema é que esse número não está registrado no WhatsApp.
+3. **A geração manual (`AgreementInstallments.tsx`)** já funciona para qualquer perfil que tenha acesso à tela do cliente, então esse ponto parece OK. O problema é que depende do operador lembrar de clicar "Gerar".
 
-**Ação**: Nenhuma correção de código necessária — o número não existe no WhatsApp. Esse tipo de falha é esperado e já é registrado como `failed` nos logs.
+## Correções
 
-### 2. Conversas não aparecem na aba WhatsApp CRM
+### 1. Gerar boletos automaticamente via Edge Function após criação/aprovação
 
-**Causa raiz**: O `send-bulk-whatsapp` envia a mensagem via API da Evolution mas **não cria um registro na tabela `conversations`** nem insere a mensagem em `chat_messages`. Conversas só são criadas pelo webhook (`whatsapp-webhook`) quando chega uma mensagem **inbound** ou quando a Evolution envia um evento `messages.upsert` com `fromMe: true`.
+Mover a lógica de geração de boletos para uma **Edge Function** (`generate-agreement-boletos`) que:
+- Recebe `agreement_id`
+- Busca o acordo, parcelas simuladas (calcula com base em `new_installments`, `new_installment_value`, `first_due_date`, `entrada_value`, `entrada_date`, `custom_installment_values`)
+- Busca dados cadastrais do cliente via `client_profiles`
+- Chama a Negociarie para gerar os boletos
+- Se faltar dados cadastrais, marca `boleto_pendente = true` sem bloquear
 
-O webhook depende de receber o evento da Evolution. Se o webhook não está configurado na instância "DISPAROS VITOR 1", ou se a Evolution não dispara eventos para mensagens enviadas via API, as conversas nunca são criadas.
+### 2. Chamar a Edge Function nos dois pontos de formalização
 
-**Correção proposta**: Após cada envio bem-sucedido no `send-bulk-whatsapp`, criar ou atualizar a conversa e inserir a mensagem outbound em `chat_messages`. Isso garante que toda mensagem enviada apareça no CRM.
+**a) AgreementCalculator.tsx (criação direta, sem aprovação):**
+- Após `createAgreement`, chamar `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id } })`
+- Remover a condição `formaPagto === "BOLETO"` — boletos devem ser gerados sempre (a forma de pagamento é configuração do credor, não do operador)
+- Manter o tratamento de erros/toast
 
-### Alterações em `supabase/functions/send-bulk-whatsapp/index.ts`
+**b) agreementService.ts (`approveAgreement`):**
+- Após aprovar, chamar `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id } })`
+- Isso cobre o fluxo de acordos fora do padrão que passam por liberação
 
-Criar uma função auxiliar `ensureConversationAndMessage` que:
-1. Busca a conversa existente por `tenant_id` + `instance_id` + `remote_phone` (telefone normalizado)
-2. Se não existir, cria com status `"open"`, vinculando ao `client_id` se disponível
-3. Insere a mensagem outbound em `chat_messages` com `external_id` do provider
-4. Atualiza `last_message_at` da conversa
+### 3. Manter a geração manual como está
 
-Chamar essa função após cada envio bem-sucedido, tanto no `handleCampaignFlow` quanto no `handleLegacyFlow`.
+A geração manual em `AgreementInstallments.tsx` já funciona sem restrição de perfil — não precisa de alteração. Serve como fallback quando `boleto_pendente = true`.
 
-```text
-Envio OK → ensureConversationAndMessage(tenantId, instanceId, normalizedPhone, clientName, clientId, message, providerMessageId)
-         → conversations: upsert (create if missing, update last_message_at)
-         → chat_messages: insert outbound record
-```
+## Alternativa mais simples (sem Edge Function)
 
-### Impacto
+Se preferir evitar a criação de uma nova Edge Function, podemos:
 
-- Todas as mensagens enviadas em lote passarão a aparecer na aba Conversas do WhatsApp CRM
-- O operador poderá ver o histórico de disparos e continuar a conversa
-- Nenhuma alteração no frontend ou no banco de dados (tabelas `conversations` e `chat_messages` já existem)
+- **No `approveAgreement`**: após aprovar, chamar `negociarie-proxy` com action `generate_boletos` passando os dados do acordo
+- **No `AgreementCalculator`**: remover a condição `formaPagto === "BOLETO"` e a condição `!outOfStandard.isOut` — gerar boletos sempre que o acordo é criado com status direto (não `pending_approval`)
+
+Isso é mais simples mas mantém a lógica no frontend.
+
+## Resumo de alterações
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Adicionar `ensureConversationAndMessage` e chamar após envio OK |
+| `supabase/functions/generate-agreement-boletos/index.ts` | Nova Edge Function que calcula parcelas e chama Negociarie |
+| `src/components/client-detail/AgreementCalculator.tsx` | Substituir geração local por chamada à Edge Function; remover condição `formaPagto === "BOLETO"` |
+| `src/services/agreementService.ts` | Em `approveAgreement`, chamar Edge Function para gerar boletos após aprovação |
 
