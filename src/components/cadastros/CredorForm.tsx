@@ -83,7 +83,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
           parcelas_min: 1, parcelas_max: 12, entrada_minima_valor: 0, entrada_minima_tipo: "percent",
           desconto_maximo: 0, juros_mes: 0, multa: 0,
-          template_acordo: TEMPLATE_ACORDO_DEFAULT, template_recibo: TEMPLATE_RECIBO_DEFAULT, template_quitacao: TEMPLATE_QUITACAO_DEFAULT, template_descricao_divida: TEMPLATE_DESCRICAO_DIVIDA_DEFAULT, template_notificacao_extrajudicial: TEMPLATE_NOTIFICACAO_EXTRAJUDICIAL_DEFAULT,
+          ...Object.fromEntries(Object.entries(TEMPLATE_DEFAULTS).map(([k, v]) => [k, v])),
         });
         setHonorarios([]);
       }
