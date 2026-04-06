@@ -131,6 +131,7 @@ const CarteiraPage = () => {
       filters.semContato === true ||
       filters.emDia === true ||
       filters.higienizados === true ||
+      filters.semWhatsapp === true ||
       filters.scoreRange !== "" ||
       filters.debtorProfile !== ""
     );
