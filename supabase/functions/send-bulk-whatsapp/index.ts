@@ -137,7 +137,53 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!["admin", "super_admin"].includes(tenantUser.role)) {
+    // Check admin role OR granular RBAC permission (campanhas_whatsapp.create)
+    const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
+    let hasPermission = isAdmin;
+
+    if (!isAdmin) {
+      // Get profile with permission_profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, permission_profile_id")
+        .eq("user_id", userId)
+        .single();
+
+      if (profile) {
+        // 1) Check permission_profiles (assigned profile permissions)
+        if (profile.permission_profile_id) {
+          const { data: permProfile } = await supabase
+            .from("permission_profiles")
+            .select("permissions")
+            .eq("id", profile.permission_profile_id)
+            .single();
+
+          if (permProfile?.permissions) {
+            const perms = permProfile.permissions as Record<string, string[]>;
+            if (perms.campanhas_whatsapp?.includes("create")) {
+              hasPermission = true;
+            }
+          }
+        }
+
+        // 2) Check user_permissions overrides
+        if (!hasPermission) {
+          const { data: overrides } = await supabase
+            .from("user_permissions")
+            .select("actions")
+            .eq("profile_id", profile.id)
+            .eq("tenant_id", tenantUser.tenant_id)
+            .eq("module", "campanhas_whatsapp")
+            .single();
+
+          if (overrides?.actions && (overrides.actions as string[]).includes("create")) {
+            hasPermission = true;
+          }
+        }
+      }
+    }
+
+    if (!hasPermission) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
