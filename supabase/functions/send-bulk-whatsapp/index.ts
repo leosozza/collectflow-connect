@@ -549,8 +549,15 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
         },
       });
 
-      if (status === "sent") sent++;
-      else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
+      if (status === "sent") {
+        sent++;
+        // Persist conversation + outbound message in CRM
+        await ensureConversationAndMessage(
+          supabase, tenantUser.tenant_id, inst?.id || null,
+          phone, client.nome_completo, client.id, message,
+          sendResult.providerMessageId
+        );
+      } else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
 
       await new Promise((r) => setTimeout(r, 100));
     } catch (err: any) {
