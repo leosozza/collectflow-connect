@@ -1,30 +1,86 @@
+"use client";
+
 import { useState } from "react";
-import { Calculator } from "lucide-react";
+import { Calculator, Delete, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const MAX_DISPLAY_LENGTH = 10;
+
+const formatForDisplay = (value: number): string => {
+  if (!isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+  if (isNaN(value)) return "Error";
+
+  const stringValue = String(value);
+  if (stringValue.length <= MAX_DISPLAY_LENGTH) return stringValue;
+
+  if (stringValue.includes(".")) {
+    const [integerPart] = stringValue.split(".");
+    const availableDecimals = MAX_DISPLAY_LENGTH - integerPart.length - 1;
+    if (availableDecimals > 0) return value.toFixed(availableDecimals);
+  }
+
+  let precision = 5;
+  while (precision >= 0) {
+    const exp = value.toExponential(precision);
+    if (exp.length <= MAX_DISPLAY_LENGTH) return exp;
+    precision--;
+  }
+  return value.toExponential(0);
+};
+
+const calculate = (a: number, b: number, op: string): number => {
+  switch (op) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "×": return a * b;
+    case "÷": return b !== 0 ? a / b : Infinity;
+    default: return b;
+  }
+};
 
 const SimpleCalculator = () => {
   const [display, setDisplay] = useState("0");
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
 
-  const inputDigit = (digit: string) => {
+  const inputNumber = (num: string) => {
     if (waitingForOperand) {
-      setDisplay(digit);
+      setDisplay(num);
       setWaitingForOperand(false);
     } else {
-      setDisplay(display === "0" ? digit : display + digit);
+      const newDisplay = display === "0" ? num : display + num;
+      const effectiveLength = newDisplay.replace(".", "").replace("-", "").length;
+      if (effectiveLength <= MAX_DISPLAY_LENGTH) setDisplay(newDisplay);
     }
   };
 
-  const inputDot = () => {
-    if (waitingForOperand) {
-      setDisplay("0,");
-      setWaitingForOperand(false);
-      return;
+  const inputOperation = (nextOp: string) => {
+    const inputValue = parseFloat(display);
+    if (previousValue === null) {
+      setPreviousValue(inputValue);
+    } else if (operation) {
+      const result = calculate(previousValue, inputValue, operation);
+      setDisplay(formatForDisplay(result));
+      setPreviousValue(result);
+      setHistory((prev) => [...prev.slice(-4), `${previousValue} ${operation} ${inputValue} = ${formatForDisplay(result)}`]);
     }
-    if (!display.includes(",")) setDisplay(display + ",");
+    setWaitingForOperand(true);
+    setOperation(nextOp);
+  };
+
+  const performCalculation = () => {
+    const inputValue = parseFloat(display);
+    if (previousValue !== null && operation) {
+      const result = calculate(previousValue, inputValue, operation);
+      setDisplay(formatForDisplay(result));
+      setHistory((prev) => [...prev.slice(-4), `${previousValue} ${operation} ${inputValue} = ${formatForDisplay(result)}`]);
+      setPreviousValue(null);
+      setOperation(null);
+      setWaitingForOperand(true);
+    }
   };
 
   const clear = () => {
@@ -34,63 +90,36 @@ const SimpleCalculator = () => {
     setWaitingForOperand(false);
   };
 
-  const toggleSign = () => {
-    const val = parseFloat(display.replace(",", "."));
-    if (val !== 0) setDisplay(String(-val).replace(".", ","));
+  const backspace = () => {
+    if (waitingForOperand) return;
+    setDisplay(display.length > 1 ? display.slice(0, -1) : "0");
   };
 
-  const percentage = () => {
-    const val = parseFloat(display.replace(",", "."));
-    setDisplay(String(val / 100).replace(".", ","));
-  };
-
-  const calculate = (a: number, b: number, op: string): number => {
-    switch (op) {
-      case "+": return a + b;
-      case "−": return a - b;
-      case "×": return a * b;
-      case "÷": return b !== 0 ? a / b : 0;
-      default: return b;
+  const handleClick = (btn: string) => {
+    if (btn === "C") return clear();
+    if (btn === "=") return performCalculation();
+    if (["÷", "×", "-", "+"].includes(btn)) return inputOperation(btn);
+    if (btn === "±") return setDisplay(formatForDisplay(parseFloat(display) * -1));
+    if (btn === "%") return setDisplay(formatForDisplay(parseFloat(display) / 100));
+    if (btn === ".") {
+      if (!display.includes(".")) inputNumber(btn);
+      return;
     }
+    inputNumber(btn);
   };
 
-  const handleOperation = (nextOp: string) => {
-    const current = parseFloat(display.replace(",", "."));
-    if (previousValue !== null && operation && !waitingForOperand) {
-      const result = calculate(previousValue, current, operation);
-      setDisplay(String(parseFloat(result.toFixed(10))).replace(".", ","));
-      setPreviousValue(result);
-    } else {
-      setPreviousValue(current);
-    }
-    setOperation(nextOp);
-    setWaitingForOperand(true);
+  const getBtnClass = (btn: string) => {
+    if (["÷", "×", "-", "+", "="].includes(btn)) return "bg-orange-500 hover:bg-orange-600 text-white";
+    if (["C", "±", "%"].includes(btn)) return "bg-gray-500 hover:bg-gray-600 text-white";
+    return "bg-gray-700 hover:bg-gray-600 text-white";
   };
 
-  const equals = () => {
-    if (previousValue === null || !operation) return;
-    const current = parseFloat(display.replace(",", "."));
-    const result = calculate(previousValue, current, operation);
-    setDisplay(String(parseFloat(result.toFixed(10))).replace(".", ","));
-    setPreviousValue(null);
-    setOperation(null);
-    setWaitingForOperand(true);
-  };
-
-  const btnBase = "rounded-full h-12 w-12 text-base font-medium transition-colors focus:outline-none";
-  const btnDigit = `${btnBase} bg-muted hover:bg-muted/70 text-foreground`;
-  const btnOp = `${btnBase} bg-orange-500 hover:bg-orange-400 text-white`;
-  const btnFunc = `${btnBase} bg-secondary hover:bg-secondary/70 text-secondary-foreground`;
-  const btnZero = `${btnBase} bg-muted hover:bg-muted/70 text-foreground w-[6.5rem] rounded-full`;
-
-  const OpBtn = ({ label }: { label: string }) => (
-    <button
-      className={`${btnOp} ${operation === label && waitingForOperand ? "ring-2 ring-white/50" : ""}`}
-      onClick={() => handleOperation(label)}
-    >
-      {label}
-    </button>
-  );
+  const rows = [
+    ["C", "±", "%", "÷"],
+    ["7", "8", "9", "×"],
+    ["4", "5", "6", "-"],
+    ["1", "2", "3", "+"],
+  ];
 
   return (
     <Popover>
@@ -100,42 +129,86 @@ const SimpleCalculator = () => {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto p-3 bg-background/95 backdrop-blur-sm border shadow-xl"
+        className="w-[280px] p-0 bg-gray-900 border-gray-700 shadow-2xl"
         align="end"
         sideOffset={8}
       >
-        {/* Display */}
-        <div className="bg-muted/50 rounded-lg px-3 py-2 mb-3 text-right">
-          <span className="text-2xl font-light text-foreground truncate block">
-            {display}
-          </span>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+          <span className="text-sm font-medium text-gray-300">Calculadora</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setHistory([])}
+              className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+              title="Limpar histórico"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={backspace}
+              className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+              title="Apagar"
+            >
+              <Delete className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Buttons grid */}
-        <div className="grid grid-cols-4 gap-2">
-          <button className={btnFunc} onClick={clear}>AC</button>
-          <button className={btnFunc} onClick={toggleSign}>+/−</button>
-          <button className={btnFunc} onClick={percentage}>%</button>
-          <OpBtn label="÷" />
+        {/* History */}
+        <div className="px-3 py-1.5 min-h-[32px] border-b border-gray-800">
+          {history.length > 0 ? (
+            <div className="space-y-0.5">
+              {history.slice(-2).map((entry, i) => (
+                <p key={i} className="text-[11px] text-gray-500 text-right truncate">{entry}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-gray-600 text-right">Histórico aparecerá aqui</p>
+          )}
+        </div>
 
-          <button className={btnDigit} onClick={() => inputDigit("7")}>7</button>
-          <button className={btnDigit} onClick={() => inputDigit("8")}>8</button>
-          <button className={btnDigit} onClick={() => inputDigit("9")}>9</button>
-          <OpBtn label="×" />
+        {/* Display */}
+        <div className="px-3 py-3 text-right">
+          <p className="text-3xl font-light text-white tracking-wide truncate">{display}</p>
+          {operation && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {previousValue} {operation}
+            </p>
+          )}
+        </div>
 
-          <button className={btnDigit} onClick={() => inputDigit("4")}>4</button>
-          <button className={btnDigit} onClick={() => inputDigit("5")}>5</button>
-          <button className={btnDigit} onClick={() => inputDigit("6")}>6</button>
-          <OpBtn label="−" />
-
-          <button className={btnDigit} onClick={() => inputDigit("1")}>1</button>
-          <button className={btnDigit} onClick={() => inputDigit("2")}>2</button>
-          <button className={btnDigit} onClick={() => inputDigit("3")}>3</button>
-          <OpBtn label="+" />
-
-          <button className={btnZero} onClick={() => inputDigit("0")}>0</button>
-          <button className={btnDigit} onClick={inputDot}>,</button>
-          <button className={btnOp} onClick={equals}>=</button>
+        {/* Buttons */}
+        <div className="grid grid-cols-4 gap-1.5 p-3 pt-0">
+          {rows.map((row, ri) =>
+            row.map((btn) => (
+              <button
+                key={`${ri}-${btn}`}
+                onClick={() => handleClick(btn)}
+                className={`${getBtnClass(btn)} h-10 rounded text-lg font-semibold transition-colors active:scale-95`}
+              >
+                {btn}
+              </button>
+            ))
+          )}
+          {/* Last row: 0 (col-span-2), ., = */}
+          <button
+            onClick={() => handleClick("0")}
+            className={`${getBtnClass("0")} h-10 rounded text-lg font-semibold transition-colors active:scale-95 col-span-2`}
+          >
+            0
+          </button>
+          <button
+            onClick={() => handleClick(".")}
+            className={`${getBtnClass(".")} h-10 rounded text-lg font-semibold transition-colors active:scale-95`}
+          >
+            .
+          </button>
+          <button
+            onClick={() => handleClick("=")}
+            className={`${getBtnClass("=")} h-10 rounded text-lg font-semibold transition-colors active:scale-95`}
+          >
+            =
+          </button>
         </div>
       </PopoverContent>
     </Popover>
