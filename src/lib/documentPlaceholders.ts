@@ -37,6 +37,7 @@ export const DOCUMENT_PLACEHOLDERS: PlaceholderInfo[] = [
   { key: "{desconto_concedido}", label: "Desconto Concedido (%)", description: "Percentual de desconto aplicado", category: "acordo" },
   { key: "{primeiro_vencimento}", label: "Primeiro Vencimento", description: "Data do primeiro vencimento do acordo", category: "acordo" },
   { key: "{data_acordo}", label: "Data do Acordo", description: "Data de formalização do acordo", category: "acordo" },
+  { key: "{tabela_parcelas}", label: "Tabela de Parcelas", description: "Tabela automática com parcelas do acordo (parcela, vencimento, valor)", category: "acordo" },
 ];
 
 export const PLACEHOLDER_CATEGORIES = [
@@ -68,4 +69,5 @@ export const SAMPLE_DATA: Record<string, string> = {
   "{desconto_concedido}": "10",
   "{primeiro_vencimento}": "15/02/2026",
   "{data_acordo}": "01/01/2026",
+  "{tabela_parcelas}": `<table style="border-collapse:collapse;width:100%;margin:8pt 0"><thead><tr><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;font-weight:700;text-align:left;font-size:11pt">Parcela</th><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;font-weight:700;text-align:left;font-size:11pt">Vencimento</th><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;font-weight:700;text-align:left;font-size:11pt">Valor</th></tr></thead><tbody><tr><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">01</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">15/02/2026</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">R$ 500,00</td></tr><tr><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">02</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">15/03/2026</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">R$ 500,00</td></tr><tr><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">03</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">15/04/2026</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt">R$ 500,00</td></tr></tbody><tfoot><tr><td colspan="2" style="padding:6px 12px;border:1px solid #ccc;font-size:11pt;font-weight:700">Total</td><td style="padding:6px 12px;border:1px solid #ccc;font-size:11pt;font-weight:700">R$ 1.500,00</td></tr></tfoot></table>`,
 };
