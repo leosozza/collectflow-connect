@@ -1,51 +1,54 @@
 
 
-# Plano: Busca multi-termo na Carteira + Iniciar conversa WhatsApp por telefone
+# Plano: Corrigir prioridade de status_cobranca_id no agrupamento da Carteira
 
-## Problema 1: Busca na Carteira não encontra cliente
+## Problema
 
-A função `get_carteira_grouped` busca com `ILIKE '%texto_inteiro%'`. Ao pesquisar "Cesiane Amancio Antonio dos Santos", exige correspondência exata da string completa. Se o nome no banco tiver qualquer diferença (espaço extra, acento, abreviação), a busca falha.
+Na função `get_carteira_grouped`, o `status_cobranca_id` do grupo é escolhido com esta prioridade:
 
-**Correção**: Alterar a função SQL para dividir o texto de busca em palavras e exigir que TODAS as palavras estejam presentes no nome (AND de ILIKEs). Exemplo: "Cesiane Santos" encontraria "Cesiane Amancio Antonio dos Santos".
-
-**Arquivo**: Migration SQL alterando `get_carteira_grouped`
-
-Trecho relevante — substituir:
 ```sql
-c.nome_completo ILIKE '%' || _search || '%'
+CASE f.status
+  WHEN 'pendente' THEN 1
+  WHEN 'quebrado' THEN 2
+  WHEN 'pago'     THEN 3
+  ELSE 4
+END
 ```
-Por lógica que divide `_search` em palavras (split por espaço) e verifica cada uma com `ILIKE` em AND. Mantém busca por CPF, telefone e email como está (sem split).
 
----
+O status `em_acordo` cai no `ELSE` (prioridade 4), **depois** de `pago` (prioridade 3). Resultado: as 3 parcelas com status `pago` + `Quitado` são escolhidas antes das 17 parcelas com `em_acordo` + `Acordo Vigente`. O grupo inteiro aparece como "Quitado".
 
-## Problema 2: Botão WhatsApp não abre/cria conversa
+A cliente tem:
+- 3 parcelas: status=`pago`, status_cobranca=`Quitado`
+- 17 parcelas: status=`em_acordo`, status_cobranca=`Acordo Vigente`
 
-Ao clicar no botão WhatsApp na Carteira ou Atendimento, o sistema navega para `/contact-center/whatsapp?phone=5511...` mas o `WhatsAppChatLayout` ignora completamente o parâmetro `?phone=`. O operador vê a lista de conversas sem nenhuma selecionada e sem como iniciar uma nova.
+## Correção
 
-**Correção em 2 partes**:
+**Migration SQL** — alterar a função `get_carteira_grouped`, ajustando a prioridade para que `em_acordo` tenha prioridade **1** (mais alta), pois um acordo vigente é o estado mais relevante operacionalmente:
 
-### 2a. Auto-selecionar conversa existente pelo phone
-No `WhatsAppChatLayout`, após carregar as conversas, ler o `?phone=` da URL. Se encontrar uma conversa com `remote_phone` correspondente (suffix match dos últimos 8 dígitos), selecioná-la automaticamente.
+```sql
+CASE f.status
+  WHEN 'em_acordo' THEN 1
+  WHEN 'pendente'  THEN 2
+  WHEN 'quebrado'  THEN 3
+  WHEN 'pago'      THEN 4
+  ELSE 5
+END
+```
 
-### 2b. Criar conversa se não existir
-Se nenhuma conversa for encontrada para aquele telefone:
-- Inserir uma nova conversa na tabela `conversations` com status `open`, vinculando à instância default do tenant
-- Selecionar automaticamente a conversa criada
-- O operador pode então digitar e enviar a primeira mensagem
+Também ajustar o `CASE` do campo `status` agregado para incluir `em_acordo`:
 
-**Arquivo**: `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`
-- Adicionar `useSearchParams` para ler `?phone=`
-- Após `loadConversations`, executar lógica de match ou criação
-- Limpar o param da URL após processar para evitar re-execução
+```sql
+CASE
+  WHEN bool_or(f.status = 'em_acordo') THEN 'em_acordo'
+  WHEN bool_or(f.status = 'pendente')  THEN 'pendente'
+  WHEN bool_or(f.status = 'quebrado')  THEN 'quebrado'
+  ELSE 'pago'
+END AS status
+```
 
----
+## Impacto
 
-## Resumo de alterações
-
-| Arquivo | Tipo |
-|---|---|
-| Migration SQL (`get_carteira_grouped`) | Alterado — busca multi-termo |
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | Alterado — auto-select/create por phone |
-
-Nenhuma alteração em: campanhas, webhook, chat_messages, permissions, Contact Center admin, automação.
+- Clientes com parcelas em acordo passarão a mostrar "Acordo Vigente" na listagem
+- Filtrar por "Acordo Vigente" passará a incluir essas clientes
+- Nenhuma alteração no frontend — apenas na função SQL
 
