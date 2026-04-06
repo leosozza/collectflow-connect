@@ -1,132 +1,91 @@
 
 
-# Relatório de Validação — Fase 5: Fluxo Completo de Documentos
+# Plano: Mover Modelos de Documentos para o Credor + Correções Funcionais
 
-## 1. Geração de Documentos — Análise por Tipo
+## Situação atual
 
-**Fluxo geral**: `handleGenerate` → valida → resolve template (3 níveis) → renderiza → abre preview → download PDF + salva histórico. **Correto.**
+- `DocumentTemplatesPage` (446 linhas) opera em `document_templates` (nível tenant) — acessível em Configurações
+- `CredorForm.tsx` aba Personalização (linhas 570-652) tem editor básico (textarea + variáveis) que salva diretamente nas colunas `template_*` da tabela `credores`
+- `ClientDocuments.tsx` já usa fallback correto: credor → tenant → default
+- Existem dois editores diferentes para a mesma funcionalidade
 
-Todos os 5 tipos (acordo, recibo, quitação, divida, notificação) seguem o mesmo caminho. Templates default existem para todos. **OK.**
+## Alterações
 
----
+### 1. Remover aba "Modelos de Documentos" de ConfiguracoesPage
 
-## 2. Validação de Regras de Negócio
+- Remover import de `DocumentTemplatesPage`
+- Remover item `documentos` do array `items`
+- Remover bloco de renderização condicional `visited.has("documentos")`
 
-| Cenário | Esperado | Resultado |
-|---|---|---|
-| Sem acordo → gerar acordo | Bloqueado | OK |
-| Sem pagamento → gerar recibo | Bloqueado | OK |
-| Saldo aberto → gerar quitação | Bloqueado | OK (verifica `totalAberto > 0` e `agreement.status !== 'pago'`) |
-| Com dívida → descrição | Disponível | OK |
-| Com dívida → notificação | Disponível | OK |
+### 2. Criar componente reutilizável `CredorDocumentTemplates`
 
-**Sem problemas.**
+Novo arquivo: `src/components/cadastros/CredorDocumentTemplates.tsx`
 
----
+Componente que exibe os 5 tipos de documento no contexto do credor, com:
 
-## 3. Fallback de Template
+- **Status de origem por documento**: badge indicando "Modelo próprio do credor" / "Herdando do tenant" / "Usando padrão do sistema"
+- **Edição**: ao clicar "Editar", abre Sheet lateral com o editor rico (mesmo estilo do `DocumentTemplatesPage` — markdown, placeholders categorizados, preview) — o conteúdo salva na coluna `template_*` correspondente do credor
+- **Preview A4**: reutiliza o componente `A4Preview` já existente
+- **Indicação visual clara** de quando o credor está sobrescrevendo vs herdando
 
-Cascata: credor → tenant → default. Implementação em `resolveTemplate()` linhas 72-80. **Correta.**
+Lógica de status por documento:
+- Se `credor[template_key]` tem conteúdo → "Modelo próprio do credor"
+- Senão, busca `document_templates` do tenant → "Herdando modelo do tenant"
+- Senão → "Usando padrão do sistema"
 
----
+Props: recebe `credorId`, `form` (estado do form), `set` (setter do form)
 
-## 4. Problemas Encontrados
+### 3. Substituir seção atual no CredorForm
 
-### CRÍTICO
+Na aba Personalização do `CredorForm.tsx`, substituir o bloco "Modelos de Documentos" (linhas 570-652) pelo novo componente `<CredorDocumentTemplates>`.
 
-**Bug 1 — Botão clicável mesmo quando documento é inválido**
-- Linha 177: `onClick={() => handleGenerate(...)` é sempre executado, mesmo com `canGenerate = false`
-- Embora o `handleGenerate` valide e mostre toast, o botão NÃO tem `disabled` ou early return no onClick
-- O CSS mostra `cursor-not-allowed` e `opacity-60`, mas o click passa → valida → mostra toast. Isso é um **comportamento aceitável** (toast explica o motivo), mas semanticamente o botão deveria ter `disabled` ou um guard no onClick para não executar quando `!canGenerate`
-- **Severidade: Média** — funciona corretamente (valida e bloqueia), mas UX poderia ser melhor
+Remove:
+- Os dialogs inline de edição de template
+- A lista simplificada de cards com botão "Editar"
 
-**Bug 2 — Erro silenciado no salvamento de histórico**
-- Linhas 142-144: o `catch` apenas faz `console.error`. Se o INSERT no banco falhar (ex: RLS, campo obrigatório), o usuário recebe toast de sucesso mas o histórico NÃO é salvo
-- **Severidade: Crítico** — o operador acredita que o documento foi registrado, mas pode não ter sido
+### 4. Validação de placeholders ao salvar
 
-**Bug 3 — Falta de validação no `rendered_html` antes do INSERT**
-- Se `preview.html` estiver vazio ou corrupto, o INSERT acontece mesmo assim
-- **Severidade: Baixa**
+No `CredorDocumentTemplates`, ao salvar modelo:
+- Extrair todos os `{...}` do conteúdo
+- Comparar com a lista oficial de `DOCUMENT_PLACEHOLDERS`
+- Se houver placeholders inválidos → exibir aviso antes de salvar: "Este modelo contém variáveis inválidas: {xxxx}, {yyyy}"
+- Permitir salvar com confirmação, mas alertar
 
-### MÉDIO
+### 5. Exibir origem do template no DocumentPreviewDialog
 
-**Bug 4 — `formatCurrency` nos templates default usa `R$` duplicado**
-- `formatCurrency()` retorna `R$ 5.000,00` (com prefixo)
-- Templates default contêm `R$ {valor_divida}` → renderiza como `R$ R$ 5.000,00`
-- Afeta: linhas 6-8 de `documentDefaults.ts` (acordo, recibo, quitação, divida, notificação)
-- **Severidade: Média** — visualmente incorreto no PDF final
+Adicionar prop `templateSource` ao `DocumentPreviewDialog`:
+- Exibir badge discreto no header: "Modelo: Credor" / "Modelo: Tenant" / "Modelo: Padrão"
+- Apenas informativo, sem alterar layout
 
-**Bug 5 — `{numero_parcela}` hardcoded como "1"**
-- Linha 114 de `documentDataResolver.ts`: `"{numero_parcela}": "1"` — sempre fixo
-- Não reflete a parcela real sendo paga (relevante para recibo)
-- **Severidade: Média**
+### 6. Melhorar mensagens na aba Documentos do cliente (ClientDocuments)
 
-**Bug 6 — `{total_parcelas}` usa `clients.length` em vez de dados do acordo**
-- Linha 115: `String(clients.length)` conta títulos no banco, não parcelas do acordo
-- Pode divergir do número real de parcelas negociadas
-- **Severidade: Média**
+Refinar as mensagens de `validation.reason` para ficarem mais operacionais:
+- "Sem acordo vigente para gerar carta de acordo"
+- "Nenhum pagamento confirmado para gerar recibo"
+- "Quitação disponível apenas para débito liquidado"
+- "Modelo não configurado para este credor"
 
-### MELHORIA
+Atualizar em `documentValidationService.ts`.
 
-**Item 7 — Preview dialog não tem botão de fechar explícito (X)**
-- O `DialogContent` do shadcn já inclui um X padrão, mas o header menciona dois botões e só mostra "Baixar PDF"
-- **Severidade: Baixa** — funciona, o X do shadcn existe
+### 7. Registrar visualização na timeline
 
-**Item 8 — `markdownLight` faz `escapeHtml` que escapa `<` e `>`**
-- Isso significa que se o template do credor contiver HTML (ex: `<br>`, `<b>`), ele será escapado e exibido como texto
-- O two-pass no renderer só protege `<table>` blocks, não HTML inline
-- **Severidade: Baixa** — templates normalmente usam markdown, não HTML
+Em `ClientDocuments.tsx`, ao abrir preview (antes do download):
+- Inserir evento `document_previewed` em `client_events`
+- Manter o evento `document_generated` apenas no download do PDF
 
-**Item 9 — Sem loading state ao abrir preview**
-- `resolveDocumentData` é síncrono, então não é um problema real
-- **Severidade: Nenhuma**
+## Arquivos
 
-**Item 10 — RLS não tem policy de DELETE**
-- `client_generated_documents` só tem SELECT e INSERT. Se precisar excluir documentos, não será possível
-- **Severidade: Baixa** — por design, documentos são imutáveis
-
----
-
-## 5. Timeline do Cliente
-
-INSERT em `client_events` com `event_type: 'document_generated'` e metadata com tipo/source. **Correto.**
-Porém sujeito ao mesmo problema do Bug 2 (erro silenciado).
-
----
-
-## 6. PDF
-
-- Layout A4 com margens `[20, 18, 20, 18]mm` — **OK**
-- `html2canvas` com `scale: 2` — boa qualidade
-- Wrapper com tipografia serifada — **OK**
-- Tabela de parcelas usa inline styles — compatível com html2pdf
-- **Risco**: documentos muito longos podem ter quebra de página no meio da tabela (limitação do html2pdf.js)
-
----
-
-## 7. Edge Cases
-
-| Cenário | Comportamento |
+| Arquivo | Tipo |
 |---|---|
-| Sem endereço | `filter(Boolean).join(", ")` → string vazia. **OK** |
-| CPF sem formato | `formatCPF` aceita qualquer string. **OK** |
-| Valores zerados | `formatCurrency(0)` → "R$ 0,00". **OK** |
-| Sem acordo | `buildTabelaParcelas` retorna `""`. **OK** |
-| Parcela única | Tabela com 1 linha. **OK** |
+| `src/components/cadastros/CredorDocumentTemplates.tsx` | Novo — editor rico no contexto do credor |
+| `src/components/cadastros/CredorForm.tsx` | Substituir seção de templates pelo novo componente |
+| `src/pages/ConfiguracoesPage.tsx` | Remover aba e import de DocumentTemplatesPage |
+| `src/components/client-detail/DocumentPreviewDialog.tsx` | Adicionar badge de origem |
+| `src/components/client-detail/ClientDocuments.tsx` | Evento de preview + passar templateSource ao dialog |
+| `src/services/documentValidationService.ts` | Melhorar mensagens |
+| `src/pages/DocumentTemplatesPage.tsx` | Manter arquivo (usado internamente pelo novo componente como referência de estilo), mas sem rota direta |
 
----
+## Sem alteração de banco
 
-## Resumo de Ações Recomendadas
-
-| # | Severidade | Problema | Ação |
-|---|---|---|---|
-| 2 | **Crítico** | Erro silenciado no histórico | Mostrar toast de warning se INSERT falhar |
-| 4 | **Médio** | `R$` duplicado nos templates | Remover `R$` dos templates default OU remover do `formatCurrency` retorno nos vars |
-| 5 | **Médio** | `{numero_parcela}` fixo em "1" | Calcular parcela real ou remover placeholder |
-| 6 | **Médio** | `{total_parcelas}` inconsistente | Usar `agreement.new_installments` quando houver acordo |
-| 1 | **Médio** | Botão clicável sem validação visual | Adicionar guard `if (!canGenerate) return` no onClick |
-| 8 | **Baixo** | HTML inline no template escapado | Documentar ou proteger HTML inline |
-| 10 | **Baixo** | Sem policy de DELETE | Manter por design (imutável) |
-
-Deseja que eu corrija os itens críticos e médios?
+Não há migration. Os templates do credor continuam nas colunas existentes da tabela `credores`.
 
