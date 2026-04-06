@@ -258,28 +258,27 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
         </div>
 
         {/* Row 3: Status pills */}
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className="flex gap-1 mb-2 overflow-hidden">
           {statusPills.map((pill) => (
             <button
               key={pill.key}
               onClick={() => setStatusFilter(statusFilter === pill.key ? "all" : pill.key)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex-1 justify-center ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all flex-1 justify-center whitespace-nowrap min-w-0 ${
                 statusFilter === pill.key
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${pill.color}`} />
-              {pill.label}
-              <span className={`font-bold ${statusFilter === pill.key ? "text-primary-foreground" : "text-foreground"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pill.color}`} />
+              <span className="truncate">{pill.label}</span>
+              <span className={`font-bold shrink-0 ${statusFilter === pill.key ? "text-primary-foreground" : "text-foreground"}`}>
                 {pill.count}
               </span>
             </button>
           ))}
-          {/* Não lidas — toggle independente */}
           <button
             onClick={() => setUnreadOnly(!unreadOnly)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all justify-center whitespace-nowrap shrink-0 ${
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all justify-center whitespace-nowrap shrink-0 ${
               unreadOnly
                 ? "bg-blue-600 text-white shadow-sm"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
