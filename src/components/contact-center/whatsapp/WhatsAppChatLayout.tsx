@@ -107,6 +107,68 @@ const WhatsAppChatLayout = () => {
     loadConversations();
   }, [loadConversations]);
 
+  // Auto-select or create conversation from ?phone= param
+  useEffect(() => {
+    if (phoneParamProcessed.current) return;
+    const phoneParam = searchParams.get("phone");
+    if (!phoneParam || !tenantId || conversations.length === 0 && !instances.length) return;
+
+    phoneParamProcessed.current = true;
+    // Clear the param from URL
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("phone");
+      return next;
+    }, { replace: true });
+
+    const normalizedParam = phoneParam.replace(/\D/g, "");
+    const suffix = normalizedParam.slice(-8);
+
+    // Try to find existing conversation
+    const existing = conversations.find((c) => {
+      const remoteSuffix = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
+      return remoteSuffix === suffix;
+    });
+
+    if (existing) {
+      setSelectedConv(existing);
+      return;
+    }
+
+    // Create new conversation
+    const defaultInstance = instances[0];
+    if (!defaultInstance) {
+      toast.error("Nenhuma instância WhatsApp configurada");
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("conversations")
+          .insert({
+            tenant_id: tenantId,
+            instance_id: defaultInstance.id,
+            remote_phone: normalizedParam,
+            status: "open",
+            last_message_at: new Date().toISOString(),
+          } as any)
+          .select()
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          const newConv = data as unknown as Conversation;
+          setConversations((prev) => [newConv, ...prev]);
+          setSelectedConv(newConv);
+        }
+      } catch (err: any) {
+        console.error("Error creating conversation:", err);
+        toast.error("Erro ao criar conversa");
+      }
+    })();
+  }, [searchParams, conversations, instances, tenantId]);
+
   // Load messages when selecting conversation
   useEffect(() => {
     if (!selectedConv) {
