@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity, FileText } from "lucide-react";
 import { useUrlState } from "@/hooks/useUrlState";
 import IntegracaoPage from "@/pages/IntegracaoPage";
 import ApiDocsPage from "@/pages/ApiDocsPage";
 import MaxListPage from "@/pages/MaxListPage";
 import AuditoriaPage from "@/pages/AuditoriaPage";
+import DocumentTemplatesPage from "@/pages/DocumentTemplatesPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -22,7 +23,7 @@ const ConfiguracoesPage = () => {
   const items = [
     { key: "integracao", label: "Integração", icon: Cloud },
     ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
-    
+    ...(isTenantAdmin ? [{ key: "documentos", label: "Modelos de Documentos", icon: FileText }] : []),
     ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
     ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
   ];
@@ -69,6 +70,11 @@ const ConfiguracoesPage = () => {
         {visited.has("auditoria") && (
           <div style={{ display: active === "auditoria" ? "block" : "none" }}>
             <AuditoriaPage />
+          </div>
+        )}
+        {visited.has("documentos") && (
+          <div style={{ display: active === "documentos" ? "block" : "none" }}>
+            <DocumentTemplatesPage />
           </div>
         )}
         {visited.has("api_docs") && (
