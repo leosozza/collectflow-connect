@@ -450,9 +450,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Calculator className="w-4 h-4" />
               Cálculo
             </CardTitle>
-            <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
-              <Copy className="w-3 h-3" /> Copiar Títulos
-            </Button>
+            <div className="flex items-center gap-1">
+              <SimpleCalculator />
+              <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
+                <Copy className="w-3 h-3" /> Copiar Títulos
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pb-3">
