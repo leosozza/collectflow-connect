@@ -258,7 +258,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
         </div>
 
         {/* Row 3: Status pills */}
-        <div className="flex gap-1 mb-2">
+        <div className="flex flex-wrap gap-1 mb-2">
           {statusPills.map((pill) => (
             <button
               key={pill.key}
