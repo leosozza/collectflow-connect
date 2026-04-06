@@ -31,16 +31,46 @@ import { fetchFieldMappings } from "@/services/fieldMappingService";
 
 const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
   const selected = value ? parseISO(value) : undefined;
+  const [inputValue, setInputValue] = useState(selected ? format(selected, "dd/MM/yyyy") : "");
+
+  // Sync inputValue when value changes externally
+  useEffect(() => {
+    setInputValue(value ? format(parseISO(value), "dd/MM/yyyy") : "");
+  }, [value]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/\D/g, "");
+    if (raw.length > 8) raw = raw.slice(0, 8);
+    let formatted = raw;
+    if (raw.length > 2) formatted = raw.slice(0, 2) + "/" + raw.slice(2);
+    if (raw.length > 4) formatted = raw.slice(0, 2) + "/" + raw.slice(2, 4) + "/" + raw.slice(4);
+    setInputValue(formatted);
+
+    if (raw.length === 8) {
+      const day = parseInt(raw.slice(0, 2), 10);
+      const month = parseInt(raw.slice(2, 4), 10);
+      const year = parseInt(raw.slice(4, 8), 10);
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
+        onChange(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+      }
+    } else if (raw.length === 0) {
+      onChange("");
+    }
+  };
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn("w-full justify-start text-left font-normal h-9 text-sm", !value && "text-muted-foreground")}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {selected ? format(selected, "dd/MM/yyyy") : "Selecionar"}
-        </Button>
+        <div className="relative w-full">
+          <Input
+            value={inputValue}
+            onChange={handleInputChange}
+            placeholder="dd/mm/aaaa"
+            className="h-9 text-sm pr-9"
+            maxLength={10}
+          />
+          <CalendarIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        </div>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
