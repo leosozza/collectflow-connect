@@ -1,34 +1,50 @@
 
 
-# Plano: Corrigir seleção global para Discador, WhatsApp e Higienizar
+# Plano: Corrigir contagem e fetch completo da seleção global
 
-## Problema confirmado
+## Causa raiz
 
-Todas as ações em massa (Discador, WhatsApp **e Higienizar**) usam `selectedClients`, que é filtrado de `displayClients` (apenas a página atual). Quando `selectAllFiltered` está ativo, apenas ~1.000 registros da página corrente são passados, em vez dos 11.137 filtrados.
+Ambas as funções `fetchAllCarteiraIds` e `fetchAllCarteiraClients` usam `pageSize = 5000`, mas o Supabase limita respostas RPC a **1.000 linhas**. Como `rows.length < 5000` é sempre verdadeiro no primeiro batch (retorna ≤1.000), o loop para imediatamente. Resultado: apenas ~1.000 grupos são retornados.
 
-## Correção
+Isso causa **3 sintomas visíveis**:
+1. **Banner**: "3.529 clientes filtrados" (deveria ser 11.137) — usa `selectedIds.size` que vem do `fetchAllCarteiraIds` truncado
+2. **Botões**: WhatsApp/Discador/Higienizar mostram (3529) — usam `selectedCount = selectedIds.size`
+3. **Dialog do Discador**: "1000 clientes selecionados" — `fetchAllCarteiraClients` retornou só 1 batch
 
-### 1. Nova função `fetchAllCarteiraClients` em `src/services/clientService.ts`
+## Correções
 
-Busca todos os dados completos dos clientes filtrados via RPC `get_carteira_grouped` em loop paginado (5.000 por batch). Retorna os campos necessários: `representative_id`, `cpf`, `nome_completo`, `phone`, `credor`, `valor_parcela`.
+### 1. Reduzir batch size para 1.000 em `src/services/clientService.ts`
 
-### 2. Atualizar `src/pages/CarteiraPage.tsx`
+Em `fetchAllCarteiraIds` (linha 514) e `fetchAllCarteiraClients` (linha 588):
 
-Quando `selectAllFiltered=true` e o usuário abre Discador, WhatsApp ou Higienizar:
-- Buscar todos os clientes filtrados via `fetchAllCarteiraClients`
-- Mostrar loading durante a busca
-- Passar os dados completos para o dialog
+```tsx
+const pageSize = 1000; // era 5000
+```
 
-Quando `selectAllFiltered=false`, manter comportamento atual (filtrar de `displayClients`).
+Isso faz o loop paginar corretamente por todas as páginas.
 
-### Impacto
+### 2. Usar `totalCount` nos contadores quando selectAllFiltered — `src/pages/CarteiraPage.tsx`
 
-- Discador, WhatsApp e Higienizar receberão todos os registros selecionados
-- Nenhuma alteração nos componentes dos dialogs
-- Nenhuma alteração no SQL
+Linha 525-527 — quando `selectAllFiltered=true`, usar `totalCount` (já disponível da query principal) em vez de `selectedIds.size`:
+
+```tsx
+const selectedCount = selectAllFiltered
+  ? totalCount
+  : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
+```
+
+### 3. Banner usar `totalCount` — `src/pages/CarteiraPage.tsx`
+
+Linha 692 — trocar `selectedIds.size` por `totalCount`:
+
+```tsx
+Todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados estão selecionados.
+```
+
+## Resumo
 
 | Arquivo | Alteração |
 |---|---|
-| `src/services/clientService.ts` | Nova função `fetchAllCarteiraClients` |
-| `src/pages/CarteiraPage.tsx` | Fetch completo quando selectAllFiltered=true |
+| `src/services/clientService.ts` | `pageSize` 5000 → 1000 em ambas as funções |
+| `src/pages/CarteiraPage.tsx` | `selectedCount` e banner usam `totalCount` quando selectAllFiltered |
 
