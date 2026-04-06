@@ -246,6 +246,7 @@ const CarteiraPage = () => {
     setUrlPage(1);
     setSelectedIds(new Set());
     setSelectAllFiltered(false);
+    setBulkClients(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rpcFiltersKey]);
 
