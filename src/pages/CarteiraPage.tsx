@@ -181,7 +181,8 @@ const CarteiraPage = () => {
   const [calculatingScore, setCalculatingScore] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
-
+  const [loadingBulkClients, setLoadingBulkClients] = useState(false);
+  const [bulkClients, setBulkClients] = useState<GroupedClient[] | null>(null);
   const toggleSort = (field: string) => {
     if (sortField === field) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
