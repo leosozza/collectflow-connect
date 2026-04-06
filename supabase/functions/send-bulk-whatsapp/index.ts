@@ -339,8 +339,16 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           },
         });
 
-        if (status === "sent") sent++;
-        else {
+        if (status === "sent") {
+          sent++;
+          // Persist conversation + outbound message in CRM
+          await ensureConversationAndMessage(
+            supabase, tenantId, recipient.assigned_instance_id,
+            recipient.phone, recipient.recipient_name,
+            recipient.representative_client_id, message,
+            sendResult.providerMessageId
+          );
+        } else {
           failed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
         }
