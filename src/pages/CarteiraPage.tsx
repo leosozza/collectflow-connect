@@ -239,6 +239,7 @@ const CarteiraPage = () => {
     debtorProfile: filters.debtorProfile || undefined,
     operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
     semAcordo: filters.semAcordo || undefined,
+    semWhatsapp: filters.semWhatsapp || undefined,
     cadastroDe: filters.cadastroDe || undefined,
     cadastroAte: filters.cadastroAte || undefined,
   }), [filters, permissions.canViewFullData, profileId]);
