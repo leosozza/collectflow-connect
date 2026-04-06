@@ -504,6 +504,22 @@ const CarteiraPage = () => {
     setSelectedIds(next);
   };
 
+  // When selectAllFiltered, fetch ALL clients from DB for bulk actions
+  const fetchBulkIfNeeded = async (): Promise<GroupedClient[]> => {
+    if (!selectAllFiltered) {
+      return displayClients.filter((c) => selectedIds.has(c.id));
+    }
+    if (bulkClients) return bulkClients;
+    setLoadingBulkClients(true);
+    try {
+      const all = await fetchAllCarteiraClients(tenant!.id, rpcFilters, sortField, sortDir);
+      setBulkClients(all);
+      return all;
+    } finally {
+      setLoadingBulkClients(false);
+    }
+  };
+
   const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
   const selectedCount = selectAllFiltered
     ? selectedIds.size
@@ -518,6 +534,46 @@ const CarteiraPage = () => {
     }
     return Array.from(cpfMap.values());
   }, [selectedClients]);
+
+  // State for resolved bulk data passed to dialogs
+  const [resolvedDialerClients, setResolvedDialerClients] = useState<GroupedClient[]>([]);
+  const [resolvedWhatsappClients, setResolvedWhatsappClients] = useState<GroupedClient[]>([]);
+  const [resolvedEnrichClients, setResolvedEnrichClients] = useState<{ id: string; cpf: string; credor?: string }[]>([]);
+
+  const handleOpenDialer = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      setResolvedDialerClients(all);
+    } else {
+      setResolvedDialerClients(selectedClients);
+    }
+    setDialerOpen(true);
+  };
+
+  const handleOpenWhatsapp = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      const cpfMap = new Map<string, GroupedClient>();
+      for (const c of all) {
+        const cpf = c.cpf.replace(/\D/g, "");
+        if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
+      }
+      setResolvedWhatsappClients(Array.from(cpfMap.values()));
+    } else {
+      setResolvedWhatsappClients(uniqueSelectedClients);
+    }
+    setWhatsappOpen(true);
+  };
+
+  const handleOpenEnrich = async () => {
+    if (selectAllFiltered) {
+      const all = await fetchBulkIfNeeded();
+      setResolvedEnrichClients(all.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
+    } else {
+      setResolvedEnrichClients(selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
+    }
+    setEnrichOpen(true);
+  };
 
 
   return (
