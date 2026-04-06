@@ -616,7 +616,8 @@ const CarteiraPage = () => {
                   <span className="hidden sm:inline">WhatsApp</span> ({selectedCount})
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => setDialerOpen(true)} className="gap-1.5 border-primary text-primary">
+              <Button variant="outline" size="sm" onClick={handleOpenDialer} disabled={loadingBulkClients} className="gap-1.5 border-primary text-primary">
+                {loadingBulkClients && <Loader2 className="w-3 h-3 animate-spin" />}
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Discador</span> ({selectedCount})
               </Button>
