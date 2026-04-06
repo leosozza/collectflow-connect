@@ -752,7 +752,7 @@ const CarteiraPage = () => {
                       <TableCell>
                         <button
                           className="font-medium text-primary hover:underline cursor-pointer text-left"
-                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`)}
                         >
                           {client.nome_completo}
                         </button>
