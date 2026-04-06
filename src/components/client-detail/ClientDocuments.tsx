@@ -79,7 +79,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     return null;
   };
 
-  const handleGenerate = (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
+  const handleGenerate = async (credorKey: string, docType: string, label: string, canGenerate: boolean) => {
     if (!canGenerate) return;
     const validation = validateDocumentGeneration(docType, lastAgreement, totalAberto, totalPago);
     if (!validation.isValid) {
