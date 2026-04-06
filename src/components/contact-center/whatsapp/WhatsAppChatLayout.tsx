@@ -28,7 +28,9 @@ const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const { canManageContactCenterAdmin } = usePermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tenantId = tenant?.id || profile?.tenant_id;
+  const phoneParamProcessed = useRef(false);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
