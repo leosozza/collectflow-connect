@@ -1,23 +1,25 @@
 
 
-# Plano: Substituir SimpleCalculator pela identidade visual do prompt
+# Plano: Centralizar calculadora na tela ao abrir
 
-## O que muda
+## Problema
 
-Reescrever `src/components/client-detail/SimpleCalculator.tsx` usando o design do componente fornecido (fundo escuro, botões com `bg-gray-700`/`bg-orange-500`/`bg-gray-500`, histórico, backspace, display com operação pendente). Manter o wrapper `Popover` existente para integração no `AgreementCalculator`.
+A posição inicial é `x: window.innerWidth - 300, y: 120` — canto superior direito. Em telas largas, fica fora da área visível ou exige scroll.
 
-## Alteração
+## Correção
 
-**Arquivo único**: `src/components/client-detail/SimpleCalculator.tsx`
+**Arquivo**: `src/components/client-detail/SimpleCalculator.tsx`, linha 58
 
-- Substituir a lógica interna pela do componente fornecido (com `history`, `formatForDisplay`, `MAX_DISPLAY_LENGTH`, `backspace`)
-- Manter o `Popover` + `PopoverTrigger` com ícone `Calculator` (integração atual)
-- Dentro do `PopoverContent`, renderizar o layout do componente fornecido: header com título + botões (limpar histórico, backspace), seção de histórico, display com operação pendente, grid 4 colunas com as 5 linhas de botões
-- Usar as classes do prompt: `bg-gray-700`, `bg-gray-500`, `bg-orange-500` para botões, `bg-gray-900` para fundo geral
-- Usar ponto decimal (`.`) como no componente original, não vírgula
+Substituir o cálculo de posição inicial por centralização:
 
-## Nenhuma alteração em
+```typescript
+setPosition({
+  x: Math.max(0, (window.innerWidth - 280) / 2),
+  y: Math.max(0, (window.innerHeight - 450) / 2)
+});
+```
 
-- `AgreementCalculator.tsx` (já importa `SimpleCalculator`)
-- Parcelas, simulações, formalização, backend
+280 = largura do componente, 450 ≈ altura estimada. Resultado: calculadora abre centralizada na viewport.
+
+Nenhuma outra alteração.
 
