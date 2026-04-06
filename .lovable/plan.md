@@ -1,54 +1,68 @@
 
 
-# Plano: Corrigir prioridade de status_cobranca_id no agrupamento da Carteira
+# Plano: Corrigir inconsistências definitivas da Carteira
 
-## Problema
+## 4 problemas, 4 correções
 
-Na função `get_carteira_grouped`, o `status_cobranca_id` do grupo é escolhido com esta prioridade:
+### 1. Resetar paginação ao mudar filtros
 
-```sql
-CASE f.status
-  WHEN 'pendente' THEN 1
-  WHEN 'quebrado' THEN 2
-  WHEN 'pago'     THEN 3
-  ELSE 4
-END
+**Arquivo**: `src/pages/CarteiraPage.tsx`
+
+Adicionar `useEffect` observando `rpcFilters` que reseta `page=1`, limpa `selectedIds` e `selectAllFiltered`:
+
+```tsx
+useEffect(() => {
+  setUrlPage(1);
+  setSelectedIds(new Set());
+  setSelectAllFiltered(false);
+}, [rpcFilters]);
 ```
 
-O status `em_acordo` cai no `ELSE` (prioridade 4), **depois** de `pago` (prioridade 3). Resultado: as 3 parcelas com status `pago` + `Quitado` são escolhidas antes das 17 parcelas com `em_acordo` + `Acordo Vigente`. O grupo inteiro aparece como "Quitado".
+Usar `JSON.stringify(rpcFilters)` como dependência para evitar loop por referência de objeto.
 
-A cliente tem:
-- 3 parcelas: status=`pago`, status_cobranca=`Quitado`
-- 17 parcelas: status=`em_acordo`, status_cobranca=`Acordo Vigente`
+---
 
-## Correção
+### 2. Agrupar por CPF + Credor (não apenas CPF)
 
-**Migration SQL** — alterar a função `get_carteira_grouped`, ajustando a prioridade para que `em_acordo` tenha prioridade **1** (mais alta), pois um acordo vigente é o estado mais relevante operacionalmente:
+**Arquivo**: Migration SQL — alterar `get_carteira_grouped`
+
+Mudar o `GROUP BY f.cpf` para `GROUP BY f.cpf, f.credor`. Isso separa títulos de credores diferentes no agrupamento, impedindo mistura de dados.
+
+Ajustes necessários na query:
+- `grouped` CTE: `GROUP BY f.cpf, f.credor`
+- Remover `credor` do `array_agg` (já vem do GROUP BY)
+- O campo `credor` no SELECT final vem direto do agrupamento
+
+---
+
+### 3. Filtro "Sem acordo" respeitar CPF + Credor
+
+Na mesma migration, ajustar o `sem_acordo_filter` CTE para comparar também o credor:
 
 ```sql
-CASE f.status
-  WHEN 'em_acordo' THEN 1
-  WHEN 'pendente'  THEN 2
-  WHEN 'quebrado'  THEN 3
-  WHEN 'pago'      THEN 4
-  ELSE 5
-END
+WHERE NOT _sem_acordo OR NOT EXISTS (
+  SELECT 1 FROM agreements a
+  WHERE a.tenant_id = _tenant_id
+    AND a.status IN ('pending', 'approved')
+    AND replace(replace(a.client_cpf, '.', ''), '-', '') = replace(replace(g.cpf, '.', ''), '-', '')
+    AND a.credor = g.credor
+)
 ```
 
-Também ajustar o `CASE` do campo `status` agregado para incluir `em_acordo`:
+---
 
-```sql
-CASE
-  WHEN bool_or(f.status = 'em_acordo') THEN 'em_acordo'
-  WHEN bool_or(f.status = 'pendente')  THEN 'pendente'
-  WHEN bool_or(f.status = 'quebrado')  THEN 'quebrado'
-  ELSE 'pago'
-END AS status
-```
+### 4. Busca multi-termo — garantir consistência
 
-## Impacto
+Na mesma migration, mover a lógica de `_search_words` para fora do `RETURN QUERY` e garantir que o array vazio não cause falso positivo. Já foi parcialmente corrigido, mas vamos solidificar adicionando `array_length(_search_words, 1) > 0` como guard.
 
-- Clientes com parcelas em acordo passarão a mostrar "Acordo Vigente" na listagem
-- Filtrar por "Acordo Vigente" passará a incluir essas clientes
-- Nenhuma alteração no frontend — apenas na função SQL
+---
+
+## Resumo de alterações
+
+| Arquivo | Tipo |
+|---|---|
+| Migration SQL (`get_carteira_grouped`) | Alterado — GROUP BY cpf+credor, sem_acordo com credor, busca robusta |
+| `src/pages/CarteiraPage.tsx` | Alterado — useEffect para resetar paginação ao mudar filtros |
+
+Nenhuma alteração em: frontend de filtros, componentes visuais, serviços, backend, permissões.
 
