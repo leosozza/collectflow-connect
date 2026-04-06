@@ -1,39 +1,62 @@
 
 
-# Plano: Corrigir RLS da tabela `negociarie_cobrancas` para permitir operadores
-
-## Problema
-
-A política de INSERT na tabela `negociarie_cobrancas` só permite `is_tenant_admin` ou `is_super_admin`. Quando o operador Vitor tenta gerar boleto manualmente, o `saveCobranca` no frontend usa o token do usuário — e o RLS rejeita com "new row violates row-level security policy".
-
-O mesmo problema existe nas políticas de UPDATE e DELETE.
-
-## Correção
-
-Alterar as políticas de INSERT e UPDATE para permitir qualquer usuário do tenant (não apenas admins), já que a geração de boletos deve ser acessível a todos os perfis.
-
-### Migration SQL
-
-```sql
--- DROP existing restrictive policies
-DROP POLICY IF EXISTS "Tenant admins can insert negociarie cobrancas" ON public.negociarie_cobrancas;
-DROP POLICY IF EXISTS "Tenant admins can update negociarie cobrancas" ON public.negociarie_cobrancas;
-
--- Recreate with tenant-wide access
-CREATE POLICY "Tenant users can insert negociarie cobrancas"
-  ON public.negociarie_cobrancas FOR INSERT
-  WITH CHECK (tenant_id = get_my_tenant_id());
-
-CREATE POLICY "Tenant users can update negociarie cobrancas"
-  ON public.negociarie_cobrancas FOR UPDATE
-  USING (tenant_id = get_my_tenant_id());
-```
+# Plano: Adicionar filtro "Sem disparo de WhatsApp" na Carteira
 
 ## Resumo
 
-| Alteração | Detalhe |
-|---|---|
-| Migration SQL | Abrir INSERT e UPDATE de `negociarie_cobrancas` para todos os usuários do tenant |
+Adicionar um checkbox "Sem disparo de WhatsApp" no mesmo grupo visual dos filtros existentes (Sem acordo, Sem contato, Higienizados). O filtro exclui clientes que já foram incluídos como destinatários em qualquer campanha de WhatsApp, verificando por CPF + credor.
 
-Nenhuma alteração de código — apenas RLS.
+## Análise técnica
+
+A tabela `whatsapp_campaign_recipients` armazena `representative_client_id` (UUID do cliente), não CPF/credor diretamente. Para verificar CPF + credor, o SQL precisa fazer JOIN com `clients` para obter esses campos.
+
+## Alterações
+
+### 1. SQL — Alterar RPC `get_carteira_grouped`
+
+Adicionar novo parâmetro `_sem_whatsapp boolean DEFAULT false` e uma nova CTE `sem_whatsapp_filter` após `sem_acordo_filter`:
+
+```sql
+sem_whatsapp_filter AS (
+  SELECT s.*
+  FROM sem_acordo_filter s
+  WHERE NOT _sem_whatsapp OR NOT EXISTS (
+    SELECT 1 FROM whatsapp_campaign_recipients r
+    JOIN clients cl ON cl.id = r.representative_client_id
+    WHERE cl.tenant_id = _tenant_id
+      AND replace(replace(cl.cpf, '.', ''), '-', '') = replace(replace(s.cpf, '.', ''), '-', '')
+      AND cl.credor = s.credor
+  )
+)
+```
+
+A CTE `counted` passa a referenciar `sem_whatsapp_filter` em vez de `sem_acordo_filter`.
+
+### 2. Frontend — `ClientFilters.tsx`
+
+Adicionar `semWhatsapp: boolean` ao interface `Filters` e um novo checkbox no grupo dos filtros rápidos (linha 4, após "Higienizados"):
+
+```
+☐ Sem disparo de WhatsApp
+```
+
+### 3. Frontend — `CarteiraPage.tsx`
+
+- Adicionar `urlSemWhatsapp` via `useUrlState`
+- Incluir no objeto `filters` e `rpcFilters`
+- Incluir no `FILTER_DEFAULTS`
+- Incluir no `hasActiveFilters`
+
+### 4. Frontend — `clientService.ts`
+
+Adicionar `semWhatsapp` ao type `CarteiraFilters` e passar `_sem_whatsapp` nos params do RPC.
+
+## Arquivos alterados
+
+| Arquivo | Alteração |
+|---|---|
+| Migration SQL (nova) | Recriar `get_carteira_grouped` com parâmetro `_sem_whatsapp` e CTE |
+| `src/components/clients/ClientFilters.tsx` | Adicionar campo `semWhatsapp` no interface e checkbox na UI |
+| `src/pages/CarteiraPage.tsx` | URL state, filters, rpcFilters, hasActiveFilters, defaults |
+| `src/services/clientService.ts` | Adicionar ao type e passar param ao RPC |
 
