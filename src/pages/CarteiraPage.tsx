@@ -238,6 +238,15 @@ const CarteiraPage = () => {
     cadastroAte: filters.cadastroAte || undefined,
   }), [filters, permissions.canViewFullData, profileId]);
 
+  // Reset pagination when filters change
+  const rpcFiltersKey = JSON.stringify(rpcFilters);
+  useEffect(() => {
+    setUrlPage(1);
+    setSelectedIds(new Set());
+    setSelectAllFiltered(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rpcFiltersKey]);
+
   const { data: carteiraResult = { data: [], count: 0 }, isLoading } = useQuery({
     queryKey: ["carteira-grouped", tenant?.id, rpcFilters, currentPage, sortField, sortDir],
     queryFn: () => fetchCarteiraGrouped(tenant!.id, rpcFilters, currentPage, PAGE_SIZE, sortField, sortDir),
