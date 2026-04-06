@@ -1,76 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendByProvider } from "../_shared/whatsapp-sender.ts";
+import { resolveTemplate } from "../_shared/template-resolver.ts";
+import { logMessage } from "../_shared/message-logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-// ===== Multi-provider send helper =====
-async function sendByProvider(
-  inst: any,
-  phone: string,
-  message: string,
-  tenantSettings: Record<string, any>,
-  fallbackEvolutionUrl: string,
-  fallbackEvolutionKey: string,
-  wuzapiUrl: string,
-  wuzapiAdminToken: string
-): Promise<{ ok: boolean; result: any; providerMessageId: string | null }> {
-  const provider = (inst.provider || "").toLowerCase();
-
-  if (provider === "wuzapi") {
-    const baseUrl = inst.instance_url || wuzapiUrl;
-    const token = inst.api_key || wuzapiAdminToken;
-    if (!baseUrl || !token) {
-      return { ok: false, result: { error: "WuzAPI URL ou token não configurado" }, providerMessageId: null };
-    }
-    const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
-      method: "POST",
-      headers: { "Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
-    });
-    const result = await resp.json();
-    return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null };
-  }
-
-  if (provider === "gupshup") {
-    const apiKey = tenantSettings.gupshup_api_key;
-    const sourceNumber = tenantSettings.gupshup_source_number;
-    const appName = tenantSettings.gupshup_app_name || "";
-    if (!apiKey || !sourceNumber) {
-      return { ok: false, result: { error: "Credenciais Gupshup não configuradas no tenant" }, providerMessageId: null };
-    }
-    const formBody = new URLSearchParams({
-      channel: "whatsapp",
-      source: sourceNumber,
-      destination: phone,
-      "src.name": appName,
-      message: JSON.stringify({ type: "text", text: message }),
-    });
-    const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-      method: "POST",
-      headers: { apikey: apiKey, "Content-Type": "application/x-www-form-urlencoded" },
-      body: formBody.toString(),
-    });
-    const result = await resp.json();
-    return { ok: resp.ok, result, providerMessageId: result?.messageId || null };
-  }
-
-  // Default: Evolution / Baylers
-  const instanceUrl = (inst.instance_url || fallbackEvolutionUrl).replace(/\/+$/, "");
-  const instanceKey = inst.api_key || fallbackEvolutionKey;
-  if (!instanceUrl) {
-    return { ok: false, result: { error: "URL da instância Evolution não configurada" }, providerMessageId: null };
-  }
-  const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
-    method: "POST",
-    headers: { apikey: instanceKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ number: phone, text: message }),
-  });
-  const result = await resp.json();
-  return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -129,7 +66,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
 
-    // ===== NEW CAMPAIGN-BASED FLOW =====
+    // ===== CAMPAIGN-BASED FLOW =====
     if (body.campaign_id) {
       return await handleCampaignFlow(supabase, body.campaign_id, tenantUser.tenant_id);
     }
@@ -145,7 +82,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// ===== Campaign-based flow =====
+// ===== Campaign-based flow (Fases 1-4: shared helpers + batch load) =====
 async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: string) {
   // Load campaign
   const { data: campaign, error: cErr } = await supabase
@@ -217,7 +154,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   }
 
   if (missingInstances.length > 0 && missingInstances.length === instanceIds.length + (hasGupshupRecipients ? 1 : 0)) {
-    // ALL instances are missing — fail fast
     await supabase
       .from("whatsapp_campaigns")
       .update({ status: "failed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -235,6 +171,23 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
+  // Fase 4: Batch load de clientes — elimina N+1 query
+  const clientIds = [...new Set((recipients || []).map((r: any) => r.representative_client_id).filter(Boolean))];
+  const clientMap = new Map<string, any>();
+  if (clientIds.length > 0) {
+    // Batch in chunks of 500 to avoid query limits
+    for (let i = 0; i < clientIds.length; i += 500) {
+      const chunk = clientIds.slice(i, i + 500);
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
+        .in("id", chunk);
+      for (const c of clients || []) {
+        clientMap.set(c.id, c);
+      }
+    }
+  }
+
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -245,7 +198,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       let inst = instanceMap.get(recipient.assigned_instance_id);
 
       if (!inst && !recipient.assigned_instance_id && useGupshupFallback) {
-        // Virtual Gupshup instance
         inst = { provider: "gupshup", instance_name: tenantSettings.gupshup_app_name || "gupshup" };
       }
 
@@ -259,67 +211,51 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         continue;
       }
 
-      // Load client data for template resolution and traceability
-      const { data: client } = await supabase
-        .from("clients")
-        .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
-        .eq("id", recipient.representative_client_id)
-        .single();
+      // Fase 4: usar clientMap em vez de query individual
+      const client = clientMap.get(recipient.representative_client_id) || null;
 
-      // Resolve template variables
-      let message = recipient.message_body_snapshot || campaign.message_body || "";
-      if (client) {
-        message = message
-          .replace(/\{\{nome\}\}/g, client.nome_completo || "")
-          .replace(/\{\{cpf\}\}/g, client.cpf || "")
-          .replace(/\{\{valor_parcela\}\}/g,
-            new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(client.valor_parcela || 0)
-          )
-          .replace(/\{\{data_vencimento\}\}/g,
-            client.data_vencimento
-              ? new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-              : ""
-          )
-          .replace(/\{\{credor\}\}/g, client.credor || "");
-      }
+      // Fase 2: resolvedor unificado de templates
+      const rawMessage = recipient.message_body_snapshot || campaign.message_body || "";
+      const message = client ? resolveTemplate(rawMessage, client) : rawMessage;
 
       try {
-        const { ok, result, providerMessageId } = await sendByProvider(
+        // Fase 1: motor unificado de envio
+        const sendResult = await sendByProvider(
           inst, recipient.phone, message, tenantSettings,
           evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
         );
 
-        const status = ok ? "sent" : "failed";
+        const status = sendResult.ok ? "sent" : "failed";
 
         await supabase
           .from("whatsapp_campaign_recipients")
           .update({
             status,
             sent_at: status === "sent" ? new Date().toISOString() : null,
-            error_message: status === "failed" ? JSON.stringify(result) : null,
-            provider_message_id: providerMessageId,
+            error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
+            provider_message_id: sendResult.providerMessageId,
             message_body_snapshot: message,
             updated_at: new Date().toISOString(),
           })
           .eq("id", recipient.id);
 
-        // Log to message_logs with traceability metadata
-        await supabase.from("message_logs").insert({
+        // Fase 3: logger unificado com metadata de rastreabilidade
+        await logMessage(supabase, {
           tenant_id: tenantId,
           client_id: recipient.representative_client_id,
           client_cpf: client?.cpf || null,
-          channel: "whatsapp",
-          status,
           phone: recipient.phone,
+          status,
           message_body: message,
-          error_message: status === "failed" ? JSON.stringify(result) : null,
+          error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
           sent_at: status === "sent" ? new Date().toISOString() : null,
           metadata: {
+            source_type: "campaign",
             campaign_id: campaignId,
             instance_id: recipient.assigned_instance_id,
             instance_name: inst.instance_name,
-            provider: inst.provider,
-            provider_message_id: providerMessageId,
+            provider: sendResult.provider,
+            provider_message_id: sendResult.providerMessageId,
           },
         });
 
@@ -338,16 +274,17 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           })
           .eq("id", recipient.id);
 
-        await supabase.from("message_logs").insert({
+        // Fase 3: logger unificado para erros
+        await logMessage(supabase, {
           tenant_id: tenantId,
           client_id: recipient.representative_client_id,
           client_cpf: client?.cpf || null,
-          channel: "whatsapp",
-          status: "failed",
           phone: recipient.phone,
+          status: "failed",
           message_body: message,
           error_message: err.message,
           metadata: {
+            source_type: "campaign",
             campaign_id: campaignId,
             instance_id: recipient.assigned_instance_id,
             instance_name: inst.instance_name,
@@ -390,7 +327,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   );
 }
 
-// ===== Legacy flow (backward compatible) =====
+// ===== Legacy flow (backward compatible — Fases 1-3: shared helpers) =====
 async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const { client_ids, message_template } = body;
 
@@ -413,12 +350,15 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
 
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+  const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
+  const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
-  let baylersInstance: { instance_url: string; api_key: string; instance_name: string } | null = null;
+  let inst: any = null;
+
   if (provider === "baylers") {
     const { data: instances } = await supabase
       .from("whatsapp_instances")
-      .select("instance_url, api_key, instance_name")
+      .select("instance_url, api_key, instance_name, provider")
       .eq("tenant_id", tenantUser.tenant_id)
       .eq("is_default", true)
       .eq("status", "active")
@@ -426,19 +366,22 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
       .single();
 
     if (instances) {
-      const inst = instances as any;
-      baylersInstance = {
-        instance_url: inst.instance_url || evolutionUrl,
-        api_key: inst.api_key || evolutionKey,
-        instance_name: inst.instance_name,
+      inst = {
+        provider: "baylers",
+        instance_url: instances.instance_url || evolutionUrl,
+        api_key: instances.api_key || evolutionKey,
+        instance_name: instances.instance_name,
       };
     } else if (settings.baylers_api_key && settings.baylers_instance_url) {
-      baylersInstance = {
+      inst = {
+        provider: "baylers",
         instance_url: settings.baylers_instance_url,
         api_key: settings.baylers_api_key,
         instance_name: settings.baylers_instance_name || "default",
       };
     }
+  } else if (provider === "gupshup") {
+    inst = { provider: "gupshup", instance_name: settings.gupshup_app_name || "gupshup" };
   }
 
   if (provider === "gupshup" && (!settings.gupshup_api_key || !settings.gupshup_source_number)) {
@@ -446,7 +389,7 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  if (provider === "baylers" && !baylersInstance) {
+  if (provider === "baylers" && !inst) {
     return new Response(JSON.stringify({ error: "Baylers credentials not configured" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -470,21 +413,19 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const errors: string[] = [];
 
   for (const client of clients || []) {
-    const message = message_template
-      .replace(/\{\{nome\}\}/g, client.nome_completo)
-      .replace(/\{\{cpf\}\}/g, client.cpf)
-      .replace(/\{\{valor_parcela\}\}/g,
-        new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(client.valor_parcela)
-      )
-      .replace(/\{\{data_vencimento\}\}/g,
-        new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-      )
-      .replace(/\{\{credor\}\}/g, client.credor);
+    // Fase 2: resolvedor unificado de templates
+    const message = resolveTemplate(message_template, client);
 
     if (!client.phone) {
-      await supabase.from("message_logs").insert({
-        tenant_id: tenantUser.tenant_id, client_id: client.id,
-        channel: "whatsapp", status: "failed", message_body: message, error_message: "Cliente sem telefone",
+      // Fase 3: logger unificado
+      await logMessage(supabase, {
+        tenant_id: tenantUser.tenant_id,
+        client_id: client.id,
+        client_cpf: client.cpf,
+        status: "failed",
+        message_body: message,
+        error_message: "Cliente sem telefone",
+        metadata: { source_type: "legacy", provider },
       });
       failed++;
       errors.push(`${client.nome_completo}: sem telefone`);
@@ -494,36 +435,30 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
     const phone = client.phone.replace(/\D/g, "");
 
     try {
-      let resp: Response;
-      let result: any;
+      // Fase 1: motor unificado de envio
+      const sendResult = await sendByProvider(
+        inst!, phone, message, settings,
+        evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
+      );
 
-      if (provider === "baylers" && baylersInstance) {
-        resp = await fetch(`${baylersInstance.instance_url}/message/sendText/${baylersInstance.instance_name}`, {
-          method: "POST",
-          headers: { apikey: baylersInstance.api_key, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: phone, text: message }),
-        });
-        result = await resp.json();
-      } else {
-        const formBody = new URLSearchParams({
-          channel: "whatsapp", source: settings.gupshup_source_number,
-          destination: phone, "src.name": settings.gupshup_app_name || "",
-          message: JSON.stringify({ type: "text", text: message }),
-        });
-        resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-          method: "POST",
-          headers: { apikey: settings.gupshup_api_key, "Content-Type": "application/x-www-form-urlencoded" },
-          body: formBody.toString(),
-        });
-        result = await resp.json();
-      }
-      const status = resp.ok ? "sent" : "failed";
+      const status = sendResult.ok ? "sent" : "failed";
 
-      await supabase.from("message_logs").insert({
-        tenant_id: tenantUser.tenant_id, client_id: client.id,
-        channel: "whatsapp", status, phone, message_body: message,
-        error_message: status === "failed" ? JSON.stringify(result) : null,
+      // Fase 3: logger unificado
+      await logMessage(supabase, {
+        tenant_id: tenantUser.tenant_id,
+        client_id: client.id,
+        client_cpf: client.cpf,
+        phone,
+        status,
+        message_body: message,
+        error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
         sent_at: status === "sent" ? new Date().toISOString() : null,
+        metadata: {
+          source_type: "legacy",
+          provider: sendResult.provider,
+          provider_message_id: sendResult.providerMessageId,
+          instance_name: inst?.instance_name,
+        },
       });
 
       if (status === "sent") sent++;
@@ -531,9 +466,15 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
 
       await new Promise((r) => setTimeout(r, 100));
     } catch (err: any) {
-      await supabase.from("message_logs").insert({
-        tenant_id: tenantUser.tenant_id, client_id: client.id,
-        channel: "whatsapp", status: "failed", phone, message_body: message, error_message: err.message,
+      await logMessage(supabase, {
+        tenant_id: tenantUser.tenant_id,
+        client_id: client.id,
+        client_cpf: client.cpf,
+        phone,
+        status: "failed",
+        message_body: message,
+        error_message: err.message,
+        metadata: { source_type: "legacy", provider },
       });
       failed++;
       errors.push(`${client.nome_completo}: ${err.message}`);

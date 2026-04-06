@@ -23,6 +23,7 @@ export const TEMPLATE_VARIABLES = [
   "{{nome}}",
   "{{cpf}}",
   "{{valor_parcela}}",
+  "{{valor}}", // alias de compatibilidade → mesmo que {{valor_parcela}}
   "{{data_vencimento}}",
   "{{credor}}",
 ];
@@ -31,6 +32,7 @@ export const SAMPLE_DATA: Record<string, string> = {
   "{{nome}}": "João Silva",
   "{{cpf}}": "123.456.789-00",
   "{{valor_parcela}}": "R$ 350,00",
+  "{{valor}}": "R$ 350,00", // alias de {{valor_parcela}}
   "{{data_vencimento}}": "15/03/2026",
   "{{credor}}": "Empresa Exemplo",
 };
