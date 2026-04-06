@@ -1,10 +1,11 @@
 import { FileText, Download, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
 import { toast } from "sonner";
+import { useTenant } from "@/hooks/useTenant";
+import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
 
 interface ClientDocumentsProps {
   client: any;
@@ -13,14 +14,6 @@ interface ClientDocumentsProps {
   totalAberto: number;
   lastAgreement: any;
 }
-
-const DOCUMENT_TYPES = [
-  { key: "template_acordo", label: "Carta de Acordo", icon: "📄" },
-  { key: "template_recibo", label: "Recibo de Pagamento", icon: "🧾" },
-  { key: "template_quitacao", label: "Carta de Quitação", icon: "✅" },
-  { key: "template_descricao_divida", label: "Descrição de Dívida", icon: "📋" },
-  { key: "template_notificacao_extrajudicial", label: "Notificação Extrajudicial", icon: "⚖️" },
-];
 
 const replaceTemplateVars = (template: string, vars: Record<string, string>) => {
   let result = template;
@@ -31,6 +24,9 @@ const replaceTemplateVars = (template: string, vars: Record<string, string>) => 
 };
 
 const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: ClientDocumentsProps) => {
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id;
+
   const { data: credor } = useQuery({
     queryKey: ["credor-templates", client.credor],
     queryFn: async () => {
@@ -43,6 +39,19 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
       return data;
     },
     enabled: !!client.credor,
+  });
+
+  // Fetch tenant-level templates (fallback level 2)
+  const { data: tenantTemplates } = useQuery({
+    queryKey: ["document-templates-fallback", tenantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("document_templates")
+        .select("type, content")
+        .eq("tenant_id", tenantId!);
+      return data || [];
+    },
+    enabled: !!tenantId,
   });
 
   const templateVars: Record<string, string> = {
@@ -61,12 +70,40 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     valor_parcela_acordo: lastAgreement ? formatCurrency(Number(lastAgreement.new_installment_value)) : "",
     primeiro_vencimento: lastAgreement?.first_due_date ? formatDate(lastAgreement.first_due_date) : "",
     desconto_acordo: lastAgreement?.discount_percent ? `${lastAgreement.discount_percent}%` : "0%",
+    // Aliases for CredorForm-style placeholders
+    quantidade_parcelas: lastAgreement ? String(lastAgreement.new_installments) : String(clients.length),
+    valor_parcela: lastAgreement ? formatCurrency(Number(lastAgreement.new_installment_value)) : "",
+    desconto_concedido: lastAgreement?.discount_percent ? String(lastAgreement.discount_percent) : "0",
+    numero_parcela: "1",
+    data_vencimento: lastAgreement?.first_due_date ? formatDate(lastAgreement.first_due_date) : "",
+    valor_pago: formatCurrency(clients.reduce((s: number, c: any) => s + (c.valor_pago || 0), 0)),
+    data_acordo: lastAgreement ? formatDate(lastAgreement.created_at) : "",
+    data_pagamento: new Date().toLocaleDateString("pt-BR"),
   };
 
-  const handleDownload = (key: string, label: string) => {
-    const template = credor?.[key as keyof typeof credor] as string;
+  /**
+   * Resolve template with 3-level fallback:
+   * 1. Credor column (existing behavior)
+   * 2. Tenant document_templates table
+   * 3. System defaults from documentDefaults.ts
+   */
+  const resolveTemplate = (credorKey: string, docType: string): string | null => {
+    // Level 1: Credor column
+    const credorTemplate = credor?.[credorKey as keyof typeof credor] as string;
+    if (credorTemplate?.trim()) return credorTemplate;
+
+    // Level 2: Tenant template
+    const tenantTpl = tenantTemplates?.find((t) => t.type === docType);
+    if (tenantTpl?.content?.trim()) return tenantTpl.content;
+
+    // Level 3: System default
+    return TEMPLATE_DEFAULTS[credorKey] || null;
+  };
+
+  const handleDownload = (credorKey: string, docType: string, label: string) => {
+    const template = resolveTemplate(credorKey, docType);
     if (!template) {
-      toast.error(`Modelo de "${label}" não configurado para este credor.`);
+      toast.error(`Modelo de "${label}" não configurado.`);
       return;
     }
     const content = replaceTemplateVars(template, templateVars);
@@ -80,13 +117,11 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     toast.success(`${label} gerado com sucesso!`);
   };
 
-  const isConfigured = (key: string) => {
-    if (!credor) return false;
-    const val = credor[key as keyof typeof credor] as string;
-    return !!val?.trim();
+  const isConfigured = (credorKey: string, docType: string) => {
+    return !!resolveTemplate(credorKey, docType);
   };
 
-  const configuredCount = DOCUMENT_TYPES.filter(d => isConfigured(d.key)).length;
+  const configuredCount = DOCUMENT_TYPES.filter((d) => isConfigured(d.credorKey, d.type)).length;
 
   return (
     <Card>
@@ -100,8 +135,8 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
           <div className="lg:col-span-2 flex flex-col gap-3">
             {DOCUMENT_TYPES.map((doc) => (
               <button
-                key={doc.key}
-                onClick={() => handleDownload(doc.key, doc.label)}
+                key={doc.credorKey}
+                onClick={() => handleDownload(doc.credorKey, doc.type, doc.label)}
                 className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors text-left group cursor-pointer"
               >
                 <span className="text-2xl">{doc.icon}</span>
@@ -126,9 +161,9 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
               </p>
               <div className="space-y-2.5">
                 {DOCUMENT_TYPES.map((doc) => {
-                  const configured = isConfigured(doc.key);
+                  const configured = isConfigured(doc.credorKey, doc.type);
                   return (
-                    <div key={doc.key} className="flex items-center gap-2.5">
+                    <div key={doc.credorKey} className="flex items-center gap-2.5">
                       {configured ? (
                         <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                       ) : (

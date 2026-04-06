@@ -72,6 +72,11 @@ const ConfiguracoesPage = () => {
             <AuditoriaPage />
           </div>
         )}
+        {visited.has("documentos") && (
+          <div style={{ display: active === "documentos" ? "block" : "none" }}>
+            <DocumentTemplatesPage />
+          </div>
+        )}
         {visited.has("api_docs") && (
           <div style={{ display: active === "api_docs" ? "block" : "none" }}>
             <ApiDocsPage />
