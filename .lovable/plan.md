@@ -1,50 +1,59 @@
 
 
-# Plano: Corrigir contagem e fetch completo da seleção global
+# Plano: Normalizar telefones com validação completa (DDI + DDD + 9 dígitos)
 
-## Causa raiz
+## Problema
 
-Ambas as funções `fetchAllCarteiraIds` e `fetchAllCarteiraClients` usam `pageSize = 5000`, mas o Supabase limita respostas RPC a **1.000 linhas**. Como `rows.length < 5000` é sempre verdadeiro no primeiro batch (retorna ≤1.000), o loop para imediatamente. Resultado: apenas ~1.000 grupos são retornados.
+Os telefones no banco podem estar em diversos formatos:
+- `11972583005` (11 dígitos — DDD + número com 9)
+- `1172583005` (10 dígitos — DDD + número sem 9, fixo ou celular antigo)
+- `5511972583005` (13 dígitos — já com DDI)
+- `972583005` (9 dígitos — só o número sem DDD)
 
-Isso causa **3 sintomas visíveis**:
-1. **Banner**: "3.529 clientes filtrados" (deveria ser 11.137) — usa `selectedIds.size` que vem do `fetchAllCarteiraIds` truncado
-2. **Botões**: WhatsApp/Discador/Higienizar mostram (3529) — usam `selectedCount = selectedIds.size`
-3. **Dialog do Discador**: "1000 clientes selecionados" — `fetchAllCarteiraClients` retornou só 1 batch
+Atualmente o `whatsapp-sender.ts` envia o número bruto, sem normalização. Precisa garantir que o número final tenha **13 dígitos**: `55` + DDD(2) + número com 9(9).
 
-## Correções
+## Correção
 
-### 1. Reduzir batch size para 1.000 em `src/services/clientService.ts`
+**Arquivo**: `supabase/functions/_shared/whatsapp-sender.ts`
 
-Em `fetchAllCarteiraIds` (linha 514) e `fetchAllCarteiraClients` (linha 588):
+Adicionar função `normalizePhoneBR` no topo e aplicar antes do envio em cada provedor:
 
-```tsx
-const pageSize = 1000; // era 5000
+```typescript
+function normalizePhoneBR(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+
+  // Já tem 13 dígitos (55 + DDD + 9 dígitos) — ok
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+
+  // 12 dígitos com 55 — celular sem o 9 → inserir 9
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return digits.slice(0, 4) + "9" + digits.slice(4);
+  }
+
+  // 11 dígitos — DDD + 9 dígitos → prefixar 55
+  if (digits.length === 11) return "55" + digits;
+
+  // 10 dígitos — DDD + 8 dígitos (sem 9) → prefixar 55 + inserir 9
+  if (digits.length === 10) {
+    return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
+  }
+
+  // 9 dígitos — só número sem DDD → não tem como resolver, retorna como está
+  // 8 dígitos — fixo sem DDD → idem
+  return digits;
+}
 ```
 
-Isso faz o loop paginar corretamente por todas as páginas.
-
-### 2. Usar `totalCount` nos contadores quando selectAllFiltered — `src/pages/CarteiraPage.tsx`
-
-Linha 525-527 — quando `selectAllFiltered=true`, usar `totalCount` (já disponível da query principal) em vez de `selectedIds.size`:
-
-```tsx
-const selectedCount = selectAllFiltered
-  ? totalCount
-  : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
-```
-
-### 3. Banner usar `totalCount` — `src/pages/CarteiraPage.tsx`
-
-Linha 692 — trocar `selectedIds.size` por `totalCount`:
-
-```tsx
-Todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados estão selecionados.
-```
+Aplicar nos 3 pontos de envio:
+- **Linha 35** (WuzAPI): `phone: \`${normalizePhoneBR(phone)}@s.whatsapp.net\``
+- **Linha 51** (Gupshup): `destination: normalizePhoneBR(phone)`
+- **Linha 74** (Evolution): `number: normalizePhoneBR(phone)`
 
 ## Resumo
 
 | Arquivo | Alteração |
 |---|---|
-| `src/services/clientService.ts` | `pageSize` 5000 → 1000 em ambas as funções |
-| `src/pages/CarteiraPage.tsx` | `selectedCount` e banner usam `totalCount` quando selectAllFiltered |
+| `supabase/functions/_shared/whatsapp-sender.ts` | Adicionar `normalizePhoneBR` e aplicar nos 3 provedores |
+
+Nenhuma alteração no frontend ou banco de dados.
 
