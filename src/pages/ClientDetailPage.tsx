@@ -63,6 +63,8 @@ const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const credorFilter = searchParams.get("credor");
   const { tenant } = useTenant();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
@@ -74,14 +76,17 @@ const ClientDetailPage = () => {
   const backTo = (location.state as any)?.from || "/carteira";
 
   const { data: clients = [], isLoading, refetch } = useQuery({
-    queryKey: ["client-detail", cpf],
+    queryKey: ["client-detail", cpf, credorFilter],
     queryFn: async () => {
       const rawCpf = (cpf || "").replace(/\D/g, "");
-      const { data, error } = await supabase
+      let query = supabase
         .from("clients")
         .select("*")
-        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
-        .order("numero_parcela", { ascending: true });
+        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`);
+      if (credorFilter) {
+        query = query.eq("credor", credorFilter);
+      }
+      const { data, error } = await query.order("numero_parcela", { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -89,14 +94,17 @@ const ClientDetailPage = () => {
   });
 
   const { data: agreements = [], refetch: refetchAgreements } = useQuery({
-    queryKey: ["client-agreements", cpf],
+    queryKey: ["client-agreements", cpf, credorFilter],
     queryFn: async () => {
       const rawCpf = (cpf || "").replace(/\D/g, "");
-      const { data, error } = await supabase
+      let query = supabase
         .from("agreements")
         .select("*")
-        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`)
-        .order("created_at", { ascending: false });
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`);
+      if (credorFilter) {
+        query = query.eq("credor", credorFilter);
+      }
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       
       // Fetch creator profiles for all agreements

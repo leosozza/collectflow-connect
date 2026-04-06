@@ -730,11 +730,7 @@ const CarteiraPage = () => {
                     </TableHead>
                     
                     <TableHead className="text-center">Score</TableHead>
-                    <TableHead className="text-center">
-                      <button className="flex items-center gap-0.5 hover:text-foreground transition-colors mx-auto" onClick={() => toggleSort("status_cobranca")}>
-                        Status Cobrança <SortIcon field="status_cobranca" />
-                      </button>
-                    </TableHead>
+                    <TableHead className="text-center">Status Cobrança</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -752,7 +748,7 @@ const CarteiraPage = () => {
                       <TableCell>
                         <button
                           className="font-medium text-primary hover:underline cursor-pointer text-left"
-                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}`)}
+                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`)}
                         >
                           {client.nome_completo}
                         </button>
