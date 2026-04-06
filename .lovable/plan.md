@@ -1,33 +1,39 @@
 
 
-# Plano: Permitir operadores com permissão RBAC executarem disparos em lote
+# Plano: Corrigir RLS da tabela `negociarie_cobrancas` para permitir operadores
 
 ## Problema
 
-A Edge Function `send-bulk-whatsapp` (linha 140) só permite `admin` ou `super_admin`. O operador Vitor tem permissão `campanhas_whatsapp.create` no RBAC granular, mas a Edge Function não consulta essas permissões — retorna 403 e a campanha fica presa em `draft`.
+A política de INSERT na tabela `negociarie_cobrancas` só permite `is_tenant_admin` ou `is_super_admin`. Quando o operador Vitor tenta gerar boleto manualmente, o `saveCobranca` no frontend usa o token do usuário — e o RLS rejeita com "new row violates row-level security policy".
+
+O mesmo problema existe nas políticas de UPDATE e DELETE.
 
 ## Correção
 
-### Arquivo: `supabase/functions/send-bulk-whatsapp/index.ts`
+Alterar as políticas de INSERT e UPDATE para permitir qualquer usuário do tenant (não apenas admins), já que a geração de boletos deve ser acessível a todos os perfis.
 
-Na validação de autorização (linhas 127-145), além de verificar o role do `tenant_users`, consultar também a tabela `role_permissions` para checar se o usuário possui a permissão `campanhas_whatsapp.create`:
+### Migration SQL
 
+```sql
+-- DROP existing restrictive policies
+DROP POLICY IF EXISTS "Tenant admins can insert negociarie cobrancas" ON public.negociarie_cobrancas;
+DROP POLICY IF EXISTS "Tenant admins can update negociarie cobrancas" ON public.negociarie_cobrancas;
+
+-- Recreate with tenant-wide access
+CREATE POLICY "Tenant users can insert negociarie cobrancas"
+  ON public.negociarie_cobrancas FOR INSERT
+  WITH CHECK (tenant_id = get_my_tenant_id());
+
+CREATE POLICY "Tenant users can update negociarie cobrancas"
+  ON public.negociarie_cobrancas FOR UPDATE
+  USING (tenant_id = get_my_tenant_id());
 ```
-Lógica atual (linha 140):
-  if role NOT IN ('admin', 'super_admin') → 403
-
-Nova lógica:
-  if role IN ('admin', 'super_admin') → permitir
-  else → consultar role_permissions para o role do usuário
-    se tiver campanhas_whatsapp.create → permitir
-    senão → 403
-```
-
-Isso alinha a Edge Function com o sistema RBAC que o frontend já utiliza.
 
 ## Resumo
 
-| Arquivo | Alteração |
+| Alteração | Detalhe |
 |---|---|
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Adicionar consulta ao RBAC granular além do check de admin |
+| Migration SQL | Abrir INSERT e UPDATE de `negociarie_cobrancas` para todos os usuários do tenant |
+
+Nenhuma alteração de código — apenas RLS.
 
