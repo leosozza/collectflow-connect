@@ -55,7 +55,10 @@ const SimpleCalculator = () => {
 
   useEffect(() => {
     if (isOpen && !hasInitialized) {
-      setPosition({ x: window.innerWidth - 300, y: 120 });
+      setPosition({
+        x: Math.max(0, (window.innerWidth - 280) / 2),
+        y: Math.max(0, (window.innerHeight - 450) / 2),
+      });
       setHasInitialized(true);
     }
   }, [isOpen, hasInitialized]);
