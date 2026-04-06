@@ -942,15 +942,15 @@ const CarteiraPage = () => {
       {/* Dialer export dialog */}
       <DialerExportDialog
         open={dialerOpen}
-        onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={selectedClients as any[]}
+        onClose={() => { setDialerOpen(false); setSelectedIds(new Set()); setBulkClients(null); }}
+        selectedClients={resolvedDialerClients as any[]}
       />
 
       {/* WhatsApp bulk dialog */}
       <WhatsAppBulkDialog
         open={whatsappOpen}
-        onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); }}
-        selectedClients={uniqueSelectedClients as any[]}
+        onClose={() => { setWhatsappOpen(false); setSelectedIds(new Set()); setBulkClients(null); }}
+        selectedClients={resolvedWhatsappClients as any[]}
       />
 
       {/* Assign operator dialog */}
