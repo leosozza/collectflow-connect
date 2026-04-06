@@ -142,6 +142,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
       });
     } catch (err) {
       console.error("Erro ao salvar histórico do documento:", err);
+      toast.warning("Documento gerado, mas houve um erro ao salvar o histórico. Tente novamente ou contate o suporte.");
     }
 
     toast.success(`${preview.label} gerado com sucesso!`);
