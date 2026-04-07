@@ -13,6 +13,7 @@ import {
   fetchMessages,
   fetchQuickReplies,
   sendTextMessage,
+  sendMediaMessage,
   sendInternalNote,
   updateConversationStatus,
   markConversationRead,
@@ -344,13 +345,9 @@ const WhatsAppChatLayout = () => {
 
   const handleSendMedia = async (file: File) => {
     if (!selectedConv || !tenantId) return;
-    const instance = getInstanceForConv();
-    if (!instance) {
-      toast.error("Instância não encontrada");
-      return;
-    }
     setSending(true);
     try {
+      // 1. Upload to storage
       const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-media")
@@ -360,56 +357,25 @@ const WhatsAppChatLayout = () => {
       const { data: urlData } = supabase.storage.from("chat-media").getPublicUrl(filePath);
       const mediaUrl = urlData.publicUrl;
 
-      let mediaType = "document";
+      let mediaType: "image" | "video" | "audio" | "document" = "document";
       if (file.type.startsWith("image/")) mediaType = "image";
       else if (file.type.startsWith("video/")) mediaType = "video";
       else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) throw new Error("Não autenticado");
+      // 2. Send via unified Edge Function
+      await sendMediaMessage(
+        selectedConv.id,
+        tenantId,
+        mediaUrl,
+        mediaType,
+        file.type,
+        file.name,
+      );
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const conv = selectedConv;
-      const resp = await fetch(`${supabaseUrl}/functions/v1/evolution-proxy?action=sendMessage`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instanceName: instance.instance_name,
-          phone: conv.remote_phone,
-          mediaUrl,
-          mediaType,
-          message: file.name,
-        }),
-      });
-      const result = await resp.json();
-      if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mídia");
-
-      await supabase.from("chat_messages" as any).insert({
-        conversation_id: conv.id,
-        tenant_id: tenantId,
-        direction: "outbound",
-        message_type: mediaType,
-        content: file.name,
-        media_url: mediaUrl,
-        media_mime_type: file.type,
-        status: "sent",
-        external_id: result?.key?.id || null,
-      } as any);
-
-      // Auto-accept: waiting -> open when operator sends media/audio
-      const convUpdatePayload: any = { last_message_at: new Date().toISOString() };
-      if (selectedConv.status === "waiting") {
-        convUpdatePayload.status = "open";
-      }
-      await supabase
-        .from("conversations" as any)
-        .update(convUpdatePayload)
-        .eq("id", conv.id);
-
+      // 3. Auto-accept UI update
       if (selectedConv.status === "waiting") {
         setSelectedConv({ ...selectedConv, status: "open" as any });
-        setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: "open" as any } : c));
+        setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, status: "open" as any } : c));
       }
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mídia");
