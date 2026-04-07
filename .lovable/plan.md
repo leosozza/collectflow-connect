@@ -1,111 +1,122 @@
 
 
-# FASE 3 — Core Canônico de Conversa e Mensagem
+# FASE 4 — RPC Transacional de Ingestão Canônica
+
+## Objetivo
+
+Centralizar toda a lógica de ingestão de mensagens (resolve cliente, resolve/cria conversa, deduplica, grava mensagem, atualiza resumo, aplica SLA, atribui operador) em uma **única função PostgreSQL transacional** (`ingest_channel_event`). Os webhooks passam a ser apenas parsers de payload que chamam essa RPC.
 
 ## Situação Atual
 
-### `conversations` (145 registros: 89 waiting, 56 open)
-- **14 colunas** — sem `channel_type`, `provider`, `endpoint_id`, sem denormalização de última mensagem
-- **Sem constraint UNIQUE** em `(tenant_id, instance_id, remote_phone)` — deduplicação apenas por query
-- `instance_id` aponta para `whatsapp_instances` — funcional mas acoplado ao nome "whatsapp"
-- Inbox faz **query extra** em `chat_messages` para buscar preview da última mensagem (batch de até 50 IDs)
+A lógica de ingestão está **espalhada em 3 locais**:
 
-### `chat_messages` (802 registros)
-- **13 colunas** — sem `provider`, `provider_message_id`, `actor_type`
-- `external_id` **sem UNIQUE constraint** — deduplicação por SELECT antes de INSERT (race condition)
-- Sem rastreabilidade de qual provider/endpoint enviou/recebeu
+| Local | Lógica |
+|---|---|
+| `whatsapp-webhook/index.ts` (385 linhas) | findClientByPhone + getSlaMinutes + assignRoundRobin + resolve/create conversation + dedup + insert message — **tudo em TypeScript** |
+| `gupshup-webhook/index.ts` (64 linhas) | Só atualiza `message_logs` — **não cria conversas nem chat_messages** |
+| `send-bulk-whatsapp/index.ts` | `ensureConversationAndMessage()` — outra implementação paralela de resolve/create conversation |
 
-### `whatsapp_instances`
-- Já tem `provider`, `provider_category`, capabilities (`supports_*`) — boa base para endpoint
-
-### Frontend (`conversationService.ts`)
-- `fetchConversations()` faz join com `clients(nome_completo)` + batch query em `chat_messages` para preview
-- Com denormalização, essa segunda query desaparece
-
----
+Problemas:
+- 3 implementações diferentes da mesma lógica
+- Sem transacionalidade (queries separadas = race conditions)
+- `findClientByPhone` usa `ILIKE %suffix%` em `clients` (ignora `client_phones` da Fase 2)
+- Gupshup inbound é completamente invisível na inbox
+- Adicionar novo provider exige duplicar toda a lógica
 
 ## O Que Será Feito
 
-### 1. Migration — Adicionar colunas multiprovider em `conversations`
+### 1. Migration — Criar RPC `ingest_channel_event`
 
-Novas colunas:
-- `channel_type` (text, default `'whatsapp'`) — tipo de canal (whatsapp, voice, portal)
-- `provider` (text, nullable) — provider usado (evolution, gupshup, wuzapi, meta)
-- `endpoint_id` (uuid, nullable) — referência genérica ao endpoint (hoje = whatsapp_instances.id, equivalente a instance_id)
-- `last_message_content` (text, nullable) — preview denormalizado
-- `last_message_type` (text, nullable) — tipo da última mensagem
-- `last_message_direction` (text, nullable) — direction da última mensagem
+Função PostgreSQL `SECURITY DEFINER` que recebe um payload canônico e executa tudo em uma transação:
 
-### 2. Migration — Adicionar colunas multiprovider em `chat_messages`
+```text
+ingest_channel_event(
+  _tenant_id uuid,
+  _endpoint_id uuid,
+  _channel_type text,        -- 'whatsapp', 'voice', etc.
+  _provider text,             -- 'evolution', 'gupshup', 'wuzapi', 'meta'
+  _remote_phone text,
+  _remote_name text,
+  _direction text,            -- 'inbound' | 'outbound'
+  _message_type text,         -- 'text', 'image', 'audio', etc.
+  _content text,
+  _media_url text,
+  _media_mime_type text,
+  _external_id text,
+  _provider_message_id text,
+  _actor_type text,           -- 'human', 'ai', 'system', 'campaign'
+  _status text                -- 'sent', 'delivered', etc.
+)
+RETURNS jsonb  -- { conversation_id, message_id, is_new_conversation, client_id, skipped_duplicate }
+```
 
-Novas colunas:
-- `provider` (text, nullable) — provider que processou esta mensagem
-- `provider_message_id` (text, nullable) — ID no provider (separado do external_id)
-- `endpoint_id` (uuid, nullable) — endpoint que processou
-- `actor_type` (text, default `'human'`) — quem enviou (human, ai, system, campaign)
+Lógica interna (em ordem):
+1. **Resolver cliente** — chama `resolve_client_by_phone` (Fase 2)
+2. **Resolver conversa** — busca por `(tenant_id, endpoint_id, remote_phone)` ou cria nova
+3. **Fluxo de status** — closed→waiting (inbound), waiting→open não muda, etc.
+4. **Deduplicação** — INSERT com `ON CONFLICT (tenant_id, external_id)` DO NOTHING, retorna `skipped_duplicate = true`
+5. **Gravar mensagem** — INSERT em `chat_messages` com provider, endpoint_id, actor_type
+6. **Atualizar resumo** — `last_message_content/type/direction/at`, `unread_count`
+7. **SLA** — calcula por credor → fallback tenant
+8. **Round-robin** — atribuição para novas conversas inbound (consulta `operator_instances` + count)
 
-### 3. Migration — Constraint UNIQUE para idempotência
+### 2. Refatorar `whatsapp-webhook/index.ts`
 
-- `conversations`: UNIQUE em `(tenant_id, instance_id, remote_phone)` — **limpar duplicatas primeiro** se existirem
-- `chat_messages`: UNIQUE parcial em `(tenant_id, external_id)` WHERE `external_id IS NOT NULL` — elimina race condition na dedup
+Reduzir de ~385 linhas para ~100 linhas:
+- Manter parsing do payload Evolution (connection.update, messages.upsert, messages.update)
+- Transformar payload Evolution → payload canônico
+- Chamar `supabase.rpc('ingest_channel_event', {...})`
+- Manter handler de `connection.update` como está (não é ingestão de mensagem)
+- Manter handler de `messages.update` (status updates) — chamar um UPDATE simples por `external_id`
+- Remover: `findClientByPhone`, `getSlaMinutes`, `assignRoundRobin`, toda a lógica de conversation management
 
-### 4. Migration — Trigger de denormalização de última mensagem
+### 3. Refatorar `gupshup-webhook/index.ts`
 
-Criar trigger `AFTER INSERT` em `chat_messages` (quando `is_internal = false`) que atualiza `conversations` com:
-- `last_message_content` = conteúdo truncado (primeiros 200 chars)
-- `last_message_type` = message_type
-- `last_message_direction` = direction
-- `last_message_at` = created_at
+Transformar de "log-only" em webhook funcional:
+- Parsear payload Gupshup (inbound messages + status updates)
+- Para inbound: transformar em payload canônico → chamar `ingest_channel_event`
+- Para status: atualizar `chat_messages.status` por `external_id`
+- Manter atualização de `message_logs` existente como fallback
 
-### 5. Migration — Popular colunas existentes
+### 4. Refatorar `send-bulk-whatsapp/index.ts` → `ensureConversationAndMessage`
 
-- Preencher `channel_type = 'whatsapp'` para todas conversations existentes
-- Copiar `instance_id` → `endpoint_id` para todas conversations
-- Popular `provider` em conversations a partir de `whatsapp_instances.provider`
-- Popular `last_message_*` com dados atuais de `chat_messages`
+Substituir a implementação local por chamada à mesma RPC `ingest_channel_event` com `direction = 'outbound'` e `actor_type = 'campaign'`.
 
-### 6. Frontend — Usar denormalização na inbox
+### 5. Documentação
 
-Atualizar `conversationService.ts` → `fetchConversations()`:
-- Remover a batch query em `chat_messages` para buscar preview
-- Usar diretamente `last_message_content`, `last_message_type`, `last_message_direction` da conversa
-
-### 7. Documentação
-
-Criar `docs/MULTICHANNEL_PHASE3_CANONICAL_CORE.md`
-
----
+Criar `docs/MULTICHANNEL_PHASE4_INGESTION_RPC.md`
 
 ## Arquivos Alterados
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL (1) | Colunas multiprovider em conversations + chat_messages |
-| Migration SQL (2) | UNIQUE constraints + limpeza de duplicatas |
-| Migration SQL (3) | Trigger denormalização última mensagem |
-| Migration SQL (4) | Popular dados existentes |
-| `src/services/conversationService.ts` | Remover batch query de preview, usar colunas denormalizadas |
-| `docs/MULTICHANNEL_PHASE3_CANONICAL_CORE.md` | Documentação |
+| Migration SQL | Criar RPC `ingest_channel_event` |
+| `supabase/functions/whatsapp-webhook/index.ts` | Refatorar para parser + chamada RPC |
+| `supabase/functions/gupshup-webhook/index.ts` | Transformar em webhook funcional com ingestão |
+| `supabase/functions/send-bulk-whatsapp/index.ts` | Substituir `ensureConversationAndMessage` por chamada RPC |
+| `docs/MULTICHANNEL_PHASE4_INGESTION_RPC.md` | Documentação |
 
 ## Sem alteração em
 
-- `whatsapp-webhook/index.ts` — será refatorado na Fase 4 (RPC de ingestão)
-- `gupshup-webhook/index.ts` — idem
-- `send-bulk-whatsapp/index.ts` — idem
-- Frontend de chat (WhatsAppChatLayout) — nenhuma alteração
+- Frontend — nenhuma alteração
+- `conversationService.ts` — envio manual será refatorado na Fase 5
+- `_shared/whatsapp-sender.ts` — motor de envio permanece (Fase 5 unifica)
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
-| Conversas duplicadas impedem UNIQUE constraint | Query para identificar e limpar antes de criar constraint |
-| Trigger de denormalização pode impactar volume | Trigger simples (UPDATE de 3 colunas), custo mínimo |
-| Colunas novas nullable para não quebrar inserts existentes | Todos os novos campos são nullable ou têm defaults |
+| RPC complexa pode falhar silenciosamente | Retorno jsonb detalhado com status de cada etapa |
+| Round-robin dentro do PostgreSQL | Usa mesma lógica atual (count conversations por operador) — funcional até Fase 9 |
+| Gupshup inbound nunca foi testado com conversas | Começar com logs detalhados, mesma estrutura validada do Evolution |
+| `send-bulk-whatsapp` muda de INSERT direto para RPC | A RPC faz exatamente o mesmo, com idempotência melhor |
 
 ## Resultado
 
-- Modelo canônico de conversa e mensagem pronto para qualquer provider/canal
-- Idempotência real via constraints (fim das race conditions)
-- Inbox 2x mais rápida (sem query extra para preview)
-- Zero breaking changes na operação atual
+- **Uma única fonte de verdade** para ingestão de mensagens
+- Webhooks viram apenas **parsers de payload** (~100 linhas cada)
+- Gupshup inbound **funcional** na inbox
+- Campanhas usam o **mesmo pipeline**
+- Adicionar novo provider = apenas criar novo parser de payload
+- Transacionalidade real (sem race conditions)
 
