@@ -132,73 +132,46 @@ export async function sendTextMessage(
   conversationId: string,
   tenantId: string,
   content: string,
-  instanceName: string,
+  _instanceName: string,
   replyToMessageId?: string | null
 ): Promise<ChatMessage> {
-  // Get conversation phone + status
-  const { data: conv } = await supabase
-    .from("conversations" as any)
-    .select("remote_phone, status")
-    .eq("id", conversationId)
-    .eq("tenant_id", tenantId)
-    .single();
-
-  if (!conv) throw new Error("Conversa não encontrada");
-  const phone = (conv as any).remote_phone;
-  const convStatus = (conv as any).status;
-
-  // Send via evolution-proxy
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
   if (!token) throw new Error("Não autenticado");
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const resp = await fetch(`${supabaseUrl}/functions/v1/evolution-proxy?action=sendMessage`, {
+  const resp = await fetch(`${supabaseUrl}/functions/v1/send-chat-message`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ instanceName, phone, message: content }),
+    body: JSON.stringify({
+      conversationId,
+      content,
+      replyToMessageId: replyToMessageId || undefined,
+    }),
   });
 
   const result = await resp.json();
   if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mensagem");
 
-  // Insert local message
-  const insertData: any = {
+  // Return a ChatMessage-compatible object for the UI
+  return {
+    id: result.message_id || crypto.randomUUID(),
     conversation_id: conversationId,
     tenant_id: tenantId,
     direction: "outbound",
     message_type: "text",
     content,
+    media_url: null,
+    media_mime_type: null,
     status: "sent",
-    external_id: result?.key?.id || null,
-  };
-  if (replyToMessageId) {
-    insertData.reply_to_message_id = replyToMessageId;
-  }
-
-  const { data: msg, error } = await supabase
-    .from("chat_messages" as any)
-    .insert(insertData)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // Update conversation last_message_at + auto-accept if waiting
-  const updatePayload: any = { last_message_at: new Date().toISOString() };
-  if (convStatus === "waiting") {
-    updatePayload.status = "open";
-  }
-
-  await supabase
-    .from("conversations" as any)
-    .update(updatePayload)
-    .eq("id", conversationId);
-
-  return msg as unknown as ChatMessage;
+    external_id: result.provider_message_id || null,
+    is_internal: false,
+    reply_to_message_id: replyToMessageId || null,
+    created_at: new Date().toISOString(),
+  } as ChatMessage;
 }
 
 export async function updateConversationStatus(id: string, status: string) {
