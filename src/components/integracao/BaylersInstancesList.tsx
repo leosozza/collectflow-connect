@@ -10,10 +10,10 @@ import {
   deleteWhatsAppInstance,
   setDefaultInstance,
   createEvolutionInstance,
-  connectEvolutionInstance,
-  getEvolutionInstanceStatus,
-  deleteEvolutionInstance,
-  setEvolutionWebhook,
+  connectInstance,
+  getInstanceStatus,
+  deleteInstanceRemote,
+  setInstanceWebhook,
   WhatsAppInstance,
 } from "@/services/whatsappInstanceService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,7 +111,7 @@ const BaylersInstancesList = () => {
       const isFirst = instances.length === 0;
       const isUnofficial = data.providerCategory === "unofficial";
 
-      await createWhatsAppInstance({
+      const created = await createWhatsAppInstance({
         name: data.name,
         instance_name: instanceName,
         instance_url: "",
@@ -138,9 +138,9 @@ const BaylersInstancesList = () => {
       setFormOpen(false);
       toast({ title: "Instância criada!" });
 
-      // Auto-configure webhook
+      // Auto-configure webhook via unified proxy
       try {
-        await setEvolutionWebhook(instanceName);
+        await setInstanceWebhook(created.id);
         toast({ title: "Webhook configurado automaticamente!" });
       } catch {
         toast({ title: "Aviso", description: "Instância criada, mas webhook não pôde ser configurado. Use o botão de webhook manualmente.", variant: "destructive" });
@@ -170,7 +170,7 @@ const BaylersInstancesList = () => {
   const startPolling = useCallback((inst: WhatsAppInstance) => {
     stopPolling();
     setQrConnected(false);
-    pollingInstanceRef.current = inst.instance_name;
+    pollingInstanceRef.current = inst.id;
     let elapsed = 0;
     pollingRef.current = setInterval(async () => {
       elapsed += 5000;
@@ -180,7 +180,7 @@ const BaylersInstancesList = () => {
         return;
       }
       try {
-        const result = await getEvolutionInstanceStatus(inst.instance_name);
+        const result = await getInstanceStatus(inst.id);
         const state = result?.instance?.state || result?.state || "unknown";
         setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
         if (state === "open") {
@@ -218,7 +218,7 @@ const BaylersInstancesList = () => {
   const handleConnect = async (inst: WhatsAppInstance) => {
     setLoadingQr((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      const result = await connectEvolutionInstance(inst.instance_name);
+      const result = await connectInstance(inst.id);
       const qr = result?.base64 || result?.qrcode?.base64 || result?.code;
       if (qr) {
         setQrCodeData(qr);
@@ -235,7 +235,7 @@ const BaylersInstancesList = () => {
       }
       // Auto-configure webhook after connect
       try {
-        await setEvolutionWebhook(inst.instance_name);
+        await setInstanceWebhook(inst.id);
       } catch {
         // silent
       }
@@ -248,7 +248,7 @@ const BaylersInstancesList = () => {
 
   const handleSetWebhook = async (inst: WhatsAppInstance) => {
     try {
-      await setEvolutionWebhook(inst.instance_name);
+      await setInstanceWebhook(inst.id);
       toast({ title: "Webhook configurado com sucesso!" });
     } catch (err: any) {
       toast({ title: "Erro ao configurar webhook", description: err.message, variant: "destructive" });
@@ -258,7 +258,7 @@ const BaylersInstancesList = () => {
   const handleCheckStatus = async (inst: WhatsAppInstance) => {
     setLoadingStatus((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      const result = await getEvolutionInstanceStatus(inst.instance_name);
+      const result = await getInstanceStatus(inst.id);
       const state = result?.instance?.state || result?.state || "unknown";
       setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
 
@@ -293,11 +293,11 @@ const BaylersInstancesList = () => {
   const handleDelete = async () => {
     if (!deleteTarget || !tenant) return;
     try {
-      // Delete from Evolution API first (best effort)
+      // Delete from remote provider first (best effort)
       try {
-        await deleteEvolutionInstance(deleteTarget.instance_name);
+        await deleteInstanceRemote(deleteTarget.id);
       } catch {
-        // Ignore Evolution API errors on delete
+        // Ignore remote API errors on delete
       }
       await deleteWhatsAppInstance(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
@@ -530,7 +530,7 @@ const BaylersInstancesList = () => {
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
-                  A instância <strong>"{deleteTarget?.name || deleteTarget?.instance_name}"</strong> será removida do sistema e da Evolution API.
+                  A instância <strong>"{deleteTarget?.name || deleteTarget?.instance_name}"</strong> será removida do sistema e do provedor remoto.
                 </p>
                 {deleteTarget && (conversationCounts[deleteTarget.id] || 0) > 0 && (
                   <p className="text-amber-600 dark:text-amber-400 font-medium">

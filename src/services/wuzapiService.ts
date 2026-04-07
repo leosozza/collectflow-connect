@@ -1,13 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import {
-  connectInstance,
-  getInstanceQrCode,
-  getInstanceStatus,
-  disconnectInstance,
-  setInstanceWebhook,
-} from "@/services/whatsappInstanceService";
 
-// Legacy WuzAPI-specific functions — redirect to unified proxy
+// WuzAPI-specific: only user creation remains provider-specific
 
 async function callWuzapiProxy(action: string, body: Record<string, any>) {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -34,25 +27,4 @@ async function callWuzapiProxy(action: string, body: Record<string, any>) {
 /** Create WuzAPI user (provider-specific, needs serverUrl + adminToken) */
 export async function createWuzapiUser(serverUrl: string, adminToken: string, userId: string, userPassword: string) {
   return callWuzapiProxy("create", { serverUrl, adminToken, userId, userPassword });
-}
-
-// Unified proxy redirects
-export async function connectWuzapiInstance(instanceId: string) {
-  return connectInstance(instanceId);
-}
-
-export async function getWuzapiQrCode(instanceId: string) {
-  return getInstanceQrCode(instanceId);
-}
-
-export async function getWuzapiStatus(instanceId: string) {
-  return getInstanceStatus(instanceId);
-}
-
-export async function disconnectWuzapiInstance(instanceId: string) {
-  return disconnectInstance(instanceId);
-}
-
-export async function setWuzapiWebhook(instanceId: string) {
-  return setInstanceWebhook(instanceId);
 }

@@ -9,15 +9,13 @@ import {
   updateWhatsAppInstance,
   deleteWhatsAppInstance,
   setDefaultInstance,
+  connectInstance,
+  getInstanceQrCode,
+  getInstanceStatus,
+  disconnectInstance,
+  setInstanceWebhook,
   WhatsAppInstance,
 } from "@/services/whatsappInstanceService";
-import {
-  connectWuzapiInstance,
-  getWuzapiQrCode,
-  getWuzapiStatus,
-  disconnectWuzapiInstance,
-  setWuzapiWebhook,
-} from "@/services/wuzapiService";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -156,8 +154,9 @@ const WuzApiInstancesList = () => {
         return;
       }
       try {
-        const result = await getWuzapiStatus(inst.id);
-        const state = result?.Connected ? "open" : "disconnected";
+        const result = await getInstanceStatus(inst.id);
+        // Unified proxy normalizes to { instance: { state } }
+        const state = result?.instance?.state || "disconnected";
         setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
         if (state === "open") {
           stopPolling();
@@ -188,9 +187,9 @@ const WuzApiInstancesList = () => {
   const handleConnect = async (inst: WhatsAppInstance) => {
     setLoadingQr((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      await connectWuzapiInstance(inst.id);
-      // Get QR code
-      const qrResult = await getWuzapiQrCode(inst.id);
+      await connectInstance(inst.id);
+      // Get QR code via unified proxy
+      const qrResult = await getInstanceQrCode(inst.id);
       const qr = qrResult?.QRCode || qrResult?.qrcode || qrResult?.code;
       if (qr) {
         setQrCodeData(qr);
@@ -201,7 +200,7 @@ const WuzApiInstancesList = () => {
       }
       // Auto webhook
       try {
-        await setWuzapiWebhook(inst.id);
+        await setInstanceWebhook(inst.id);
       } catch { /* silent */ }
     } catch (err: any) {
       toast({ title: "Erro ao conectar", description: err.message, variant: "destructive" });
@@ -213,8 +212,9 @@ const WuzApiInstancesList = () => {
   const handleCheckStatus = async (inst: WhatsAppInstance) => {
     setLoadingStatus((prev) => ({ ...prev, [inst.id]: true }));
     try {
-      const result = await getWuzapiStatus(inst.id);
-      const state = result?.Connected ? "open" : "disconnected";
+      const result = await getInstanceStatus(inst.id);
+      // Unified proxy normalizes to { instance: { state } }
+      const state = result?.instance?.state || "disconnected";
       setStatusMap((prev) => ({ ...prev, [inst.id]: state }));
     } catch {
       setStatusMap((prev) => ({ ...prev, [inst.id]: "error" }));
@@ -242,7 +242,7 @@ const WuzApiInstancesList = () => {
     if (!deleteTarget || !tenant) return;
     try {
       try {
-        await disconnectWuzapiInstance(deleteTarget.id);
+        await disconnectInstance(deleteTarget.id);
       } catch { /* ignore */ }
       await deleteWhatsAppInstance(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instances", tenant.id] });
@@ -255,7 +255,7 @@ const WuzApiInstancesList = () => {
 
   const handleSetWebhook = async (inst: WhatsAppInstance) => {
     try {
-      await setWuzapiWebhook(inst.id);
+      await setInstanceWebhook(inst.id);
       toast({ title: "Webhook configurado com sucesso!" });
     } catch (err: any) {
       toast({ title: "Erro ao configurar webhook", description: err.message, variant: "destructive" });
