@@ -13,6 +13,7 @@ import {
   fetchMessages,
   fetchQuickReplies,
   sendTextMessage,
+  sendMediaMessage,
   sendInternalNote,
   updateConversationStatus,
   markConversationRead,
