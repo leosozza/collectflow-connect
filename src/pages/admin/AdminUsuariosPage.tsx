@@ -47,6 +47,10 @@ const AdminUsuariosPage = () => {
       toast.error("A senha deve ter pelo menos 6 caracteres");
       return;
     }
+    if (userType === "tenant" && !selectedTenantId) {
+      toast.error("Selecione a empresa para o usuário de tenant");
+      return;
+    }
     setCreating(true);
     try {
       const body: Record<string, unknown> = {
@@ -55,23 +59,34 @@ const AdminUsuariosPage = () => {
         password: newPassword,
         role: newRole,
       };
-      if (selectedTenantId !== "none") {
+      if (userType === "tenant") {
         body.tenant_id = selectedTenantId;
       }
       const result = await invokeCreateUser(body);
       showEdgeFunctionResult(result, newName.trim());
       queryClient.invalidateQueries({ queryKey: ["sa-all-users"] });
-      setNewOpen(false);
-      setNewName("");
-      setNewEmail("");
-      setNewPassword("");
-      setNewRole("operador");
-      setSelectedTenantId("none");
+      resetForm();
     } catch (err: any) {
       toast.error(handleEdgeFunctionError(err));
     } finally {
       setCreating(false);
     }
+  };
+
+  const resetForm = () => {
+    setNewOpen(false);
+    setNewName("");
+    setNewEmail("");
+    setNewPassword("");
+    setNewRole(userType === "rivo" ? "admin" : "operador");
+    setSelectedTenantId("");
+    setUserType("tenant");
+  };
+
+  const handleUserTypeChange = (type: UserType) => {
+    setUserType(type);
+    setNewRole(type === "rivo" ? "admin" : "operador");
+    setSelectedTenantId("");
   };
 
   return (
