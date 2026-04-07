@@ -6,6 +6,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Normalize Brazilian phone to E.164 (13 digits: 55 + DDD + 9 digits) */
+function normalizeToE164(digits: string): string | null {
+  if (digits.length < 10) return null;
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return "55" + digits.slice(2, 4) + "9" + digits.slice(4);
+  }
+  if (digits.length === 11) return "55" + digits;
+  if (digits.length === 10) return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
+  return digits.startsWith("55") ? digits : "55" + digits;
+}
+
 /** Fetch with timeout */
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000): Promise<Response> {
   const controller = new AbortController();
