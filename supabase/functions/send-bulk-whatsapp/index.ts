@@ -3,7 +3,7 @@ import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { resolveTemplate } from "../_shared/template-resolver.ts";
 import { logMessage } from "../_shared/message-logger.ts";
 
-// ===== Helper: persist conversation + outbound message in CRM =====
+// ===== Helper: persist conversation + outbound message via canonical RPC =====
 async function ensureConversationAndMessage(
   supabase: any,
   tenantId: string,
@@ -13,71 +13,30 @@ async function ensureConversationAndMessage(
   clientId: string | null,
   messageBody: string,
   providerMessageId: string | null,
+  provider?: string,
 ) {
   try {
-    // Normalize phone for remote_phone (strip 55 prefix for display, keep full)
-    const remotePhone = normalizedPhone.replace(/\D/g, "");
-
-    // Try to find existing conversation
-    let query = supabase
-      .from("conversations")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("remote_phone", remotePhone);
-
-    if (instanceId) {
-      query = query.eq("instance_id", instanceId);
-    }
-
-    const { data: existing } = await query.limit(1).maybeSingle();
-
-    let conversationId: string;
-    const now = new Date().toISOString();
-
-    if (existing) {
-      conversationId = existing.id;
-      // Update last_message_at
-      await supabase
-        .from("conversations")
-        .update({ last_message_at: now, updated_at: now })
-        .eq("id", conversationId);
-    } else {
-      // Create new conversation
-      const insertData: any = {
-        tenant_id: tenantId,
-        remote_phone: remotePhone,
-        remote_name: recipientName || remotePhone,
-        status: "open",
-        last_message_at: now,
-        unread_count: 0,
-      };
-      if (instanceId) insertData.instance_id = instanceId;
-      if (clientId) insertData.client_id = clientId;
-
-      const { data: newConv, error: convErr } = await supabase
-        .from("conversations")
-        .insert(insertData)
-        .select("id")
-        .single();
-
-      if (convErr) {
-        console.error("Error creating conversation:", convErr);
-        return;
-      }
-      conversationId = newConv.id;
-    }
-
-    // Insert outbound message
-    await supabase.from("chat_messages").insert({
-      conversation_id: conversationId,
-      tenant_id: tenantId,
-      direction: "outbound",
-      content: messageBody,
-      message_type: "text",
-      status: "sent",
-      external_id: providerMessageId || null,
-      is_internal: false,
+    const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
+      _tenant_id: tenantId,
+      _endpoint_id: instanceId,
+      _channel_type: "whatsapp",
+      _provider: provider || null,
+      _remote_phone: normalizedPhone,
+      _remote_name: recipientName || normalizedPhone,
+      _direction: "outbound",
+      _message_type: "text",
+      _content: messageBody,
+      _media_url: null,
+      _media_mime_type: null,
+      _external_id: providerMessageId || null,
+      _provider_message_id: providerMessageId || null,
+      _actor_type: "campaign",
+      _status: "sent",
     });
+
+    if (rpcErr) {
+      console.error("ingest_channel_event error:", rpcErr);
+    }
   } catch (err) {
     console.error("ensureConversationAndMessage error:", err);
   }
