@@ -216,6 +216,7 @@ const AdminUsuariosPage = () => {
                 </Select>
               </div>
             )}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => resetForm()}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={creating}>
