@@ -356,48 +356,7 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "sendMessage": {
-        const { instanceName, phone, message, mediaUrl, mediaType } = body;
-        if (!instanceName || !phone) {
-          return new Response(JSON.stringify({ error: "instanceName e phone são obrigatórios" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        const payload: any = {
-          number: phone.includes("@") ? phone : `${phone}@s.whatsapp.net`,
-        };
-
-        let endpoint = "sendText";
-        if (mediaUrl && mediaType) {
-          endpoint = "sendMedia";
-          payload.mediatype = mediaType;
-          payload.media = mediaUrl;
-          payload.caption = message || "";
-        } else {
-          payload.text = message || "";
-        }
-
-        const resp = await fetchEvo(`${baseUrl}/message/${endpoint}/${encodeURIComponent(instanceName)}`, {
-          method: "POST",
-          headers: {
-            apikey: evolutionKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        result = await resp.json();
-
-        if (!resp.ok) {
-          return new Response(JSON.stringify({ error: result?.message || "Erro ao enviar mensagem", details: result }), {
-            status: resp.status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        break;
-      }
+      // sendMessage removed — use send-chat-message Edge Function (Phase 5/6)
 
       case "setWebhook": {
         const { instanceName, webhookUrl } = body;
@@ -437,7 +396,7 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, restart, status, delete, sendMessage, setWebhook" }), {
+        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, restart, status, delete, setWebhook" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

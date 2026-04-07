@@ -74,7 +74,66 @@ export async function setDefaultInstance(id: string, tenantId: string): Promise<
   if (error) throw error;
 }
 
-// --- Evolution API proxy functions ---
+// ============ Unified Instance Proxy ============
+
+async function callInstanceProxy(action: string, body: Record<string, any>) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error("Não autenticado");
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/instance-proxy?action=${action}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const result = await resp.json();
+  if (!resp.ok) {
+    throw new Error(result?.error || `Erro na ação ${action}`);
+  }
+  return result;
+}
+
+/** Connect instance and get QR code (any provider) */
+export async function connectInstance(instanceId: string) {
+  return callInstanceProxy("connect", { instanceId });
+}
+
+/** Get QR code for instance (any provider) */
+export async function getInstanceQrCode(instanceId: string) {
+  return callInstanceProxy("qrcode", { instanceId });
+}
+
+/** Get connection status (any provider) — returns normalized { instance: { state } } */
+export async function getInstanceStatus(instanceId: string) {
+  return callInstanceProxy("status", { instanceId });
+}
+
+/** Restart instance connection (any provider) */
+export async function restartInstance(instanceId: string) {
+  return callInstanceProxy("restart", { instanceId });
+}
+
+/** Disconnect instance (any provider) */
+export async function disconnectInstance(instanceId: string) {
+  return callInstanceProxy("disconnect", { instanceId });
+}
+
+/** Delete instance from remote provider (any provider) */
+export async function deleteInstanceRemote(instanceId: string) {
+  return callInstanceProxy("delete", { instanceId });
+}
+
+/** Configure webhook for instance (any provider) */
+export async function setInstanceWebhook(instanceId: string) {
+  return callInstanceProxy("setWebhook", { instanceId });
+}
+
+// ============ Legacy Evolution API proxy (only for create) ============
 
 async function callEvolutionProxy(action: string, body: Record<string, any>) {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -98,27 +157,34 @@ async function callEvolutionProxy(action: string, body: Record<string, any>) {
   return result;
 }
 
+/** Create Evolution/Baylers instance (provider-specific, needs instanceName) */
 export async function createEvolutionInstance(instanceName: string) {
   return callEvolutionProxy("create", { instanceName });
 }
 
+// Legacy aliases — redirect to unified proxy
 export async function connectEvolutionInstance(instanceName: string) {
+  console.warn("[DEPRECATED] connectEvolutionInstance: use connectInstance(instanceId) instead");
   return callEvolutionProxy("connect", { instanceName });
 }
 
 export async function getEvolutionInstanceStatus(instanceName: string) {
+  console.warn("[DEPRECATED] getEvolutionInstanceStatus: use getInstanceStatus(instanceId) instead");
   return callEvolutionProxy("status", { instanceName });
 }
 
 export async function deleteEvolutionInstance(instanceName: string) {
+  console.warn("[DEPRECATED] deleteEvolutionInstance: use deleteInstanceRemote(instanceId) instead");
   return callEvolutionProxy("delete", { instanceName });
 }
 
 export async function restartEvolutionInstance(instanceName: string) {
+  console.warn("[DEPRECATED] restartEvolutionInstance: use restartInstance(instanceId) instead");
   return callEvolutionProxy("restart", { instanceName });
 }
 
 export async function setEvolutionWebhook(instanceName: string) {
+  console.warn("[DEPRECATED] setEvolutionWebhook: use setInstanceWebhook(instanceId) instead");
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
   return callEvolutionProxy("setWebhook", { instanceName, webhookUrl });
