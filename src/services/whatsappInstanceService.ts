@@ -133,7 +133,7 @@ export async function setInstanceWebhook(instanceId: string) {
   return callInstanceProxy("setWebhook", { instanceId });
 }
 
-// ============ Legacy Evolution API proxy (only for create) ============
+// ============ Evolution API proxy (only for create) ============
 
 async function callEvolutionProxy(action: string, body: Record<string, any>) {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -160,32 +160,4 @@ async function callEvolutionProxy(action: string, body: Record<string, any>) {
 /** Create Evolution/Baylers instance (provider-specific, needs instanceName) */
 export async function createEvolutionInstance(instanceName: string) {
   return callEvolutionProxy("create", { instanceName });
-}
-
-// Legacy aliases — redirect to unified proxy
-export async function connectEvolutionInstance(instanceName: string) {
-  console.warn("[DEPRECATED] connectEvolutionInstance: use connectInstance(instanceId) instead");
-  return callEvolutionProxy("connect", { instanceName });
-}
-
-export async function getEvolutionInstanceStatus(instanceName: string) {
-  console.warn("[DEPRECATED] getEvolutionInstanceStatus: use getInstanceStatus(instanceId) instead");
-  return callEvolutionProxy("status", { instanceName });
-}
-
-export async function deleteEvolutionInstance(instanceName: string) {
-  console.warn("[DEPRECATED] deleteEvolutionInstance: use deleteInstanceRemote(instanceId) instead");
-  return callEvolutionProxy("delete", { instanceName });
-}
-
-export async function restartEvolutionInstance(instanceName: string) {
-  console.warn("[DEPRECATED] restartEvolutionInstance: use restartInstance(instanceId) instead");
-  return callEvolutionProxy("restart", { instanceName });
-}
-
-export async function setEvolutionWebhook(instanceName: string) {
-  console.warn("[DEPRECATED] setEvolutionWebhook: use setInstanceWebhook(instanceId) instead");
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
-  return callEvolutionProxy("setWebhook", { instanceName, webhookUrl });
 }
