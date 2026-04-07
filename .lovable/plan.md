@@ -1,95 +1,111 @@
 
 
-# FASE 2 — Identidade de Contato e Telefone como Camada Oficial
+# FASE 3 — Core Canônico de Conversa e Mensagem
 
 ## Situação Atual
 
-- Tabela `client_phones` existe mas está **vazia** (0 registros)
-- `clients` tem **169.757 registros** com phones (maioria 11 dígitos DDD+9)
-- Tabela `client_phones` usa `cpf` como vínculo (não `client_id`) — correto para o modelo agrupado por CPF/credor
-- Já tem UNIQUE em `(tenant_id, cpf, phone_number)` e índice em `(tenant_id, cpf, priority)`
-- **Faltam**: colunas normalizadas para lookup rápido e dados populados
+### `conversations` (145 registros: 89 waiting, 56 open)
+- **14 colunas** — sem `channel_type`, `provider`, `endpoint_id`, sem denormalização de última mensagem
+- **Sem constraint UNIQUE** em `(tenant_id, instance_id, remote_phone)` — deduplicação apenas por query
+- `instance_id` aponta para `whatsapp_instances` — funcional mas acoplado ao nome "whatsapp"
+- Inbox faz **query extra** em `chat_messages` para buscar preview da última mensagem (batch de até 50 IDs)
+
+### `chat_messages` (802 registros)
+- **13 colunas** — sem `provider`, `provider_message_id`, `actor_type`
+- `external_id` **sem UNIQUE constraint** — deduplicação por SELECT antes de INSERT (race condition)
+- Sem rastreabilidade de qual provider/endpoint enviou/recebeu
+
+### `whatsapp_instances`
+- Já tem `provider`, `provider_category`, capabilities (`supports_*`) — boa base para endpoint
+
+### Frontend (`conversationService.ts`)
+- `fetchConversations()` faz join com `clients(nome_completo)` + batch query em `chat_messages` para preview
+- Com denormalização, essa segunda query desaparece
+
+---
 
 ## O Que Será Feito
 
-### 1. Migration SQL — Adicionar colunas normalizadas + índices
+### 1. Migration — Adicionar colunas multiprovider em `conversations`
 
-Adicionar à tabela `client_phones`:
-- `phone_e164` (text) — formato internacional `5511999887766`
-- `phone_last8` (text) — últimos 8 dígitos para fallback
-- `phone_last10` (text) — últimos 10 dígitos
-- `client_id` (uuid, nullable, FK → clients) — link direto opcional
+Novas colunas:
+- `channel_type` (text, default `'whatsapp'`) — tipo de canal (whatsapp, voice, portal)
+- `provider` (text, nullable) — provider usado (evolution, gupshup, wuzapi, meta)
+- `endpoint_id` (uuid, nullable) — referência genérica ao endpoint (hoje = whatsapp_instances.id, equivalente a instance_id)
+- `last_message_content` (text, nullable) — preview denormalizado
+- `last_message_type` (text, nullable) — tipo da última mensagem
+- `last_message_direction` (text, nullable) — direction da última mensagem
 
-Criar índices:
-- `(tenant_id, phone_e164)` — match exato
-- `(tenant_id, phone_last8)` — fallback por sufixo
+### 2. Migration — Adicionar colunas multiprovider em `chat_messages`
 
-### 2. Migration SQL — Migrar dados de `clients.phone/phone2/phone3`
+Novas colunas:
+- `provider` (text, nullable) — provider que processou esta mensagem
+- `provider_message_id` (text, nullable) — ID no provider (separado do external_id)
+- `endpoint_id` (uuid, nullable) — endpoint que processou
+- `actor_type` (text, default `'human'`) — quem enviou (human, ai, system, campaign)
 
-Inserir em `client_phones` todos os telefones existentes com normalização:
-- Telefones de 10-11 dígitos → `phone_e164` = `55` + telefone (13 dígitos, com 9° dígito inserido se necessário)
-- `phone_last8` e `phone_last10` calculados automaticamente
-- `priority`: phone=1, phone2=2, phone3=3
-- `is_whatsapp`: true para phone (priority 1)
-- `source`: `'migration'`
-- `client_id`: linkado ao `clients.id` correspondente
-- Respeitar o UNIQUE existente (ON CONFLICT DO NOTHING)
+### 3. Migration — Constraint UNIQUE para idempotência
 
-### 3. Função RPC — `resolve_client_by_phone`
+- `conversations`: UNIQUE em `(tenant_id, instance_id, remote_phone)` — **limpar duplicatas primeiro** se existirem
+- `chat_messages`: UNIQUE parcial em `(tenant_id, external_id)` WHERE `external_id IS NOT NULL` — elimina race condition na dedup
 
-Criar função PostgreSQL `SECURITY DEFINER`:
-```text
-resolve_client_by_phone(_tenant_id uuid, _phone text)
-→ RETURNS TABLE(client_id uuid, cpf text, phone_e164 text, priority int)
-```
+### 4. Migration — Trigger de denormalização de última mensagem
 
-Lógica:
-1. Normalizar o input para e164
-2. Buscar match exato por `phone_e164`
-3. Se não encontrar, fallback por `phone_last8`
-4. Filtrar por `tenant_id`
-5. Ordenar por `priority ASC`
-6. Retornar primeiro resultado
+Criar trigger `AFTER INSERT` em `chat_messages` (quando `is_internal = false`) que atualiza `conversations` com:
+- `last_message_content` = conteúdo truncado (primeiros 200 chars)
+- `last_message_type` = message_type
+- `last_message_direction` = direction
+- `last_message_at` = created_at
 
-### 4. Trigger — Manter `client_phones` sincronizado
+### 5. Migration — Popular colunas existentes
 
-Criar trigger `AFTER INSERT OR UPDATE` em `clients` que sincroniza `phone`, `phone2`, `phone3` para `client_phones` automaticamente. Isso garante que novos imports e edições mantenham a tabela atualizada.
+- Preencher `channel_type = 'whatsapp'` para todas conversations existentes
+- Copiar `instance_id` → `endpoint_id` para todas conversations
+- Popular `provider` em conversations a partir de `whatsapp_instances.provider`
+- Popular `last_message_*` com dados atuais de `chat_messages`
 
-### 5. Atualizar enrichment (targetdata)
+### 6. Frontend — Usar denormalização na inbox
 
-Os webhooks de enriquecimento já populam `client_phones` — apenas adicionar o preenchimento das novas colunas (`phone_e164`, `phone_last8`, `phone_last10`).
+Atualizar `conversationService.ts` → `fetchConversations()`:
+- Remover a batch query em `chat_messages` para buscar preview
+- Usar diretamente `last_message_content`, `last_message_type`, `last_message_direction` da conversa
 
-### 6. NÃO alterar lookups existentes ainda
+### 7. Documentação
 
-O webhook e o `useClientByPhone` continuam usando o método antigo. A substituição será na Fase 4 (RPC de ingestão). Esta fase apenas **prepara a base**.
+Criar `docs/MULTICHANNEL_PHASE3_CANONICAL_CORE.md`
+
+---
 
 ## Arquivos Alterados
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL | Colunas + índices + migração de dados + trigger + RPC |
-| `supabase/functions/targetdata-enrich/index.ts` | Preencher `phone_e164`, `phone_last8`, `phone_last10` |
-| `supabase/functions/targetdata-webhook/index.ts` | Preencher `phone_e164`, `phone_last8`, `phone_last10` |
+| Migration SQL (1) | Colunas multiprovider em conversations + chat_messages |
+| Migration SQL (2) | UNIQUE constraints + limpeza de duplicatas |
+| Migration SQL (3) | Trigger denormalização última mensagem |
+| Migration SQL (4) | Popular dados existentes |
+| `src/services/conversationService.ts` | Remover batch query de preview, usar colunas denormalizadas |
+| `docs/MULTICHANNEL_PHASE3_CANONICAL_CORE.md` | Documentação |
 
 ## Sem alteração em
 
-- `whatsapp-webhook/index.ts` — mantém lookup antigo (será trocado na Fase 4)
-- `useClientByPhone.ts` — mantém lookup antigo
-- Frontend — nenhuma alteração
+- `whatsapp-webhook/index.ts` — será refatorado na Fase 4 (RPC de ingestão)
+- `gupshup-webhook/index.ts` — idem
+- `send-bulk-whatsapp/index.ts` — idem
+- Frontend de chat (WhatsAppChatLayout) — nenhuma alteração
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
-| Migração de ~170k × 3 = ~500k registros | INSERT com ON CONFLICT DO NOTHING, executado em SQL único |
-| Telefones com formato irregular (≤9 dígitos) | Filtrar: só migrar telefones ≥10 dígitos |
-| Trigger pode impactar imports em massa | Trigger é simples (upsert), custo mínimo |
+| Conversas duplicadas impedem UNIQUE constraint | Query para identificar e limpar antes de criar constraint |
+| Trigger de denormalização pode impactar volume | Trigger simples (UPDATE de 3 colunas), custo mínimo |
+| Colunas novas nullable para não quebrar inserts existentes | Todos os novos campos são nullable ou têm defaults |
 
 ## Resultado
 
-- `client_phones` populada com ~500k registros normalizados
-- Lookup por telefone escalável via índice (sem ILIKE)
-- RPC pronta para uso nas fases seguintes
-- Trigger garante sincronização automática
-- Zero impacto na operação atual
+- Modelo canônico de conversa e mensagem pronto para qualquer provider/canal
+- Idempotência real via constraints (fim das race conditions)
+- Inbox 2x mais rápida (sem query extra para preview)
+- Zero breaking changes na operação atual
 
