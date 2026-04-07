@@ -560,7 +560,7 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
         await ensureConversationAndMessage(
           supabase, tenantUser.tenant_id, inst?.id || null,
           phone, client.nome_completo, client.id, message,
-          sendResult.providerMessageId
+          sendResult.providerMessageId, sendResult.provider
         );
       } else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
 
