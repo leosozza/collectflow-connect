@@ -1293,10 +1293,14 @@ export type Database = {
       }
       client_phones: {
         Row: {
+          client_id: string | null
           cpf: string
           created_at: string | null
           id: string
           is_whatsapp: boolean | null
+          phone_e164: string | null
+          phone_last10: string | null
+          phone_last8: string | null
           phone_number: string
           phone_type: string | null
           priority: number | null
@@ -1306,10 +1310,14 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          client_id?: string | null
           cpf: string
           created_at?: string | null
           id?: string
           is_whatsapp?: boolean | null
+          phone_e164?: string | null
+          phone_last10?: string | null
+          phone_last8?: string | null
           phone_number: string
           phone_type?: string | null
           priority?: number | null
@@ -1319,10 +1327,14 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          client_id?: string | null
           cpf?: string
           created_at?: string | null
           id?: string
           is_whatsapp?: boolean | null
+          phone_e164?: string | null
+          phone_last10?: string | null
+          phone_last8?: string | null
           phone_number?: string
           phone_type?: string | null
           priority?: number | null
@@ -1332,6 +1344,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "client_phones_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_phones_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -6230,6 +6249,7 @@ export type Database = {
         }
         Returns: number
       }
+      normalize_phone_br: { Args: { _phone: string }; Returns: string }
       onboard_tenant: {
         Args: { _cnpj?: string; _name: string; _plan_id: string; _slug: string }
         Returns: string
@@ -6240,6 +6260,15 @@ export type Database = {
           message: Json
           msg_id: number
           read_ct: number
+        }[]
+      }
+      resolve_client_by_phone: {
+        Args: { _phone: string; _tenant_id: string }
+        Returns: {
+          client_id: string
+          cpf: string
+          phone_e164: string
+          priority: number
         }[]
       }
       seed_default_permission_profiles: {
