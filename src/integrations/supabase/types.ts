@@ -1054,46 +1054,58 @@ export type Database = {
       }
       chat_messages: {
         Row: {
+          actor_type: string
           content: string | null
           conversation_id: string
           created_at: string
           direction: string
+          endpoint_id: string | null
           external_id: string | null
           id: string
           is_internal: boolean
           media_mime_type: string | null
           media_url: string | null
           message_type: string
+          provider: string | null
+          provider_message_id: string | null
           reply_to_message_id: string | null
           status: string
           tenant_id: string
         }
         Insert: {
+          actor_type?: string
           content?: string | null
           conversation_id: string
           created_at?: string
           direction: string
+          endpoint_id?: string | null
           external_id?: string | null
           id?: string
           is_internal?: boolean
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
+          provider?: string | null
+          provider_message_id?: string | null
           reply_to_message_id?: string | null
           status?: string
           tenant_id: string
         }
         Update: {
+          actor_type?: string
           content?: string | null
           conversation_id?: string
           created_at?: string
           direction?: string
+          endpoint_id?: string | null
           external_id?: string | null
           id?: string
           is_internal?: boolean
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
+          provider?: string | null
+          provider_message_id?: string | null
           reply_to_message_id?: string | null
           status?: string
           tenant_id?: string
@@ -1899,11 +1911,17 @@ export type Database = {
       conversations: {
         Row: {
           assigned_to: string | null
+          channel_type: string
           client_id: string | null
           created_at: string
+          endpoint_id: string | null
           id: string
           instance_id: string | null
           last_message_at: string | null
+          last_message_content: string | null
+          last_message_direction: string | null
+          last_message_type: string | null
+          provider: string | null
           remote_name: string
           remote_phone: string
           sla_deadline_at: string | null
@@ -1915,11 +1933,17 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          channel_type?: string
           client_id?: string | null
           created_at?: string
+          endpoint_id?: string | null
           id?: string
           instance_id?: string | null
           last_message_at?: string | null
+          last_message_content?: string | null
+          last_message_direction?: string | null
+          last_message_type?: string | null
+          provider?: string | null
           remote_name?: string
           remote_phone: string
           sla_deadline_at?: string | null
@@ -1931,11 +1955,17 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          channel_type?: string
           client_id?: string | null
           created_at?: string
+          endpoint_id?: string | null
           id?: string
           instance_id?: string | null
           last_message_at?: string | null
+          last_message_content?: string | null
+          last_message_direction?: string | null
+          last_message_type?: string | null
+          provider?: string | null
           remote_name?: string
           remote_phone?: string
           sla_deadline_at?: string | null
