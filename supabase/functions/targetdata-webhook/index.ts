@@ -6,6 +6,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Normalize Brazilian phone to E.164 (13 digits: 55 + DDD + 9 digits) */
+function normalizeToE164(digits: string): string | null {
+  if (digits.length < 10) return null;
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return "55" + digits.slice(2, 4) + "9" + digits.slice(4);
+  }
+  if (digits.length === 11) return "55" + digits;
+  if (digits.length === 10) return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
+  return digits.startsWith("55") ? digits : "55" + digits;
+}
+
 /** Classify phone from Target Data contato.telefone[] entry */
 function classifyTdPhone(entry: any): { number: string; type: string; priority: number; isWhatsApp: boolean; raw: any } {
   const ddd = String(entry.nr_ddd || "").replace(/\D/g, "");
@@ -207,6 +219,10 @@ Deno.serve(async (req) => {
       if (tenantId) {
         for (let p = 0; p < allPhones.length; p++) {
           const phone = allPhones[p];
+          const digits = phone.number.replace(/\D/g, "");
+          const phoneE164 = normalizeToE164(digits);
+          const phoneLast8 = digits.slice(-8);
+          const phoneLast10 = digits.slice(-10);
           await supabase.from("client_phones").upsert(
             {
               tenant_id: tenantId,
@@ -217,6 +233,9 @@ Deno.serve(async (req) => {
               is_whatsapp: phone.isWhatsApp,
               source: "targetdata",
               raw_metadata: phone.raw || {},
+              phone_e164: phoneE164,
+              phone_last8: phoneLast8,
+              phone_last10: phoneLast10,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "tenant_id,cpf,phone_number" }
