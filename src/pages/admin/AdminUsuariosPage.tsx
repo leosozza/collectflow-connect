@@ -131,6 +131,32 @@ const AdminUsuariosPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
+              <Label className="text-xs font-semibold uppercase text-muted-foreground mb-2 block">Tipo de Conta</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={userType === "rivo" ? "default" : "outline"}
+                  className="w-full text-sm"
+                  onClick={() => handleUserTypeChange("rivo")}
+                >
+                  Equipe RIVO
+                </Button>
+                <Button
+                  type="button"
+                  variant={userType === "tenant" ? "default" : "outline"}
+                  className="w-full text-sm"
+                  onClick={() => handleUserTypeChange("tenant")}
+                >
+                  Usuário de Tenant
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {userType === "rivo"
+                  ? "Membro da equipe de gestão da plataforma RIVO"
+                  : "Colaborador vinculado a uma empresa cliente"}
+              </p>
+            </div>
+            <div>
               <Label>Nome completo *</Label>
               <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do usuário" />
             </div>
@@ -156,6 +182,41 @@ const AdminUsuariosPage = () => {
                 </button>
               </div>
             </div>
+            <div>
+              <Label>Função</Label>
+              <Select value={newRole} onValueChange={setNewRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {userType === "rivo" ? (
+                    <>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="operador">Operador</SelectItem>
+                      <SelectItem value="supervisor">Supervisor</SelectItem>
+                      <SelectItem value="gerente">Gerente</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            {userType === "tenant" && (
+              <div>
+                <Label>Empresa (Tenant) *</Label>
+                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                  <SelectContent>
+                    {tenants.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
             <div>
               <Label>Função</Label>
               <Select value={newRole} onValueChange={setNewRole}>
