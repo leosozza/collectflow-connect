@@ -1,91 +1,59 @@
 
 
-# Plano: Mover Modelos de Documentos para o Credor + Correções Funcionais
+# Plano: Separação Clara Super Admin (RIVO) vs Tenant Admin
 
 ## Situação atual
 
-- `DocumentTemplatesPage` (446 linhas) opera em `document_templates` (nível tenant) — acessível em Configurações
-- `CredorForm.tsx` aba Personalização (linhas 570-652) tem editor básico (textarea + variáveis) que salva diretamente nas colunas `template_*` da tabela `credores`
-- `ClientDocuments.tsx` já usa fallback correto: credor → tenant → default
-- Existem dois editores diferentes para a mesma funcionalidade
+Existem dois contextos de criação de usuários:
 
-## Alterações
+1. **`UsersPage.tsx`** (tenant admin) — cria usuários herdando o `tenant_id` do caller automaticamente via Edge Function. **Funciona corretamente.**
 
-### 1. Remover aba "Modelos de Documentos" de ConfiguracoesPage
+2. **`AdminUsuariosPage.tsx`** (super admin) — permite criar usuários com seletor de tenant. **Problema**: quando `selectedTenantId = "none"`, a Edge Function (linha 78-81) faz fallback para o tenant do próprio super admin. Ou seja, **não existe conceito de criar usuário SEM tenant** para gestão do RIVO.
 
-- Remover import de `DocumentTemplatesPage`
-- Remover item `documentos` do array `items`
-- Remover bloco de renderização condicional `visited.has("documentos")`
+3. **Edge Function `create-user`** (linha 78-81): `effectiveTenantId = callerRole === "super_admin" && body.tenant_id ? body.tenant_id : callerTenantUser.tenant_id`. Sempre vincula a algum tenant.
 
-### 2. Criar componente reutilizável `CredorDocumentTemplates`
+## Problemas identificados
 
-Novo arquivo: `src/components/cadastros/CredorDocumentTemplates.tsx`
+| # | Problema |
+|---|---|
+| 1 | Super admin criando com "Nenhuma" empresa vincula ao tenant do próprio super admin |
+| 2 | `AdminUsuariosPage` não diferencia claramente entre "criar para gestão RIVO" vs "criar para tenant cliente" |
+| 3 | Falta validação: ao criar para um tenant, `tenant_id` deve ser obrigatório |
 
-Componente que exibe os 5 tipos de documento no contexto do credor, com:
+## Correções
 
-- **Status de origem por documento**: badge indicando "Modelo próprio do credor" / "Herdando do tenant" / "Usando padrão do sistema"
-- **Edição**: ao clicar "Editar", abre Sheet lateral com o editor rico (mesmo estilo do `DocumentTemplatesPage` — markdown, placeholders categorizados, preview) — o conteúdo salva na coluna `template_*` correspondente do credor
-- **Preview A4**: reutiliza o componente `A4Preview` já existente
-- **Indicação visual clara** de quando o credor está sobrescrevendo vs herdando
+### 1. `AdminUsuariosPage.tsx` — Separar os dois fluxos
 
-Lógica de status por documento:
-- Se `credor[template_key]` tem conteúdo → "Modelo próprio do credor"
-- Senão, busca `document_templates` do tenant → "Herdando modelo do tenant"
-- Senão → "Usando padrão do sistema"
+Redesenhar o formulário com duas opções claras:
 
-Props: recebe `credorId`, `form` (estado do form), `set` (setter do form)
+- **"Equipe RIVO"** — cria usuário vinculado ao tenant do super admin (gestão interna)
+- **"Usuário de Tenant"** — exige seleção de um tenant cliente (obrigatório)
 
-### 3. Substituir seção atual no CredorForm
+Quando "Equipe RIVO" for selecionado:
+- Não mostrar seletor de tenant
+- Não enviar `body.tenant_id` (Edge Function usa o tenant do super admin — correto)
+- Roles disponíveis: `admin`, `super_admin`
 
-Na aba Personalização do `CredorForm.tsx`, substituir o bloco "Modelos de Documentos" (linhas 570-652) pelo novo componente `<CredorDocumentTemplates>`.
+Quando "Usuário de Tenant" for selecionado:
+- Seletor de tenant obrigatório (sem opção "Nenhuma")
+- Enviar `body.tenant_id` explícito
+- Roles disponíveis: `operador`, `supervisor`, `gerente`, `admin`
 
-Remove:
-- Os dialogs inline de edição de template
-- A lista simplificada de cards com botão "Editar"
+### 2. `UsersPage.tsx` — Sem alteração
 
-### 4. Validação de placeholders ao salvar
+O fluxo do tenant admin já está correto: herda o `tenant_id` do caller, cria dentro do tenant, gera convite com `tenant.id`. Nenhuma alteração necessária.
 
-No `CredorDocumentTemplates`, ao salvar modelo:
-- Extrair todos os `{...}` do conteúdo
-- Comparar com a lista oficial de `DOCUMENT_PLACEHOLDERS`
-- Se houver placeholders inválidos → exibir aviso antes de salvar: "Este modelo contém variáveis inválidas: {xxxx}, {yyyy}"
-- Permitir salvar com confirmação, mas alertar
+### 3. Edge Function `create-user` — Sem alteração
 
-### 5. Exibir origem do template no DocumentPreviewDialog
-
-Adicionar prop `templateSource` ao `DocumentPreviewDialog`:
-- Exibir badge discreto no header: "Modelo: Credor" / "Modelo: Tenant" / "Modelo: Padrão"
-- Apenas informativo, sem alterar layout
-
-### 6. Melhorar mensagens na aba Documentos do cliente (ClientDocuments)
-
-Refinar as mensagens de `validation.reason` para ficarem mais operacionais:
-- "Sem acordo vigente para gerar carta de acordo"
-- "Nenhum pagamento confirmado para gerar recibo"
-- "Quitação disponível apenas para débito liquidado"
-- "Modelo não configurado para este credor"
-
-Atualizar em `documentValidationService.ts`.
-
-### 7. Registrar visualização na timeline
-
-Em `ClientDocuments.tsx`, ao abrir preview (antes do download):
-- Inserir evento `document_previewed` em `client_events`
-- Manter o evento `document_generated` apenas no download do PDF
+A lógica atual (linha 78-81) já funciona corretamente para ambos os cenários quando o frontend envia os dados corretos. O problema é exclusivamente de UX no `AdminUsuariosPage`.
 
 ## Arquivos
 
-| Arquivo | Tipo |
+| Arquivo | Alteração |
 |---|---|
-| `src/components/cadastros/CredorDocumentTemplates.tsx` | Novo — editor rico no contexto do credor |
-| `src/components/cadastros/CredorForm.tsx` | Substituir seção de templates pelo novo componente |
-| `src/pages/ConfiguracoesPage.tsx` | Remover aba e import de DocumentTemplatesPage |
-| `src/components/client-detail/DocumentPreviewDialog.tsx` | Adicionar badge de origem |
-| `src/components/client-detail/ClientDocuments.tsx` | Evento de preview + passar templateSource ao dialog |
-| `src/services/documentValidationService.ts` | Melhorar mensagens |
-| `src/pages/DocumentTemplatesPage.tsx` | Manter arquivo (usado internamente pelo novo componente como referência de estilo), mas sem rota direta |
+| `src/pages/admin/AdminUsuariosPage.tsx` | Separar "Equipe RIVO" vs "Usuário de Tenant", tornar tenant obrigatório no segundo caso |
 
 ## Sem alteração de banco
 
-Não há migration. Os templates do credor continuam nas colunas existentes da tabela `credores`.
+Não há migration.
 
