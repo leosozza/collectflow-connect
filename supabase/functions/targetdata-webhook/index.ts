@@ -207,6 +207,10 @@ Deno.serve(async (req) => {
       if (tenantId) {
         for (let p = 0; p < allPhones.length; p++) {
           const phone = allPhones[p];
+          const digits = phone.number.replace(/\D/g, "");
+          const phoneE164 = normalizeToE164(digits);
+          const phoneLast8 = digits.slice(-8);
+          const phoneLast10 = digits.slice(-10);
           await supabase.from("client_phones").upsert(
             {
               tenant_id: tenantId,
@@ -217,6 +221,9 @@ Deno.serve(async (req) => {
               is_whatsapp: phone.isWhatsApp,
               source: "targetdata",
               raw_metadata: phone.raw || {},
+              phone_e164: phoneE164,
+              phone_last8: phoneLast8,
+              phone_last10: phoneLast10,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "tenant_id,cpf,phone_number" }
