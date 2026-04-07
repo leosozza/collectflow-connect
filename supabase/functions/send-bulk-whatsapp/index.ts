@@ -351,7 +351,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
             supabase, tenantId, recipient.assigned_instance_id,
             recipient.phone, recipient.recipient_name,
             recipient.representative_client_id, message,
-            sendResult.providerMessageId
+            sendResult.providerMessageId, sendResult.provider
           );
         } else {
           failed++;
