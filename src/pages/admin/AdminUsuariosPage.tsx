@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { UserPlus, Loader2, Eye, EyeOff, Users } from "lucide-react";
 import { invokeCreateUser, handleEdgeFunctionError, showEdgeFunctionResult } from "@/services/userEdgeFunctionService";
 
+type UserType = "rivo" | "tenant";
+
 const AdminUsuariosPage = () => {
   const queryClient = useQueryClient();
   const [newOpen, setNewOpen] = useState(false);
@@ -22,8 +24,9 @@ const AdminUsuariosPage = () => {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [newRole, setNewRole] = useState("operador");
-  const [selectedTenantId, setSelectedTenantId] = useState("none");
+  const [newRole, setNewRole] = useState("admin");
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+  const [userType, setUserType] = useState<UserType>("tenant");
   const [creating, setCreating] = useState(false);
 
   const { data: tenants = [] } = useQuery({
@@ -44,6 +47,10 @@ const AdminUsuariosPage = () => {
       toast.error("A senha deve ter pelo menos 6 caracteres");
       return;
     }
+    if (userType === "tenant" && !selectedTenantId) {
+      toast.error("Selecione a empresa para o usuário de tenant");
+      return;
+    }
     setCreating(true);
     try {
       const body: Record<string, unknown> = {
@@ -52,23 +59,34 @@ const AdminUsuariosPage = () => {
         password: newPassword,
         role: newRole,
       };
-      if (selectedTenantId !== "none") {
+      if (userType === "tenant") {
         body.tenant_id = selectedTenantId;
       }
       const result = await invokeCreateUser(body);
       showEdgeFunctionResult(result, newName.trim());
       queryClient.invalidateQueries({ queryKey: ["sa-all-users"] });
-      setNewOpen(false);
-      setNewName("");
-      setNewEmail("");
-      setNewPassword("");
-      setNewRole("operador");
-      setSelectedTenantId("none");
+      resetForm();
     } catch (err: any) {
       toast.error(handleEdgeFunctionError(err));
     } finally {
       setCreating(false);
     }
+  };
+
+  const resetForm = () => {
+    setNewOpen(false);
+    setNewName("");
+    setNewEmail("");
+    setNewPassword("");
+    setNewRole(userType === "rivo" ? "admin" : "operador");
+    setSelectedTenantId("");
+    setUserType("tenant");
+  };
+
+  const handleUserTypeChange = (type: UserType) => {
+    setUserType(type);
+    setNewRole(type === "rivo" ? "admin" : "operador");
+    setSelectedTenantId("");
   };
 
   return (
@@ -113,6 +131,32 @@ const AdminUsuariosPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
+              <Label className="text-xs font-semibold uppercase text-muted-foreground mb-2 block">Tipo de Conta</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={userType === "rivo" ? "default" : "outline"}
+                  className="w-full text-sm"
+                  onClick={() => handleUserTypeChange("rivo")}
+                >
+                  Equipe RIVO
+                </Button>
+                <Button
+                  type="button"
+                  variant={userType === "tenant" ? "default" : "outline"}
+                  className="w-full text-sm"
+                  onClick={() => handleUserTypeChange("tenant")}
+                >
+                  Usuário de Tenant
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {userType === "rivo"
+                  ? "Membro da equipe de gestão da plataforma RIVO"
+                  : "Colaborador vinculado a uma empresa cliente"}
+              </p>
+            </div>
+            <div>
               <Label>Nome completo *</Label>
               <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do usuário" />
             </div>
@@ -143,28 +187,38 @@ const AdminUsuariosPage = () => {
               <Select value={newRole} onValueChange={setNewRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="operador">Operador</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="gerente">Gerente</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {userType === "rivo" ? (
+                    <>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="operador">Operador</SelectItem>
+                      <SelectItem value="supervisor">Supervisor</SelectItem>
+                      <SelectItem value="gerente">Gerente</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Empresa (Tenant)</Label>
-              <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {tenants.map((t: any) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {userType === "tenant" && (
+              <div>
+                <Label>Empresa (Tenant) *</Label>
+                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                  <SelectContent>
+                    {tenants.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => resetForm()}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={creating}>
               {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Criar Usuário
