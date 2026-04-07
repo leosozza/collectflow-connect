@@ -174,6 +174,55 @@ export async function sendTextMessage(
   } as ChatMessage;
 }
 
+export async function sendMediaMessage(
+  conversationId: string,
+  tenantId: string,
+  mediaUrl: string,
+  mediaType: "image" | "video" | "audio" | "document",
+  mediaMimeType: string,
+  fileName: string,
+): Promise<ChatMessage> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error("Não autenticado");
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/send-chat-message`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      conversationId,
+      content: fileName,
+      mediaUrl,
+      mediaType,
+      mediaMimeType,
+      fileName,
+    }),
+  });
+
+  const result = await resp.json();
+  if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mídia");
+
+  return {
+    id: result.message_id || crypto.randomUUID(),
+    conversation_id: conversationId,
+    tenant_id: tenantId,
+    direction: "outbound",
+    message_type: mediaType,
+    content: fileName,
+    media_url: mediaUrl,
+    media_mime_type: mediaMimeType,
+    status: "sent",
+    external_id: result.provider_message_id || null,
+    is_internal: false,
+    reply_to_message_id: null,
+    created_at: new Date().toISOString(),
+  } as ChatMessage;
+}
+
 export async function updateConversationStatus(id: string, status: string) {
   const { error } = await supabase
     .from("conversations" as any)
