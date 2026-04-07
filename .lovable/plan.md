@@ -1,122 +1,73 @@
 
 
-# FASE 4 — RPC Transacional de Ingestão Canônica
+# FASE 5 — Motor de Envio Unificado + Refatoração do Chat Manual
 
-## Objetivo
+## Estratégia de Segurança (Zero Downtime)
 
-Centralizar toda a lógica de ingestão de mensagens (resolve cliente, resolve/cria conversa, deduplica, grava mensagem, atualiza resumo, aplica SLA, atribui operador) em uma **única função PostgreSQL transacional** (`ingest_channel_event`). Os webhooks passam a ser apenas parsers de payload que chamam essa RPC.
+A abordagem é **aditiva**: criamos a nova Edge Function `send-chat-message`, atualizamos o frontend para usá-la, mas **mantemos o `evolution-proxy` intacto**. Se a nova função falhar, o `evolution-proxy` continua disponível — basta reverter uma linha no frontend.
 
-## Situação Atual
-
-A lógica de ingestão está **espalhada em 3 locais**:
-
-| Local | Lógica |
-|---|---|
-| `whatsapp-webhook/index.ts` (385 linhas) | findClientByPhone + getSlaMinutes + assignRoundRobin + resolve/create conversation + dedup + insert message — **tudo em TypeScript** |
-| `gupshup-webhook/index.ts` (64 linhas) | Só atualiza `message_logs` — **não cria conversas nem chat_messages** |
-| `send-bulk-whatsapp/index.ts` | `ensureConversationAndMessage()` — outra implementação paralela de resolve/create conversation |
-
-Problemas:
-- 3 implementações diferentes da mesma lógica
-- Sem transacionalidade (queries separadas = race conditions)
-- `findClientByPhone` usa `ILIKE %suffix%` em `clients` (ignora `client_phones` da Fase 2)
-- Gupshup inbound é completamente invisível na inbox
-- Adicionar novo provider exige duplicar toda a lógica
+O fluxo atual de **recebimento de mensagens (webhooks) não é tocado**.
 
 ## O Que Será Feito
 
-### 1. Migration — Criar RPC `ingest_channel_event`
+### 1. Nova Edge Function `send-chat-message`
 
-Função PostgreSQL `SECURITY DEFINER` que recebe um payload canônico e executa tudo em uma transação:
+Função unificada que:
+1. Valida JWT e resolve tenant do caller
+2. Busca a conversa + instância (`whatsapp_instances`) pelo `conversation_id`
+3. Usa o `whatsapp-sender.ts` (multiprovider) para enviar via Evolution/Gupshup/WuzAPI
+4. Chama `ingest_channel_event` RPC para persistir a mensagem + atualizar conversa (status waiting→open, denormalização)
+5. Retorna o message_id + conversation_id
 
+Parâmetros: `{ conversationId, content, replyToMessageId? }`
+
+Isso substitui o fluxo atual onde o frontend faz:
+- Chamada ao `evolution-proxy?action=sendMessage` (só Evolution, hardcoded)
+- INSERT manual em `chat_messages`
+- UPDATE manual em `conversations`
+
+### 2. Frontend — `conversationService.ts`
+
+Substituir `sendTextMessage()` (~70 linhas) por uma chamada simples:
 ```text
-ingest_channel_event(
-  _tenant_id uuid,
-  _endpoint_id uuid,
-  _channel_type text,        -- 'whatsapp', 'voice', etc.
-  _provider text,             -- 'evolution', 'gupshup', 'wuzapi', 'meta'
-  _remote_phone text,
-  _remote_name text,
-  _direction text,            -- 'inbound' | 'outbound'
-  _message_type text,         -- 'text', 'image', 'audio', etc.
-  _content text,
-  _media_url text,
-  _media_mime_type text,
-  _external_id text,
-  _provider_message_id text,
-  _actor_type text,           -- 'human', 'ai', 'system', 'campaign'
-  _status text                -- 'sent', 'delivered', etc.
-)
-RETURNS jsonb  -- { conversation_id, message_id, is_new_conversation, client_id, skipped_duplicate }
+fetch(`${supabaseUrl}/functions/v1/send-chat-message`, {
+  method: "POST",
+  headers: { Authorization, Content-Type },
+  body: { conversationId, content, replyToMessageId }
+})
 ```
 
-Lógica interna (em ordem):
-1. **Resolver cliente** — chama `resolve_client_by_phone` (Fase 2)
-2. **Resolver conversa** — busca por `(tenant_id, endpoint_id, remote_phone)` ou cria nova
-3. **Fluxo de status** — closed→waiting (inbound), waiting→open não muda, etc.
-4. **Deduplicação** — INSERT com `ON CONFLICT (tenant_id, external_id)` DO NOTHING, retorna `skipped_duplicate = true`
-5. **Gravar mensagem** — INSERT em `chat_messages` com provider, endpoint_id, actor_type
-6. **Atualizar resumo** — `last_message_content/type/direction/at`, `unread_count`
-7. **SLA** — calcula por credor → fallback tenant
-8. **Round-robin** — atribuição para novas conversas inbound (consulta `operator_instances` + count)
+Remove: busca de conversa, chamada ao evolution-proxy, INSERT em chat_messages, UPDATE em conversations — tudo isso passa a ser responsabilidade da Edge Function.
 
-### 2. Refatorar `whatsapp-webhook/index.ts`
+### 3. Sem alteração em `evolution-proxy`
 
-Reduzir de ~385 linhas para ~100 linhas:
-- Manter parsing do payload Evolution (connection.update, messages.upsert, messages.update)
-- Transformar payload Evolution → payload canônico
-- Chamar `supabase.rpc('ingest_channel_event', {...})`
-- Manter handler de `connection.update` como está (não é ingestão de mensagem)
-- Manter handler de `messages.update` (status updates) — chamar um UPDATE simples por `external_id`
-- Remover: `findClientByPhone`, `getSlaMinutes`, `assignRoundRobin`, toda a lógica de conversation management
-
-### 3. Refatorar `gupshup-webhook/index.ts`
-
-Transformar de "log-only" em webhook funcional:
-- Parsear payload Gupshup (inbound messages + status updates)
-- Para inbound: transformar em payload canônico → chamar `ingest_channel_event`
-- Para status: atualizar `chat_messages.status` por `external_id`
-- Manter atualização de `message_logs` existente como fallback
-
-### 4. Refatorar `send-bulk-whatsapp/index.ts` → `ensureConversationAndMessage`
-
-Substituir a implementação local por chamada à mesma RPC `ingest_channel_event` com `direction = 'outbound'` e `actor_type = 'campaign'`.
-
-### 5. Documentação
-
-Criar `docs/MULTICHANNEL_PHASE4_INGESTION_RPC.md`
+O `evolution-proxy` continua funcionando para operações de instância (create, connect, status, delete, setWebhook). O `sendMessage` permanece lá como fallback, apenas não é mais chamado pelo chat.
 
 ## Arquivos Alterados
 
 | Arquivo | Alteração |
 |---|---|
-| Migration SQL | Criar RPC `ingest_channel_event` |
-| `supabase/functions/whatsapp-webhook/index.ts` | Refatorar para parser + chamada RPC |
-| `supabase/functions/gupshup-webhook/index.ts` | Transformar em webhook funcional com ingestão |
-| `supabase/functions/send-bulk-whatsapp/index.ts` | Substituir `ensureConversationAndMessage` por chamada RPC |
-| `docs/MULTICHANNEL_PHASE4_INGESTION_RPC.md` | Documentação |
+| `supabase/functions/send-chat-message/index.ts` | **Novo** — Edge Function multiprovider |
+| `src/services/conversationService.ts` | Simplificar `sendTextMessage()` para chamar a nova Edge Function |
 
 ## Sem alteração em
 
-- Frontend — nenhuma alteração
-- `conversationService.ts` — envio manual será refatorado na Fase 5
-- `_shared/whatsapp-sender.ts` — motor de envio permanece (Fase 5 unifica)
+- `evolution-proxy/index.ts` — permanece intacto
+- `whatsapp-webhook/index.ts` — não tocado
+- `WhatsAppChatLayout.tsx` — mesma interface (`sendTextMessage(convId, tenantId, content, instanceName, replyTo)`)
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
-| RPC complexa pode falhar silenciosamente | Retorno jsonb detalhado com status de cada etapa |
-| Round-robin dentro do PostgreSQL | Usa mesma lógica atual (count conversations por operador) — funcional até Fase 9 |
-| Gupshup inbound nunca foi testado com conversas | Começar com logs detalhados, mesma estrutura validada do Evolution |
-| `send-bulk-whatsapp` muda de INSERT direto para RPC | A RPC faz exatamente o mesmo, com idempotência melhor |
+| Nova Edge Function com bug no envio | Usa o mesmo `whatsapp-sender.ts` já validado em campanhas |
+| Mensagem enviada mas não persistida | RPC `ingest_channel_event` é transacional — falha atômica |
+| Tenant usa Gupshup/WuzAPI no chat manual | Agora funciona (antes só Evolution era suportado no chat) |
 
 ## Resultado
 
-- **Uma única fonte de verdade** para ingestão de mensagens
-- Webhooks viram apenas **parsers de payload** (~100 linhas cada)
-- Gupshup inbound **funcional** na inbox
-- Campanhas usam o **mesmo pipeline**
-- Adicionar novo provider = apenas criar novo parser de payload
-- Transacionalidade real (sem race conditions)
+- Chat manual suporta **todos os providers** (Evolution, Gupshup, WuzAPI)
+- Lógica de persistência **centralizada** na RPC (fim de INSERT/UPDATE avulsos)
+- `evolution-proxy` preservado como fallback
+- Zero impacto no recebimento de mensagens
 
