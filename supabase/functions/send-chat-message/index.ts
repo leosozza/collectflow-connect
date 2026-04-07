@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendByProvider } from "../_shared/whatsapp-sender.ts";
+import type { MediaPayload } from "../_shared/whatsapp-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,16 +41,27 @@ Deno.serve(async (req) => {
   }
 
   const userId = claimsData.claims.sub as string;
-
-  // Service client for DB ops
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
     const body = await req.json();
-    const { conversationId, content, replyToMessageId } = body;
+    const {
+      conversationId,
+      content,
+      replyToMessageId,
+      // Media fields (optional)
+      mediaUrl,
+      mediaType,
+      mediaMimeType,
+      fileName,
+    } = body;
 
-    if (!conversationId || !content) {
-      return jsonResp({ error: "conversationId e content são obrigatórios" }, 400);
+    if (!conversationId) {
+      return jsonResp({ error: "conversationId é obrigatório" }, 400);
+    }
+
+    if (!content && !mediaUrl) {
+      return jsonResp({ error: "content ou mediaUrl é obrigatório" }, 400);
     }
 
     // 2. Resolve tenant
@@ -79,7 +91,7 @@ Deno.serve(async (req) => {
 
     const instanceId = conv.endpoint_id || conv.instance_id;
 
-    // 4. Fetch WhatsApp instance details
+    // 4. Fetch WhatsApp instance
     let instance: any = null;
     if (instanceId) {
       const { data: inst } = await supabase
@@ -95,7 +107,7 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "Instância WhatsApp não encontrada para esta conversa" }, 404);
     }
 
-    // 5. Fetch tenant settings (for Gupshup credentials)
+    // 5. Tenant settings
     const { data: tenant } = await supabase
       .from("tenants")
       .select("settings")
@@ -104,7 +116,19 @@ Deno.serve(async (req) => {
 
     const tenantSettings = (tenant?.settings as Record<string, any>) || {};
 
-    // 6. Send via multiprovider whatsapp-sender
+    // 6. Build media payload if applicable
+    let media: MediaPayload | null = null;
+    if (mediaUrl && mediaType) {
+      media = {
+        mediaUrl,
+        mediaType,
+        caption: content || fileName || "",
+        fileName: fileName || undefined,
+        mimeType: mediaMimeType || undefined,
+      };
+    }
+
+    // 7. Send via multiprovider
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
     const wuzapiUrl = Deno.env.get("WUZAPI_API_URL") || "";
@@ -118,12 +142,13 @@ Deno.serve(async (req) => {
         instance_name: instance.instance_name,
       },
       conv.remote_phone,
-      content,
+      content || "",
       tenantSettings,
       evolutionUrl,
       evolutionKey,
       wuzapiUrl,
       wuzapiToken,
+      media,
     );
 
     if (!sendResult.ok) {
@@ -131,7 +156,10 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "Erro ao enviar mensagem", details: sendResult.result }, 502);
     }
 
-    // 7. Persist via ingest_channel_event RPC (transactional)
+    // 8. Determine message_type for RPC
+    const msgType = media ? mediaType : "text";
+
+    // 9. Persist via ingest_channel_event RPC
     const { data: rpcResult, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
       _tenant_id: tenantId,
       _endpoint_id: instanceId,
@@ -140,10 +168,10 @@ Deno.serve(async (req) => {
       _remote_phone: conv.remote_phone,
       _remote_name: conv.remote_phone,
       _direction: "outbound",
-      _message_type: "text",
-      _content: content,
-      _media_url: null,
-      _media_mime_type: null,
+      _message_type: msgType,
+      _content: content || fileName || null,
+      _media_url: mediaUrl || null,
+      _media_mime_type: mediaMimeType || null,
       _external_id: sendResult.providerMessageId || null,
       _provider_message_id: sendResult.providerMessageId || null,
       _actor_type: "human",
@@ -159,7 +187,7 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
-    // 8. Handle reply_to if provided
+    // 10. Handle reply_to
     if (replyToMessageId && rpcResult?.message_id) {
       await supabase
         .from("chat_messages")
@@ -167,8 +195,7 @@ Deno.serve(async (req) => {
         .eq("id", rpcResult.message_id);
     }
 
-    // 9. If conversation was waiting, the RPC handles status via its inbound logic,
-    //    but for outbound we need to explicitly set open if waiting
+    // 11. Waiting → open for outbound
     if (conv.status === "waiting") {
       await supabase
         .from("conversations")
