@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, restart, status, delete, sendMessage, setWebhook" }), {
+        return new Response(JSON.stringify({ error: "Ação inválida. Use: create, connect, restart, status, delete, setWebhook" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
