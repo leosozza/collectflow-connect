@@ -12,6 +12,9 @@ export interface Conversation {
   unread_count: number;
   client_id: string | null;
   client_name?: string;
+  last_message_content?: string;
+  last_message_type?: string;
+  last_message_direction?: string;
   created_at: string;
   updated_at: string;
 }
@@ -95,10 +98,32 @@ export async function fetchConversations(
   const { data, count, error } = await query.range(from, to);
   if (error) throw error;
 
+  // Batch-fetch last message for each conversation
+  const convIds = ((data || []) as any[]).map((r: any) => r.id);
+  let lastMsgMap: Record<string, { content: string | null; message_type: string; direction: string }> = {};
+  if (convIds.length > 0) {
+    const { data: msgs } = await supabase
+      .from("chat_messages" as any)
+      .select("conversation_id, content, message_type, direction, created_at")
+      .in("conversation_id", convIds)
+      .eq("is_internal", false)
+      .order("created_at", { ascending: false });
+    if (msgs) {
+      for (const m of msgs as any[]) {
+        if (!lastMsgMap[m.conversation_id]) {
+          lastMsgMap[m.conversation_id] = { content: m.content, message_type: m.message_type, direction: m.direction };
+        }
+      }
+    }
+  }
+
   const mapped = ((data || []) as any[]).map((row: any) => ({
     ...row,
     client_name: row.clients?.nome_completo ?? undefined,
     clients: undefined,
+    last_message_content: lastMsgMap[row.id]?.content ?? undefined,
+    last_message_type: lastMsgMap[row.id]?.message_type ?? undefined,
+    last_message_direction: lastMsgMap[row.id]?.direction ?? undefined,
   })) as Conversation[];
 
   return { data: mapped, count: count || 0 };
