@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { UserPlus, Loader2, Eye, EyeOff, Users } from "lucide-react";
 import { invokeCreateUser, handleEdgeFunctionError, showEdgeFunctionResult } from "@/services/userEdgeFunctionService";
 
+type UserType = "rivo" | "tenant";
+
 const AdminUsuariosPage = () => {
   const queryClient = useQueryClient();
   const [newOpen, setNewOpen] = useState(false);
@@ -22,8 +24,9 @@ const AdminUsuariosPage = () => {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [newRole, setNewRole] = useState("operador");
-  const [selectedTenantId, setSelectedTenantId] = useState("none");
+  const [newRole, setNewRole] = useState("admin");
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+  const [userType, setUserType] = useState<UserType>("tenant");
   const [creating, setCreating] = useState(false);
 
   const { data: tenants = [] } = useQuery({
