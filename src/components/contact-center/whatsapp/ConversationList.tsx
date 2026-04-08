@@ -403,7 +403,7 @@ const ConversationList = ({
                           </span>
                         </div>
                         <div className="flex items-center justify-between mt-[2px] gap-1">
-                          <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
+                          <span className="text-[13px] text-muted-foreground flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block">
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
                                 ? `📎 ${conv.last_message_type === "audio" ? "Áudio" : conv.last_message_type === "image" ? "Imagem" : conv.last_message_type === "video" ? "Vídeo" : conv.last_message_type === "document" ? "Documento" : conv.last_message_type === "sticker" ? "Sticker" : "Mídia"}`
