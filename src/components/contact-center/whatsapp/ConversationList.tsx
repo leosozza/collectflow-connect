@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, MessageSquare, EyeOff, Link2Off } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Conversation } from "@/services/conversationService";
+import { Conversation, ConversationFilters } from "@/services/conversationService";
 
 interface ConversationTag {
   id: string;
@@ -61,6 +61,11 @@ interface ConversationListProps {
   isAdmin?: boolean;
   dispositionAssignments?: DispositionAssignment[];
   dispositionTypes?: DispositionType[];
+  statusCounts: { open: number; waiting: number; closed: number; unread: number };
+  onFiltersChange: (filters: ConversationFilters) => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
+  isLoadingMore: boolean;
 }
 
 function formatCompactTime(dateStr: string): string {
@@ -159,7 +164,25 @@ const statusLabels: Record<string, string> = {
   closed: "Fechada",
 };
 
-const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange, onDelete, instances, tags = [], tagAssignments = [], operators = [], isAdmin = false, dispositionAssignments = [], dispositionTypes = [] }: ConversationListProps) => {
+const ConversationList = ({
+  conversations,
+  selectedId,
+  onSelect,
+  onStatusChange,
+  onDelete,
+  instances,
+  tags = [],
+  tagAssignments = [],
+  operators = [],
+  isAdmin = false,
+  dispositionAssignments = [],
+  dispositionTypes = [],
+  statusCounts,
+  onFiltersChange,
+  onLoadMore,
+  hasMore,
+  isLoadingMore,
+}: ConversationListProps) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -168,39 +191,46 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
   const [linkFilter, setLinkFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Build a set of conversation IDs that have the selected tag
-  const taggedConvIds = useMemo(() => {
-    if (tagFilter === "all") return null;
-    return new Set(tagAssignments.filter((a) => a.tag_id === tagFilter).map((a) => a.conversation_id));
-  }, [tagFilter, tagAssignments]);
+  // Propagate filter changes to parent (server-side)
+  useEffect(() => {
+    onFiltersChange({
+      statusFilter,
+      instanceFilter,
+      operatorFilter,
+      search,
+      unreadOnly,
+      linkFilter,
+    });
+  }, [statusFilter, instanceFilter, operatorFilter, search, unreadOnly, linkFilter]);
 
-  // Status counts
-  const statusCounts = useMemo(() => {
-    const counts = { open: 0, waiting: 0, closed: 0, unread: 0 };
-    for (const c of conversations) {
-      if (c.status === "open") counts.open++;
-      else if (c.status === "waiting") counts.waiting++;
-      else if (c.status === "closed") counts.closed++;
-      if (c.unread_count > 0) counts.unread++;
-    }
-    return counts;
-  }, [conversations]);
+  // Debounced search
+  const handleSearchChange = useCallback((value: string) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearch(value);
+    }, 300);
+  }, []);
 
-  const filtered = conversations.filter((c) => {
-    const displayName = c.client_name || c.remote_name;
-    const matchSearch =
-      !search ||
-      displayName.toLowerCase().includes(search.toLowerCase()) ||
-      c.remote_phone.includes(search);
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
-    const matchUnread = !unreadOnly || c.unread_count > 0;
-    const matchInstance = instanceFilter === "all" || c.instance_id === instanceFilter;
-    const matchTag = !taggedConvIds || taggedConvIds.has(c.id);
-    const matchOperator = operatorFilter === "all" || c.assigned_to === operatorFilter;
-    const matchLink = linkFilter === "all" || (linkFilter === "linked" ? !!c.client_id : !c.client_id);
-    return matchSearch && matchStatus && matchUnread && matchInstance && matchTag && matchOperator && matchLink;
-  });
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          onLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, onLoadMore]);
 
   const statusColors: Record<string, string> = {
     open: "bg-[#25d366]",
@@ -251,8 +281,8 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Pesquisar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            defaultValue=""
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-8 h-8 text-sm bg-card rounded-lg"
           />
         </div>
@@ -291,7 +321,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
           </button>
         </div>
 
-        {/* Row 4: Tag + Instance filters */}
+        {/* Row 4: Link + Instance filters */}
         <div className="flex gap-1.5">
           <Select value={linkFilter} onValueChange={setLinkFilter}>
             <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
@@ -343,12 +373,12 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
 
       {/* List */}
       <ScrollArea className="flex-1">
-        {filtered.length === 0 ? (
+        {conversations.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">
             Nenhuma conversa encontrada
           </div>
         ) : (
-          filtered.map((conv) => {
+          conversations.map((conv) => {
             const displayName = conv.client_name || (conv.remote_name?.toLowerCase() !== SYSTEM_NAME ? conv.remote_name : null) || conv.remote_phone;
             return (
               <ContextMenu key={conv.id}>
@@ -491,6 +521,10 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
             );
           })
         )}
+        {/* Infinite scroll sentinel */}
+        <div ref={sentinelRef} className="h-8 flex items-center justify-center">
+          {isLoadingMore && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        </div>
       </ScrollArea>
 
       {/* Delete confirmation dialog */}

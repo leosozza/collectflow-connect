@@ -48,6 +48,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const CHUNK_SIZE = 100;
+const MAX_EXECUTION_MS = 50000; // 50s safety margin before edge function timeout
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -96,12 +99,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check admin role OR granular RBAC permission (campanhas_whatsapp.create)
+    // Check admin role OR granular RBAC permission
     const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
     let hasPermission = isAdmin;
 
     if (!isAdmin) {
-      // Get profile with permission_profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("id, permission_profile_id")
@@ -109,7 +111,6 @@ Deno.serve(async (req) => {
         .single();
 
       if (profile) {
-        // 1) Check permission_profiles (assigned profile permissions)
         if (profile.permission_profile_id) {
           const { data: permProfile } = await supabase
             .from("permission_profiles")
@@ -125,7 +126,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 2) Check user_permissions overrides
         if (!hasPermission) {
           const { data: overrides } = await supabase
             .from("user_permissions")
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
       return await handleCampaignFlow(supabase, body.campaign_id, tenantUser.tenant_id);
     }
 
-    // ===== LEGACY FLOW (preserved for backward compatibility) =====
+    // ===== LEGACY FLOW =====
     return await handleLegacyFlow(supabase, body, tenantUser);
   } catch (err: any) {
     console.error("send-bulk-whatsapp error:", err);
@@ -167,8 +167,10 @@ Deno.serve(async (req) => {
   }
 });
 
-// ===== Campaign-based flow (Fases 1-4: shared helpers + batch load) =====
+// ===== Campaign-based flow with chunked processing + checkpoint =====
 async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: string) {
+  const startTime = Date.now();
+
   // Load campaign
   const { data: campaign, error: cErr } = await supabase
     .from("whatsapp_campaigns")
@@ -184,7 +186,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     });
   }
 
-  // Load tenant settings for Gupshup credentials
+  // Load tenant settings
   const { data: tenantData } = await supabase
     .from("tenants")
     .select("settings")
@@ -192,97 +194,97 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     .single();
   const tenantSettings = (tenantData?.settings || {}) as Record<string, any>;
 
-  // Update campaign status to sending
-  await supabase
-    .from("whatsapp_campaigns")
-    .update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq("id", campaignId);
-
-  // Load ONLY pending recipients
-  const { data: recipients, error: rErr } = await supabase
-    .from("whatsapp_campaign_recipients")
-    .select("*")
-    .eq("campaign_id", campaignId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
-
-  if (rErr) throw rErr;
-
-  // Load all assigned instances from DB
-  const instanceIds = [...new Set((recipients || []).map((r: any) => r.assigned_instance_id).filter(Boolean))];
-  const { data: instances } = instanceIds.length > 0
-    ? await supabase
-        .from("whatsapp_instances")
-        .select("id, instance_url, api_key, instance_name, provider")
-        .in("id", instanceIds)
-    : { data: [] };
-
-  const instanceMap = new Map<string, any>();
-  for (const inst of instances || []) {
-    instanceMap.set(inst.id, inst);
-  }
-
-  // Build virtual Gupshup instance for recipients with null assigned_instance_id
-  const hasGupshupRecipients = (recipients || []).some((r: any) => !r.assigned_instance_id);
-  const gupshupConfigured = !!(tenantSettings.gupshup_api_key && tenantSettings.gupshup_source_number);
-  const useGupshupFallback = hasGupshupRecipients && gupshupConfigured;
-
-  // Pre-flight: validate all instances have credentials
-  const missingInstances: string[] = [];
-  for (const iid of instanceIds) {
-    if (!instanceMap.has(iid)) {
-      missingInstances.push(iid);
-    }
-  }
-  if (hasGupshupRecipients && !gupshupConfigured) {
-    missingInstances.push("gupshup-official (credenciais não configuradas)");
-  }
-
-  if (missingInstances.length > 0 && missingInstances.length === instanceIds.length + (hasGupshupRecipients ? 1 : 0)) {
+  // Update campaign status to sending (only if not already sending — supports resume)
+  if (campaign.status !== "sending") {
     await supabase
       .from("whatsapp_campaigns")
-      .update({ status: "failed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", campaignId);
-
-    return new Response(
-      JSON.stringify({ error: `Instâncias não encontradas: ${missingInstances.join(", ")}`, sent: 0, failed: (recipients || []).length, errors: [`Nenhuma instância válida encontrada`], finalStatus: "failed" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
-  // Global fallback env vars
+  // Count total pending for progress tracking
+  const { count: totalPending } = await supabase
+    .from("whatsapp_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+
+  // Global env vars
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
   const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
-  // Fase 4: Batch load de clientes — elimina N+1 query
-  const clientIds = [...new Set((recipients || []).map((r: any) => r.representative_client_id).filter(Boolean))];
-  const clientMap = new Map<string, any>();
-  if (clientIds.length > 0) {
-    // Batch in chunks of 500 to avoid query limits
-    for (let i = 0; i < clientIds.length; i += 500) {
-      const chunk = clientIds.slice(i, i + 500);
+  // Gupshup config
+  const gupshupConfigured = !!(tenantSettings.gupshup_api_key && tenantSettings.gupshup_source_number);
+
+  let totalSent = (campaign.sent_count || 0);
+  let totalFailed = (campaign.failed_count || 0);
+  let chunkSent = 0;
+  let chunkFailed = 0;
+  const errors: string[] = [];
+  let timedOut = false;
+
+  // Instance cache to avoid repeated lookups
+  const instanceCache = new Map<string, any>();
+
+  // Process in chunks
+  while (true) {
+    // Check time budget
+    if (Date.now() - startTime > MAX_EXECUTION_MS) {
+      timedOut = true;
+      break;
+    }
+
+    // Load next chunk of pending recipients
+    const { data: recipients, error: rErr } = await supabase
+      .from("whatsapp_campaign_recipients")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(CHUNK_SIZE);
+
+    if (rErr) throw rErr;
+    if (!recipients || recipients.length === 0) break;
+
+    // Pre-load instances for this chunk
+    const instanceIds = [...new Set(recipients.map((r: any) => r.assigned_instance_id).filter(Boolean))];
+    const missingInstanceIds = instanceIds.filter(id => !instanceCache.has(id));
+    if (missingInstanceIds.length > 0) {
+      const { data: instances } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_url, api_key, instance_name, provider")
+        .in("id", missingInstanceIds);
+      for (const inst of instances || []) {
+        instanceCache.set(inst.id, inst);
+      }
+    }
+
+    // Batch load clients for this chunk
+    const clientIds = [...new Set(recipients.map((r: any) => r.representative_client_id).filter(Boolean))];
+    const clientMap = new Map<string, any>();
+    if (clientIds.length > 0) {
       const { data: clients } = await supabase
         .from("clients")
         .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
-        .in("id", chunk);
+        .in("id", clientIds);
       for (const c of clients || []) {
         clientMap.set(c.id, c);
       }
     }
-  }
 
-  let sent = 0;
-  let failed = 0;
-  const errors: string[] = [];
+    // Process chunk
+    for (const recipient of recipients) {
+      // Time check within chunk
+      if (Date.now() - startTime > MAX_EXECUTION_MS) {
+        timedOut = true;
+        break;
+      }
 
-  try {
-    for (const recipient of recipients || []) {
-      // Resolve instance: DB instance or virtual Gupshup
-      let inst = instanceMap.get(recipient.assigned_instance_id);
+      let inst = instanceCache.get(recipient.assigned_instance_id);
 
-      if (!inst && !recipient.assigned_instance_id && useGupshupFallback) {
+      if (!inst && !recipient.assigned_instance_id && gupshupConfigured) {
         inst = { provider: "gupshup", instance_name: tenantSettings.gupshup_app_name || "gupshup" };
       }
 
@@ -291,20 +293,16 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           .from("whatsapp_campaign_recipients")
           .update({ status: "failed", error_message: "Instância não encontrada", updated_at: new Date().toISOString() })
           .eq("id", recipient.id);
-        failed++;
-        errors.push(`${recipient.recipient_name}: instância não encontrada`);
+        chunkFailed++;
+        totalFailed++;
         continue;
       }
 
-      // Fase 4: usar clientMap em vez de query individual
       const client = clientMap.get(recipient.representative_client_id) || null;
-
-      // Fase 2: resolvedor unificado de templates
       const rawMessage = recipient.message_body_snapshot || campaign.message_body || "";
       const message = client ? resolveTemplate(rawMessage, client) : rawMessage;
 
       try {
-        // Fase 1: motor unificado de envio
         const sendResult = await sendByProvider(
           inst, recipient.phone, message, tenantSettings,
           evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
@@ -324,7 +322,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           })
           .eq("id", recipient.id);
 
-        // Fase 3: logger unificado com metadata de rastreabilidade
         await logMessage(supabase, {
           tenant_id: tenantId,
           client_id: recipient.representative_client_id,
@@ -345,8 +342,8 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         });
 
         if (status === "sent") {
-          sent++;
-          // Persist conversation + outbound message in CRM
+          chunkSent++;
+          totalSent++;
           await ensureConversationAndMessage(
             supabase, tenantId, recipient.assigned_instance_id,
             recipient.phone, recipient.recipient_name,
@@ -354,7 +351,8 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
             sendResult.providerMessageId, sendResult.provider
           );
         } else {
-          failed++;
+          chunkFailed++;
+          totalFailed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
         }
       } catch (err: any) {
@@ -367,7 +365,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           })
           .eq("id", recipient.id);
 
-        // Fase 3: logger unificado para erros
         await logMessage(supabase, {
           tenant_id: tenantId,
           client_id: recipient.representative_client_id,
@@ -385,42 +382,80 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           },
         });
 
-        failed++;
+        chunkFailed++;
+        totalFailed++;
         errors.push(`${recipient.recipient_name}: ${err.message}`);
       }
 
       // Throttle: 200ms between messages
       await new Promise((r) => setTimeout(r, 200));
     }
-  } catch (globalErr: any) {
-    console.error("Campaign processing global error:", globalErr);
-    errors.push(`Erro global no processamento: ${globalErr.message}`);
+
+    // Update checkpoint after each chunk
+    await supabase
+      .from("whatsapp_campaigns")
+      .update({
+        sent_count: totalSent,
+        failed_count: totalFailed,
+        progress_metadata: { processed: totalSent + totalFailed, last_chunk_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+
+    if (timedOut) break;
   }
 
-  // Determine intelligent final status
-  let finalStatus = "completed";
-  if (sent === 0 && failed > 0) finalStatus = "failed";
-  else if (sent > 0 && failed > 0) finalStatus = "completed_with_errors";
+  // Check if there are still pending recipients
+  const { count: remainingCount } = await supabase
+    .from("whatsapp_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
 
-  // Update campaign with final counters
+  const remaining = remainingCount || 0;
+
+  if (timedOut && remaining > 0) {
+    // Partial completion — campaign stays in "sending" status for re-invocation
+    await supabase
+      .from("whatsapp_campaigns")
+      .update({
+        sent_count: totalSent,
+        failed_count: totalFailed,
+        progress_metadata: { processed: totalSent + totalFailed, remaining, timed_out: true, last_chunk_at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+
+    return new Response(
+      JSON.stringify({ status: "partial", sent: chunkSent, failed: chunkFailed, totalSent, totalFailed, remaining, errors }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Determine final status
+  let finalStatus = "completed";
+  if (totalSent === 0 && totalFailed > 0) finalStatus = "failed";
+  else if (totalSent > 0 && totalFailed > 0) finalStatus = "completed_with_errors";
+
   await supabase
     .from("whatsapp_campaigns")
     .update({
       status: finalStatus,
-      sent_count: sent,
-      failed_count: failed,
+      sent_count: totalSent,
+      failed_count: totalFailed,
       completed_at: new Date().toISOString(),
+      progress_metadata: { processed: totalSent + totalFailed, remaining: 0 },
       updated_at: new Date().toISOString(),
     })
     .eq("id", campaignId);
 
   return new Response(
-    JSON.stringify({ success: true, sent, failed, total: (recipients || []).length, errors, finalStatus }),
+    JSON.stringify({ success: true, sent: totalSent, failed: totalFailed, total: totalSent + totalFailed, errors, finalStatus }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }
 
-// ===== Legacy flow (backward compatible — Fases 1-3: shared helpers) =====
+// ===== Legacy flow (backward compatible) =====
 async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const { client_ids, message_template } = body;
 
@@ -431,7 +466,6 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
     });
   }
 
-  // Get tenant settings
   const { data: tenant } = await supabase
     .from("tenants")
     .select("settings")
@@ -506,11 +540,9 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const errors: string[] = [];
 
   for (const client of clients || []) {
-    // Fase 2: resolvedor unificado de templates
     const message = resolveTemplate(message_template, client);
 
     if (!client.phone) {
-      // Fase 3: logger unificado
       await logMessage(supabase, {
         tenant_id: tenantUser.tenant_id,
         client_id: client.id,
@@ -528,7 +560,6 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
     const phone = client.phone.replace(/\D/g, "");
 
     try {
-      // Fase 1: motor unificado de envio
       const sendResult = await sendByProvider(
         inst!, phone, message, settings,
         evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
@@ -536,7 +567,6 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
 
       const status = sendResult.ok ? "sent" : "failed";
 
-      // Fase 3: logger unificado
       await logMessage(supabase, {
         tenant_id: tenantUser.tenant_id,
         client_id: client.id,
@@ -556,7 +586,6 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
 
       if (status === "sent") {
         sent++;
-        // Persist conversation + outbound message in CRM
         await ensureConversationAndMessage(
           supabase, tenantUser.tenant_id, inst?.id || null,
           phone, client.nome_completo, client.id, message,

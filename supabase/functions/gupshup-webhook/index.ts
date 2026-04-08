@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log("Gupshup webhook payload:", JSON.stringify(payload));
+    console.log("Gupshup webhook payload:", JSON.stringify(payload).slice(0, 500));
 
     const eventType = payload.type || payload.eventType;
 
@@ -32,44 +32,17 @@ Deno.serve(async (req) => {
       const externalId = msgPayload.id || payload.messageId || "";
 
       if (phone) {
-        // Resolve tenant from Gupshup — find instance by provider
+        // Resolve instance: find gupshup instance by provider
         const { data: instance } = await supabase
           .from("whatsapp_instances")
-          .select("id, tenant_id")
+          .select("instance_name")
           .eq("provider", "gupshup")
           .limit(1)
           .maybeSingle();
 
-        // Fallback: find tenant from destination number in tenant settings
-        let tenantId: string | null = instance?.tenant_id || null;
-        let endpointId: string | null = instance?.id || null;
+        const instanceName = instance?.instance_name;
 
-        if (!tenantId) {
-          // Try to find tenant by gupshup_source_number matching destination
-          const destination = msgPayload.destination || payload.destination;
-          if (destination) {
-            const { data: tenants } = await supabase
-              .from("tenants")
-              .select("id")
-              .limit(10);
-
-            for (const t of tenants || []) {
-              const { data: td } = await supabase
-                .from("tenants")
-                .select("settings")
-                .eq("id", t.id)
-                .single();
-              const settings = td?.settings as any;
-              if (settings?.gupshup_source_number && destination.includes(settings.gupshup_source_number.replace(/\D/g, ""))) {
-                tenantId = t.id;
-                break;
-              }
-            }
-          }
-        }
-
-        if (tenantId) {
-          // Map Gupshup message types to canonical
+        if (instanceName) {
           const canonicalType = msgType === "text" ? "text"
             : msgType === "image" ? "image"
             : msgType === "audio" ? "audio"
@@ -77,9 +50,9 @@ Deno.serve(async (req) => {
             : msgType === "document" ? "document"
             : "text";
 
-          const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
-            _tenant_id: tenantId,
-            _endpoint_id: endpointId,
+          // Single RPC call with instance_name — no separate tenant resolution
+          const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event_v2", {
+            _instance_name: instanceName,
             _channel_type: "whatsapp",
             _provider: "gupshup",
             _remote_phone: phone,
@@ -96,9 +69,51 @@ Deno.serve(async (req) => {
           });
 
           if (rpcErr) {
-            console.error("ingest_channel_event error:", rpcErr);
+            console.error("ingest_channel_event_v2 error:", rpcErr);
           } else {
             console.log("Gupshup inbound ingested:", JSON.stringify(result));
+          }
+        } else {
+          // Fallback: try tenant settings matching
+          const destination = msgPayload.destination || payload.destination;
+          if (destination) {
+            const { data: tenants } = await supabase
+              .from("tenants")
+              .select("id, settings")
+              .limit(10);
+
+            for (const t of tenants || []) {
+              const settings = t.settings as any;
+              if (settings?.gupshup_source_number && destination.includes(settings.gupshup_source_number.replace(/\D/g, ""))) {
+                const canonicalType = msgType === "text" ? "text"
+                  : msgType === "image" ? "image"
+                  : msgType === "audio" ? "audio"
+                  : msgType === "video" ? "video"
+                  : msgType === "document" ? "document"
+                  : "text";
+
+                // Use v1 RPC with tenant_id directly
+                const { error: rpcErr } = await supabase.rpc("ingest_channel_event", {
+                  _tenant_id: t.id,
+                  _endpoint_id: null,
+                  _channel_type: "whatsapp",
+                  _provider: "gupshup",
+                  _remote_phone: phone,
+                  _remote_name: senderName,
+                  _direction: "inbound",
+                  _message_type: canonicalType,
+                  _content: content || null,
+                  _media_url: mediaUrl || null,
+                  _media_mime_type: null,
+                  _external_id: externalId || null,
+                  _provider_message_id: externalId || null,
+                  _actor_type: "human",
+                  _status: "delivered",
+                });
+                if (rpcErr) console.error("ingest_channel_event error:", rpcErr);
+                break;
+              }
+            }
           }
         }
       }
@@ -106,7 +121,6 @@ Deno.serve(async (req) => {
 
     // ===== Status update (delivered, read, failed) =====
     if (eventType === "message-event" || eventType === "status") {
-      const phone = payload.payload?.destination || payload.destination;
       const status = payload.payload?.type || payload.status;
       const gsMessageId = payload.payload?.gsId || payload.payload?.id || payload.messageId;
 
@@ -117,43 +131,11 @@ Deno.serve(async (req) => {
           status === "failed" || status === "error" ? "failed" :
           status === "sent" ? "sent" : status;
 
-        // Update chat_messages by external_id or provider_message_id
-        await supabase
-          .from("chat_messages")
-          .update({ status: mappedStatus })
-          .eq("external_id", gsMessageId);
-
-        // Also try provider_message_id
-        await supabase
-          .from("chat_messages")
-          .update({ status: mappedStatus })
-          .eq("provider_message_id", gsMessageId);
-      }
-
-      // Legacy: also update message_logs
-      if (phone && status) {
-        const mappedStatus =
-          status === "delivered" ? "delivered" :
-          status === "read" ? "read" :
-          status === "failed" || status === "error" ? "failed" :
-          status === "sent" ? "sent" : status;
-
-        const cleanPhone = phone.replace(/\D/g, "");
-
-        const { data: logs } = await supabase
-          .from("message_logs")
-          .select("id")
-          .eq("phone", cleanPhone)
-          .eq("channel", "whatsapp")
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (logs && logs.length > 0) {
-          await supabase
-            .from("message_logs")
-            .update({ status: mappedStatus })
-            .eq("id", logs[0].id);
-        }
+        // Update by external_id and provider_message_id
+        await Promise.all([
+          supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
+          supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
+        ]);
       }
     }
 
