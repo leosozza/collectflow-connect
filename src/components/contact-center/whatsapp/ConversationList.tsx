@@ -385,7 +385,7 @@ const ConversationList = ({
                 <ContextMenuTrigger asChild>
                   <button
                     onClick={() => onSelect(conv)}
-                    className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors overflow-hidden ${
+                    className={`w-full text-left px-3 py-[10px] border-b border-border/30 hover:bg-[#f5f6f6] dark:hover:bg-[#202c33] transition-colors overflow-hidden min-w-0 ${
                       selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
                     }`}
                   >
