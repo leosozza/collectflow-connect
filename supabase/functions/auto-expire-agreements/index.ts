@@ -58,7 +58,6 @@ Deno.serve(async (req) => {
       .in("status", ["pending", "approved", "overdue"]);
 
     if (err1) throw err1;
-    log(`1-fetch-agreements (${activeAgreements?.length || 0} rows)`);
 
     const toOverdue: any[] = [];
     const toPending: any[] = [];
@@ -78,7 +77,6 @@ Deno.serve(async (req) => {
           .in("metadata->>agreement_id", batch);
         if (events) allPaymentEvents.push(...events);
       }
-      log('2-fetch-payments');
 
       // Index payment totals by agreement_id
       const paymentByAgreement: Record<string, number> = {};
@@ -100,7 +98,6 @@ Deno.serve(async (req) => {
           .in("agreement_id", batch);
         if (cobrancas) allPaidCobrancas.push(...(cobrancas as any[]));
       }
-      log('3-fetch-cobrancas');
 
       // Index cobranca totals by agreement_id
       const cobrancaByAgreement: Record<string, number> = {};
@@ -154,7 +151,6 @@ Deno.serve(async (req) => {
         await supabase.from("agreements").update({ status: "pending" }).in("id", ids);
       }
     }
-    log('4-status-updates');
 
     // 2. Cancel overdue agreements based on credor's prazo_dias_acordo
     const { data: overdueAgreements, error: err2 } = await supabase
@@ -254,7 +250,6 @@ Deno.serve(async (req) => {
         cancelledCount = toCancel.length;
       }
     }
-    log('5-cancel-overdue');
 
     // 3. Mark overdue client installments via RPC (server-side batching)
     const { data: updatedTotal, error: err3 } = await supabase.rpc("mark_overdue_clients", {
@@ -262,7 +257,6 @@ Deno.serve(async (req) => {
       p_batch_size: 1000,
     });
     if (err3) throw err3;
-    log(`6-mark-vencido (${updatedTotal} rows)`);
 
     return new Response(
       JSON.stringify({
