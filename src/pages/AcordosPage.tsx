@@ -14,9 +14,14 @@ import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, HandCoins } from "lucide-react";
+import { Search, Download, HandCoins, CalendarIcon } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
 
@@ -41,7 +46,10 @@ const AcordosPage = () => {
   const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
-
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
+  const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
   const isAdmin = permissions.canApproveAcordos;
 
   const load = async () => {
@@ -100,6 +108,19 @@ const AcordosPage = () => {
     return Array.from(set).sort();
   }, [agreements]);
 
+  const years = useMemo(() => {
+    const ySet = new Set(agreements.map(a => new Date(a.created_at).getFullYear()));
+    return Array.from(ySet).sort((a, b) => b - a);
+  }, [agreements]);
+
+  const months = [
+    { value: "todos", label: "Todos os Meses" },
+    ...Array.from({ length: 12 }, (_, i) => ({
+      value: String(i),
+      label: format(new Date(2024, i, 1), "MMMM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase()),
+    })),
+  ];
+
   const filteredAgreements = useMemo(() => {
     let list = agreements;
     if (statusFilter === "vigentes") {
@@ -112,8 +133,32 @@ const AcordosPage = () => {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(a => a.client_name.toLowerCase().includes(q) || a.client_cpf.toLowerCase().includes(q));
     }
+    // Date filters
+    if (dateFrom) {
+      list = list.filter(a => new Date(a.created_at) >= dateFrom);
+    }
+    if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      list = list.filter(a => new Date(a.created_at) <= end);
+    }
+    if (!dateFrom && !dateTo) {
+      if (selectedMonth !== "todos") {
+        const m = parseInt(selectedMonth);
+        const y = parseInt(selectedYear);
+        const start = startOfMonth(new Date(y, m, 1));
+        const end = endOfMonth(new Date(y, m, 1));
+        list = list.filter(a => {
+          const d = new Date(a.created_at);
+          return d >= start && d <= end;
+        });
+      } else if (selectedYear) {
+        const y = parseInt(selectedYear);
+        list = list.filter(a => new Date(a.created_at).getFullYear() === y);
+      }
+    }
     return list;
-  }, [agreements, statusFilter, credorFilter, searchQuery]);
+  }, [agreements, statusFilter, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
   const totalActiveCount = useMemo(() =>
     agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
@@ -154,7 +199,7 @@ const AcordosPage = () => {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-3 items-center">
         <Select value={credorFilter} onValueChange={setCredorFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filtrar credor" />
@@ -167,6 +212,60 @@ const AcordosPage = () => {
           </SelectContent>
         </Select>
 
+        <Select value={selectedYear} onValueChange={(v) => { setSelectedYear(v); setDateFrom(undefined); setDateTo(undefined); }}>
+          <SelectTrigger className="w-28">
+            <SelectValue placeholder="Ano" />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map(y => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedMonth} onValueChange={(v) => { setSelectedMonth(v); setDateFrom(undefined); setDateTo(undefined); }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Mês" />
+          </SelectTrigger>
+          <SelectContent>
+            {months.map(m => (
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("w-[130px] justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+              <CalendarIcon className="mr-1 h-3.5 w-3.5" />
+              {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "De"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={dateFrom} onSelect={(d) => { setDateFrom(d); setSelectedMonth("todos"); }} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("w-[130px] justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+              <CalendarIcon className="mr-1 h-3.5 w-3.5" />
+              {dateTo ? format(dateTo, "dd/MM/yyyy") : "Até"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={dateTo} onSelect={(d) => { setDateTo(d); setSelectedMonth("todos"); }} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+
+        {(dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>
+            Limpar datas
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

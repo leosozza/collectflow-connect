@@ -218,6 +218,51 @@ export const manualPaymentService = {
 
       if (updateErr) throw updateErr;
 
+      // Check if agreement is fully paid and mark as approved
+      try {
+        const { data: agreement } = await supabase
+          .from("agreements")
+          .select("id, proposed_total, status")
+          .eq("id", mp.agreement_id)
+          .single();
+
+        if (agreement && agreement.status !== "approved") {
+          const { data: confirmedPayments } = await supabase
+            .from("manual_payments" as any)
+            .select("amount_paid")
+            .eq("agreement_id", mp.agreement_id)
+            .eq("status", "confirmed");
+
+          const { data: paidCobrancas } = await supabase
+            .from("negociarie_cobrancas" as any)
+            .select("valor")
+            .eq("agreement_id", mp.agreement_id)
+            .eq("status", "pago");
+
+          const manualTotal = ((confirmedPayments as any[]) || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
+          const cobrancaTotal = ((paidCobrancas as any[]) || []).reduce((s, c) => s + Number(c.valor || 0), 0);
+          const totalPaid = Math.max(manualTotal, cobrancaTotal, manualTotal + cobrancaTotal);
+
+          if (totalPaid >= (agreement.proposed_total || 0) - 0.01 && agreement.proposed_total > 0) {
+            await supabase
+              .from("agreements")
+              .update({ status: "approved" })
+              .eq("id", mp.agreement_id);
+
+            // Also update client status
+            await supabase
+              .from("clients")
+              .update({ status: "pago" })
+              .eq("status", "em_acordo")
+              .eq("credor", (agr as any).credor)
+              .eq("cpf", (agr as any).client_cpf)
+              .eq("tenant_id", mp.tenant_id);
+          }
+        }
+      } catch (e) {
+        logger.error(MODULE, "check_fully_paid", e);
+      }
+
       // Register event
       try {
         await supabase.from("client_events").insert({
