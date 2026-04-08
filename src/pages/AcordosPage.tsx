@@ -199,7 +199,7 @@ const AcordosPage = () => {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-3 items-center">
         <Select value={credorFilter} onValueChange={setCredorFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filtrar credor" />
@@ -212,6 +212,60 @@ const AcordosPage = () => {
           </SelectContent>
         </Select>
 
+        <Select value={selectedYear} onValueChange={(v) => { setSelectedYear(v); setDateFrom(undefined); setDateTo(undefined); }}>
+          <SelectTrigger className="w-28">
+            <SelectValue placeholder="Ano" />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map(y => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedMonth} onValueChange={(v) => { setSelectedMonth(v); setDateFrom(undefined); setDateTo(undefined); }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Mês" />
+          </SelectTrigger>
+          <SelectContent>
+            {months.map(m => (
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("w-[130px] justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+              <CalendarIcon className="mr-1 h-3.5 w-3.5" />
+              {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "De"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={dateFrom} onSelect={(d) => { setDateFrom(d); setSelectedMonth("todos"); }} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("w-[130px] justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+              <CalendarIcon className="mr-1 h-3.5 w-3.5" />
+              {dateTo ? format(dateTo, "dd/MM/yyyy") : "Até"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={dateTo} onSelect={(d) => { setDateTo(d); setSelectedMonth("todos"); }} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+
+        {(dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>
+            Limpar datas
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
