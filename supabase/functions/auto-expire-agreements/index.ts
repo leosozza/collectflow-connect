@@ -274,6 +274,7 @@ Deno.serve(async (req) => {
       batchCount = batch?.length || 0;
       updatedTotal += batchCount;
     } while (batchCount === 500);
+    log(`6-mark-vencido (${updatedTotal} rows)`);
 
     return new Response(
       JSON.stringify({
