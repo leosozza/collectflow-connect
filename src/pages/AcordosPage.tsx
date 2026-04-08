@@ -84,8 +84,8 @@ const AcordosPage = () => {
             .select("agreement_id, installment_number, amount_paid, status")
             .in("agreement_id", agreementIds),
         ]);
-        setCobrancas((cobRes.data || []) as CobrancaRecord[]);
-        setManualPayments((mpRes.data || []) as ManualPaymentRecord[]);
+        setCobrancas((cobRes.data || []) as unknown as CobrancaRecord[]);
+        setManualPayments((mpRes.data || []) as unknown as ManualPaymentRecord[]);
       } else {
         setCobrancas([]);
         setManualPayments([]);
