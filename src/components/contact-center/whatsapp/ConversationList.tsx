@@ -361,14 +361,14 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                   >
                     <div className="flex items-center gap-3 w-full min-w-0">
                       <ConversationAvatar conv={conv} />
-                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
                             <span className="font-normal text-[15px] text-foreground truncate">
                               {displayName}
                             </span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                          <span className={`text-[11px] whitespace-nowrap shrink-0 ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
                             {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                           </span>
                         </div>
@@ -420,7 +420,7 @@ const ConversationList = ({ conversations, selectedId, onSelect, onStatusChange,
                             })()}
                             <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
                             {conv.unread_count > 0 && (
-                              <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366]">
+                              <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366] flex items-center justify-center">
                                 {conv.unread_count}
                               </Badge>
                             )}
