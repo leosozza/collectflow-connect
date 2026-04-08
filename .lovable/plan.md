@@ -1,80 +1,43 @@
 
 
-# Acordos por Mês de Vencimento das Parcelas
+# Fix: Renato Aparecendo em Vigentes ao Invés de Pagos
 
-## Contexto
+## Problemas Identificados
 
-Hoje a página /acordos filtra por `created_at` (data de criação do acordo) e usa o status global do acordo (pending, approved, overdue, etc). O pedido é mudar para filtrar pelo **mês de vencimento das parcelas**, determinando a aba correta com base no status daquela parcela específica.
+### 1. Mismatch no installment_key da entrada
+O gerador de boletos (`generate-agreement-boletos`) usa `agreementId:0` como chave da entrada. Porém, o classificador (`agreementInstallmentClassifier.ts`) procura por `agreementId:entrada`. Resultado: a cobrança paga da entrada nunca é encontrada pelo classificador.
 
-## Lógica Proposta
+**Dado real do Renato:**
+- Cobrança da entrada: `installment_key = "65585edf...:0"`, `status = "pago"`
+- Classificador busca: `"65585edf...:entrada"` → não encontra → classifica como vigente/vencido
 
-Ao selecionar Abril/2026, o sistema calcula quais parcelas de quais acordos vencem em abril e classifica:
+### 2. Lógica "pior status" para múltiplas parcelas no mesmo mês
+Renato tem **duas parcelas em abril**: entrada (08/04, paga) e parcela 2 (30/04, vigente). O sistema pega o "pior status" entre todas as parcelas do mês, resultando em `vigente`. Isso é correto conceitualmente — um acordo com parcela pendente no mês não deveria ir para "Pagos". Mas o bug #1 faz a entrada nem ser reconhecida como paga.
 
-- **Pagos**: parcela do mês já quitada (via cobrança paga, manual_payment confirmado, ou payment_confirmed event)
-- **Vigentes**: parcela do mês ainda não venceu e não está paga
-- **Vencidos**: parcela do mês já passou da data e não foi paga
-- **Cancelados**: acordo com status `cancelled`
-- **Aguardando Liberação**: acordo com status `pending_approval`
-- **Confirmação de Pagamento**: parcela com manual_payment `pending_confirmation`
+## Correção
 
-## Dados Necessários
+### Arquivo: `src/lib/agreementInstallmentClassifier.ts` (linha 120)
 
-Além dos agreements, precisamos carregar:
-1. **negociarie_cobrancas** — contém `installment_key` e `status` (pago/pendente/vencido)
-2. **manual_payments** — contém `agreement_id`, `installment_number`, `status`
+Alterar a construção do `installmentKey` para usar o número (0) em vez de "entrada", alinhando com o formato real no banco:
 
-Esses dados serão buscados em batch ao carregar a página (2 queries adicionais).
+```ts
+// ANTES:
+const installmentKey = `${agId}:${installment.isEntrada ? "entrada" : installment.number}`;
 
-## Implementação
+// DEPOIS:
+const installmentKey = `${agId}:${installment.number}`;
+```
 
-### Arquivo: `src/pages/AcordosPage.tsx`
+Isso resolve o caso do Renato: a entrada (number=0) será buscada como `agreementId:0`, que é o valor real na tabela `negociarie_cobrancas`.
 
-1. **Buscar dados complementares** no `load()`:
-   - `negociarie_cobrancas` com `agreement_id` dos acordos carregados
-   - `manual_payments` com `agreement_id` dos acordos carregados
+### Resultado esperado
+- Entrada de abril (08/04): classificada como **pago** (cobrança encontrada com status "pago")
+- Parcela 2 de abril (30/04): classificada como **vigente** (ainda não venceu)
+- Status final do mês: **vigente** (pior entre pago e vigente)
 
-2. **Função `getInstallmentForMonth(agreement, month, year)`**:
-   - Calcula todas as parcelas (entrada + parcelas regulares) usando `first_due_date`, `entrada_date`, `custom_installment_dates`, `addMonths`
-   - Retorna a parcela cujo vencimento cai no mês/ano selecionado (ou null)
+**Nota:** Renato continuará em "Vigentes" em abril porque tem uma parcela pendente (30/04). Ele só aparecerá em "Pagos" quando **todas** as parcelas de abril estiverem pagas. Esse é o comportamento correto conforme a lógica definida anteriormente.
 
-3. **Função `getInstallmentStatus(agreement, installment, cobrancas, manualPayments)`**:
-   - Verifica cobrança associada (`installment_key = agreementId:numero`)
-   - Verifica manual_payment confirmado ou pending_confirmation
-   - Calcula pagamento por waterfall (como já faz o AgreementInstallments)
-   - Retorna: `pago`, `vigente`, `vencido`, `pending_confirmation`
-
-4. **Substituir filtro `filteredAgreements`**:
-   - Se mês/ano selecionado: filtra apenas acordos que têm parcela naquele mês e classifica pelo status da parcela
-   - Se "todos os meses": mantém comportamento por status global do acordo
-   - Abas `cancelled` e `pending_approval` continuam usando status global (não dependem de parcela)
-
-5. **Filtros de data (De/Até)**: passam a considerar `first_due_date` ao invés de `created_at`
-
-### Interface Agreement — campos adicionais
-
-Adicionar ao tipo `Agreement` os campos que já existem no banco mas não estão no tipo:
-- `custom_installment_dates`
-- `custom_installment_values`
-- `entrada_date`
-
-## Impacto em Outras Rotas
-
-- **Dashboard** (`get_dashboard_vencimentos`, `get_dashboard_stats`): RPCs independentes, sem impacto
-- **Carteira**: usa status do `clients`, sem impacto
-- **auto-expire-agreements**: Edge Function independente, sem impacto
-- **AgreementInstallments** (detalhe do cliente): componente isolado, sem impacto
-- **manualPaymentService**: sem alteração
-
-A mudança é 100% isolada no `AcordosPage.tsx` e no tipo `Agreement`.
-
-## Resultado
-
-| Cenário | Aba |
-|---------|-----|
-| Parcela de abril paga (Jaciele) | Pagos |
-| Parcela de abril ainda não venceu (Renato, 5 restantes) | Vigentes |
-| Parcela de abril vencida sem pagamento | Vencidos |
-| Acordo cancelado | Cancelados |
-| Acordo fora dos termos do credor | Aguardando Liberação |
-| Operador fez baixa, admin não confirmou | Confirmação de Pagamento |
+### Impacto
+- Apenas o classificador é alterado (1 linha)
+- Nenhum impacto em outras rotas, dashboard ou edge functions
 
