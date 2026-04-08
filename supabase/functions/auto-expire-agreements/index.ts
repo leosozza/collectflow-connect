@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
         await supabase.from("agreements").update({ status: "pending" }).in("id", ids);
       }
     }
+    log('4-status-updates');
 
     // 2. Cancel overdue agreements based on credor's prazo_dias_acordo
     const { data: overdueAgreements, error: err2 } = await supabase
