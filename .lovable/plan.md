@@ -1,46 +1,49 @@
 
 
-# Fix: Status Incorretos — Jaciele "Vencido" no Perfil + "Aprovado" no Dashboard
+# Relatório: Análise das Correções Aplicadas
 
-## Problemas Encontrados
+## Correções Verificadas — TODAS APLICADAS COM SUCESSO
 
-### 1. Campo errado no cálculo de pagamentos (AgreementInstallments — Perfil)
-No componente `AgreementInstallments.tsx` (linha 109), o código lê `mp.amount` para somar pagamentos manuais confirmados. Porém, o campo correto na tabela e no serviço é `amount_paid`. Resultado: **total de pagamentos = 0**, e a parcela é classificada como "vencido" (pois 07/04 já passou).
+### 1. Campo `amount_paid` no perfil do cliente ✅
+**Arquivo:** `src/components/client-detail/AgreementInstallments.tsx` (linha 109)
+- **Antes:** `mp.amount` (campo inexistente → retornava 0)
+- **Depois:** `mp.amount_paid` (campo correto da tabela `manual_payments`)
+- **Resultado:** Parcelas com baixa manual confirmada agora são corretamente reconhecidas como pagas no perfil do cliente. Jaciele não aparecerá mais como "Vencido".
 
-```ts
-// Linha 109 — BUG:
-total += confirmedManual.reduce((sum, mp) => sum + Number(mp.amount || 0), 0);
-//                                                         ^^^^^^^^^^
-// Campo correto:
-total += confirmedManual.reduce((sum, mp) => sum + Number(mp.amount_paid || 0), 0);
-```
+### 2. Label "Pago" no Dashboard ✅
+**Arquivo:** `src/pages/DashboardPage.tsx` (linha 320)
+- **Antes:** `approved` → "Aprovado" (badge amarelo)
+- **Depois:** `approved` → "Pago" (badge verde)
+- **Resultado:** Acordos quitados são exibidos com o rótulo correto no Dashboard.
 
-### 2. Dashboard mostra "Aprovado" em vez de "Pago" (DashboardPage)
-Na tabela de vencimentos do dia (linha 314), o mapeamento é:
-- `approved` → "Aprovado"
-- qualquer outro → "Pendente"
+### 3. installment_key alinhado com banco ✅
+**Arquivo:** `src/lib/agreementInstallmentClassifier.ts` (linha 120)
+- **Antes:** `agreementId:entrada` (não existia no banco)
+- **Depois:** `agreementId:0` (formato real da tabela `negociarie_cobrancas`)
+- **Resultado:** Entradas pagas via boleto são corretamente detectadas na página /acordos.
 
-Deveria ser `approved` → "Pago", pois `approved` no sistema significa acordo quitado.
+### 4. RPC `get_dashboard_vencimentos` ✅
+- Filtro adicionado para excluir acordos com `status = 'approved'`
+- Acordos já quitados não aparecem mais nos "Vencimentos do Dia"
 
-### 3. Jaciele continua aparecendo nos vencimentos do dia
-Se o acordo está `approved` (totalmente pago), ela não deveria aparecer na lista de vencimentos do dia. A RPC `get_dashboard_vencimentos` provavelmente não filtra acordos já quitados.
+## Problema Pendente — Erro de Build (NÃO relacionado às correções acima)
 
-## Correções
+O deploy está bloqueado por erros de tipo em `supabase/functions/process-email-queue/index.ts`. A tabela `email_send_log` e a RPC `move_to_dlq` existem no banco de dados, mas os **tipos TypeScript auto-gerados** não as incluem. Isso causa 4 erros TS.
 
-### A. `src/components/client-detail/AgreementInstallments.tsx` (linha 109)
-Trocar `mp.amount` por `mp.amount_paid`.
+**Correção necessária:** Adicionar cast `as any` nas chamadas `.from('email_send_log')` e `.rpc('move_to_dlq')` nessa edge function, já que a tabela existe mas não está nos tipos gerados. São ~6 linhas afetadas, todas no mesmo arquivo.
 
-### B. `src/pages/DashboardPage.tsx` (linha 314)
-Trocar `"Aprovado"` por `"Pago"` no mapeamento de status.
+### Também afetado: `maxlist-import/index.ts`
+Listado no erro mas o problema real está apenas no `process-email-queue`.
 
-### C. RPC `get_dashboard_vencimentos` — verificar se filtra `approved`
-Se a RPC retorna parcelas de acordos já `approved`, adicionar filtro para excluí-las (ou mostrar com badge "Pago" diferenciado em verde).
+## Resumo
 
-## Arquivos Alterados
-- `src/components/client-detail/AgreementInstallments.tsx` — corrigir campo `amount` → `amount_paid`
-- `src/pages/DashboardPage.tsx` — corrigir label "Aprovado" → "Pago"
-- Possível ajuste na RPC `get_dashboard_vencimentos` para excluir acordos quitados
+| Correção | Status | Impacto |
+|----------|--------|---------|
+| `amount_paid` no perfil | ✅ Aplicada | Jaciele aparece como "Pago" |
+| Label "Pago" no dashboard | ✅ Aplicada | Badge verde correto |
+| installment_key `:0` | ✅ Aplicada | Entradas detectadas na /acordos |
+| RPC filtro approved | ✅ Aplicada | Quitados saem dos vencimentos |
+| Build error email queue | ❌ Pendente | Bloqueia deploy de edge functions |
 
-## Impacto
-- Nenhum em outras rotas. Correções pontuais de campo e label.
+**Recomendação:** Corrigir o erro de build no `process-email-queue/index.ts` para desbloquear o deploy e permitir que todas as correções entrem em produção.
 
