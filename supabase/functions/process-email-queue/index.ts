@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
     const failedAttemptsByMessageId = new Map<string, number>()
     if (messageIds.length > 0) {
       const { data: failedRows, error: failedRowsError } = await supabase
-        .from('email_send_log')
+        .from('email_send_log' as any)
         .select('message_id')
         .in('message_id', messageIds)
         .eq('status', 'failed')
@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
       // Guard: skip if another worker already sent this message (VT expired race)
       if (payload.message_id) {
         const { data: alreadySent } = await supabase
-          .from('email_send_log')
+          .from('email_send_log' as any)
           .select('id')
           .eq('message_id', payload.message_id)
           .eq('status', 'sent')
@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
         )
 
         // Log success
-        await supabase.from('email_send_log').insert({
+        await supabase.from('email_send_log' as any).insert({
           message_id: payload.message_id,
           template_name: payload.label || queue,
           recipient_email: payload.to,
@@ -295,7 +295,7 @@ Deno.serve(async (req) => {
         })
 
         if (isRateLimited(error)) {
-          await supabase.from('email_send_log').insert({
+          await supabase.from('email_send_log' as any).insert({
             message_id: payload.message_id,
             template_name: payload.label || queue,
             recipient_email: payload.to,
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
         }
 
         // Log non-429 failures to track real retry attempts.
-        await supabase.from('email_send_log').insert({
+        await supabase.from('email_send_log' as any).insert({
           message_id: payload.message_id,
           template_name: payload.label || queue,
           recipient_email: payload.to,
