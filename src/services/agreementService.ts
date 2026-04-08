@@ -21,6 +21,8 @@ export interface Agreement {
   first_due_date: string;
   entrada_value?: number;
   entrada_date?: string;
+  custom_installment_dates?: Record<string, string> | null;
+  custom_installment_values?: Record<string, number> | null;
   status: string;
   boleto_pendente?: boolean;
   created_by: string;
