@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
           .in("metadata->>agreement_id", batch);
         if (events) allPaymentEvents.push(...events);
       }
+      log('2-fetch-payments');
 
       // Index payment totals by agreement_id
       const paymentByAgreement: Record<string, number> = {};
