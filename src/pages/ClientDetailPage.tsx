@@ -41,8 +41,8 @@ const statusLabelsMap: Record<string, string> = {
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
   rejected: "Rejeitado",
-  cancelled: "Quebra de Acordo",
-  overdue: "Acordo Atrasado",
+  cancelled: "Cancelado",
+  overdue: "Vencido",
 };
 
 const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "destructive"> = {
@@ -106,7 +106,7 @@ const ClientDetailPage = () => {
       }
       const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
-      
+
       // Fetch creator profiles for all agreements
       const creatorIds = [...new Set((data || []).map((a: any) => a.created_by).filter(Boolean))];
       let profilesMap: Record<string, string> = {};
@@ -119,7 +119,7 @@ const ClientDetailPage = () => {
           profiles.forEach((p: any) => { profilesMap[p.user_id] = p.full_name; });
         }
       }
-      
+
       return (data || []).map((a: any) => ({
         ...a,
         creator_name: profilesMap[a.created_by] || (a.portal_origin ? "Portal" : null),
@@ -271,12 +271,12 @@ const ClientDetailPage = () => {
                       const statusClass = c.status === "pago"
                         ? "bg-green-500/10 text-green-600 border-green-500/30"
                         : isOverdue
-                        ? "bg-destructive/10 text-destructive border-destructive/30"
-                        : c.status === "quebrado"
-                        ? "bg-muted text-muted-foreground border-muted"
-                        : isEmAcordo
-                        ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
-                        : "bg-warning/10 text-warning border-warning/30";
+                          ? "bg-destructive/10 text-destructive border-destructive/30"
+                          : c.status === "quebrado"
+                            ? "bg-muted text-muted-foreground border-muted"
+                            : isEmAcordo
+                              ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                              : "bg-warning/10 text-warning border-warning/30";
                       const valorEfetivo = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (

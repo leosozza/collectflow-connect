@@ -180,10 +180,16 @@ BEGIN
     a.credor,
     1::int AS numero_parcela,
     COALESCE((a.custom_installment_values->>'entrada')::numeric, a.entrada_value) AS valor_parcela,
-    a.status AS agreement_status
+    (CASE 
+      WHEN EXISTS (
+        SELECT 1 FROM manual_payments mp 
+        WHERE mp.agreement_id = a.id AND mp.installment_number = 1 AND mp.status = 'confirmed'
+      ) THEN 'approved'
+      ELSE a.status
+    END) AS agreement_status
   FROM agreements a
   WHERE a.tenant_id = _tenant
-    AND a.status IN ('pending', 'approved', 'overdue')
+    AND a.status IN ('pending', 'overdue', 'approved')
     AND (_user_id IS NULL OR a.created_by = _user_id)
     AND a.entrada_value > 0
     AND COALESCE(a.entrada_date, a.first_due_date)::date = _target_date
@@ -199,11 +205,19 @@ BEGIN
     COALESCE((a.custom_installment_values->>cast(
       CASE WHEN a.entrada_value > 0 THEN i + 2 ELSE i + 1 END
     as text))::numeric, a.new_installment_value) AS valor_parcela,
-    a.status AS agreement_status
+    (CASE 
+      WHEN EXISTS (
+        SELECT 1 FROM manual_payments mp 
+        WHERE mp.agreement_id = a.id 
+          AND mp.installment_number = (CASE WHEN a.entrada_value > 0 THEN i + 2 ELSE i + 1 END) 
+          AND mp.status = 'confirmed'
+      ) THEN 'approved'
+      ELSE a.status
+    END) AS agreement_status
   FROM agreements a
   CROSS JOIN LATERAL generate_series(0, a.new_installments - 1) AS i
   WHERE a.tenant_id = _tenant
-    AND a.status IN ('pending', 'approved', 'overdue')
+    AND a.status IN ('pending', 'overdue', 'approved')
     AND (_user_id IS NULL OR a.created_by = _user_id)
     AND (a.first_due_date::date + (i * interval '1 month'))::date = _target_date;
 END;

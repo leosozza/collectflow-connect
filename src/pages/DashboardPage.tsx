@@ -98,7 +98,7 @@ const DashboardPage = () => {
       if (rpcUserId) params._user_id = rpcUserId;
       if (filterYear) params._year = filterYear;
       if (filterMonth) params._month = filterMonth;
-      
+
       const { data, error } = await supabase.rpc("get_dashboard_stats", params as any);
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
@@ -113,7 +113,7 @@ const DashboardPage = () => {
     queryFn: async () => {
       const params: Record<string, unknown> = { _target_date: browseDateStr };
       if (rpcUserId) params._user_id = rpcUserId;
-      
+
       const { data, error } = await supabase.rpc("get_dashboard_vencimentos", params as any);
       if (error) throw error;
       return (data || []) as VencimentoRow[];
@@ -269,7 +269,7 @@ const DashboardPage = () => {
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
 
-      
+
 
       {/* Meus Clientes table — virtual installments from agreements */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -317,7 +317,7 @@ const DashboardPage = () => {
                             ? "bg-destructive/10 text-destructive border-destructive/30"
                             : "bg-warning/10 text-warning border-warning/30"
                       }`}>
-                        {v.agreement_status === "approved" ? "Aprovado" : v.agreement_status === "overdue" ? "Atrasado" : "Pendente"}
+                        {v.agreement_status === "approved" ? "Pago" : v.agreement_status === "overdue" ? "Atrasado" : "Pendente"}
                       </span>
                     </TableCell>
                   </TableRow>
