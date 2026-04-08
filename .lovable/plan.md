@@ -1,96 +1,30 @@
 
 
-# Otimização de Alta Escala — WhatsApp System
+# Fix: Indicadores de Não Lidas e Horário Não Aparecem
 
-## Visão Geral
+## Diagnóstico
 
-Quatro pilares de otimização: busca de clientes no banco, paginação server-side no chat, consolidação do webhook, e chunked processing em campanhas.
+O código dos indicadores (horário verde + badge) **existe** no arquivo, mas não aparece visualmente. A captura de tela confirma: nenhuma conversa mostra horário ou badge à direita.
 
----
+**Causa raiz**: O layout da conversa não reserva espaço suficiente para o lado direito. O conteúdo do nome e mensagem ocupa 100% da largura, empurrando o horário e badge para fora da área visível (cortado pelo `overflow-hidden`).
 
-## Pilar 1 — Busca de Clientes Indexada
+## Solução
 
-**Problema**: `useClientByPhone.ts` usa `ILIKE %suffix%` — full table scan.
+**Arquivo:** `src/components/contact-center/whatsapp/ConversationList.tsx`
 
-**Solução**: Já existe a infraestrutura da Fase 2 (`client_phones` com `phone_last8` indexado + RPC `resolve_client_by_phone`). Falta migrar o frontend para usá-la.
+### Mudanças
 
-**Mudanças**:
-- **`src/hooks/useClientByPhone.ts`**: Substituir query ILIKE por chamada `supabase.rpc("resolve_client_by_phone", { _tenant_id, _phone })`. Resultado volta indexado via `idx_client_phones_tenant_last8`.
-- **Migração SQL**: Criar índice `idx_client_phones_tenant_last8` caso não exista (verificar). Adicionar índice GIN com `pg_trgm` em `clients.nome_completo` para buscas por nome no futuro.
+1. **Linha do nome + horário (linha 395-404)**: Garantir que o horário tenha `shrink-0` e `ml-auto` para sempre ficar visível à direita. O nome deve ter `min-w-0` e `truncate` para encolher quando necessário.
 
----
+2. **Linha da mensagem + badge (linha 405-458)**: Mesma lógica — a mensagem deve truncar, e o grupo de indicadores (status dot + badge) deve ter `shrink-0` para nunca ser cortado.
 
-## Pilar 2 — Paginação Server-Side + Filtros no Banco
+3. **Forçar largura mínima nos indicadores**: Adicionar `min-w-fit` ao container dos indicadores à direita para que nunca sejam comprimidos.
 
-**Problema**: `fetchConversations` carrega tudo na memória; filtros de status/operador/instância são `.filter()` no JS.
+4. **Corrigir o `TooltipTrigger` sem ref (warning no console)**: O `ConversationAvatar` usa `TooltipTrigger asChild` passando ref para um `<div>`, mas o warning indica que um function component está recebendo ref. Envolver o ícone em `forwardRef` ou remover `asChild`.
 
-**Mudanças**:
-
-### `src/services/conversationService.ts`
-- Expandir `fetchConversations` para aceitar todos os filtros: `statusFilter`, `instanceFilter`, `operatorFilter`, `search`, `unreadOnly`, `linkFilter`.
-- Aplicar filtros via `.eq()` / `.ilike()` / `.gt()` no Supabase query (server-side).
-
-### `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`
-- Usar `useInfiniteQuery` do TanStack Query em vez de `useState` + `loadConversations`.
-- Carregar páginas de 30 conversas por vez, com `getNextPageParam` baseado no count retornado.
-- Passar filtros como dependências do queryKey para refetch automático.
-- Manter realtime subscription para updates incrementais (já otimizado).
-
-### `src/components/contact-center/whatsapp/ConversationList.tsx`
-- Remover toda lógica de filtragem JS (`filtered = conversations.filter(...)`).
-- Receber conversas já filtradas do parent.
-- Adicionar `onLoadMore` callback + `IntersectionObserver` no final da lista para scroll infinito.
-- Status counts virão de uma query separada (ou do `count` do fetch).
-
----
-
-## Pilar 3 — Webhook Consolidado (RPC Única)
-
-**Problema**: O webhook faz 3+ queries sequenciais (buscar instância, resolver cliente, buscar SLA, inserir mensagem).
-
-**Situação atual**: O `ingest_channel_event` RPC **já consolida** resolve cliente + find/create conversa + deduplica + insere mensagem + SLA. O webhook já a utiliza.
-
-**Otimização restante**:
-- **Lookup de instância**: Mover a busca de `whatsapp_instances` para dentro da RPC, recebendo `_instance_name` em vez de `_endpoint_id`. Isso elimina 1 query no webhook.
-- Criar **nova versão** da RPC `ingest_channel_event_v2` que aceita `_instance_name` e faz o lookup internamente.
-- Atualizar `whatsapp-webhook/index.ts` e `gupshup-webhook/index.ts` para usar a v2.
-
-**Mudanças**:
-- **Migração SQL**: Criar `ingest_channel_event_v2` com parâmetro `_instance_name text` que resolve internamente `whatsapp_instances` → `endpoint_id` + `tenant_id`.
-- **`whatsapp-webhook/index.ts`**: Simplificar para ~60 linhas — parse payload + chama RPC v2 com `_instance_name`.
-- **`gupshup-webhook/index.ts`**: Mesma simplificação.
-
----
-
-## Pilar 4 — Campanhas com Chunked Processing
-
-**Problema**: `send-bulk-whatsapp` carrega todos os recipients `pending` de uma vez. Campanhas grandes podem estourar memória/timeout.
-
-**Mudanças em `supabase/functions/send-bulk-whatsapp/index.ts`**:
-- Processar recipients em **chunks de 100** (carregar 100 pending, processar, carregar próximos 100).
-- Adicionar **contagem prévia** de recipients pendentes para estimar tempo.
-- Implementar **checkpoint**: atualizar `whatsapp_campaigns.progress_metadata` com `{ processed: N, last_recipient_id }` a cada chunk.
-- Se a função atingir ~50s de execução, retornar `{ status: "partial", processed, remaining }` — o frontend pode re-invocar automaticamente.
-- Manter throttle de 200ms entre mensagens (já existe).
-
----
-
-## Resumo de Arquivos
-
-| Arquivo | Mudança |
-|---|---|
-| Migração SQL | `ingest_channel_event_v2` + índice GIN em `nome_completo` |
-| `src/hooks/useClientByPhone.ts` | Migrar para RPC `resolve_client_by_phone` |
-| `src/services/conversationService.ts` | Filtros server-side em `fetchConversations` |
-| `WhatsAppChatLayout.tsx` | `useInfiniteQuery` + filtros como queryKey |
-| `ConversationList.tsx` | Remover `.filter()` JS + scroll infinito |
-| `whatsapp-webhook/index.ts` | Simplificar com RPC v2 (instance lookup interno) |
-| `gupshup-webhook/index.ts` | Mesma simplificação |
-| `send-bulk-whatsapp/index.ts` | Chunked processing + checkpoint |
-
-## Segurança
-
-- Multi-tenancy (`tenant_id`) preservada em todas as queries e RPCs
-- Compatibilidade Evolution/Gupshup/WuzAPI mantida
-- Zero breaking changes — RPC v1 permanece funcional
+### Resultado esperado
+Cada conversa mostrará:
+- Horário relativo à direita (verde se não lida, cinza se lida)
+- Badge verde com contagem de não lidas abaixo do horário
+- Tudo visível mesmo com nomes longos
 
