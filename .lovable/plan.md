@@ -1,38 +1,37 @@
 
 
-# Reestruturar Layout da Lista de Conversas (Referência WhatsApp)
+# Mostrar Relógio SLA Apenas em Conversas da API Oficial
 
-## Problema
-O layout atual tem `overflow-hidden` no container flex externo (linha 392) que corta os indicadores. Além disso, a estrutura das linhas difere da referência fornecida.
+## O que muda
 
-## Referência (app fornecido)
-```text
-┌──────────────────────────────────────────┐
-│ [Avatar]  Título           (3)  09:36    │  ← Row 1: nome + badge não lido + hora
-│           Campanha / Status badges       │  ← Row 2: badges opcionais
-│           ✓ Última mensagem preview...   │  ← Row 3: preview (bold se não lido)
-│           👤 Nome operador               │  ← Row 4: operador
-└──────────────────────────────────────────┘
+O relógio de SLA será exibido **somente** para conversas vinculadas a instâncias com `provider_category = 'official_meta'`. Conversas de instâncias não oficiais não terão o ícone.
+
+## Como
+
+### 1. Ampliar o tipo da prop `instances` no `ConversationList`
+
+Atualmente é `{ id: string; name: string }[]`. Adicionar `provider_category`:
+```
+instances: { id: string; name: string; provider_category?: string }[]
 ```
 
-## Mudanças
+### 2. No `WhatsAppChatLayout`, passar `provider_category` junto
 
-**Arquivo:** `src/components/contact-center/whatsapp/ConversationList.tsx`
-
-### 1. Remover `overflow-hidden` do container flex (linha 392)
-O `overflow-hidden` no `<div className="flex items-center gap-3 w-full min-w-0 overflow-hidden">` é a causa principal dos indicadores cortados. Remover, mantendo `min-w-0`.
-
-### 2. Reestruturar Row 1 conforme referência
-Mover o badge de não lidas (atualmente na Row 2, linhas 460-464) para a Row 1, entre o nome e o horário:
-```
-Nome truncado ... (badge não lidas) Horário
+Na linha onde mapeamos instances para o `ConversationList`, incluir o campo:
+```ts
+instances={instances.map((i) => ({ id: i.id, name: i.name, provider_category: i.provider_category }))}
 ```
 
-### 3. Row 2: Message preview + SLA/status
-Manter a preview da mensagem com truncate. O preview ficará **bold** (`font-semibold text-foreground`) quando `unread_count > 0`. Adicionar prefixo `✓` para mensagens outbound como na referência.
+### 3. No bloco do relógio SLA (linha ~426), verificar a instância
 
-### 4. Manter Row 3 (dispositions) inalterada
+Antes de renderizar o `Clock`, buscar a instância da conversa e checar se é oficial:
+```ts
+const inst = instances.find(i => i.id === conv.instance_id);
+const isOfficial = inst?.provider_category === "official_meta";
+if (!deadline || !isOfficial) return null;
+```
 
 ### Resultado
-Layout idêntico à referência, com todos os indicadores visíveis e texto truncado corretamente.
+- Conversas de instâncias oficiais (Meta/Gupshup): relógio verde/laranja/vermelho conforme SLA
+- Conversas de instâncias não oficiais: sem relógio
 
