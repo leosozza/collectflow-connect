@@ -330,7 +330,7 @@ const ChatPanel = ({
         onSendAudio={onSendAudio}
         onSendInternalNote={onSendInternalNote}
         quickReplies={quickReplies}
-        disabled={sending}
+        disabled={sending || conversation.status === "waiting"}
         clientInfo={clientInfo}
         operatorName={operatorName}
         replyTo={replyTo}
