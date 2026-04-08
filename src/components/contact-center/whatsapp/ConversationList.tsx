@@ -389,22 +389,23 @@ const ConversationList = ({
                       selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
                     }`}
                   >
-                    <div className="flex items-center gap-3 w-full min-w-0">
+                    <div className="flex items-center gap-3 w-full min-w-0 overflow-hidden">
                       <ConversationAvatar conv={conv} />
-                      <div className="flex-1 min-w-0">
+                      
+                      <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
                         {/* Row 1: Name and Time */}
-                        <div className="flex items-center justify-between gap-2 mb-[2px]">
-                          <span className="font-semibold text-[15px] text-foreground truncate flex-1 min-w-0">
+                        <div className="flex items-center justify-between w-full min-w-0 gap-2">
+                          <span className={`font-semibold text-[15px] text-foreground truncate ${conv.unread_count > 0 ? "" : ""}`}>
                             {displayName}
                           </span>
-                          <span className={`text-[12px] whitespace-nowrap shrink-0 ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
+                          <span className={`text-[12px] whitespace-nowrap shrink-0 text-right min-w-[35px] ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
                             {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                           </span>
                         </div>
 
-                        {/* Row 2: Message, SLA, Status, and Badge */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[13px] text-muted-foreground flex-1 min-w-0 truncate">
+                        {/* Row 2: Message and Stats/Badge */}
+                        <div className="flex items-center justify-between w-full min-w-0 gap-2 mt-[1px]">
+                          <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
                                 ? `📎 ${conv.last_message_type === "audio" ? "Áudio" : conv.last_message_type === "image" ? "Imagem" : conv.last_message_type === "video" ? "Vídeo" : conv.last_message_type === "document" ? "Documento" : conv.last_message_type === "sticker" ? "Sticker" : "Mídia"}`
@@ -412,7 +413,7 @@ const ConversationList = ({
                               : conv.remote_phone}
                           </span>
                           
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                             {/* SLA Alerts */}
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
@@ -424,7 +425,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
+                                        <AlertTriangle className="w-4 h-4 text-destructive" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
@@ -440,7 +441,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Clock className="w-3.5 h-3.5 text-yellow-500" />
+                                        <Clock className="w-4 h-4 text-yellow-500" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
@@ -453,29 +454,30 @@ const ConversationList = ({
                             })()}
 
                             {/* Status Indicator */}
-                            <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[conv.status] || "bg-muted"}`} />
 
                             {/* Unread Count Badge */}
                             {conv.unread_count > 0 && (
-                              <Badge className="h-[20px] min-w-[20px] text-[10px] px-1 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366] flex items-center justify-center font-bold">
+                              <div className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-[#25d366] text-white text-[11px] font-bold leading-none">
                                 {conv.unread_count}
-                              </Badge>
+                              </div>
                             )}
                           </div>
                         </div>
-                        {/* Disposition badges */}
+
+                        {/* Row 3: Disposition badges (if any) */}
                         {(() => {
                           const convDisps = dispositionAssignments.filter((a) => a.conversation_id === conv.id);
                           if (convDisps.length === 0) return null;
                           return (
-                            <div className="flex flex-wrap gap-1 mt-1">
+                            <div className="flex flex-wrap gap-1 mt-1.5 overflow-hidden">
                               {convDisps.map((a) => {
                                 const dt = dispositionTypes.find((d) => d.id === a.disposition_type_id);
                                 if (!dt) return null;
                                 return (
                                   <span
                                     key={dt.id}
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white"
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white truncate max-w-[120px]"
                                     style={{ backgroundColor: dt.color || "hsl(var(--primary))" }}
                                   >
                                     {dt.label}
