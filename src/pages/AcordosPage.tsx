@@ -13,15 +13,21 @@ import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab"
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Search, Download, HandCoins, CalendarIcon } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  getInstallmentsForMonth,
+  classifyInstallment,
+  type CobrancaRecord,
+  type ManualPaymentRecord,
+  type InstallmentClassification,
+} from "@/lib/agreementInstallmentClassifier";
 
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
 
@@ -42,11 +48,13 @@ const AcordosPage = () => {
   const permissions = usePermissions();
   const { toast } = useToast();
   const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [cobrancas, setCobrancas] = useState<CobrancaRecord[]>([]);
+  const [manualPayments, setManualPayments] = useState<ManualPaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
-  const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
   const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
@@ -62,6 +70,26 @@ const AcordosPage = () => {
       if (!isAdmin && user) filters.created_by = user.id;
       const data = await fetchAgreements(tenant?.id || "", Object.keys(filters).length > 0 ? filters : undefined);
       setAgreements(data);
+
+      // Batch fetch payment data
+      const agreementIds = data.map(a => a.id);
+      if (agreementIds.length > 0) {
+        const [cobRes, mpRes] = await Promise.all([
+          supabase
+            .from("negociarie_cobrancas" as any)
+            .select("agreement_id, installment_key, status, valor_pago")
+            .in("agreement_id", agreementIds),
+          supabase
+            .from("manual_payments" as any)
+            .select("agreement_id, installment_number, amount_paid, status")
+            .in("agreement_id", agreementIds),
+        ]);
+        setCobrancas((cobRes.data || []) as CobrancaRecord[]);
+        setManualPayments((mpRes.data || []) as ManualPaymentRecord[]);
+      } else {
+        setCobrancas([]);
+        setManualPayments([]);
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
@@ -109,7 +137,11 @@ const AcordosPage = () => {
   }, [agreements]);
 
   const years = useMemo(() => {
-    const ySet = new Set(agreements.map(a => new Date(a.created_at).getFullYear()));
+    const ySet = new Set<number>();
+    agreements.forEach(a => {
+      ySet.add(new Date(a.created_at).getFullYear());
+      ySet.add(new Date(a.first_due_date + "T00:00:00").getFullYear());
+    });
     return Array.from(ySet).sort((a, b) => b - a);
   }, [agreements]);
 
@@ -121,55 +153,135 @@ const AcordosPage = () => {
     })),
   ];
 
-  const filteredAgreements = useMemo(() => {
-    let list = agreements;
-    if (statusFilter === "vigentes") {
-      list = list.filter(a => a.status === "pending");
-    } else {
-      list = list.filter(a => a.status === statusFilter);
-    }
-    if (credorFilter !== "todos") list = list.filter(a => a.credor === credorFilter);
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter(a => a.client_name.toLowerCase().includes(q) || a.client_cpf.toLowerCase().includes(q));
-    }
-    // Date filters
-    if (dateFrom) {
-      list = list.filter(a => new Date(a.created_at) >= dateFrom);
-    }
-    if (dateTo) {
-      const end = new Date(dateTo);
-      end.setHours(23, 59, 59, 999);
-      list = list.filter(a => new Date(a.created_at) <= end);
-    }
-    if (!dateFrom && !dateTo) {
-      if (selectedMonth !== "todos") {
-        const m = parseInt(selectedMonth);
-        const y = parseInt(selectedYear);
-        const start = startOfMonth(new Date(y, m, 1));
-        const end = endOfMonth(new Date(y, m, 1));
-        list = list.filter(a => {
-          const d = new Date(a.created_at);
-          return d >= start && d <= end;
-        });
-      } else if (selectedYear) {
-        const y = parseInt(selectedYear);
-        list = list.filter(a => new Date(a.created_at).getFullYear() === y);
+  // Classify agreements by installment status for the selected month
+  const classifiedAgreements = useMemo(() => {
+    const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
+    const today = new Date();
+    const m = isMonthSelected ? parseInt(selectedMonth) : -1;
+    const y = parseInt(selectedYear);
+
+    type ClassifiedAgreement = Agreement & { _installmentClass?: InstallmentClassification };
+
+    const result: ClassifiedAgreement[] = [];
+
+    for (const agreement of agreements) {
+      // Apply credor filter
+      if (credorFilter !== "todos" && agreement.credor !== credorFilter) continue;
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        if (!agreement.client_name.toLowerCase().includes(q) && !agreement.client_cpf.toLowerCase().includes(q)) continue;
+      }
+
+      // For global statuses (cancelled, pending_approval), no installment logic needed
+      if (agreement.status === "cancelled" || agreement.status === "rejected") {
+        result.push({ ...agreement, _installmentClass: undefined });
+        continue;
+      }
+      if (agreement.status === "pending_approval") {
+        result.push({ ...agreement, _installmentClass: undefined });
+        continue;
+      }
+
+      if (isMonthSelected) {
+        // Get installments for this month
+        const installments = getInstallmentsForMonth(agreement, m, y);
+        if (installments.length === 0) continue; // No installment in this month
+
+        // Classify by worst status of all installments in the month
+        const classifications = installments.map(inst =>
+          classifyInstallment(inst, cobrancas, manualPayments, today)
+        );
+
+        // Priority: pending_confirmation > vencido > vigente > pago
+        let finalClass: InstallmentClassification = "pago";
+        if (classifications.includes("pending_confirmation")) finalClass = "pending_confirmation";
+        else if (classifications.includes("vencido")) finalClass = "vencido";
+        else if (classifications.includes("vigente")) finalClass = "vigente";
+
+        result.push({ ...agreement, _installmentClass: finalClass });
+      } else {
+        // Date range or "todos" — filter by due date range if applicable
+        if (dateFrom || dateTo) {
+          const { buildInstallmentSchedule } = require("@/lib/agreementInstallmentClassifier");
+          const schedule = buildInstallmentSchedule(agreement);
+          const hasInRange = schedule.some((inst: any) => {
+            const d = inst.dueDate;
+            if (dateFrom && d < dateFrom) return false;
+            if (dateTo) {
+              const end = new Date(dateTo);
+              end.setHours(23, 59, 59, 999);
+              if (d > end) return false;
+            }
+            return true;
+          });
+          if (!hasInRange) continue;
+        } else if (selectedYear) {
+          // "todos os meses" but year selected — show agreements with installments in that year
+          const { buildInstallmentSchedule } = require("@/lib/agreementInstallmentClassifier");
+          const schedule = buildInstallmentSchedule(agreement);
+          const hasInYear = schedule.some((inst: any) => inst.dueDate.getFullYear() === y);
+          if (!hasInYear) continue;
+        }
+
+        // Use global status mapping
+        result.push({ ...agreement, _installmentClass: undefined });
       }
     }
-    return list;
-  }, [agreements, statusFilter, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
-  const totalActiveCount = useMemo(() =>
-    agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
-    [agreements]
-  );
+    return result;
+  }, [agreements, cobrancas, manualPayments, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
-  const activeAgreements = filteredAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected" && a.status !== "overdue");
-  const pending = activeAgreements.filter(a => a.status === "pending" || a.status === "pending_approval").length;
-  const paid = activeAgreements.filter(a => a.status === "approved").length;
+  // Filter by selected tab
+  const filteredAgreements = useMemo(() => {
+    const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
 
-  // Determine which statuses allow admin actions in /acordos
+    return classifiedAgreements.filter(a => {
+      const cls = (a as any)._installmentClass as InstallmentClassification | undefined;
+
+      switch (statusFilter) {
+        case "vigentes":
+          if (isMonthSelected && cls !== undefined) return cls === "vigente";
+          return a.status === "pending";
+        case "approved":
+          if (isMonthSelected && cls !== undefined) return cls === "pago";
+          return a.status === "approved";
+        case "overdue":
+          if (isMonthSelected && cls !== undefined) return cls === "vencido";
+          return a.status === "overdue";
+        case "pending_approval":
+          return a.status === "pending_approval";
+        case "cancelled":
+          return a.status === "cancelled";
+        case "payment_confirmation":
+          if (isMonthSelected && cls !== undefined) return cls === "pending_confirmation";
+          return false; // handled by PaymentConfirmationTab
+        default:
+          return false;
+      }
+    });
+  }, [classifiedAgreements, statusFilter, selectedMonth, dateFrom, dateTo]);
+
+  // Stats based on classified data for selected month
+  const stats = useMemo(() => {
+    const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
+    const relevant = classifiedAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
+
+    if (isMonthSelected) {
+      const cls = relevant.map(a => (a as any)._installmentClass as InstallmentClassification | undefined);
+      const total = relevant.filter((_, i) => cls[i] !== undefined).length;
+      const pending = relevant.filter((_, i) => cls[i] === "vigente" || cls[i] === "pending_confirmation").length;
+      const paid = relevant.filter((_, i) => cls[i] === "pago").length;
+      return { total, pending, paid };
+    }
+
+    const total = relevant.length;
+    const pending = relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
+    const paid = relevant.filter(a => a.status === "approved").length;
+    return { total, pending, paid };
+  }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
+
   const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
   return (
@@ -177,9 +289,9 @@ const AcordosPage = () => {
       <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Total de Acordos" value={String(totalActiveCount)} icon="agreement" />
-        <StatCard title="Pendentes" value={String(pending)} icon="receivable" />
-        <StatCard title="Pagos" value={String(paid)} icon="received" />
+        <StatCard title="Total de Acordos" value={String(stats.total)} icon="agreement" />
+        <StatCard title="Pendentes" value={String(stats.pending)} icon="receivable" />
+        <StatCard title="Pagos" value={String(stats.paid)} icon="received" />
       </div>
 
       <div className="flex flex-wrap gap-2">
