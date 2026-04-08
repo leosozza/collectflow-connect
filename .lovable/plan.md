@@ -1,30 +1,28 @@
 
 
-# Fix: Indicadores de Não Lidas e Horário Não Aparecem
+# Fix: Timestamps e Badges Invisíveis na Lista de Conversas
 
 ## Diagnóstico
 
-O código dos indicadores (horário verde + badge) **existe** no arquivo, mas não aparece visualmente. A captura de tela confirma: nenhuma conversa mostra horário ou badge à direita.
+Os elementos existem no DOM (confirmado via browser extract: timestamp "agora" e badge "2" estão lá), mas são empurrados para fora da área visível.
 
-**Causa raiz**: O layout da conversa não reserva espaço suficiente para o lado direito. O conteúdo do nome e mensagem ocupa 100% da largura, empurrando o horário e badge para fora da área visível (cortado pelo `overflow-hidden`).
+**Causa raiz**: O `<button>` (linha 386-390) é um flex child dentro do `ContextMenuTrigger`. Buttons em flexbox têm `min-width: auto` por padrão, o que impede que encolham abaixo do tamanho do conteúdo. Mesmo com `overflow-hidden`, o conteúdo interno expande além dos 360px do container pai, empurrando timestamp e badge para fora.
 
 ## Solução
 
 **Arquivo:** `src/components/contact-center/whatsapp/ConversationList.tsx`
 
-### Mudanças
+### Mudança única
+Adicionar `min-w-0` ao `<button>` (linha 388) para quebrar o `min-width: auto` implícito do flexbox:
 
-1. **Linha do nome + horário (linha 395-404)**: Garantir que o horário tenha `shrink-0` e `ml-auto` para sempre ficar visível à direita. O nome deve ter `min-w-0` e `truncate` para encolher quando necessário.
+```
+className={`w-full text-left px-3 py-[10px] border-b ... overflow-hidden min-w-0 ${...}`}
+```
 
-2. **Linha da mensagem + badge (linha 405-458)**: Mesma lógica — a mensagem deve truncar, e o grupo de indicadores (status dot + badge) deve ter `shrink-0` para nunca ser cortado.
+Isso permite que a cadeia `min-w-0` funcione desde o container raiz até os spans de texto, forçando o truncamento com `...` e liberando espaço para o timestamp e badge à direita.
 
-3. **Forçar largura mínima nos indicadores**: Adicionar `min-w-fit` ao container dos indicadores à direita para que nunca sejam comprimidos.
-
-4. **Corrigir o `TooltipTrigger` sem ref (warning no console)**: O `ConversationAvatar` usa `TooltipTrigger asChild` passando ref para um `<div>`, mas o warning indica que um function component está recebendo ref. Envolver o ícone em `forwardRef` ou remover `asChild`.
-
-### Resultado esperado
-Cada conversa mostrará:
-- Horário relativo à direita (verde se não lida, cinza se lida)
-- Badge verde com contagem de não lidas abaixo do horário
-- Tudo visível mesmo com nomes longos
+### Verificação
+- Nenhum outro arquivo alterado
+- Nenhuma mudança de backend
+- Layout ficará igual ao WhatsApp: nome truncado + horário à direita (verde se não lida), mensagem truncada + badge à direita
 
