@@ -422,46 +422,31 @@ const ConversationList = ({
                           </span>
                           
                           <div className="flex items-center gap-1 shrink-0">
-                            {/* SLA Alerts */}
+                            {/* SLA Clock */}
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
                               if (!deadline) return null;
                               const deadlineDate = new Date(deadline);
                               const now = new Date();
-                              if (deadlineDate < now) {
-                                return (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                );
-                              }
                               const remainingMs = deadlineDate.getTime() - now.getTime();
-                              if (remainingMs <= 3600000) {
+                              const remainingHours = remainingMs / 3600000;
+
+                              let colorClass = "text-green-500";
+                              let label = "";
+
+                              if (remainingMs <= 0) {
+                                colorClass = "text-red-500";
+                                label = `SLA expirado em ${deadlineDate.toLocaleString("pt-BR")}`;
+                              } else if (remainingHours <= 1) {
+                                colorClass = "text-orange-500";
                                 const mins = Math.round(remainingMs / 60000);
-                                return (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Clock className="w-3.5 h-3.5 text-yellow-500" />
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                );
+                                label = `SLA expira em ${mins > 0 ? `${mins} min` : "instantes"}`;
+                              } else {
+                                const hrs = Math.floor(remainingHours);
+                                const mins = Math.round((remainingMs % 3600000) / 60000);
+                                label = `SLA em ${hrs}h${mins > 0 ? `${mins}min` : ""}`;
                               }
-                              return null;
-                            })()}
-                            {(() => {
-                              const colorClass = conv.status === "open" ? "text-green-500" : conv.status === "waiting" ? "text-yellow-500" : conv.status === "closed" ? "text-muted-foreground" : "text-muted-foreground";
+
                               return (
                                 <TooltipProvider>
                                   <Tooltip>
@@ -469,7 +454,7 @@ const ConversationList = ({
                                       <Clock className={`w-3.5 h-3.5 shrink-0 ${colorClass}`} />
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>{conv.status === "open" ? "Em atendimento" : conv.status === "waiting" ? "Aguardando" : conv.status === "closed" ? "Encerrada" : conv.status}</p>
+                                      <p>{label}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
