@@ -310,8 +310,12 @@ const DashboardPage = () => {
                     <TableCell className="text-xs text-center">{v.numero_parcela}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
                     <TableCell className="text-xs text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-warning/10 text-warning border-warning/30">
-                        {v.agreement_status === "approved" ? "Aprovado" : "Pendente"}
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        v.agreement_status === "approved" 
+                          ? "bg-success/10 text-success border-success/30" 
+                          : "bg-warning/10 text-warning border-warning/30"
+                      }`}>
+                        {v.agreement_status === "approved" ? "Pago" : "Pendente"}
                       </span>
                     </TableCell>
                   </TableRow>
