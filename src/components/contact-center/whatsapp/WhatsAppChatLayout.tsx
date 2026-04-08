@@ -445,6 +445,7 @@ const WhatsAppChatLayout = () => {
           clientInfo={clientInfo}
           quickReplies={quickReplies}
           slaDeadline={(selectedConv as any)?.sla_deadline_at}
+          isOfficialApi={isOfficialApi}
           operatorName={profile?.full_name}
           dispositionAssignments={dispositionAssignments}
           dispositionTypes={dispositionTypes}
