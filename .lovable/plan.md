@@ -1,37 +1,30 @@
 
 
-# Mostrar Relógio SLA Apenas em Conversas da API Oficial
+# Fix: Organizar Bolhas de Mensagem no Chat
 
-## O que muda
+## Problema
 
-O relógio de SLA será exibido **somente** para conversas vinculadas a instâncias com `provider_category = 'official_meta'`. Conversas de instâncias não oficiais não terão o ícone.
+As bolhas de mensagem não estão respeitando o alinhamento correto (esquerda para inbound, direita para outbound) porque há um wrapper intermediário (`div.flex.items-center.gap-1` na linha 105) que quebra a cadeia de largura. O `max-w-[65%]` da bolha calcula relativo a esse wrapper sem largura definida, não ao container do chat.
 
-## Como
+## Solução
 
-### 1. Ampliar o tipo da prop `instances` no `ConversationList`
+No arquivo `ChatMessage.tsx`, reestruturar o layout do return principal (linhas 103-158):
 
-Atualmente é `{ id: string; name: string }[]`. Adicionar `provider_category`:
-```
-instances: { id: string; name: string; provider_category?: string }[]
-```
+1. **Remover o wrapper intermediário** (`div.flex.items-center.gap-1` na linha 105) que não tem largura definida
+2. **Mover o botão de reply** para dentro da bolha ou como sibling direto no flex externo
+3. **Adicionar `w-full`** ao container externo para garantir que `max-w-[65%]` funcione corretamente
 
-### 2. No `WhatsAppChatLayout`, passar `provider_category` junto
-
-Na linha onde mapeamos instances para o `ConversationList`, incluir o campo:
-```ts
-instances={instances.map((i) => ({ id: i.id, name: i.name, provider_category: i.provider_category }))}
-```
-
-### 3. No bloco do relógio SLA (linha ~426), verificar a instância
-
-Antes de renderizar o `Clock`, buscar a instância da conversa e checar se é oficial:
-```ts
-const inst = instances.find(i => i.id === conv.instance_id);
-const isOfficial = inst?.provider_category === "official_meta";
-if (!deadline || !isOfficial) return null;
+### Estrutura corrigida:
+```text
+div.flex.w-full.[justify-end|justify-start]   ← container principal com largura total
+  ├── (reply button - hover, apenas inbound)
+  └── div.max-w-[65%].bubble                   ← bolha diretamente no flex
 ```
 
-### Resultado
-- Conversas de instâncias oficiais (Meta/Gupshup): relógio verde/laranja/vermelho conforme SLA
-- Conversas de instâncias não oficiais: sem relógio
+### Arquivo alterado
+- `src/components/contact-center/whatsapp/ChatMessage.tsx` — apenas o bloco de return (linhas 103-158)
+
+### Sem impacto em
+- Notas internas (bloco separado)
+- ChatPanel, ConversationList, ou qualquer outro componente
 
