@@ -416,7 +416,7 @@ const WhatsAppChatLayout = () => {
             onSelect={handleSelectConv}
             onStatusChange={handleStatusChangeFromList}
             onDelete={handleDeleteConversation}
-            instances={instances.map((i) => ({ id: i.id, name: i.name }))}
+            instances={instances.map((i) => ({ id: i.id, name: i.name, provider_category: i.provider_category }))}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}
             dispositionAssignments={dispositionAssignments}

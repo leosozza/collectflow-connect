@@ -54,7 +54,7 @@ interface ConversationListProps {
   onSelect: (conv: Conversation) => void;
   onStatusChange?: (convId: string, status: string) => void;
   onDelete?: (convId: string) => void;
-  instances: { id: string; name: string }[];
+  instances: { id: string; name: string; provider_category?: string }[];
   tags?: ConversationTag[];
   tagAssignments?: TagAssignment[];
   operators?: { id: string; name: string }[];
@@ -425,7 +425,9 @@ const ConversationList = ({
                             {/* SLA Clock */}
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
-                              if (!deadline) return null;
+                              const inst = instances.find(i => i.id === conv.instance_id);
+                              const isOfficial = inst?.provider_category === "official_meta";
+                              if (!deadline || !isOfficial) return null;
                               const deadlineDate = new Date(deadline);
                               const now = new Date();
                               const remainingMs = deadlineDate.getTime() - now.getTime();
