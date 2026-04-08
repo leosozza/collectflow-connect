@@ -6312,6 +6312,10 @@ export type Database = {
           slug: string
         }[]
       }
+      mark_overdue_clients: {
+        Args: { p_batch_size?: number; p_today: string }
+        Returns: number
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
