@@ -251,13 +251,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Mark overdue client installments
-    const { error: err3 } = await supabase
-      .from("clients")
-      .update({ status: "vencido" })
-      .eq("status", "pendente")
-      .lt("data_vencimento", todayStr);
-
+    // 3. Mark overdue client installments via RPC (server-side batching)
+    const { data: updatedTotal, error: err3 } = await supabase.rpc("mark_overdue_clients", {
+      p_today: todayStr,
+      p_batch_size: 1000,
+    });
     if (err3) throw err3;
 
     return new Response(
