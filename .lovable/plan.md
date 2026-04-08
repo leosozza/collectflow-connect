@@ -1,43 +1,46 @@
 
 
-# Fix: Renato Aparecendo em Vigentes ao Invés de Pagos
+# Fix: Status Incorretos — Jaciele "Vencido" no Perfil + "Aprovado" no Dashboard
 
-## Problemas Identificados
+## Problemas Encontrados
 
-### 1. Mismatch no installment_key da entrada
-O gerador de boletos (`generate-agreement-boletos`) usa `agreementId:0` como chave da entrada. Porém, o classificador (`agreementInstallmentClassifier.ts`) procura por `agreementId:entrada`. Resultado: a cobrança paga da entrada nunca é encontrada pelo classificador.
-
-**Dado real do Renato:**
-- Cobrança da entrada: `installment_key = "65585edf...:0"`, `status = "pago"`
-- Classificador busca: `"65585edf...:entrada"` → não encontra → classifica como vigente/vencido
-
-### 2. Lógica "pior status" para múltiplas parcelas no mesmo mês
-Renato tem **duas parcelas em abril**: entrada (08/04, paga) e parcela 2 (30/04, vigente). O sistema pega o "pior status" entre todas as parcelas do mês, resultando em `vigente`. Isso é correto conceitualmente — um acordo com parcela pendente no mês não deveria ir para "Pagos". Mas o bug #1 faz a entrada nem ser reconhecida como paga.
-
-## Correção
-
-### Arquivo: `src/lib/agreementInstallmentClassifier.ts` (linha 120)
-
-Alterar a construção do `installmentKey` para usar o número (0) em vez de "entrada", alinhando com o formato real no banco:
+### 1. Campo errado no cálculo de pagamentos (AgreementInstallments — Perfil)
+No componente `AgreementInstallments.tsx` (linha 109), o código lê `mp.amount` para somar pagamentos manuais confirmados. Porém, o campo correto na tabela e no serviço é `amount_paid`. Resultado: **total de pagamentos = 0**, e a parcela é classificada como "vencido" (pois 07/04 já passou).
 
 ```ts
-// ANTES:
-const installmentKey = `${agId}:${installment.isEntrada ? "entrada" : installment.number}`;
-
-// DEPOIS:
-const installmentKey = `${agId}:${installment.number}`;
+// Linha 109 — BUG:
+total += confirmedManual.reduce((sum, mp) => sum + Number(mp.amount || 0), 0);
+//                                                         ^^^^^^^^^^
+// Campo correto:
+total += confirmedManual.reduce((sum, mp) => sum + Number(mp.amount_paid || 0), 0);
 ```
 
-Isso resolve o caso do Renato: a entrada (number=0) será buscada como `agreementId:0`, que é o valor real na tabela `negociarie_cobrancas`.
+### 2. Dashboard mostra "Aprovado" em vez de "Pago" (DashboardPage)
+Na tabela de vencimentos do dia (linha 314), o mapeamento é:
+- `approved` → "Aprovado"
+- qualquer outro → "Pendente"
 
-### Resultado esperado
-- Entrada de abril (08/04): classificada como **pago** (cobrança encontrada com status "pago")
-- Parcela 2 de abril (30/04): classificada como **vigente** (ainda não venceu)
-- Status final do mês: **vigente** (pior entre pago e vigente)
+Deveria ser `approved` → "Pago", pois `approved` no sistema significa acordo quitado.
 
-**Nota:** Renato continuará em "Vigentes" em abril porque tem uma parcela pendente (30/04). Ele só aparecerá em "Pagos" quando **todas** as parcelas de abril estiverem pagas. Esse é o comportamento correto conforme a lógica definida anteriormente.
+### 3. Jaciele continua aparecendo nos vencimentos do dia
+Se o acordo está `approved` (totalmente pago), ela não deveria aparecer na lista de vencimentos do dia. A RPC `get_dashboard_vencimentos` provavelmente não filtra acordos já quitados.
 
-### Impacto
-- Apenas o classificador é alterado (1 linha)
-- Nenhum impacto em outras rotas, dashboard ou edge functions
+## Correções
+
+### A. `src/components/client-detail/AgreementInstallments.tsx` (linha 109)
+Trocar `mp.amount` por `mp.amount_paid`.
+
+### B. `src/pages/DashboardPage.tsx` (linha 314)
+Trocar `"Aprovado"` por `"Pago"` no mapeamento de status.
+
+### C. RPC `get_dashboard_vencimentos` — verificar se filtra `approved`
+Se a RPC retorna parcelas de acordos já `approved`, adicionar filtro para excluí-las (ou mostrar com badge "Pago" diferenciado em verde).
+
+## Arquivos Alterados
+- `src/components/client-detail/AgreementInstallments.tsx` — corrigir campo `amount` → `amount_paid`
+- `src/pages/DashboardPage.tsx` — corrigir label "Aprovado" → "Pago"
+- Possível ajuste na RPC `get_dashboard_vencimentos` para excluir acordos quitados
+
+## Impacto
+- Nenhum em outras rotas. Correções pontuais de campo e label.
 
