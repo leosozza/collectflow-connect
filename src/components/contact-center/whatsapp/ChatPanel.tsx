@@ -30,6 +30,7 @@ interface ChatPanelProps {
   clientInfo?: any;
   quickReplies?: any[];
   slaDeadline?: string | null;
+  isOfficialApi?: boolean;
   operatorName?: string;
   dispositionAssignments?: { conversation_id: string; disposition_type_id: string }[];
   dispositionTypes?: { id: string; label: string; color: string; key: string }[];
@@ -50,6 +51,7 @@ const ChatPanel = ({
   clientInfo,
   quickReplies,
   slaDeadline,
+  isOfficialApi,
   operatorName,
   dispositionAssignments = [],
   dispositionTypes = [],
@@ -158,7 +160,7 @@ const ChatPanel = ({
     closed: "Fechada",
   };
 
-  const slaExpired = slaDeadline && new Date(slaDeadline) < new Date();
+  const slaExpired = isOfficialApi && slaDeadline && new Date(slaDeadline) < new Date();
   const FOUR_HOURS = 4 * 3600000;
   const ONE_HOUR = 3600000;
   const slaColor = slaRemainingMs > FOUR_HOURS ? "text-[#25d366]" : slaRemainingMs > ONE_HOUR ? "text-yellow-500" : "text-destructive";
@@ -191,7 +193,7 @@ const ChatPanel = ({
                 });
               })()}
               {/* SLA countdown timer */}
-              {slaRemaining && !slaExpired && (
+              {isOfficialApi && slaRemaining && !slaExpired && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

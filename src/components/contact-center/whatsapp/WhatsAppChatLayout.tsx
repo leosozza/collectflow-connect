@@ -404,7 +404,9 @@ const WhatsAppChatLayout = () => {
     }
   };
 
-  const selectedInstanceName = instances.find((i) => i.id === selectedConv?.instance_id)?.name;
+  const selectedInstance = instances.find((i) => i.id === selectedConv?.instance_id);
+  const selectedInstanceName = selectedInstance?.name;
+  const isOfficialApi = selectedInstance?.provider_category === "official_meta";
 
   return (
     <div className="flex flex-col h-full">
@@ -443,6 +445,7 @@ const WhatsAppChatLayout = () => {
           clientInfo={clientInfo}
           quickReplies={quickReplies}
           slaDeadline={(selectedConv as any)?.sla_deadline_at}
+          isOfficialApi={isOfficialApi}
           operatorName={profile?.full_name}
           dispositionAssignments={dispositionAssignments}
           dispositionTypes={dispositionTypes}
