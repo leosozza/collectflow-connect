@@ -372,7 +372,7 @@ const ConversationList = ({
       </div>
 
       {/* List */}
-      <ScrollArea className="flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
+      <ScrollArea className="flex-1 [&>div>div[style]]:!block [&>div>div[style]]:!min-w-0">
         {conversations.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">
             Nenhuma conversa encontrada
