@@ -108,6 +108,19 @@ const AcordosPage = () => {
     return Array.from(set).sort();
   }, [agreements]);
 
+  const years = useMemo(() => {
+    const ySet = new Set(agreements.map(a => new Date(a.created_at).getFullYear()));
+    return Array.from(ySet).sort((a, b) => b - a);
+  }, [agreements]);
+
+  const months = [
+    { value: "todos", label: "Todos os Meses" },
+    ...Array.from({ length: 12 }, (_, i) => ({
+      value: String(i),
+      label: format(new Date(2024, i, 1), "MMMM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase()),
+    })),
+  ];
+
   const filteredAgreements = useMemo(() => {
     let list = agreements;
     if (statusFilter === "vigentes") {
@@ -120,8 +133,32 @@ const AcordosPage = () => {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(a => a.client_name.toLowerCase().includes(q) || a.client_cpf.toLowerCase().includes(q));
     }
+    // Date filters
+    if (dateFrom) {
+      list = list.filter(a => new Date(a.created_at) >= dateFrom);
+    }
+    if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      list = list.filter(a => new Date(a.created_at) <= end);
+    }
+    if (!dateFrom && !dateTo) {
+      if (selectedMonth !== "todos") {
+        const m = parseInt(selectedMonth);
+        const y = parseInt(selectedYear);
+        const start = startOfMonth(new Date(y, m, 1));
+        const end = endOfMonth(new Date(y, m, 1));
+        list = list.filter(a => {
+          const d = new Date(a.created_at);
+          return d >= start && d <= end;
+        });
+      } else if (selectedYear) {
+        const y = parseInt(selectedYear);
+        list = list.filter(a => new Date(a.created_at).getFullYear() === y);
+      }
+    }
     return list;
-  }, [agreements, statusFilter, credorFilter, searchQuery]);
+  }, [agreements, statusFilter, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
   const totalActiveCount = useMemo(() =>
     agreements.filter(a => a.status !== "cancelled" && a.status !== "rejected").length,
