@@ -49,8 +49,6 @@ Deno.serve(async (req) => {
 
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
-  const t0 = Date.now();
-  const log = (label: string) => console.log(`[TIMER] ${label}: ${Date.now() - t0}ms`);
 
   try {
     // 1. Fetch all active agreements
