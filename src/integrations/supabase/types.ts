@@ -6147,6 +6147,7 @@ export type Database = {
           client_cpf: string
           client_name: string
           credor: string
+          effective_status: string
           numero_parcela: number
           valor_parcela: number
         }[]
