@@ -101,58 +101,55 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
   }
 
   return (
-    <div className={`flex ${isOutbound ? "justify-end" : "justify-start"} mb-[2px] group`}>
-      <div className="flex items-center gap-1">
-        {/* Reply button for inbound messages — appears on hover */}
-        {!isOutbound && onReply && (
-          <button
-            onClick={() => onReply(message)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 order-2"
-            title="Responder"
-          >
-            <Reply className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
-        {/* Reply button removed for outbound — reply only allowed on inbound messages */}
-        <div
-          className={`relative max-w-[65%] px-[9px] pt-[6px] pb-[8px] shadow-sm ${
-            isOutbound
-              ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none"
-              : "bg-card text-foreground border border-border/40 rounded-lg rounded-tl-none"
-          } ${!isOutbound ? "order-1" : ""}`}
+    <div className={`flex w-full ${isOutbound ? "justify-end" : "justify-start"} mb-[2px] group`}>
+      {/* Reply button for inbound messages — appears on hover */}
+      {!isOutbound && onReply && (
+        <button
+          onClick={() => onReply(message)}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 self-center order-2"
+          title="Responder"
         >
-          {/* Reply preview */}
-          {hasReplyRef && (
-            <div
-              className={`mb-1 px-2 py-1 rounded text-[12px] leading-[16px] border-l-[3px] ${
-                isOutbound
-                  ? "bg-[#c8efc3] dark:bg-[#004a3f] border-l-[#25d366]"
-                  : "bg-muted/50 border-l-primary"
-              }`}
-            >
-              {repliedMessage ? (
-                <>
-                  <span className="font-medium text-[11px] block">
-                    {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
-                  </span>
-                  <span className="line-clamp-2 text-muted-foreground">
-                    {repliedMessage.content || `[${repliedMessage.message_type}]`}
-                  </span>
-                </>
-              ) : (
-                <span className="italic text-muted-foreground">Mensagem respondida</span>
-              )}
-            </div>
-          )}
-          {renderContent()}
-          <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
-            isOutbound ? "text-[#667781] dark:text-[#ffffff99]" : "text-muted-foreground"
-          }`}>
-            <span className="text-[11px] leading-none">
-              {format(new Date(message.created_at), "HH:mm")}
-            </span>
-            {isOutbound && statusIcons[message.status]}
+          <Reply className="w-4 h-4 text-muted-foreground" />
+        </button>
+      )}
+      <div
+        className={`relative max-w-[65%] px-[9px] pt-[6px] pb-[8px] shadow-sm ${
+          isOutbound
+            ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none"
+            : "bg-card text-foreground border border-border/40 rounded-lg rounded-tl-none order-1"
+        }`}
+      >
+        {/* Reply preview */}
+        {hasReplyRef && (
+          <div
+            className={`mb-1 px-2 py-1 rounded text-[12px] leading-[16px] border-l-[3px] ${
+              isOutbound
+                ? "bg-[#c8efc3] dark:bg-[#004a3f] border-l-[#25d366]"
+                : "bg-muted/50 border-l-primary"
+            }`}
+          >
+            {repliedMessage ? (
+              <>
+                <span className="font-medium text-[11px] block">
+                  {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
+                </span>
+                <span className="line-clamp-2 text-muted-foreground">
+                  {repliedMessage.content || `[${repliedMessage.message_type}]`}
+                </span>
+              </>
+            ) : (
+              <span className="italic text-muted-foreground">Mensagem respondida</span>
+            )}
           </div>
+        )}
+        {renderContent()}
+        <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
+          isOutbound ? "text-[#667781] dark:text-[#ffffff99]" : "text-muted-foreground"
+        }`}>
+          <span className="text-[11px] leading-none">
+            {format(new Date(message.created_at), "HH:mm")}
+          </span>
+          {isOutbound && statusIcons[message.status]}
         </div>
       </div>
     </div>
