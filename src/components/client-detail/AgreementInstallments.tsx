@@ -106,7 +106,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
       // 2. Confirmed manual payments
       const confirmedManual = manualPayments.filter((mp: any) => mp.status === "confirmed");
-      total += confirmedManual.reduce((sum: number, mp: any) => sum + Number(mp.amount || 0), 0);
+      total += confirmedManual.reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
 
       // 3. Paid cobrancas from negociarie
       const paidCobrancas = cobrancas.filter((c: any) => c.status === "pago");
