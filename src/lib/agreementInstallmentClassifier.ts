@@ -117,7 +117,7 @@ export function classifyInstallment(
   }
 
   // Check negociarie cobrancas
-  const installmentKey = `${agId}:${installment.isEntrada ? "entrada" : installment.number}`;
+  const installmentKey = `${agId}:${installment.number}`;
   const cob = cobrancas.find(c => c.installment_key === installmentKey);
   if (cob) {
     if (cob.status === "pago" || cob.status === "RECEIVED" || cob.status === "CONFIRMED") {
