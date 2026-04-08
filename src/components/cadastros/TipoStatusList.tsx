@@ -194,7 +194,7 @@ const TipoStatusList = () => {
               {regras.bloqueio && regras.tempo_expiracao_dias && (
                 <div className="flex items-center gap-3">
                   <Label className="text-sm whitespace-nowrap">Após expirar, mudar para</Label>
-                  <Input value={regras.auto_transicao || ""} onChange={e => updateRegra("auto_transicao", e.target.value || null)} placeholder="Aguardando acionamento" className="flex-1" />
+                  <Input value={regras.auto_transicao || ""} onChange={e => updateRegra("auto_transicao", e.target.value || null)} placeholder="Inadimplente" className="flex-1" />
                 </div>
               )}
               <div className="flex items-center gap-3">
