@@ -45,6 +45,15 @@ export interface QuickReply {
   updated_at: string;
 }
 
+export interface ConversationFilters {
+  statusFilter?: string;
+  instanceFilter?: string;
+  operatorFilter?: string;
+  search?: string;
+  unreadOnly?: boolean;
+  linkFilter?: string;
+}
+
 export async function fetchQuickReplies(tenantId: string): Promise<QuickReply[]> {
   const { data, error } = await supabase
     .from("quick_replies" as any)
@@ -80,8 +89,8 @@ export async function sendInternalNote(
 export async function fetchConversations(
   tenantId: string,
   page = 1,
-  pageSize = 50,
-  statusFilter?: string
+  pageSize = 30,
+  filters: ConversationFilters = {}
 ): Promise<{ data: Conversation[]; count: number }> {
   let query = supabase
     .from("conversations" as any)
@@ -89,8 +98,32 @@ export async function fetchConversations(
     .eq("tenant_id", tenantId)
     .order("last_message_at", { ascending: false });
 
-  if (statusFilter && statusFilter !== "all") {
-    query = query.eq("status", statusFilter);
+  // Server-side filters
+  if (filters.statusFilter && filters.statusFilter !== "all") {
+    query = query.eq("status", filters.statusFilter);
+  }
+
+  if (filters.instanceFilter && filters.instanceFilter !== "all") {
+    query = query.eq("instance_id", filters.instanceFilter);
+  }
+
+  if (filters.operatorFilter && filters.operatorFilter !== "all") {
+    query = query.eq("assigned_to", filters.operatorFilter);
+  }
+
+  if (filters.unreadOnly) {
+    query = query.gt("unread_count", 0);
+  }
+
+  if (filters.linkFilter === "linked") {
+    query = query.not("client_id", "is", null);
+  } else if (filters.linkFilter === "unlinked") {
+    query = query.is("client_id", null);
+  }
+
+  if (filters.search && filters.search.trim()) {
+    const s = filters.search.trim();
+    query = query.or(`remote_name.ilike.%${s}%,remote_phone.ilike.%${s}%`);
   }
 
   const from = (page - 1) * pageSize;
@@ -108,6 +141,26 @@ export async function fetchConversations(
   })) as Conversation[];
 
   return { data: mapped, count: count || 0 };
+}
+
+export async function fetchConversationCounts(
+  tenantId: string
+): Promise<{ open: number; waiting: number; closed: number; unread: number }> {
+  const counts = { open: 0, waiting: 0, closed: 0, unread: 0 };
+  
+  const [openRes, waitingRes, closedRes, unreadRes] = await Promise.all([
+    supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "open"),
+    supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "waiting"),
+    supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "closed"),
+    supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).gt("unread_count", 0),
+  ]);
+  
+  counts.open = openRes.count || 0;
+  counts.waiting = waitingRes.count || 0;
+  counts.closed = closedRes.count || 0;
+  counts.unread = unreadRes.count || 0;
+  
+  return counts;
 }
 
 export async function fetchMessages(
@@ -156,7 +209,6 @@ export async function sendTextMessage(
   const result = await resp.json();
   if (!resp.ok) throw new Error(result?.error || "Erro ao enviar mensagem");
 
-  // Return a ChatMessage-compatible object for the UI
   return {
     id: result.message_id || crypto.randomUUID(),
     conversation_id: conversationId,
@@ -240,20 +292,17 @@ export async function markConversationRead(id: string) {
 }
 
 export async function deleteConversation(id: string) {
-  // Delete messages first (FK constraint)
   const { error: msgError } = await supabase
     .from("chat_messages" as any)
     .delete()
     .eq("conversation_id", id);
   if (msgError) throw msgError;
 
-  // Delete tag assignments
   await supabase
     .from("conversation_tag_assignments" as any)
     .delete()
     .eq("conversation_id", id);
 
-  // Delete conversation
   const { error } = await supabase
     .from("conversations" as any)
     .delete()

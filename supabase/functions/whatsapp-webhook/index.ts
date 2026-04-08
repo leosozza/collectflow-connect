@@ -28,24 +28,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("id, tenant_id, provider")
-      .eq("instance_name", instanceName)
-      .maybeSingle();
-
-    if (!instance) {
-      console.log("Instance not found:", instanceName);
-      return new Response(JSON.stringify({ ok: true, skipped: "instance not found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const tenantId = instance.tenant_id;
-    const instanceId = instance.id;
-    const provider = instance.provider || "evolution";
-
-    // ===== Handle connection state changes =====
+    // ===== Handle connection state changes (needs instance lookup) =====
     if (event === "connection.update") {
       const state = body.data?.state;
       const sender = body.sender;
@@ -68,7 +51,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== Handle message events via canonical RPC =====
+    // ===== Handle message events via consolidated RPC v2 =====
     if (event === "messages.upsert") {
       const msgData = body.data;
       if (!msgData) {
@@ -118,12 +101,10 @@ Deno.serve(async (req) => {
         mediaUrl = msgData.mediaUrl || "";
       }
 
-      // Call canonical ingestion RPC
-      const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
-        _tenant_id: tenantId,
-        _endpoint_id: instanceId,
+      // Single RPC call — no separate instance lookup needed
+      const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event_v2", {
+        _instance_name: instanceName,
         _channel_type: "whatsapp",
-        _provider: provider,
         _remote_phone: remotePhone,
         _remote_name: pushName || remotePhone,
         _direction: fromMe ? "outbound" : "inbound",
@@ -138,7 +119,7 @@ Deno.serve(async (req) => {
       });
 
       if (rpcErr) {
-        console.error("ingest_channel_event error:", rpcErr);
+        console.error("ingest_channel_event_v2 error:", rpcErr);
         throw rpcErr;
       }
 

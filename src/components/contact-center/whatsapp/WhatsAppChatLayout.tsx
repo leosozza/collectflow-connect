@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -9,7 +10,9 @@ import {
   Conversation,
   ChatMessage,
   QuickReply,
+  ConversationFilters,
   fetchConversations,
+  fetchConversationCounts,
   fetchMessages,
   fetchQuickReplies,
   sendTextMessage,
@@ -23,17 +26,18 @@ import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappIns
 import ConversationList from "./ConversationList";
 import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
-import GlobalSearch from "./GlobalSearch";
+
+const PAGE_SIZE = 30;
 
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const { canManageContactCenterAdmin } = usePermissions();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tenantId = tenant?.id || profile?.tenant_id;
   const phoneParamProcessed = useRef(false);
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
@@ -44,7 +48,9 @@ const WhatsAppChatLayout = () => {
   const [dispositionAssignments, setDispositionAssignments] = useState<{ conversation_id: string; disposition_type_id: string }[]>([]);
   const [dispositionTypes, setDispositionTypes] = useState<{ id: string; label: string; color: string; key: string }[]>([]);
 
-  // Track known waiting conversation IDs to avoid duplicate notifications
+  // Filters state — lifted to parent so we can pass to useInfiniteQuery
+  const [filters, setFilters] = useState<ConversationFilters>({});
+
   const knownWaitingRef = useRef<Set<string>>(new Set());
 
   // Load instances + quick replies + operators + disposition types
@@ -53,7 +59,6 @@ const WhatsAppChatLayout = () => {
     fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
     fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
 
-    // Load operators for admin filter
     supabase
       .from("profiles")
       .select("user_id, full_name")
@@ -64,7 +69,6 @@ const WhatsAppChatLayout = () => {
         }
       });
 
-    // Load whatsapp disposition types
     supabase
       .from("call_disposition_types")
       .select("id, label, color, key")
@@ -76,37 +80,60 @@ const WhatsAppChatLayout = () => {
       });
   }, [tenantId]);
 
-  // Load conversations + disposition assignments
-  const loadConversations = useCallback(async () => {
-    if (!tenantId) return;
-    try {
-      const result = await fetchConversations(tenantId);
-      setConversations(result.data);
+  // Server-side paginated conversations with useInfiniteQuery
+  const {
+    data: convPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch: refetchConversations,
+  } = useInfiniteQuery({
+    queryKey: ["conversations", tenantId, filters],
+    queryFn: async ({ pageParam = 1 }) => {
+      if (!tenantId) return { data: [], count: 0 };
+      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters);
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const totalLoaded = allPages.reduce((sum, p) => sum + p.data.length, 0);
+      if (totalLoaded < lastPage.count) return allPages.length + 1;
+      return undefined;
+    },
+    initialPageParam: 1,
+    enabled: !!tenantId,
+  });
 
-      // Load disposition assignments for all conversations
-      const convIds = result.data.map((c) => c.id);
-      if (convIds.length > 0) {
-        const { data: assignments } = await supabase
-          .from("conversation_disposition_assignments" as any)
-          .select("conversation_id, disposition_type_id")
-          .in("conversation_id", convIds);
-        if (assignments) setDispositionAssignments(assignments as any);
-      }
+  // Flatten pages into single conversations array
+  const conversations = convPages?.pages.flatMap((p) => p.data) || [];
 
-      // Initialize known waiting set on first load
-      if (knownWaitingRef.current.size === 0) {
-        for (const c of result.data) {
-          if (c.status === "waiting") knownWaitingRef.current.add(c.id);
-        }
-      }
-    } catch (err) {
-      console.error("Error loading conversations:", err);
-    }
-  }, [tenantId]);
+  // Status counts from server (separate lightweight query)
+  const { data: statusCounts } = useQuery({
+    queryKey: ["conversation-counts", tenantId],
+    queryFn: () => fetchConversationCounts(tenantId!),
+    enabled: !!tenantId,
+    refetchInterval: 30000, // refresh every 30s
+  });
 
+  // Load disposition assignments for visible conversations
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    const convIds = conversations.map((c) => c.id);
+    if (convIds.length === 0) return;
+    supabase
+      .from("conversation_disposition_assignments" as any)
+      .select("conversation_id, disposition_type_id")
+      .in("conversation_id", convIds)
+      .then(({ data }) => {
+        if (data) setDispositionAssignments(data as any);
+      });
+  }, [conversations.length]);
+
+  // Initialize known waiting set
+  useEffect(() => {
+    if (knownWaitingRef.current.size === 0 && conversations.length > 0) {
+      for (const c of conversations) {
+        if (c.status === "waiting") knownWaitingRef.current.add(c.id);
+      }
+    }
+  }, [conversations]);
 
   // Auto-select or create conversation from ?phone= param
   useEffect(() => {
@@ -115,7 +142,6 @@ const WhatsAppChatLayout = () => {
     if (!phoneParam || !tenantId || conversations.length === 0 && !instances.length) return;
 
     phoneParamProcessed.current = true;
-    // Clear the param from URL
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("phone");
@@ -125,7 +151,6 @@ const WhatsAppChatLayout = () => {
     const normalizedParam = phoneParam.replace(/\D/g, "");
     const suffix = normalizedParam.slice(-8);
 
-    // Try to find existing conversation
     const existing = conversations.find((c) => {
       const remoteSuffix = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
       return remoteSuffix === suffix;
@@ -136,7 +161,6 @@ const WhatsAppChatLayout = () => {
       return;
     }
 
-    // Create new conversation
     const defaultInstance = instances[0];
     if (!defaultInstance) {
       toast.error("Nenhuma instância WhatsApp configurada");
@@ -160,8 +184,8 @@ const WhatsAppChatLayout = () => {
         if (error) throw error;
         if (data) {
           const newConv = data as unknown as Conversation;
-          setConversations((prev) => [newConv, ...prev]);
           setSelectedConv(newConv);
+          refetchConversations();
         }
       } catch (err: any) {
         console.error("Error creating conversation:", err);
@@ -206,19 +230,17 @@ const WhatsAppChatLayout = () => {
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
-          // Check for new "waiting" conversations to send notification
           if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
             const conv = payload.new as any;
             if (conv.status === "waiting" && !knownWaitingRef.current.has(conv.id)) {
               knownWaitingRef.current.add(conv.id);
-              const displayName = conv.remote_name || conv.remote_phone || "Cliente";
               supabase
                 .from("notifications")
                 .insert({
                   tenant_id: tenantId,
                   user_id: profile?.user_id || profile?.id,
                   title: "Conversa aguardando atendimento",
-                  message: `${displayName} está aguardando resposta no WhatsApp.`,
+                  message: `${conv.remote_name || conv.remote_phone || "Cliente"} está aguardando resposta no WhatsApp.`,
                   type: "warning",
                   reference_type: "conversation",
                   reference_id: conv.id,
@@ -231,37 +253,9 @@ const WhatsAppChatLayout = () => {
             }
           }
 
-          // Optimized: update state incrementally instead of full reload
-          if (payload.eventType === "INSERT") {
-            const newConv = payload.new as any;
-            // Fetch client name for the new conversation
-            if (newConv.client_id) {
-              supabase.from("clients").select("nome_completo").eq("id", newConv.client_id).single()
-                .then(({ data }) => {
-                  setConversations(prev => [{
-                    ...newConv,
-                    client_name: data?.nome_completo ?? undefined,
-                  } as Conversation, ...prev]);
-                });
-            } else {
-              setConversations(prev => [newConv as Conversation, ...prev]);
-            }
-          } else if (payload.eventType === "UPDATE") {
-            const updated = payload.new as any;
-            setConversations(prev => {
-              const idx = prev.findIndex(c => c.id === updated.id);
-              if (idx === -1) return prev;
-              const updatedConv = { ...prev[idx], ...updated };
-              const newList = [...prev];
-              newList[idx] = updatedConv;
-              // Re-sort by last_message_at
-              newList.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
-              return newList;
-            });
-          } else if (payload.eventType === "DELETE") {
-            const deleted = payload.old as any;
-            setConversations(prev => prev.filter(c => c.id !== deleted.id));
-          }
+          // Invalidate queries for fresh data
+          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
+          queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
         }
       )
       .subscribe();
@@ -269,7 +263,7 @@ const WhatsAppChatLayout = () => {
     return () => {
       supabase.removeChannel(convChannel);
     };
-  }, [tenantId, profile]);
+  }, [tenantId, profile, queryClient]);
 
   useEffect(() => {
     if (!selectedConv) return;
@@ -347,7 +341,6 @@ const WhatsAppChatLayout = () => {
     if (!selectedConv || !tenantId) return;
     setSending(true);
     try {
-      // 1. Upload to storage
       const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-media")
@@ -362,20 +355,10 @@ const WhatsAppChatLayout = () => {
       else if (file.type.startsWith("video/")) mediaType = "video";
       else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-      // 2. Send via unified Edge Function
-      await sendMediaMessage(
-        selectedConv.id,
-        tenantId,
-        mediaUrl,
-        mediaType,
-        file.type,
-        file.name,
-      );
+      await sendMediaMessage(selectedConv.id, tenantId, mediaUrl, mediaType, file.type, file.name);
 
-      // 3. Auto-accept UI update
       if (selectedConv.status === "waiting") {
         setSelectedConv({ ...selectedConv, status: "open" as any });
-        setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, status: "open" as any } : c));
       }
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mídia");
@@ -395,7 +378,8 @@ const WhatsAppChatLayout = () => {
       if (selectedConv?.id === convId) {
         setSelectedConv({ ...selectedConv, status: status as any });
       }
-      loadConversations();
+      refetchConversations();
+      queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
     } catch {
       toast.error("Erro ao atualizar status");
     }
@@ -413,15 +397,11 @@ const WhatsAppChatLayout = () => {
         setSelectedConv(null);
       }
       toast.success("Conversa excluída");
-      loadConversations();
+      refetchConversations();
+      queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
     } catch (err: any) {
       toast.error(err.message || "Erro ao excluir conversa");
     }
-  };
-
-  const handleGlobalSearchNavigate = (conversationId: string) => {
-    const conv = conversations.find((c) => c.id === conversationId);
-    if (conv) setSelectedConv(conv);
   };
 
   const selectedInstanceName = instances.find((i) => i.id === selectedConv?.instance_id)?.name;
@@ -441,6 +421,11 @@ const WhatsAppChatLayout = () => {
             isAdmin={canManageContactCenterAdmin}
             dispositionAssignments={dispositionAssignments}
             dispositionTypes={dispositionTypes}
+            statusCounts={statusCounts || { open: 0, waiting: 0, closed: 0, unread: 0 }}
+            onFiltersChange={setFilters}
+            onLoadMore={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+            hasMore={!!hasNextPage}
+            isLoadingMore={isFetchingNextPage}
           />
         </div>
         <ChatPanel
@@ -466,7 +451,7 @@ const WhatsAppChatLayout = () => {
           <ContactSidebar
             conversation={selectedConv}
             messages={messages}
-            onClientLinked={loadConversations}
+            onClientLinked={() => refetchConversations()}
           />
         )}
       </div>
