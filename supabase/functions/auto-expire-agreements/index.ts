@@ -102,6 +102,7 @@ Deno.serve(async (req) => {
           .in("agreement_id", batch);
         if (cobrancas) allPaidCobrancas.push(...(cobrancas as any[]));
       }
+      log('3-fetch-cobrancas');
 
       // Index cobranca totals by agreement_id
       const cobrancaByAgreement: Record<string, number> = {};
