@@ -14,9 +14,14 @@ import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, HandCoins } from "lucide-react";
+import { Search, Download, HandCoins, CalendarIcon } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
 
@@ -41,7 +46,10 @@ const AcordosPage = () => {
   const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
-
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
+  const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
   const isAdmin = permissions.canApproveAcordos;
 
   const load = async () => {
