@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
       .in("status", ["pending", "approved", "overdue"]);
 
     if (err1) throw err1;
+    log(`1-fetch-agreements (${activeAgreements?.length || 0} rows)`);
 
     const toOverdue: any[] = [];
     const toPending: any[] = [];
