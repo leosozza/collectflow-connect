@@ -37,7 +37,7 @@ const FIELD_LABELS: Record<string, string> = {
   cidade: "Cidade",
   uf: "UF",
   cep: "CEP",
-  status_cobranca_id: "Status Cobrança",
+  status_cobranca_id: "Status do Cliente",
   observacoes: "Observações",
 };
 

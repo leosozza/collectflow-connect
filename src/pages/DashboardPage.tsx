@@ -317,7 +317,7 @@ const DashboardPage = () => {
                             ? "bg-destructive/10 text-destructive border-destructive/30"
                             : "bg-warning/10 text-warning border-warning/30"
                       }`}>
-                        {v.agreement_status === "approved" ? "Pago" : v.agreement_status === "overdue" ? "Atrasado" : "Pendente"}
+                        {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
                       </span>
                     </TableCell>
                   </TableRow>

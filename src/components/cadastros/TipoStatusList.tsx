@@ -15,11 +15,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const DEFAULT_STATUS = [
-  { nome: "Aguardando acionamento", descricao: "Status padrão, cliente pode ser cobrado normalmente", cor: "#6b7280", regras: { bloqueio: false } },
+  { nome: "Inadimplente", descricao: "Cliente com parcelas vencidas sem acordo ativo", cor: "#6b7280", regras: { bloqueio: false } },
   { nome: "Acordo Vigente", descricao: "Apenas o operador responsável ou admin podem editar", cor: "#22c55e", regras: { bloqueio: true, apenas_responsavel: true } },
+  { nome: "Acordo Atrasado", descricao: "Acordo com parcela vencida sem pagamento", cor: "#ef4444", regras: {} },
   { nome: "Quebra de Acordo", descricao: "Muda automaticamente após 3 dias sem baixa da parcela", cor: "#f97316", regras: { auto_quebra_dias: 3 } },
   { nome: "Quitado", descricao: "Somente leitura, nenhuma ação de cobrança disponível", cor: "#3b82f6", regras: { somente_leitura: true } },
-  { nome: "Em negociação", descricao: "Cliente travado por 10 dias para o operador responsável", cor: "#a855f7", regras: { bloqueio: true, tempo_expiracao_dias: 10, auto_transicao: "Aguardando acionamento" } },
+  { nome: "Em negociação", descricao: "Cliente travado por 10 dias para o operador responsável", cor: "#a855f7", regras: { bloqueio: true, tempo_expiracao_dias: 10, auto_transicao: "Inadimplente" } },
   { nome: "Risco de Processo", descricao: "Alerta visual, sinalizado para análise em campanhas", cor: "#ef4444", regras: { alerta_visual: true } },
 ];
 

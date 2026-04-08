@@ -41,8 +41,8 @@ const statusLabelsMap: Record<string, string> = {
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
   rejected: "Rejeitado",
-  cancelled: "Cancelado",
-  overdue: "Vencido",
+  cancelled: "Quebra de Acordo",
+  overdue: "Acordo Atrasado",
 };
 
 const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "destructive"> = {

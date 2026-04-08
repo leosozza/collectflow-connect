@@ -409,7 +409,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
         const { data: aguardandoStatus } = await supabase
           .from("tipos_status")
           .select("id")
-          .eq("nome", "Aguardando acionamento")
+          .eq("nome", "Inadimplente")
           .single();
 
         const rawCpf = agreement.client_cpf.replace(/\D/g, "");

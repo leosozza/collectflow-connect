@@ -12,7 +12,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Extract tenant_id from body (required)
     let tenant_id: string | null = null;
     try {
       const body = await req.json();
@@ -49,163 +48,156 @@ Deno.serve(async (req) => {
     });
 
     const emDiaId = statusMap.get("Em dia");
-    const aguardandoId = statusMap.get("Aguardando acionamento");
+    const inadimplenteId = statusMap.get("Inadimplente");
     const acordoVigenteId = statusMap.get("Acordo Vigente");
+    const acordoAtrasadoId = statusMap.get("Acordo Atrasado");
     const quebraAcordoId = statusMap.get("Quebra de Acordo");
     const quitadoId = statusMap.get("Quitado");
     const emNegociacaoId = statusMap.get("Em negociação");
 
-    if (!emDiaId || !aguardandoId) {
+    if (!emDiaId || !inadimplenteId) {
       return new Response(
-        JSON.stringify({ error: "Status 'Em dia' ou 'Aguardando acionamento' não encontrados para este tenant" }),
+        JSON.stringify({ error: "Status 'Em dia' ou 'Inadimplente' não encontrados para este tenant" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const counts: Record<string, number> = {};
 
-    // 2. Clients with status 'em_acordo' → force "Acordo Vigente"
-    if (acordoVigenteId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: acordoVigenteId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "em_acordo")
-        .neq("status_cobranca_id", acordoVigenteId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: acordoVigenteId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "em_acordo")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.acordo_vigente = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 3. Clients with status 'quebrado' → force "Quebra de Acordo"
-    if (quebraAcordoId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quebraAcordoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "quebrado")
-        .neq("status_cobranca_id", quebraAcordoId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quebraAcordoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "quebrado")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.quebra_acordo = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 4. Clients with status 'pago' → force "Quitado"
-    if (quitadoId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quitadoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "pago")
-        .neq("status_cobranca_id", quitadoId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quitadoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "pago")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.quitado = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 5. Overdue clients (pendente/vencido) with "Em dia" → "Aguardando acionamento"
-    const { data: overdueClients } = await supabase
+    // 2. Fetch ALL clients for this tenant (batched)
+    const { data: allClients } = await supabase
       .from("clients")
-      .update({ status_cobranca_id: aguardandoId })
+      .select("id, cpf, credor, status, data_vencimento, status_cobranca_id")
+      .eq("tenant_id", tenant_id);
+
+    // 3. Fetch ALL active agreements for this tenant
+    const { data: allAgreements } = await supabase
+      .from("agreements")
+      .select("id, client_cpf, credor, status")
       .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .eq("status_cobranca_id", emDiaId)
-      .lt("data_vencimento", today)
-      .select("id");
+      .not("status", "in", "(rejected)");
 
-    counts.overdue_to_aguardando = overdueClients?.length || 0;
-
-    // 6. "Aguardando acionamento" clients where ALL parcels are future → "Em dia"
-    const { data: aguardandoClients } = await supabase
-      .from("clients")
-      .select("id, cpf, credor, data_vencimento, status, status_cobranca_id")
-      .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .eq("status_cobranca_id", aguardandoId);
-
-    const groups = new Map<string, any[]>();
-    (aguardandoClients || []).forEach((c: any) => {
+    // 4. Group clients by CPF+Credor
+    const cpfGroups = new Map<string, any[]>();
+    (allClients || []).forEach((c: any) => {
       const key = `${c.cpf}|${c.credor}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(c);
+      if (!cpfGroups.has(key)) cpfGroups.set(key, []);
+      cpfGroups.get(key)!.push(c);
     });
 
-    const idsToEmDia: string[] = [];
-    groups.forEach((group) => {
-      const allFutureAndPendente = group.every(
-        (c: any) => c.data_vencimento >= today && c.status === "pendente"
-      );
-      if (allFutureAndPendente) {
-        group.forEach((c: any) => idsToEmDia.push(c.id));
+    // 5. Index agreements by normalized CPF+Credor
+    const agreementsByKey = new Map<string, any[]>();
+    (allAgreements || []).forEach((a: any) => {
+      const rawCpf = (a.client_cpf || "").replace(/\D/g, "");
+      const key = `${rawCpf}|${a.credor}`;
+      if (!agreementsByKey.has(key)) agreementsByKey.set(key, []);
+      agreementsByKey.get(key)!.push(a);
+    });
+
+    // 6. Apply CPF-Centric hierarchy
+    const updates: { ids: string[]; statusId: string }[] = [];
+    let countQuitado = 0, countAcordoVigente = 0, countAcordoAtrasado = 0;
+    let countQuebraAcordo = 0, countInadimplente = 0, countEmDia = 0;
+
+    cpfGroups.forEach((clients, key) => {
+      const rawCpf = clients[0].cpf.replace(/\D/g, "");
+      const agreementKey = `${rawCpf}|${clients[0].credor}`;
+      const agreements = agreementsByKey.get(agreementKey) || [];
+
+      // Skip clients in "Em negociação" - they have their own expiration logic
+      const allInNegociacao = clients.every((c: any) => c.status_cobranca_id === emNegociacaoId);
+      if (allInNegociacao && emNegociacaoId) return;
+
+      // Determine target status using hierarchy
+      let targetStatusId: string | null = null;
+
+      // a) QUITADO: ALL parcelas are 'pago' AND all agreements are 'approved'
+      const allPago = clients.every((c: any) => c.status === "pago");
+      const allAgreementsApproved = agreements.length > 0 && agreements.every((a: any) => a.status === "approved" || a.status === "cancelled");
+      if (allPago && quitadoId) {
+        targetStatusId = quitadoId;
+        countQuitado += clients.length;
+      }
+
+      // b) ACORDO VIGENTE: exists a pending agreement
+      if (!targetStatusId && acordoVigenteId) {
+        const hasPending = agreements.some((a: any) => a.status === "pending");
+        if (hasPending) {
+          targetStatusId = acordoVigenteId;
+          countAcordoVigente += clients.length;
+        }
+      }
+
+      // c) ACORDO ATRASADO: exists an overdue agreement
+      if (!targetStatusId && acordoAtrasadoId) {
+        const hasOverdue = agreements.some((a: any) => a.status === "overdue");
+        if (hasOverdue) {
+          targetStatusId = acordoAtrasadoId;
+          countAcordoAtrasado += clients.length;
+        }
+      }
+
+      // d) QUEBRA DE ACORDO: last agreement is cancelled
+      if (!targetStatusId && quebraAcordoId) {
+        const sortedAgreements = [...agreements].sort((a, b) => 
+          (b.id > a.id ? 1 : -1) // proxy for creation order
+        );
+        if (sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
+          targetStatusId = quebraAcordoId;
+          countQuebraAcordo += clients.length;
+        }
+      }
+
+      // e) INADIMPLENTE: has overdue original parcels, no active agreement
+      if (!targetStatusId) {
+        const hasOverdue = clients.some((c: any) => 
+          c.data_vencimento < today && (c.status === "pendente" || c.status === "vencido")
+        );
+        const hasActiveAgreement = agreements.some((a: any) => 
+          a.status === "pending" || a.status === "overdue"
+        );
+        if (hasOverdue && !hasActiveAgreement) {
+          targetStatusId = inadimplenteId;
+          countInadimplente += clients.length;
+        }
+      }
+
+      // f) EM DIA: nothing overdue
+      if (!targetStatusId) {
+        targetStatusId = emDiaId;
+        countEmDia += clients.length;
+      }
+
+      // Collect IDs that need updating
+      const idsToUpdate = clients
+        .filter((c: any) => c.status_cobranca_id !== targetStatusId)
+        .map((c: any) => c.id);
+
+      if (idsToUpdate.length > 0 && targetStatusId) {
+        updates.push({ ids: idsToUpdate, statusId: targetStatusId });
       }
     });
 
-    if (idsToEmDia.length > 0) {
-      for (let i = 0; i < idsToEmDia.length; i += 100) {
-        const batch = idsToEmDia.slice(i, i + 100);
+    // 7. Apply updates in batches
+    let totalUpdated = 0;
+    for (const { ids, statusId } of updates) {
+      for (let i = 0; i < ids.length; i += 100) {
+        const batch = ids.slice(i, i + 100);
         await supabase
           .from("clients")
-          .update({ status_cobranca_id: emDiaId })
+          .update({ status_cobranca_id: statusId })
           .eq("tenant_id", tenant_id)
           .in("id", batch);
+        totalUpdated += batch.length;
       }
     }
-    counts.aguardando_to_emdia = idsToEmDia.length;
 
-    // 7. Pending clients with no status_cobranca_id and not overdue → "Em dia"
-    const { data: noStatusClients } = await supabase
-      .from("clients")
-      .update({ status_cobranca_id: emDiaId })
-      .eq("tenant_id", tenant_id)
-      .eq("status", "pendente")
-      .is("status_cobranca_id", null)
-      .gte("data_vencimento", today)
-      .select("id");
-
-    counts.new_emdia = noStatusClients?.length || 0;
-
-    // 8. Pending/vencido clients with no status that ARE overdue → "Aguardando acionamento"
-    const { data: noStatusOverdue } = await supabase
-      .from("clients")
-      .update({ status_cobranca_id: aguardandoId })
-      .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .is("status_cobranca_id", null)
-      .lt("data_vencimento", today)
-      .select("id");
-
-    counts.new_aguardando = noStatusOverdue?.length || 0;
-
-    // 9. Expire "Em negociação"
+    // 8. Expire "Em negociação"
     if (emNegociacaoId) {
       const regras = statusRegras.get("Em negociação") || {};
       const expiracaoDias = regras.tempo_expiracao_dias || 10;
-      const autoTransicaoNome = regras.auto_transicao || "Aguardando acionamento";
-      const targetId = statusMap.get(autoTransicaoNome) || aguardandoId;
+      const autoTransicaoNome = regras.auto_transicao || "Inadimplente";
+      const targetId = statusMap.get(autoTransicaoNome) || inadimplenteId;
 
       const { data: negociacaoClients } = await supabase
         .from("clients")
@@ -240,6 +232,14 @@ Deno.serve(async (req) => {
       }
       counts.negociacao_expirada = idsToExpire.length;
     }
+
+    counts.total_updated = totalUpdated;
+    counts.quitado = countQuitado;
+    counts.acordo_vigente = countAcordoVigente;
+    counts.acordo_atrasado = countAcordoAtrasado;
+    counts.quebra_acordo = countQuebraAcordo;
+    counts.inadimplente = countInadimplente;
+    counts.em_dia = countEmDia;
 
     return new Response(
       JSON.stringify({ success: true, tenant_id, ...counts }),
