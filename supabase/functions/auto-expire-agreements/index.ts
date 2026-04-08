@@ -256,6 +256,7 @@ Deno.serve(async (req) => {
         cancelledCount = toCancel.length;
       }
     }
+    log('5-cancel-overdue');
 
     // 3. Mark overdue client installments (batch by 500 to avoid timeouts)
     let updatedTotal = 0;
