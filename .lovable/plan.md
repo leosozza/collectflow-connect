@@ -1,39 +1,80 @@
 
 
-# Fix: Status de Acordos Não Atualiza Após Baixa Manual + Filtros de Data
+# Acordos por Mês de Vencimento das Parcelas
 
-## Problemas Identificados
+## Contexto
 
-### 1. Evento de pagamento manual invisível ao motor de status
-A Edge Function `auto-expire-agreements` busca apenas eventos `payment_confirmed`, mas a baixa manual gera `manual_payment_confirmed`. O pagamento da Jaciele nunca é contabilizado.
+Hoje a página /acordos filtra por `created_at` (data de criação do acordo) e usa o status global do acordo (pending, approved, overdue, etc). O pedido é mudar para filtrar pelo **mês de vencimento das parcelas**, determinando a aba correta com base no status daquela parcela específica.
 
-### 2. Campo de valor incompatível
-Mesmo se o evento fosse encontrado, o motor lê `metadata.valor_pago` mas o evento manual grava `metadata.amount_paid`. Resultado: valor = 0.
+## Lógica Proposta
 
-### 3. Acordo nunca é marcado como "Pago" (approved)
-Nem a `registerAgreementPayment()` nem a `auto-expire-agreements` atualizam o status do **acordo** para `approved` quando o valor total é quitado. Só a tabela `clients` é atualizada.
+Ao selecionar Abril/2026, o sistema calcula quais parcelas de quais acordos vencem em abril e classifica:
 
-## Correções
+- **Pagos**: parcela do mês já quitada (via cobrança paga, manual_payment confirmado, ou payment_confirmed event)
+- **Vigentes**: parcela do mês ainda não venceu e não está paga
+- **Vencidos**: parcela do mês já passou da data e não foi paga
+- **Cancelados**: acordo com status `cancelled`
+- **Aguardando Liberação**: acordo com status `pending_approval`
+- **Confirmação de Pagamento**: parcela com manual_payment `pending_confirmation`
 
-### A. `manualPaymentService.ts` — Atualizar acordo ao confirmar pagamento
-Após chamar `registerAgreementPayment()`, verificar se o total pago (via `manual_payments` confirmados + `negociarie_cobrancas` pagas + eventos `payment_confirmed`) cobre o `proposed_total` do acordo. Se sim, atualizar `agreements.status = 'approved'`.
+## Dados Necessários
 
-### B. `auto-expire-agreements/index.ts` — Incluir pagamentos manuais
-1. Buscar eventos com `event_type IN ('payment_confirmed', 'manual_payment_confirmed')`
-2. Ler o valor de `metadata.valor_pago` OU `metadata.amount_paid` (coalesce)
-3. Incluir `manual_payments` confirmados na contagem de pagamento total
-4. Marcar acordos como `approved` quando totalmente pagos
+Além dos agreements, precisamos carregar:
+1. **negociarie_cobrancas** — contém `installment_key` e `status` (pago/pendente/vencido)
+2. **manual_payments** — contém `agreement_id`, `installment_number`, `status`
 
-### C. `AcordosPage.tsx` — Adicionar filtros de mês/ano e período
-Adicionar filtros de Mês, Ano e seleção de datas (De/Até) no padrão já usado no sistema (similar ao `ReportFilters`), filtrando por `created_at` dos acordos.
+Esses dados serão buscados em batch ao carregar a página (2 queries adicionais).
 
-## Arquivos Alterados
-- `supabase/functions/auto-expire-agreements/index.ts` — incluir `manual_payment_confirmed` + marcar `approved`
-- `src/services/manualPaymentService.ts` — atualizar status do acordo para `approved` se quitado
-- `src/pages/AcordosPage.tsx` — adicionar filtros de data (mês, ano, período)
+## Implementação
 
-## Resultado Esperado
-- Jaciele e Renato aparecerão na aba "Pagos" após a correção
-- O motor de status reconhecerá pagamentos manuais confirmados
-- Filtros de data permitirão visualizar acordos por período específico
+### Arquivo: `src/pages/AcordosPage.tsx`
+
+1. **Buscar dados complementares** no `load()`:
+   - `negociarie_cobrancas` com `agreement_id` dos acordos carregados
+   - `manual_payments` com `agreement_id` dos acordos carregados
+
+2. **Função `getInstallmentForMonth(agreement, month, year)`**:
+   - Calcula todas as parcelas (entrada + parcelas regulares) usando `first_due_date`, `entrada_date`, `custom_installment_dates`, `addMonths`
+   - Retorna a parcela cujo vencimento cai no mês/ano selecionado (ou null)
+
+3. **Função `getInstallmentStatus(agreement, installment, cobrancas, manualPayments)`**:
+   - Verifica cobrança associada (`installment_key = agreementId:numero`)
+   - Verifica manual_payment confirmado ou pending_confirmation
+   - Calcula pagamento por waterfall (como já faz o AgreementInstallments)
+   - Retorna: `pago`, `vigente`, `vencido`, `pending_confirmation`
+
+4. **Substituir filtro `filteredAgreements`**:
+   - Se mês/ano selecionado: filtra apenas acordos que têm parcela naquele mês e classifica pelo status da parcela
+   - Se "todos os meses": mantém comportamento por status global do acordo
+   - Abas `cancelled` e `pending_approval` continuam usando status global (não dependem de parcela)
+
+5. **Filtros de data (De/Até)**: passam a considerar `first_due_date` ao invés de `created_at`
+
+### Interface Agreement — campos adicionais
+
+Adicionar ao tipo `Agreement` os campos que já existem no banco mas não estão no tipo:
+- `custom_installment_dates`
+- `custom_installment_values`
+- `entrada_date`
+
+## Impacto em Outras Rotas
+
+- **Dashboard** (`get_dashboard_vencimentos`, `get_dashboard_stats`): RPCs independentes, sem impacto
+- **Carteira**: usa status do `clients`, sem impacto
+- **auto-expire-agreements**: Edge Function independente, sem impacto
+- **AgreementInstallments** (detalhe do cliente): componente isolado, sem impacto
+- **manualPaymentService**: sem alteração
+
+A mudança é 100% isolada no `AcordosPage.tsx` e no tipo `Agreement`.
+
+## Resultado
+
+| Cenário | Aba |
+|---------|-----|
+| Parcela de abril paga (Jaciele) | Pagos |
+| Parcela de abril ainda não venceu (Renato, 5 restantes) | Vigentes |
+| Parcela de abril vencida sem pagamento | Vencidos |
+| Acordo cancelado | Cancelados |
+| Acordo fora dos termos do credor | Aguardando Liberação |
+| Operador fez baixa, admin não confirmou | Confirmação de Pagamento |
 
