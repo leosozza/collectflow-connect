@@ -311,13 +311,13 @@ const DashboardPage = () => {
                     <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
                     <TableCell className="text-xs text-center">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        v.agreement_status === "approved" 
+                        (v as any).effective_status === "paid" 
                           ? "bg-success/10 text-success border-success/30" 
-                          : v.agreement_status === "overdue"
+                          : (v as any).effective_status === "overdue"
                             ? "bg-destructive/10 text-destructive border-destructive/30"
                             : "bg-warning/10 text-warning border-warning/30"
                       }`}>
-                        {v.agreement_status === "approved" ? "Pago" : v.agreement_status === "overdue" ? "Atrasado" : "Pendente"}
+                        {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
                       </span>
                     </TableCell>
                   </TableRow>
