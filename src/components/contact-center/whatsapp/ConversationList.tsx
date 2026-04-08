@@ -460,7 +460,21 @@ const ConversationList = ({
                               }
                               return null;
                             })()}
-                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[conv.status] || "bg-muted"}`} />
+                            {(() => {
+                              const colorClass = conv.status === "open" ? "text-green-500" : conv.status === "waiting" ? "text-yellow-500" : conv.status === "closed" ? "text-muted-foreground" : "text-muted-foreground";
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Clock className={`w-3.5 h-3.5 shrink-0 ${colorClass}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{conv.status === "open" ? "Em atendimento" : conv.status === "waiting" ? "Aguardando" : conv.status === "closed" ? "Encerrada" : conv.status}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            })()}
                           </div>
                         </div>
 
