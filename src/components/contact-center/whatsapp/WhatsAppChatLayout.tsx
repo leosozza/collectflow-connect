@@ -404,7 +404,9 @@ const WhatsAppChatLayout = () => {
     }
   };
 
-  const selectedInstanceName = instances.find((i) => i.id === selectedConv?.instance_id)?.name;
+  const selectedInstance = instances.find((i) => i.id === selectedConv?.instance_id);
+  const selectedInstanceName = selectedInstance?.name;
+  const isOfficialApi = selectedInstance?.provider_category === "official_meta";
 
   return (
     <div className="flex flex-col h-full">
