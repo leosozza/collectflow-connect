@@ -412,7 +412,7 @@ const ConversationList = ({
 
                         {/* Row 2: Message preview + SLA */}
                         <div className="flex items-center w-full min-w-0 gap-2 mt-[2px]">
-                          <span className={`text-[13px] truncate flex-1 min-w-0 ${conv.unread_count > 0 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
+                          <span className={`text-[13px] truncate flex-1 min-w-0 ${conv.unread_count > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                             {conv.last_message_direction !== "inbound" && conv.last_message_content ? "✓ " : ""}
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
