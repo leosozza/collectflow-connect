@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   getInstallmentsForMonth,
   classifyInstallment,
+  buildInstallmentSchedule,
   type CobrancaRecord,
   type ManualPaymentRecord,
   type InstallmentClassification,
