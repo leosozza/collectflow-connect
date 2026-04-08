@@ -205,7 +205,6 @@ const AcordosPage = () => {
       } else {
         // Date range or "todos" — filter by due date range if applicable
         if (dateFrom || dateTo) {
-          const { buildInstallmentSchedule } = require("@/lib/agreementInstallmentClassifier");
           const schedule = buildInstallmentSchedule(agreement);
           const hasInRange = schedule.some((inst: any) => {
             const d = inst.dueDate;
@@ -220,7 +219,6 @@ const AcordosPage = () => {
           if (!hasInRange) continue;
         } else if (selectedYear) {
           // "todos os meses" but year selected — show agreements with installments in that year
-          const { buildInstallmentSchedule } = require("@/lib/agreementInstallmentClassifier");
           const schedule = buildInstallmentSchedule(agreement);
           const hasInYear = schedule.some((inst: any) => inst.dueDate.getFullYear() === y);
           if (!hasInYear) continue;
