@@ -63,31 +63,51 @@ Deno.serve(async (req) => {
     const toPending: any[] = [];
 
     if (activeAgreements && activeAgreements.length > 0) {
-      // Batch: fetch ALL payment events for these agreements at once
       const agreementIds = activeAgreements.map(a => a.id);
 
-      // Fetch payment events in batches of 200 to avoid URL length limits
+      // Fetch payment events (including manual) in batches
       const allPaymentEvents: any[] = [];
       for (let i = 0; i < agreementIds.length; i += 200) {
         const batch = agreementIds.slice(i, i + 200);
         const { data: events } = await supabase
           .from("client_events")
           .select("metadata")
-          .eq("event_type", "payment_confirmed")
+          .in("event_type", ["payment_confirmed", "manual_payment_confirmed"])
           .in("metadata->>agreement_id", batch);
         if (events) allPaymentEvents.push(...events);
       }
 
-      // Index payment totals by agreement_id
+      // Index payment totals by agreement_id (coalesce valor_pago / amount_paid)
       const paymentByAgreement: Record<string, number> = {};
       for (const ev of allPaymentEvents) {
         const agId = ev.metadata?.agreement_id;
         if (agId) {
-          paymentByAgreement[agId] = (paymentByAgreement[agId] || 0) + Number(ev.metadata?.valor_pago || 0);
+          const val = Number(ev.metadata?.valor_pago || ev.metadata?.amount_paid || 0);
+          paymentByAgreement[agId] = (paymentByAgreement[agId] || 0) + val;
         }
       }
 
-      // Batch: fetch ALL paid cobrancas for these agreements
+      // Fetch confirmed manual_payments totals
+      const allManualPayments: any[] = [];
+      for (let i = 0; i < agreementIds.length; i += 200) {
+        const batch = agreementIds.slice(i, i + 200);
+        const { data: mps } = await supabase
+          .from("manual_payments" as any)
+          .select("agreement_id, amount_paid")
+          .eq("status", "confirmed")
+          .in("agreement_id", batch);
+        if (mps) allManualPayments.push(...(mps as any[]));
+      }
+
+      const manualByAgreement: Record<string, number> = {};
+      for (const mp of allManualPayments) {
+        const agId = mp.agreement_id;
+        if (agId) {
+          manualByAgreement[agId] = (manualByAgreement[agId] || 0) + Number(mp.amount_paid || 0);
+        }
+      }
+
+      // Fetch paid cobrancas
       const allPaidCobrancas: any[] = [];
       for (let i = 0; i < agreementIds.length; i += 200) {
         const batch = agreementIds.slice(i, i + 200);
@@ -99,7 +119,6 @@ Deno.serve(async (req) => {
         if (cobrancas) allPaidCobrancas.push(...(cobrancas as any[]));
       }
 
-      // Index cobranca totals by agreement_id
       const cobrancaByAgreement: Record<string, number> = {};
       for (const c of allPaidCobrancas) {
         const agId = c.agreement_id;
@@ -108,9 +127,23 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Now process each agreement without additional queries
+      const toApproved: any[] = [];
+
       for (const a of activeAgreements) {
         if (a.status === "approved") continue;
+
+        const totalPaid = Math.max(
+          (paymentByAgreement[a.id] || 0),
+          (manualByAgreement[a.id] || 0),
+          (cobrancaByAgreement[a.id] || 0),
+          (manualByAgreement[a.id] || 0) + (cobrancaByAgreement[a.id] || 0)
+        );
+
+        // Check if fully paid
+        if (totalPaid >= (a.proposed_total || 0) - 0.01 && a.proposed_total > 0) {
+          toApproved.push(a);
+          continue;
+        }
 
         const schedule = buildSchedule(a);
         const pastDueEntries = schedule.filter(s => s.date < todayStr);
@@ -121,7 +154,6 @@ Deno.serve(async (req) => {
         }
 
         const expectedPaid = pastDueEntries[pastDueEntries.length - 1].cumulative;
-        const totalPaid = (paymentByAgreement[a.id] || 0) + (cobrancaByAgreement[a.id] || 0);
         const isOverdue = totalPaid < expectedPaid - 0.01;
 
         if (isOverdue && a.status === "pending") {
@@ -149,6 +181,25 @@ Deno.serve(async (req) => {
       if (toPending.length > 0) {
         const ids = toPending.map((a: any) => a.id);
         await supabase.from("agreements").update({ status: "pending" }).in("id", ids);
+      }
+
+      if (toApproved.length > 0) {
+        const ids = toApproved.map((a: any) => a.id);
+        await supabase.from("agreements").update({ status: "approved" }).in("id", ids);
+
+        // Update client status to 'pago' for fully paid agreements
+        for (const a of toApproved) {
+          const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
+          const fmtCpf = rawCpf.length === 11
+            ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+            : rawCpf;
+          await supabase
+            .from("clients")
+            .update({ status: "pago" })
+            .eq("status", "em_acordo")
+            .in("cpf", [rawCpf, fmtCpf, a.client_cpf])
+            .eq("tenant_id", a.tenant_id);
+        }
       }
     }
 
