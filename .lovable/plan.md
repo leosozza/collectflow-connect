@@ -1,28 +1,38 @@
 
 
-# Fix: Timestamps e Badges Invisíveis na Lista de Conversas
+# Reestruturar Layout da Lista de Conversas (Referência WhatsApp)
 
-## Diagnóstico
+## Problema
+O layout atual tem `overflow-hidden` no container flex externo (linha 392) que corta os indicadores. Além disso, a estrutura das linhas difere da referência fornecida.
 
-Os elementos existem no DOM (confirmado via browser extract: timestamp "agora" e badge "2" estão lá), mas são empurrados para fora da área visível.
+## Referência (app fornecido)
+```text
+┌──────────────────────────────────────────┐
+│ [Avatar]  Título           (3)  09:36    │  ← Row 1: nome + badge não lido + hora
+│           Campanha / Status badges       │  ← Row 2: badges opcionais
+│           ✓ Última mensagem preview...   │  ← Row 3: preview (bold se não lido)
+│           👤 Nome operador               │  ← Row 4: operador
+└──────────────────────────────────────────┘
+```
 
-**Causa raiz**: O `<button>` (linha 386-390) é um flex child dentro do `ContextMenuTrigger`. Buttons em flexbox têm `min-width: auto` por padrão, o que impede que encolham abaixo do tamanho do conteúdo. Mesmo com `overflow-hidden`, o conteúdo interno expande além dos 360px do container pai, empurrando timestamp e badge para fora.
-
-## Solução
+## Mudanças
 
 **Arquivo:** `src/components/contact-center/whatsapp/ConversationList.tsx`
 
-### Mudança única
-Adicionar `min-w-0` ao `<button>` (linha 388) para quebrar o `min-width: auto` implícito do flexbox:
+### 1. Remover `overflow-hidden` do container flex (linha 392)
+O `overflow-hidden` no `<div className="flex items-center gap-3 w-full min-w-0 overflow-hidden">` é a causa principal dos indicadores cortados. Remover, mantendo `min-w-0`.
 
+### 2. Reestruturar Row 1 conforme referência
+Mover o badge de não lidas (atualmente na Row 2, linhas 460-464) para a Row 1, entre o nome e o horário:
 ```
-className={`w-full text-left px-3 py-[10px] border-b ... overflow-hidden min-w-0 ${...}`}
+Nome truncado ... (badge não lidas) Horário
 ```
 
-Isso permite que a cadeia `min-w-0` funcione desde o container raiz até os spans de texto, forçando o truncamento com `...` e liberando espaço para o timestamp e badge à direita.
+### 3. Row 2: Message preview + SLA/status
+Manter a preview da mensagem com truncate. O preview ficará **bold** (`font-semibold text-foreground`) quando `unread_count > 0`. Adicionar prefixo `✓` para mensagens outbound como na referência.
 
-### Verificação
-- Nenhum outro arquivo alterado
-- Nenhuma mudança de backend
-- Layout ficará igual ao WhatsApp: nome truncado + horário à direita (verde se não lida), mensagem truncada + badge à direita
+### 4. Manter Row 3 (dispositions) inalterada
+
+### Resultado
+Layout idêntico à referência, com todos os indicadores visíveis e texto truncado corretamente.
 
