@@ -389,23 +389,31 @@ const ConversationList = ({
                       selectedId === conv.id ? "bg-[#f0f2f5] dark:bg-[#2a3942]" : ""
                     }`}
                   >
-                    <div className="flex items-center gap-3 w-full min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-3 w-full min-w-0">
                       <ConversationAvatar conv={conv} />
                       
                       <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
-                        {/* Row 1: Name and Time */}
-                        <div className="flex items-center justify-between w-full min-w-0 gap-2">
-                          <span className={`font-semibold text-[15px] text-foreground truncate ${conv.unread_count > 0 ? "" : ""}`}>
+                        {/* Row 1: Name + Unread Badge + Time */}
+                        <div className="flex items-center w-full min-w-0 gap-1">
+                          <span className="font-semibold text-[15px] text-foreground truncate min-w-0 flex-1">
                             {displayName}
                           </span>
-                          <span className={`text-[12px] whitespace-nowrap shrink-0 text-right min-w-[35px] ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
-                            {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                            {conv.unread_count > 0 && (
+                              <div className="flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-[#25d366] text-white text-[11px] font-bold leading-none">
+                                {conv.unread_count}
+                              </div>
+                            )}
+                            <span className={`text-[12px] whitespace-nowrap ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
+                              {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
+                            </span>
+                          </div>
                         </div>
 
-                        {/* Row 2: Message and Stats/Badge */}
-                        <div className="flex items-center justify-between w-full min-w-0 gap-2 mt-[1px]">
-                          <span className="text-[13px] text-muted-foreground truncate flex-1 min-w-0">
+                        {/* Row 2: Message preview + SLA */}
+                        <div className="flex items-center w-full min-w-0 gap-2 mt-[2px]">
+                          <span className={`text-[13px] truncate flex-1 min-w-0 ${conv.unread_count > 0 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
+                            {conv.last_message_direction !== "inbound" && conv.last_message_content ? "✓ " : ""}
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
                                 ? `📎 ${conv.last_message_type === "audio" ? "Áudio" : conv.last_message_type === "image" ? "Imagem" : conv.last_message_type === "video" ? "Vídeo" : conv.last_message_type === "document" ? "Documento" : conv.last_message_type === "sticker" ? "Sticker" : "Mídia"}`
@@ -413,7 +421,7 @@ const ConversationList = ({
                               : conv.remote_phone}
                           </span>
                           
-                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                          <div className="flex items-center gap-1 shrink-0">
                             {/* SLA Alerts */}
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
@@ -425,7 +433,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <AlertTriangle className="w-4 h-4 text-destructive" />
+                                        <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
@@ -441,7 +449,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Clock className="w-4 h-4 text-yellow-500" />
+                                        <Clock className="w-3.5 h-3.5 text-yellow-500" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
@@ -452,16 +460,7 @@ const ConversationList = ({
                               }
                               return null;
                             })()}
-
-                            {/* Status Indicator */}
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[conv.status] || "bg-muted"}`} />
-
-                            {/* Unread Count Badge */}
-                            {conv.unread_count > 0 && (
-                              <div className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-[#25d366] text-white text-[11px] font-bold leading-none">
-                                {conv.unread_count}
-                              </div>
-                            )}
                           </div>
                         </div>
 
