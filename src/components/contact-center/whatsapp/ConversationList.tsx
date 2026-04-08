@@ -391,26 +391,29 @@ const ConversationList = ({
                   >
                     <div className="flex items-center gap-3 w-full min-w-0">
                       <ConversationAvatar conv={conv} />
-                        <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="font-normal text-[15px] text-foreground truncate">
-                              {displayName}
-                            </span>
-                          </div>
-                          <span className={`text-[11px] whitespace-nowrap shrink-0 ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
+                      <div className="flex-1 min-w-0">
+                        {/* Row 1: Name and Time */}
+                        <div className="flex items-center justify-between gap-2 mb-[2px]">
+                          <span className="font-semibold text-[15px] text-foreground truncate flex-1 min-w-0">
+                            {displayName}
+                          </span>
+                          <span className={`text-[12px] whitespace-nowrap shrink-0 ${conv.unread_count > 0 ? "text-[#25d366] font-medium" : "text-muted-foreground"}`}>
                             {conv.last_message_at ? formatCompactTime(conv.last_message_at) : ""}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between mt-[2px] gap-1 min-w-0">
-                          <span className="text-[13px] text-muted-foreground flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block">
+
+                        {/* Row 2: Message, SLA, Status, and Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] text-muted-foreground flex-1 min-w-0 truncate">
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
                                 ? `📎 ${conv.last_message_type === "audio" ? "Áudio" : conv.last_message_type === "image" ? "Imagem" : conv.last_message_type === "video" ? "Vídeo" : conv.last_message_type === "document" ? "Documento" : conv.last_message_type === "sticker" ? "Sticker" : "Mídia"}`
                                 : conv.last_message_content)
                               : conv.remote_phone}
                           </span>
+                          
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {/* SLA Alerts */}
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
                               if (!deadline) return null;
@@ -421,7 +424,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <AlertTriangle className="w-3 h-3 text-destructive" />
+                                        <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expirado em {deadlineDate.toLocaleString("pt-BR")}</p>
@@ -437,7 +440,7 @@ const ConversationList = ({
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Clock className="w-3 h-3 text-yellow-500" />
+                                        <Clock className="w-3.5 h-3.5 text-yellow-500" />
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p>SLA expira em {mins > 0 ? `${mins} min` : "instantes"} ({deadlineDate.toLocaleString("pt-BR")})</p>
@@ -448,9 +451,13 @@ const ConversationList = ({
                               }
                               return null;
                             })()}
+
+                            {/* Status Indicator */}
                             <span className={`w-2.5 h-2.5 rounded-full ${statusColors[conv.status] || "bg-muted"}`} />
+
+                            {/* Unread Count Badge */}
                             {conv.unread_count > 0 && (
-                              <Badge className="h-[20px] min-w-[20px] text-[11px] px-1.5 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366] flex items-center justify-center">
+                              <Badge className="h-[20px] min-w-[20px] text-[10px] px-1 rounded-full bg-[#25d366] text-white border-0 hover:bg-[#25d366] flex items-center justify-center font-bold">
                                 {conv.unread_count}
                               </Badge>
                             )}
