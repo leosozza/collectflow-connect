@@ -251,14 +251,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Mark overdue client installments
-    const { error: err3 } = await supabase
-      .from("clients")
-      .update({ status: "vencido" })
-      .eq("status", "pendente")
-      .lt("data_vencimento", todayStr);
+    // 3. Mark overdue client installments (batch by 500 to avoid timeouts)
+    let updatedTotal = 0;
+    let batchCount = 0;
+    do {
+      const { data: batch, error: err3 } = await supabase
+        .from("clients")
+        .update({ status: "vencido" })
+        .eq("status", "pendente")
+        .lt("data_vencimento", todayStr)
+        .limit(500)
+        .select("id");
 
-    if (err3) throw err3;
+      if (err3) throw err3;
+      batchCount = batch?.length || 0;
+      updatedTotal += batchCount;
+    } while (batchCount === 500);
 
     return new Response(
       JSON.stringify({
