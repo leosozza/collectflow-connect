@@ -6,20 +6,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+/**
+ * AUTO-STATUS-SYNC (CPF-CENTRIC VERSION)
+ * 
+ * Hierarchy of status for a single CPF/Credor:
+ * 1. QUITADO (All parcels are 'pago')
+ * 2. ACORDO (Vigente, Atrasado or Quebrado)
+ * 3. LOCKED (Em negociação)
+ * 4. OVERDUE (Vencido / Aguardando acionamento)
+ * 5. IN_DAY (Em dia)
+ */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Extract tenant_id from body (required)
     let tenant_id: string | null = null;
     try {
       const body = await req.json();
       tenant_id = body?.tenant_id || null;
-    } catch {
-      // No body or invalid JSON
-    }
+    } catch { }
 
     if (!tenant_id) {
       return new Response(
@@ -33,9 +40,8 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const today = new Date().toISOString().split("T")[0];
-    const now = new Date();
 
-    // 1. Get status IDs for this tenant
+    // 1. Get status types configuration
     const { data: statusList } = await supabase
       .from("tipos_status")
       .select("id, nome, regras")
@@ -51,201 +57,140 @@ Deno.serve(async (req) => {
     const emDiaId = statusMap.get("Em dia");
     const aguardandoId = statusMap.get("Aguardando acionamento");
     const acordoVigenteId = statusMap.get("Acordo Vigente");
+    const acordoAtrasadoId = statusMap.get("Acordo Atrasado"); // New
     const quebraAcordoId = statusMap.get("Quebra de Acordo");
     const quitadoId = statusMap.get("Quitado");
     const emNegociacaoId = statusMap.get("Em negociação");
 
     if (!emDiaId || !aguardandoId) {
       return new Response(
-        JSON.stringify({ error: "Status 'Em dia' ou 'Aguardando acionamento' não encontrados para este tenant" }),
+        JSON.stringify({ error: "Status 'Em dia' ou 'Aguardando acionamento' não encontrados." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const counts: Record<string, number> = {};
-
-    // 2. Clients with status 'em_acordo' → force "Acordo Vigente"
-    if (acordoVigenteId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: acordoVigenteId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "em_acordo")
-        .neq("status_cobranca_id", acordoVigenteId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: acordoVigenteId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "em_acordo")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.acordo_vigente = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 3. Clients with status 'quebrado' → force "Quebra de Acordo"
-    if (quebraAcordoId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quebraAcordoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "quebrado")
-        .neq("status_cobranca_id", quebraAcordoId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quebraAcordoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "quebrado")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.quebra_acordo = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 4. Clients with status 'pago' → force "Quitado"
-    if (quitadoId) {
-      const { data: d1 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quitadoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "pago")
-        .neq("status_cobranca_id", quitadoId)
-        .select("id");
-
-      const { data: d2 } = await supabase
-        .from("clients")
-        .update({ status_cobranca_id: quitadoId })
-        .eq("tenant_id", tenant_id)
-        .eq("status", "pago")
-        .is("status_cobranca_id", null)
-        .select("id");
-
-      counts.quitado = (d1?.length || 0) + (d2?.length || 0);
-    }
-
-    // 5. Overdue clients (pendente/vencido) with "Em dia" → "Aguardando acionamento"
-    const { data: overdueClients } = await supabase
+    // 2. Fetch all clients and active agreements relevant for this tenant
+    const { data: allClients } = await supabase
       .from("clients")
-      .update({ status_cobranca_id: aguardandoId })
+      .select("id, cpf, credor, status, data_vencimento, status_cobranca_id, status_cobranca_locked_at")
+      .eq("tenant_id", tenant_id);
+
+    const { data: agreements } = await supabase
+      .from("agreements")
+      .select("client_cpf, credor, status")
       .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .eq("status_cobranca_id", emDiaId)
-      .lt("data_vencimento", today)
-      .select("id");
+      .in("status", ["pending", "approved", "overdue", "cancelled"]);
 
-    counts.overdue_to_aguardando = overdueClients?.length || 0;
-
-    // 6. "Aguardando acionamento" clients where ALL parcels are future → "Em dia"
-    const { data: aguardandoClients } = await supabase
-      .from("clients")
-      .select("id, cpf, credor, data_vencimento, status, status_cobranca_id")
-      .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .eq("status_cobranca_id", aguardandoId);
-
-    const groups = new Map<string, any[]>();
-    (aguardandoClients || []).forEach((c: any) => {
-      const key = `${c.cpf}|${c.credor}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(c);
+    // 3. Group data by CPF + Credor
+    const clientGroups = new Map<string, any[]>();
+    (allClients || []).forEach(c => {
+      const key = `${c.cpf.replace(/\D/g, "")}|${c.credor}`;
+      if (!clientGroups.has(key)) clientGroups.set(key, []);
+      clientGroups.get(key)!.push(c);
     });
 
-    const idsToEmDia: string[] = [];
-    groups.forEach((group) => {
-      const allFutureAndPendente = group.every(
-        (c: any) => c.data_vencimento >= today && c.status === "pendente"
-      );
-      if (allFutureAndPendente) {
-        group.forEach((c: any) => idsToEmDia.push(c.id));
+    const agreementMap = new Map<string, string>(); // key -> agreement_status
+    (agreements || []).forEach(a => {
+      const key = `${a.client_cpf.replace(/\D/g, "")}|${a.credor}`;
+      // Prioritize active over cancelled if multiple exist (though schema usually prevents)
+      if (!agreementMap.has(key) || a.status !== "cancelled") {
+        agreementMap.set(key, a.status);
       }
     });
 
-    if (idsToEmDia.length > 0) {
-      for (let i = 0; i < idsToEmDia.length; i += 100) {
-        const batch = idsToEmDia.slice(i, i + 100);
-        await supabase
-          .from("clients")
-          .update({ status_cobranca_id: emDiaId })
-          .eq("tenant_id", tenant_id)
-          .in("id", batch);
-      }
-    }
-    counts.aguardando_to_emdia = idsToEmDia.length;
+    const updates: { id: string, status_cobranca_id: string | null, clearLock?: boolean }[] = [];
+    let counts = { quitado: 0, acordo: 0, quebra: 0, vencido: 0, em_dia: 0, negociacao_mantida: 0 };
 
-    // 7. Pending clients with no status_cobranca_id and not overdue → "Em dia"
-    const { data: noStatusClients } = await supabase
-      .from("clients")
-      .update({ status_cobranca_id: emDiaId })
-      .eq("tenant_id", tenant_id)
-      .eq("status", "pendente")
-      .is("status_cobranca_id", null)
-      .gte("data_vencimento", today)
-      .select("id");
+    // 4. Determine status for each group
+    for (const [key, parcels] of clientGroups.entries()) {
+      const agreementStatus = agreementMap.get(key);
+      
+      let targetStatusId: string | null = null;
 
-    counts.new_emdia = noStatusClients?.length || 0;
-
-    // 8. Pending/vencido clients with no status that ARE overdue → "Aguardando acionamento"
-    const { data: noStatusOverdue } = await supabase
-      .from("clients")
-      .update({ status_cobranca_id: aguardandoId })
-      .eq("tenant_id", tenant_id)
-      .in("status", ["pendente", "vencido"])
-      .is("status_cobranca_id", null)
-      .lt("data_vencimento", today)
-      .select("id");
-
-    counts.new_aguardando = noStatusOverdue?.length || 0;
-
-    // 9. Expire "Em negociação"
-    if (emNegociacaoId) {
-      const regras = statusRegras.get("Em negociação") || {};
-      const expiracaoDias = regras.tempo_expiracao_dias || 10;
-      const autoTransicaoNome = regras.auto_transicao || "Aguardando acionamento";
-      const targetId = statusMap.get(autoTransicaoNome) || aguardandoId;
-
-      const { data: negociacaoClients } = await supabase
-        .from("clients")
-        .select("id, status_cobranca_locked_at")
-        .eq("tenant_id", tenant_id)
-        .eq("status_cobranca_id", emNegociacaoId);
-
-      const idsToExpire: string[] = [];
-      (negociacaoClients || []).forEach((c: any) => {
-        if (c.status_cobranca_locked_at) {
-          const lockedAt = new Date(c.status_cobranca_locked_at);
-          const diffDays = Math.floor((now.getTime() - lockedAt.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays >= expiracaoDias) {
-            idsToExpire.push(c.id);
-          }
+      // Rule 1: All paid?
+      const allPaid = parcels.every(p => p.status === "pago");
+      
+      if (allPaid) {
+        targetStatusId = quitadoId || null;
+        counts.quitado++;
+      } 
+      // Rule 2: Active Agreement?
+      else if (agreementStatus && ["pending", "approved", "overdue"].includes(agreementStatus)) {
+        if (agreementStatus === "overdue" && acordoAtrasadoId) {
+          targetStatusId = acordoAtrasadoId;
+        } else {
+          targetStatusId = acordoVigenteId || null;
         }
-      });
+        counts.acordo++;
+      }
+      // Rule 3: Broken Agreement?
+      else if (agreementStatus === "cancelled") {
+        targetStatusId = quebraAcordoId || null;
+        counts.quebra++;
+      }
+      // Rule 4: Overdue Title?
+      else {
+        const hasOverdue = parcels.some(p => p.data_vencimento < today && p.status !== "pago");
+        if (hasOverdue) {
+          targetStatusId = aguardandoId;
+          counts.vencido++;
+        } else {
+          targetStatusId = emDiaId;
+          counts.em_dia++;
+        }
+      }
 
-      if (idsToExpire.length > 0) {
-        for (let i = 0; i < idsToExpire.length; i += 100) {
-          const batch = idsToExpire.slice(i, i + 100);
+      // Final check: Is it currently locked in negotiation?
+      // We only override if it's not locked, OR if it's paid (payment always breaks negotiation lock eventually)
+      for (const p of parcels) {
+        const isLocked = p.status_cobranca_id === emNegociacaoId;
+        const shouldOverride = !isLocked || allPaid || agreementStatus;
+
+        if (shouldOverride && p.status_cobranca_id !== targetStatusId) {
+          updates.push({ 
+            id: p.id, 
+            status_cobranca_id: targetStatusId,
+            clearLock: allPaid || (agreementStatus && agreementStatus !== "cancelled")
+          });
+        } else if (isLocked) {
+          counts.negociacao_mantida++;
+        }
+      }
+    }
+
+    // 5. Execute Updates in batches
+    if (updates.length > 0) {
+      console.log(`[auto-status-sync] Updating ${updates.length} records for tenant ${tenant_id}`);
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+        const batch = updates.slice(i, i + BATCH_SIZE);
+        
+        // Group by status_id to minimize queries
+        const byStatus: Record<string, string[]> = {};
+        for (const up of batch) {
+          const sid = up.status_cobranca_id || "null";
+          if (!byStatus[sid]) byStatus[sid] = [];
+          byStatus[sid].push(up.id);
+        }
+
+        for (const [statusId, ids] of Object.entries(byStatus)) {
+          const payload: any = { status_cobranca_id: statusId === "null" ? null : statusId };
+          
           await supabase
             .from("clients")
-            .update({
-              status_cobranca_id: targetId,
-              status_cobranca_locked_by: null,
-              status_cobranca_locked_at: null,
-            })
-            .eq("tenant_id", tenant_id)
-            .in("id", batch);
+            .update(payload)
+            .in("id", ids);
         }
       }
-      counts.negociacao_expirada = idsToExpire.length;
     }
 
     return new Response(
-      JSON.stringify({ success: true, tenant_id, ...counts }),
+      JSON.stringify({ success: true, tenant_id, updates: updates.length, summary: counts }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err: any) {
+    console.error(`[auto-status-sync] ERROR:`, err.message);
     return new Response(
       JSON.stringify({ error: err.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

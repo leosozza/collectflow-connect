@@ -313,9 +313,11 @@ const DashboardPage = () => {
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                         v.agreement_status === "approved" 
                           ? "bg-success/10 text-success border-success/30" 
-                          : "bg-warning/10 text-warning border-warning/30"
+                          : v.agreement_status === "overdue"
+                            ? "bg-destructive/10 text-destructive border-destructive/30"
+                            : "bg-warning/10 text-warning border-warning/30"
                       }`}>
-                        {v.agreement_status === "approved" ? "Pago" : "Pendente"}
+                        {v.agreement_status === "approved" ? "Aprovado" : v.agreement_status === "overdue" ? "Atrasado" : "Pendente"}
                       </span>
                     </TableCell>
                   </TableRow>

@@ -183,7 +183,7 @@ BEGIN
     a.status AS agreement_status
   FROM agreements a
   WHERE a.tenant_id = _tenant
-    AND a.status IN ('pending', 'approved')
+    AND a.status IN ('pending', 'approved', 'overdue')
     AND (_user_id IS NULL OR a.created_by = _user_id)
     AND a.entrada_value > 0
     AND COALESCE(a.entrada_date, a.first_due_date)::date = _target_date
@@ -203,7 +203,7 @@ BEGIN
   FROM agreements a
   CROSS JOIN LATERAL generate_series(0, a.new_installments - 1) AS i
   WHERE a.tenant_id = _tenant
-    AND a.status IN ('pending', 'approved')
+    AND a.status IN ('pending', 'approved', 'overdue')
     AND (_user_id IS NULL OR a.created_by = _user_id)
     AND (a.first_due_date::date + (i * interval '1 month'))::date = _target_date;
 END;
