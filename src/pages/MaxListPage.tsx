@@ -873,9 +873,9 @@ const MaxListPage = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4">
             <div className="space-y-2">
-              <Label className="font-semibold">CPF/CNPJ</Label>
+              <Label className="font-semibold">CPF</Label>
               <Input
-                placeholder="Digite o CPF ou CNPJ"
+                placeholder="000.000.000-00"
                 value={filters.cpf}
                 onChange={(e) => updateFilter("cpf", e.target.value)}
               />
@@ -986,7 +986,7 @@ const MaxListPage = () => {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Importando...</span>
-                <span className="font-medium">{Math.min(importProgress, 100)}%</span>
+                <span className="font-medium">{Math.min(importProgress, 100).toFixed(2)}%</span>
               </div>
               <Progress value={Math.min(importProgress, 100)} />
             </div>
