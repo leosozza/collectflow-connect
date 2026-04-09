@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTenant } from "@/hooks/useTenant";
-import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
