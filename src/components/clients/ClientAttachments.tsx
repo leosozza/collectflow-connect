@@ -57,7 +57,8 @@ const ClientAttachments = ({ cpf }: Props) => {
 
     setUploading(true);
     try {
-      const filePath = `${tenant.id}/${cpf}/${Date.now()}_${file.name}`;
+      const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${tenant.id}/${cpf}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("client-attachments")
         .upload(filePath, file);
