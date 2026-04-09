@@ -1,40 +1,47 @@
 
 
-# Corrigir instância Gupshup não aparecendo na lista
+# Corrigir teste de conexão — incluir número de telefone real
 
 ## Problema
 
-A tabela `whatsapp_instances` tem colunas `instance_url` e `api_key` como `NOT NULL` sem valor default. O insert no `GupshupConfigDialog` (linha 101-108) não fornece esses campos, causando falha silenciosa — a instância nunca é criada.
+O `gupshup-proxy` envia `source=validation` e `destination=0` como valores fictícios. A Gupshup rejeita com "Invalid App Details" porque o `source` não corresponde a nenhum número registrado no app. O curl do usuário funciona porque usa o número real `5511971306153`.
 
 ## Correção
 
 ### 1. `src/components/integracao/GupshupConfigDialog.tsx`
 
-Adicionar `instance_url` e `api_key` no insert (linhas 101-108):
+Enviar o `sourceNumber` junto no body da chamada ao proxy:
 
 ```typescript
-await (supabase.from("whatsapp_instances") as any).insert({
-  tenant_id: tenant.id,
-  instance_name: instanceName,
-  phone_number: sourceNumber.replace(/\D/g, ""),
-  status: "connected",
-  provider: "gupshup",
-  provider_category: "official",
-  name: appName.trim(),
-  instance_url: "https://api.gupshup.io",
-  api_key: apiKey.trim(),
-});
+body: { apiKey, appName, sourceNumber: sourceNumber.trim(), tenantId: tenant?.id }
 ```
 
-Também adicionar tratamento de erro no insert/update para capturar falhas em vez de ignorá-las silenciosamente.
+### 2. `supabase/functions/gupshup-proxy/index.ts`
 
-### 2. Verificar se já existe instância com dados corretos
+- Extrair `sourceNumber` do body da request
+- Usar o número real no campo `source` em vez de `"validation"`
+- Usar um destino válido (o próprio número) em vez de `"0"`
 
-Após o fix, a instância "Maxfama2" será criada ao próximo "Salvar e ativar" e aparecerá no card da esquerda.
+```typescript
+const { apiKey, appName, tenantId, sourceNumber } = await req.json();
+const src = sourceNumber || "validation";
+const dst = sourceNumber || "0";
+const requestBody = `channel=whatsapp&source=${encodeURIComponent(src)}&src.name=${encodeURIComponent(appName)}&destination=${encodeURIComponent(dst)}&message={}`;
+```
 
-## Arquivo alterado
+### 3. `WhatsAppIntegrationTab.tsx`
+
+Atualizar `handleTestConnection` para enviar o `sourceNumber` das settings do tenant:
+
+```typescript
+body: { apiKey, appName, sourceNumber: settings.gupshup_source_number, tenantId: tenant.id }
+```
+
+## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/integracao/GupshupConfigDialog.tsx` | Adicionar `instance_url`, `api_key`, `provider_category` no insert; tratar erros do insert/update |
+| `src/components/integracao/GupshupConfigDialog.tsx` | Enviar `sourceNumber` no body |
+| `supabase/functions/gupshup-proxy/index.ts` | Usar número real no `source` e `destination` |
+| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Enviar `sourceNumber` no teste externo |
 
