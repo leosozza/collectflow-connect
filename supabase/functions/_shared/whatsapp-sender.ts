@@ -231,10 +231,14 @@ async function sendGupshupMsg(
 ): Promise<SendResult> {
   const apiKey = tenantSettings.gupshup_api_key;
   const sourceNumber = tenantSettings.gupshup_source_number;
-  const appName = tenantSettings.gupshup_app_name || "";
+  const appName = tenantSettings.gupshup_app_id || tenantSettings.gupshup_app_name || "";
+  
   if (!apiKey || !sourceNumber) {
     return { ok: false, result: { error: "Credenciais Gupshup não configuradas no tenant" }, providerMessageId: null, provider: "gupshup" };
   }
+
+  console.log(`Gupshup outbound: to=${phone}, source=${sourceNumber}, app=${appName}`);
+
   const formBody = new URLSearchParams({
     channel: "whatsapp",
     source: sourceNumber,
@@ -242,11 +246,22 @@ async function sendGupshupMsg(
     "src.name": appName,
     message: messageJson,
   });
+
   const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
     method: "POST",
-    headers: { apikey: apiKey, "Content-Type": "application/x-www-form-urlencoded" },
+    headers: { 
+      "apiKey": apiKey, 
+      "Content-Type": "application/x-www-form-urlencoded" 
+    },
     body: formBody.toString(),
   });
+
   const result = await resp.json();
+  
+  if (!resp.ok) {
+    console.error("Gupshup API error:", JSON.stringify(result));
+  }
+
   return { ok: resp.ok, result, providerMessageId: result?.messageId || null, provider: "gupshup" };
 }
+
