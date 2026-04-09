@@ -1,26 +1,27 @@
 
 
-# Adicionar botão "Ver Logs" do webhook Gupshup
+# Registrar logs do "Testar Conexão" na mesma caixa de logs do webhook
 
 ## O que será feito
 
-Adicionar um botão "Ver Logs" ao lado do webhook URL no card Gupshup. Ao clicar, abre um dialog/modal mostrando os logs mais recentes da edge function `gupshup-webhook`, buscados via `supabase.functions.invoke` de uma nova edge function auxiliar.
+Quando o usuário clicar em "Testar Conexão", o resultado (sucesso ou erro) será salvo na tabela `webhook_logs` com `function_name = 'gupshup-proxy'`. Assim, ao abrir o dialog de logs, os testes de conexão aparecerão junto com os logs do webhook.
 
-## Abordagem
+## Alterações
 
-### 1. Nova Edge Function `webhook-logs` 
+### 1. `src/components/integracao/WhatsAppIntegrationTab.tsx` — `handleTestConnection`
 
-Cria uma edge function que usa a Analytics API do Supabase para buscar os logs da function `gupshup-webhook` e retornar ao frontend. Usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` para consultar os logs via endpoint interno de analytics.
+Após receber a resposta do `gupshup-proxy`, inserir um registro na tabela `webhook_logs`:
+- **Sucesso**: `event_type = 'success'`, mensagem "Conexão testada com sucesso"
+- **Erro**: `event_type = 'error'`, mensagem com o detalhe do erro
 
-### 2. Botão + Dialog no `WhatsAppIntegrationTab.tsx`
+Também atualizar a query de `handleFetchLogs` para buscar logs de ambas as functions (`gupshup-webhook` e `gupshup-proxy`), usando `.in("function_name", ["gupshup-webhook", "gupshup-proxy"])`.
 
-- Adicionar botão "Ver Logs" (ícone `ScrollText`) ao lado do botão de copiar webhook
-- Ao clicar, chama a edge function `webhook-logs` 
-- Exibe os resultados em um `Dialog` com scroll, mostrando timestamp, tipo de evento e mensagem
-- Cada log formatado com cores (erro = vermelho, info = normal)
+### 2. `supabase/functions/gupshup-proxy/index.ts`
 
-### Arquivos alterados
+Adicionar escrita na tabela `webhook_logs` diretamente na edge function, registrando a resposta raw da Gupshup (status, corpo) para diagnóstico completo. Usar o service role key disponível via `Deno.env`.
 
-1. **Novo**: `supabase/functions/webhook-logs/index.ts` — busca logs da edge function gupshup-webhook via API de analytics
-2. **Editado**: `src/components/integracao/WhatsAppIntegrationTab.tsx` — adiciona botão + dialog de logs
+## Arquivos alterados
+
+1. **`src/components/integracao/WhatsAppIntegrationTab.tsx`** — inserir log após teste + expandir query de logs
+2. **`supabase/functions/gupshup-proxy/index.ts`** — registrar resultado na `webhook_logs`
 
