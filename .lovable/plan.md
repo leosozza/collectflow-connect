@@ -1,27 +1,88 @@
 
 
-# Registrar logs do "Testar Conexão" na mesma caixa de logs do webhook
+# Plano de Implementação — Paridade Gupshup (ThothAI → Rivo)
 
-## O que será feito
+## Resumo
 
-Quando o usuário clicar em "Testar Conexão", o resultado (sucesso ou erro) será salvo na tabela `webhook_logs` com `function_name = 'gupshup-proxy'`. Assim, ao abrir o dialog de logs, os testes de conexão aparecerão junto com os logs do webhook.
+Implementar 4 melhorias na integração Gupshup: coluna `metadata` para contexto de botões, persistência automática de mídia no Storage, correção do roteamento webhook, e padronização do envio de mídia.
 
-## Alterações
+## Respostas às perguntas abertas
 
-### 1. `src/components/integracao/WhatsAppIntegrationTab.tsx` — `handleTestConnection`
+- **Transcrição**: Sim, a coluna `metadata` (jsonb) já comportará transcrições futuras sem nova migração.
+- **Handoff IA vs Humano**: Não será implementado agora; pode ser adicionado depois via flag na conversa.
 
-Após receber a resposta do `gupshup-proxy`, inserir um registro na tabela `webhook_logs`:
-- **Sucesso**: `event_type = 'success'`, mensagem "Conexão testada com sucesso"
-- **Erro**: `event_type = 'error'`, mensagem com o detalhe do erro
+---
 
-Também atualizar a query de `handleFetchLogs` para buscar logs de ambas as functions (`gupshup-webhook` e `gupshup-proxy`), usando `.in("function_name", ["gupshup-webhook", "gupshup-proxy"])`.
+## 1. Migração de Banco de Dados
 
-### 2. `supabase/functions/gupshup-proxy/index.ts`
+**Arquivo**: Nova migração SQL
 
-Adicionar escrita na tabela `webhook_logs` diretamente na edge function, registrando a resposta raw da Gupshup (status, corpo) para diagnóstico completo. Usar o service role key disponível via `Deno.env`.
+```sql
+ALTER TABLE public.chat_messages
+  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+```
+
+- `provider_message_id` já existe (adicionado na migração `20260407174146`), não precisa re-criar.
+- `metadata` servirá para: contexto de botões simulados, transcrições futuras, dados extras do provider.
+
+---
+
+## 2. Edge Function `gupshup-webhook/index.ts` — Reescrever
+
+Mudanças principais:
+
+- **Separar `message` vs `message-event`**: Usar `if/else if` em vez de dois `if` independentes, evitando que `message-event` caia em ambos os blocos.
+- **Cascata de URLs de mídia**: Buscar URL em `payload.payload.url`, `payload.payload.originalUrl`, `payload.payload.payload.url` recursivamente (padrão ThothAI).
+- **`downloadAndUploadMedia()`**: Nova função que baixa o arquivo da Gupshup e faz upload para o bucket `chat-media` do Storage, retornando a URL pública persistida. Inclui timeout de 15s.
+- **Botões simulados**: Quando `msgType === "text"` e o conteúdo é "1", "2", "3" etc., buscar a última mensagem outbound com `metadata.buttons` na conversa para mapear a resposta numérica ao label do botão. Salvar contexto em `metadata` da mensagem.
+- **Mime type**: Extrair mime type do header `Content-Type` ao baixar a mídia.
+
+---
+
+## 3. `_shared/whatsapp-sender.ts` — Padronizar envio de mídia
+
+- **Gupshup media**: Garantir `filename` e `mimetype` nos payloads de document/audio/video.
+- **Vídeo**: Adicionar `caption` no payload.
+- **Áudio**: Adicionar `mimetype: "audio/ogg"` por padrão.
+- **Document**: Incluir `mimetype` dinâmico a partir do `mimeType` passado.
+
+Snippet da mudança no `sendGupshupMedia`:
+```typescript
+} else if (gupType === "video") {
+  msgPayload.url = media.mediaUrl;
+  msgPayload.caption = media.caption || "";
+  msgPayload.mimetype = media.mimeType || "video/mp4"; // NOVO
+} else if (gupType === "audio") {
+  msgPayload.url = media.mediaUrl;
+  msgPayload.mimetype = media.mimeType || "audio/ogg"; // NOVO
+} else {
+  msgPayload.url = media.mediaUrl;
+  msgPayload.filename = media.fileName || "file";
+  msgPayload.mimetype = media.mimeType || "application/octet-stream"; // NOVO
+}
+```
+
+---
+
+## 4. Frontend `ChatMessage.tsx` — Ajuste de renderização
+
+- Garantir que `<audio>` e `<video>` funcionem com URLs do Storage (já funciona, pois o bucket `chat-media` é público).
+- Nenhuma mudança estrutural necessária no `ChatPanel.tsx` — já renderiza corretamente via `ChatMessageBubble`.
+
+---
 
 ## Arquivos alterados
 
-1. **`src/components/integracao/WhatsAppIntegrationTab.tsx`** — inserir log após teste + expandir query de logs
-2. **`supabase/functions/gupshup-proxy/index.ts`** — registrar resultado na `webhook_logs`
+| Arquivo | Ação |
+|---|---|
+| Nova migração SQL | Adicionar coluna `metadata` jsonb |
+| `supabase/functions/gupshup-webhook/index.ts` | Reescrever com cascata de URLs, persistência de mídia, botões simulados, fix do roteamento |
+| `supabase/functions/_shared/whatsapp-sender.ts` | Padronizar `mimetype`/`filename` no envio Gupshup |
+
+---
+
+## Verificação
+
+- Deploy das edge functions e teste via `curl_edge_functions` com payloads simulados de texto, imagem e status.
+- Verificar nos logs (`webhook_logs`) se mídia é persistida corretamente.
 
