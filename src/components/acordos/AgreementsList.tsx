@@ -67,14 +67,7 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                 {(a as any).creator_name || "—"}
               </TableCell>
               <TableCell>
-                <div className="flex items-center gap-1.5">
-                  <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
-                  {(a as any).boleto_pendente && (
-                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-600">
-                      Boleto pendente
-                    </Badge>
-                  )}
-                </div>
+                <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
               </TableCell>
             </TableRow>
           ))}
