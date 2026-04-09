@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
     });
   } catch (err: any) {
     console.error("gupshup-webhook error:", err);
+    await writeLog(null, "error", `Erro geral: ${err.message}`, null, 500);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
