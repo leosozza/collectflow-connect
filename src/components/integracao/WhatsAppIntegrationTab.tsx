@@ -98,8 +98,8 @@ const WhatsAppIntegrationTab = () => {
           })
           .eq("id", existing.id);
       } else {
-        await supabase
-          .from("whatsapp_instances")
+        await (supabase
+          .from("whatsapp_instances") as any)
           .insert({
             tenant_id: tenant.id,
             instance_name: instanceName,
