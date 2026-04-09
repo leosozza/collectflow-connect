@@ -32,15 +32,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { apiKey, appName, tenantId } = await req.json();
+    const { apiKey, appName, tenantId, sourceNumber } = await req.json();
 
     if (!apiKey || !appName) {
       throw new Error("apiKey and appName are required");
     }
 
-    // Validate API key by sending a minimal request to the messaging endpoint
-    // A 400 (missing params) proves the key is valid; only 401/403 means invalid key
-    const requestBody = `channel=whatsapp&source=validation&src.name=${encodeURIComponent(appName)}&destination=0&message={}`;
+    // Use real source number for validation; Gupshup rejects unknown sources
+    const src = sourceNumber || "validation";
+    const dst = sourceNumber || "0";
+    const requestBody = `channel=whatsapp&source=${encodeURIComponent(src)}&src.name=${encodeURIComponent(appName)}&destination=${encodeURIComponent(dst)}&message={}`;
     const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
       method: "POST",
       headers: {
