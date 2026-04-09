@@ -78,31 +78,44 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
     };
   }, [credorAgreements]);
 
-  // === MÉTRICA DE CARTEIRA === Aging por parcelas de clientes com acordo
-  // Usa saldo real (valor_parcela - valor_pago) em vez de depender apenas do status
+  // === MÉTRICA DE CARTEIRA === Aging baseado na data mais antiga de vencimento por cliente (CPF)
+  // Agrupa todas as parcelas do mesmo CPF, usa a primeira parcela vencida como referência
+  // para classificar o cliente na faixa de aging correta (tempo que está devendo ao credor)
   const agingData = useMemo(() => {
+    // Agrupar parcelas por CPF normalizado
+    const cpfMap = new Map<string, { earliest: Date; totalSaldo: number; totalPago: number }>();
+
+    credorClients.forEach((c) => {
+      const cpf = normalizeCPF(c.cpf);
+      const vencimento = parseISO(c.data_vencimento);
+      const parcela = Number(c.valor_parcela) || 0;
+      const pago = Number(c.valor_pago) || 0;
+      const saldo = Math.max(parcela - pago, 0);
+
+      const existing = cpfMap.get(cpf);
+      if (existing) {
+        // Mantém a data mais antiga (quando começou a dever)
+        if (vencimento < existing.earliest) existing.earliest = vencimento;
+        existing.totalSaldo += saldo;
+        existing.totalPago += pago;
+      } else {
+        cpfMap.set(cpf, { earliest: vencimento, totalSaldo: saldo, totalPago: pago });
+      }
+    });
+
+    // Classificar cada cliente na faixa de aging pela data mais antiga
     return AGING_BUCKETS.map((b) => {
       let count = 0;
       let totalAberto = 0;
       let totalRecebido = 0;
 
-      credorClients.forEach((c) => {
-        const vencimento = parseISO(c.data_vencimento);
-        const dias = differenceInDays(today, vencimento);
+      cpfMap.forEach(({ earliest, totalSaldo, totalPago }) => {
+        const dias = differenceInDays(today, earliest);
         if (dias < b.min || dias > b.max) return;
 
-        const parcela = Number(c.valor_parcela) || 0;
-        const pago = Number(c.valor_pago) || 0;
-        const saldo = Math.max(parcela - pago, 0);
-
-        // Soma recebido independentemente do status
-        if (pago > 0) totalRecebido += pago;
-
-        // Soma aberto para parcelas vencidas com saldo > 0
-        if (vencimento < today && saldo > 0) {
-          count++;
-          totalAberto += saldo;
-        }
+        count++;
+        totalAberto += totalSaldo;
+        totalRecebido += totalPago;
       });
 
       return { ...b, count, total: totalAberto, received: totalRecebido };
