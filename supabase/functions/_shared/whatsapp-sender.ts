@@ -183,11 +183,14 @@ async function sendGupshupMedia(
   } else if (gupType === "video") {
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
+    msgPayload.mimetype = media.mimeType || "video/mp4";
   } else if (gupType === "audio") {
     msgPayload.url = media.mediaUrl;
+    msgPayload.mimetype = media.mimeType || "audio/ogg";
   } else {
     msgPayload.url = media.mediaUrl;
     msgPayload.filename = media.fileName || "file";
+    msgPayload.mimetype = media.mimeType || "application/octet-stream";
   }
 
   return sendGupshupMsg(phone, JSON.stringify(msgPayload), tenantSettings);
