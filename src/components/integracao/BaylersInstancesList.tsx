@@ -40,7 +40,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const BaylersInstancesList = () => {
+interface BaylersInstancesListProps {
+  externalFormOpen?: boolean;
+  onExternalFormClose?: () => void;
+}
+
+const BaylersInstancesList = ({ externalFormOpen, onExternalFormClose }: BaylersInstancesListProps) => {
   const { tenant, refetch: refetchTenant } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
