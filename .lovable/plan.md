@@ -1,37 +1,26 @@
 
 
-# Corrigir erro 405 no teste de conexão Gupshup
+# Adicionar botão "Ver Logs" do webhook Gupshup
 
-## Problema
+## O que será feito
 
-O endpoint `https://api.gupshup.io/sm/api/v1/template/msg` está retornando **HTTP 405 (Method Not Allowed)** para requisições GET. Essa API provavelmente espera POST ou a URL correta para listar templates inclui o `appName` no path.
+Adicionar um botão "Ver Logs" ao lado do webhook URL no card Gupshup. Ao clicar, abre um dialog/modal mostrando os logs mais recentes da edge function `gupshup-webhook`, buscados via `supabase.functions.invoke` de uma nova edge function auxiliar.
 
-## Correção
+## Abordagem
 
-### `supabase/functions/gupshup-proxy/index.ts`
+### 1. Nova Edge Function `webhook-logs` 
 
-Trocar o endpoint de validação para um que aceite GET e valide as credenciais:
+Cria uma edge function que usa a Analytics API do Supabase para buscar os logs da function `gupshup-webhook` e retornar ao frontend. Usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` para consultar os logs via endpoint interno de analytics.
 
-```typescript
-// DE:
-const response = await fetch("https://api.gupshup.io/sm/api/v1/template/msg", {
-  method: "GET",
-  headers: {
-    "apiKey": apiKey,
-    "Content-Type": "application/x-www-form-urlencoded",
-  },
-});
+### 2. Botão + Dialog no `WhatsAppIntegrationTab.tsx`
 
-// PARA:
-const response = await fetch(`https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}`, {
-  method: "GET",
-  headers: {
-    "apiKey": apiKey,
-  },
-});
-```
+- Adicionar botão "Ver Logs" (ícone `ScrollText`) ao lado do botão de copiar webhook
+- Ao clicar, chama a edge function `webhook-logs` 
+- Exibe os resultados em um `Dialog` com scroll, mostrando timestamp, tipo de evento e mensagem
+- Cada log formatado com cores (erro = vermelho, info = normal)
 
-Este endpoint (`/wa/app/{appName}`) retorna informações do app e valida tanto a API Key quanto o App Name em uma única chamada. Se as credenciais forem inválidas, a Gupshup retorna erro estruturado. O restante do código (parse de texto, tratamento de erros) permanece igual.
+### Arquivos alterados
 
-Após a alteração, re-deploy da edge function.
+1. **Novo**: `supabase/functions/webhook-logs/index.ts` — busca logs da edge function gupshup-webhook via API de analytics
+2. **Editado**: `src/components/integracao/WhatsAppIntegrationTab.tsx` — adiciona botão + dialog de logs
 
