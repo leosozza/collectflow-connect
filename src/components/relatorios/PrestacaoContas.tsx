@@ -296,7 +296,7 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
             {[
               { label: "Total", value: acordosSummary.total },
-              { label: "Pagos", value: acordosSummary.aprovados + acordosSummary.pagos },
+              { label: "Pagos", value: acordosSummary.pagos },
               { label: "Pendentes", value: acordosSummary.pendentes },
               { label: "Vencidos", value: acordosSummary.vencidos },
               { label: "Cancelados", value: acordosSummary.cancelados },
