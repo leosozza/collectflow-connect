@@ -125,8 +125,6 @@ const WhatsAppIntegrationTab = () => {
         <BaylersInstancesList />
       </div>
 
-      {/* WuzAPI Card - full width */}
-      <WuzApiInstancesList />
     </div>
   );
 };
