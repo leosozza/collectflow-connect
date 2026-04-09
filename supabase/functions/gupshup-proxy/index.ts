@@ -40,13 +40,14 @@ Deno.serve(async (req) => {
 
     // Validate API key by sending a minimal request to the messaging endpoint
     // A 400 (missing params) proves the key is valid; only 401/403 means invalid key
+    const requestBody = `channel=whatsapp&source=validation&src.name=${encodeURIComponent(appName)}&destination=0&message={}`;
     const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
       method: "POST",
       headers: {
         "apikey": apiKey,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: `channel=whatsapp&source=validation&src.name=${encodeURIComponent(appName)}&destination=0&message={}`,
+      body: requestBody,
     });
 
     const text = await response.text();
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
     try {
       data = JSON.parse(text);
     } catch {
-      await writeLog(tenantId || null, "error", `Gupshup retornou resposta inválida (status ${response.status})`, { raw: text.substring(0, 500) }, response.status);
+      await writeLog(tenantId || null, "error", `Gupshup retornou resposta inválida (status ${response.status})`, { request: { url: "https://api.gupshup.io/wa/api/v1/msg", body: requestBody }, response: { status: response.status, raw: text.substring(0, 500) } }, response.status);
       return new Response(JSON.stringify({
         success: false,
         error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
@@ -68,7 +69,7 @@ Deno.serve(async (req) => {
 
     // For the validation approach: 401/403 = invalid key, anything else = key is valid
     if (response.status === 401 || response.status === 403) {
-      await writeLog(tenantId || null, "error", `API Key inválida: Gupshup respondeu ${response.status}`, { status: response.status, body: data }, response.status);
+      await writeLog(tenantId || null, "error", `API Key inválida: Gupshup respondeu ${response.status}`, { request: { url: "https://api.gupshup.io/wa/api/v1/msg", body: requestBody }, response: { status: response.status, body: data } }, response.status);
       return new Response(JSON.stringify({ 
         success: false, 
         error: data.message || "API Key inválida — autenticação falhou",
@@ -81,7 +82,7 @@ Deno.serve(async (req) => {
 
     // Detect "Invalid App Details" — API Key is valid but doesn't match the appName
     if (data?.status === "error" && /invalid app/i.test(data?.message || "")) {
-      await writeLog(tenantId || null, "error", `App Name "${appName}" não corresponde à API Key fornecida`, { status: response.status, body: data }, response.status);
+      await writeLog(tenantId || null, "error", `App Name "${appName}" não corresponde à API Key fornecida`, { request: { url: "https://api.gupshup.io/wa/api/v1/msg", body: requestBody }, response: { status: response.status, body: data } }, response.status);
       return new Response(JSON.stringify({
         success: false,
         error: `API Key válida, mas não corresponde ao App Name "${appName}". Verifique se a API Key pertence a este app.`,
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
     }
 
     // Any other response (200, 400, 412, etc.) means the key IS valid
-    await writeLog(tenantId || null, "success", `Conexão testada com sucesso (API Key válida, appName: ${appName})`, { status: response.status, body: data }, response.status);
+    await writeLog(tenantId || null, "success", `Conexão testada com sucesso (API Key válida, appName: ${appName})`, { request: { url: "https://api.gupshup.io/wa/api/v1/msg", body: requestBody }, response: { status: response.status, body: data } }, response.status);
 
     return new Response(JSON.stringify({ 
       success: true, 
