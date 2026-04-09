@@ -1,31 +1,35 @@
 
 
-# Corrigir endpoint de teste de conexão Gupshup
+# Melhorar validação do teste de conexão + preparar teste de envio real
 
-## Problema
+## Problema encontrado
 
-O endpoint `GET /wa/app/{appName}` retorna 401 mesmo com credenciais válidas. O curl do usuário prova que a API Key funciona no endpoint de envio (`/wa/api/v1/template/msg`). O endpoint de "app info" provavelmente requer permissões de admin que a API Key de envio não possui.
+1. **Credencial errada salva no banco** — A API Key salva (`sk_1047c...`) é diferente da que funciona no curl (`sk_4d0b3...`). O Gupshup retorna "Invalid App Details" porque a chave não corresponde ao app "Maxfama2".
 
-## Correção
+2. **Teste de conexão aceita falsos positivos** — Atualmente qualquer resposta ≠ 401/403 é considerada "sucesso", mas "Invalid App Details" com status 400 claramente indica problema.
 
-Trocar o endpoint de teste para `GET /sm/api/v2/wallet/balance`, que valida a API Key sem exigir permissões especiais. Esse endpoint retorna o saldo da conta e confirma que a chave é válida.
+## Correções
 
-### Alteração em `supabase/functions/gupshup-proxy/index.ts`
+### 1. `supabase/functions/gupshup-proxy/index.ts`
 
-Linha 41: trocar de:
+Após receber a resposta do Gupshup, verificar se o body contém `"status":"error"` com mensagem `"Invalid App Details"`. Se sim, retornar `success: false` com mensagem explicativa ("API Key não corresponde ao App Name informado").
+
 ```typescript
-const response = await fetch(`https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}`, {
-```
-Para:
-```typescript
-const response = await fetch("https://api.gupshup.io/sm/api/v2/wallet/balance", {
+// Após parsear a resposta JSON:
+if (data?.status === "error" && data?.message === "Invalid App Details") {
+  // API Key válida mas não pertence ao app informado
+  await writeLog(tenantId, "error", `App Name "${appName}" não corresponde à API Key`, ...);
+  return Response({ success: false, error: "API Key válida, mas não corresponde ao App Name informado" });
+}
 ```
 
-Isso valida que a API Key é autêntica. O `appName` será validado implicitamente quando o primeiro envio for feito.
+### 2. Ação do usuário (pré-requisito para teste de envio)
+
+Atualizar a API Key na interface de integração para a correta (`sk_4d0b33b6488d49d6ade15a3df3b0c99b`) e salvar.
 
 ## Arquivo alterado
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/gupshup-proxy/index.ts` | Trocar endpoint de `/wa/app/{appName}` para `/sm/api/v2/wallet/balance` |
+| `supabase/functions/gupshup-proxy/index.ts` | Detectar "Invalid App Details" como erro |
 
