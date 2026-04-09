@@ -61,12 +61,23 @@ const WhatsAppIntegrationTab = () => {
     setLoadingLogs(true);
     setLogsOpen(true);
     try {
-      const { data, error } = await supabase.functions.invoke("webhook-logs", {
-        body: { function_name: "gupshup-webhook", limit: 50 },
-      });
+      const { data, error } = await supabase
+        .from("webhook_logs")
+        .select("*")
+        .eq("function_name", "gupshup-webhook")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      
       if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || "Falha ao buscar logs");
-      setLogs(data.logs || []);
+      
+      setLogs((data || []).map((l: any) => ({
+        id: l.id,
+        timestamp: l.created_at,
+        message: l.message || "",
+        type: l.event_type === "error" ? "log" : "http",
+        status_code: l.status_code,
+        level: l.event_type,
+      })));
     } catch (err: any) {
       toast({ title: "Erro ao buscar logs", description: err.message, variant: "destructive" });
       setLogs([]);
