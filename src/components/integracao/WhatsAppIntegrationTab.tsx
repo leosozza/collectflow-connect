@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { updateTenant } from "@/services/tenantService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Eye, EyeOff, Copy, Check, Radio } from "lucide-react";
 import BaylersInstancesList from "./BaylersInstancesList";
-import WuzApiInstancesList from "./WuzApiInstancesList";
 
 const WhatsAppIntegrationTab = () => {
   const { tenant, refetch } = useTenant();
@@ -98,8 +98,8 @@ const WhatsAppIntegrationTab = () => {
           })
           .eq("id", existing.id);
       } else {
-        await supabase
-          .from("whatsapp_instances")
+        await (supabase
+          .from("whatsapp_instances") as any)
           .insert({
             tenant_id: tenant.id,
             instance_name: instanceName,
@@ -208,7 +208,6 @@ const WhatsAppIntegrationTab = () => {
         <BaylersInstancesList />
       </div>
     </div>
-  );
   );
 };
 
