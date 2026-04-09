@@ -6140,7 +6140,7 @@ export type Database = {
         }[]
       }
       get_dashboard_vencimentos: {
-        Args: { _target_date: string; _user_id?: string }
+        Args: { _target_date?: string; _user_id?: string }
         Returns: {
           agreement_id: string
           agreement_status: string
