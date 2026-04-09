@@ -1,38 +1,22 @@
 
 
-# Ajustes na aba MaxList — Progresso e Campo CPF
+# Corrigir erros de build que impedem o preview
 
-## Alterações
+## Problema
+Dois erros de build estão impedindo a aplicação de carregar:
 
-### 1. Barra de progresso — formatar para 2 casas decimais (0.00% – 100.00%)
+1. **WhatsAppIntegrationTab.tsx** — `);` duplicado na linha 212 (erro de sintaxe)
+2. **process-email-queue/index.ts** — tipos TypeScript rejeitando `as any` nos métodos `.insert()` e `.rpc()`
 
-**Arquivo**: `src/pages/MaxListPage.tsx`, linha 989
+## Correções
 
-Trocar:
-```typescript
-<span className="font-medium">{Math.min(importProgress, 100)}%</span>
-```
-Por:
-```typescript
-<span className="font-medium">{Math.min(importProgress, 100).toFixed(2)}%</span>
-```
+### 1. `src/components/integracao/WhatsAppIntegrationTab.tsx` — linha 212
+Remover o `);` extra na linha 212. O return já fecha corretamente na linha 211.
 
-### 2. Campo de filtro CPF — renomear e adicionar placeholder explicativo
+### 2. `supabase/functions/process-email-queue/index.ts` — linhas 63 e 70
+Adicionar cast explícito nos valores para contornar a tipagem estrita:
+- Linha 63: `await (supabase.from('email_send_log') as any).insert({...})`
+- Linha 70: `await (supabase as any).rpc('move_to_dlq', {...})`
 
-**Arquivo**: `src/pages/MaxListPage.tsx`, linhas 876-880
-
-Trocar:
-```typescript
-<Label className="font-semibold">CPF/CNPJ</Label>
-<Input
-  placeholder="Digite o CPF ou CNPJ"
-```
-Por:
-```typescript
-<Label className="font-semibold">CPF</Label>
-<Input
-  placeholder="000.000.000-00"
-```
-
-Duas mudanças pontuais, sem impacto em lógica ou outros componentes.
+Isso move o `as any` para englobar o objeto retornado, evitando o erro de tipo `never`.
 
