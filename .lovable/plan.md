@@ -1,79 +1,44 @@
 
+Objetivo
 
-# Corrigir Aging na Prestação de Contas
+Confirmar se a correção do flicker foi aplicada e definir o ajuste correto para eliminar qualquer flash ao voltar para a aba.
 
-## Problema
+Verificação do código
 
-O aging agrupa por CPF e usa `valor_pago` da tabela `clients` (carteira original), que pode estar zerado ou desatualizado. O valor **recebido real** está nos agreements (`total_paid_real`). Resultado: aging mostra R$ 0 em "Recebido" mesmo para clientes pagos.
+- Em `src/hooks/useTenant.tsx`, a alteração pedida já está presente no ponto crítico:
+  ```ts
+  if (!tenant) setLoading(true);
+  ```
+- Em `src/App.tsx`, o `RootPage` ainda desmonta a UI inteira quando `tenantLoading` fica `true`.
+- Em `src/components/ProtectedRoute.tsx`, também existe spinner de tela cheia baseado em `tenantLoading`.
+- Não encontrei listener manual de `window focus` no projeto; o re-fetch acontece pelo fluxo de sessão/auth e faz o `useTenant` rodar de novo.
 
-Além disso, a contagem e classificação estão corretas em lógica, mas precisam usar dados dos agreements para "Recebido".
+Conclusão
 
-## Solução
+- A correção exata no hook já foi aplicada.
+- Se uma ferramenta externa “não encontrou”, o mais provável é que ela tenha lido um snapshot anterior ou não tenha validado o arquivo atual.
+- Se ainda existir flicker em algum cenário, o endurecimento correto é separar claramente “primeiro carregamento” de “refresh silencioso”.
 
-### Arquivo: `src/components/relatorios/PrestacaoContas.tsx`
+Plano
 
-Refatorar o `agingData` memo para:
+1. Manter a lógica atual em `useTenant.tsx`:
+   - `setLoading(true)` só no primeiro carregamento, quando `tenant` ainda é `null`.
 
-1. **Manter a base nos `credorClients`** (parcelas originais de clientes com acordo) para determinar a data mais antiga e o saldo aberto
-2. **Cruzar com `credorAgreements`** para obter o `total_paid_real` por CPF — esse é o valor realmente recebido
-3. Cada CPF fica com:
-   - `earliest`: data de vencimento mais antiga da carteira (classifica no bucket)
-   - `totalSaldo`: soma dos saldos abertos das parcelas originais
-   - `totalRecebido`: soma de `total_paid_real` dos agreements daquele CPF
+2. Blindar o hook para deixar essa intenção explícita:
+   - tratar `loading` como bloqueante apenas no load inicial;
+   - continuar atualizando `tenant`, `tenantUser` e `plan` normalmente em background.
 
-### Mudança concreta no código
+3. Revisar o consumo em `App.tsx` e `ProtectedRoute.tsx`:
+   - spinner de tela cheia apenas no primeiro carregamento real;
+   - nenhum spinner durante refresh silencioso de sessão.
 
-```typescript
-const agingData = useMemo(() => {
-  // Mapa de recebido real por CPF (vindo dos agreements)
-  const recebidoPorCpf = new Map<string, number>();
-  credorAgreements.forEach((a: any) => {
-    const cpf = normalizeCPF(a.client_cpf);
-    recebidoPorCpf.set(cpf, (recebidoPorCpf.get(cpf) || 0) + Number(a.total_paid_real || 0));
-  });
+4. Validar o fluxo:
+   - abrir a aplicação;
+   - trocar de aba e voltar;
+   - confirmar que não há desmontagem visual, nem “Carregando...” em tela cheia, mas os dados continuam sendo atualizados.
 
-  // Agrupar parcelas originais por CPF
-  const cpfMap = new Map<string, { earliest: Date; totalSaldo: number }>();
-  credorClients.forEach((c) => {
-    const cpf = normalizeCPF(c.cpf);
-    const vencimento = parseISO(c.data_vencimento);
-    const saldo = Math.max(Number(c.valor_parcela) - Number(c.valor_pago), 0);
-    const existing = cpfMap.get(cpf);
-    if (existing) {
-      if (vencimento < existing.earliest) existing.earliest = vencimento;
-      existing.totalSaldo += saldo;
-    } else {
-      cpfMap.set(cpf, { earliest: vencimento, totalSaldo: saldo });
-    }
-  });
+Detalhes técnicos
 
-  // Classificar por faixa usando data mais antiga + recebido real dos agreements
-  return AGING_BUCKETS.map((b) => {
-    let count = 0, totalAberto = 0, totalRecebido = 0;
-    cpfMap.forEach(({ earliest, totalSaldo }, cpf) => {
-      const dias = differenceInDays(today, earliest);
-      if (dias < b.min || dias > b.max) return;
-      count++;
-      totalAberto += totalSaldo;
-      totalRecebido += recebidoPorCpf.get(cpf) || 0;
-    });
-    return { ...b, count, total: totalAberto, received: totalRecebido };
-  });
-}, [credorClients, credorAgreements]);
-```
-
-### O que muda para o credor
-
-- **Count**: quantidade de devedores (CPFs únicos) por faixa de aging
-- **Saldo Aberto**: soma das parcelas originais em aberto
-- **Recebido**: valor real pago via agreements (não mais da carteira)
-- **Classificação**: pela data da parcela original mais antiga — mostra há quanto tempo o cliente devia
-
-### O que NÃO muda
-
-- KPIs superiores (usam `summary` dos agreements)
-- Contadores de clientes (negociados/recebidos/quebrados)
-- Parcelas detalhadas
-- Acordos resumo
-- Nenhum status, fluxo ou automação alterado
-
+- Hook confirmado: `src/hooks/useTenant.tsx`
+- Pontos que ainda dependem de `tenantLoading`: `src/App.tsx` e `src/components/ProtectedRoute.tsx`
+- Resultado esperado: refresh silencioso ao focar a aba, sem flicker e sem perder atualização de estado.
