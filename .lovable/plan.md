@@ -1,22 +1,56 @@
 
 
-# Corrigir erros de build que impedem o preview
+# Corrigir "Unexpected end of JSON input" no teste Gupshup
 
 ## Problema
-Dois erros de build estão impedindo a aplicação de carregar:
 
-1. **WhatsAppIntegrationTab.tsx** — `);` duplicado na linha 212 (erro de sintaxe)
-2. **process-email-queue/index.ts** — tipos TypeScript rejeitando `as any` nos métodos `.insert()` e `.rpc()`
+Na linha 30 do `gupshup-proxy/index.ts`, `await response.json()` explode se a Gupshup retornar HTML ou corpo vazio. O erro genérico chega ao frontend sem contexto.
 
 ## Correções
 
-### 1. `src/components/integracao/WhatsAppIntegrationTab.tsx` — linha 212
-Remover o `);` extra na linha 212. O return já fecha corretamente na linha 211.
+### 1. `supabase/functions/gupshup-proxy/index.ts` — linha 30-31
 
-### 2. `supabase/functions/process-email-queue/index.ts` — linhas 63 e 70
-Adicionar cast explícito nos valores para contornar a tipagem estrita:
-- Linha 63: `await (supabase.from('email_send_log') as any).insert({...})`
-- Linha 70: `await (supabase as any).rpc('move_to_dlq', {...})`
+Trocar:
+```typescript
+const data = await response.json();
+console.log("Gupshup proxy test response:", data);
+```
+Por:
+```typescript
+const text = await response.text();
+console.log("Gupshup proxy raw response:", text.substring(0, 500));
 
-Isso move o `as any` para englobar o objeto retornado, evitando o erro de tipo `never`.
+let data: any;
+try {
+  data = JSON.parse(text);
+} catch {
+  return new Response(JSON.stringify({
+    success: false,
+    error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
+  }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+```
+
+### 2. `src/components/integracao/WhatsAppIntegrationTab.tsx` — linhas 54-56
+
+Trocar:
+```typescript
+if (error || !data?.success) {
+  throw new Error(data?.error || "Falha na conexão com Gupshup");
+}
+```
+Por:
+```typescript
+if (error) {
+  throw new Error(error.message || "Erro ao chamar gupshup-proxy");
+}
+if (!data?.success) {
+  throw new Error(data?.error || "Falha na conexão com Gupshup");
+}
+```
+
+Isso garante que erros de rede (edge function inacessível) e erros da Gupshup (credenciais inválidas, HTML em vez de JSON) sejam exibidos claramente no toast.
 
