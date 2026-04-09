@@ -79,6 +79,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Detect "Invalid App Details" — API Key is valid but doesn't match the appName
+    if (data?.status === "error" && /invalid app/i.test(data?.message || "")) {
+      await writeLog(tenantId || null, "error", `App Name "${appName}" não corresponde à API Key fornecida`, { status: response.status, body: data }, response.status);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `API Key válida, mas não corresponde ao App Name "${appName}". Verifique se a API Key pertence a este app.`,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
     // Any other response (200, 400, 412, etc.) means the key IS valid
     await writeLog(tenantId || null, "success", `Conexão testada com sucesso (API Key válida, appName: ${appName})`, { status: response.status, body: data }, response.status);
 
