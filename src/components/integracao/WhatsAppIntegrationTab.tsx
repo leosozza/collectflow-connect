@@ -8,8 +8,21 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Eye, EyeOff, Copy, Check, Radio } from "lucide-react";
+import { MessageSquare, Eye, EyeOff, Copy, Check, Radio, ScrollText } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import BaylersInstancesList from "./BaylersInstancesList";
+
+interface LogEntry {
+  id: string;
+  timestamp: string;
+  message: string;
+  type: "http" | "log";
+  status_code?: number;
+  method?: string;
+  execution_time_ms?: number;
+  level?: string;
+}
 
 const WhatsAppIntegrationTab = () => {
   const { tenant, refetch } = useTenant();
@@ -26,6 +39,11 @@ const WhatsAppIntegrationTab = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Logs state
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
   const activeProvider = settings.whatsapp_provider || (settings.gupshup_api_key ? "gupshup" : "");
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
@@ -37,6 +55,24 @@ const WhatsAppIntegrationTab = () => {
     await navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleFetchLogs = async () => {
+    setLoadingLogs(true);
+    setLogsOpen(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("webhook-logs", {
+        body: { function_name: "gupshup-webhook", limit: 50 },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || "Falha ao buscar logs");
+      setLogs(data.logs || []);
+    } catch (err: any) {
+      toast({ title: "Erro ao buscar logs", description: err.message, variant: "destructive" });
+      setLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -70,7 +106,6 @@ const WhatsAppIntegrationTab = () => {
     if (!tenant) return;
     setSavingGupshup(true);
     try {
-      // 1. Update tenant settings
       await updateTenant(tenant.id, {
         settings: {
           ...settings,
@@ -82,7 +117,6 @@ const WhatsAppIntegrationTab = () => {
         },
       });
 
-      // 2. Ensure a record exists in whatsapp_instances so messages appear in chat
       const instanceName = `gupshup-${tenant.slug}`;
       const { data: existing } = await supabase
         .from("whatsapp_instances")
@@ -118,6 +152,15 @@ const WhatsAppIntegrationTab = () => {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     } finally {
       setSavingGupshup(false);
+    }
+  };
+
+  const formatLogTimestamp = (ts: string) => {
+    try {
+      const d = new Date(ts);
+      return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    } catch {
+      return ts;
     }
   };
 
@@ -183,6 +226,9 @@ const WhatsAppIntegrationTab = () => {
                 <Button variant="outline" size="icon" onClick={handleCopyWebhook}>
                   {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                 </Button>
+                <Button variant="outline" size="icon" onClick={handleFetchLogs} disabled={loadingLogs} title="Ver Logs do Webhook">
+                  <ScrollText className="w-4 h-4" />
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">Cole esta URL no painel do Gupshup para receber status de entrega</p>
             </div>
@@ -210,6 +256,66 @@ const WhatsAppIntegrationTab = () => {
         {/* Baylers Card */}
         <BaylersInstancesList />
       </div>
+
+      {/* Logs Dialog */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScrollText className="w-5 h-5" />
+              Logs do Webhook Gupshup
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh]">
+            {loadingLogs ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                Carregando logs...
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                Nenhum log encontrado
+              </div>
+            ) : (
+              <div className="space-y-2 pr-4">
+                {logs.map((log, idx) => (
+                  <div
+                    key={log.id || idx}
+                    className={`p-3 rounded-md border text-xs font-mono ${
+                      log.level === "error" || (log.status_code && log.status_code >= 400)
+                        ? "border-destructive/50 bg-destructive/5 text-destructive"
+                        : "border-border bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-muted-foreground text-[10px]">
+                        {formatLogTimestamp(log.timestamp)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {log.type === "http" && log.status_code && (
+                          <Badge variant={log.status_code < 400 ? "secondary" : "destructive"} className="text-[10px] px-1.5 py-0">
+                            {log.method} {log.status_code}
+                          </Badge>
+                        )}
+                        {log.type === "http" && log.execution_time_ms && (
+                          <span className="text-muted-foreground text-[10px]">{log.execution_time_ms}ms</span>
+                        )}
+                        {log.type === "log" && log.level && (
+                          <Badge variant={log.level === "error" ? "destructive" : "outline"} className="text-[10px] px-1.5 py-0">
+                            {log.level}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="break-all whitespace-pre-wrap leading-relaxed">
+                      {log.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
