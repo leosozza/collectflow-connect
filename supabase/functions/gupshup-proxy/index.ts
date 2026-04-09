@@ -38,11 +38,15 @@ Deno.serve(async (req) => {
       throw new Error("apiKey and appName are required");
     }
 
-    const response = await fetch(`https://api.gupshup.io/wa/api/v1/template/list/${encodeURIComponent(appName)}`, {
-      method: "GET",
+    // Validate API key by sending a minimal request to the messaging endpoint
+    // A 400 (missing params) proves the key is valid; only 401/403 means invalid key
+    const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
       headers: {
         "apikey": apiKey,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
+      body: `channel=whatsapp&source=validation&src.name=${encodeURIComponent(appName)}&destination=0&message={}`,
     });
 
     const text = await response.text();
