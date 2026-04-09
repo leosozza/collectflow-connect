@@ -103,7 +103,7 @@ const RelatoriosPage = () => {
       if (selectedCredor !== "todos" && c.credor !== selectedCredor) return false;
       if (selectedOperator !== "todos" && c.operator_id !== selectedOperator) return false;
       if (selectedTipoDivida !== "todos" && (c as any).tipo_divida_id !== selectedTipoDivida) return false;
-      if (selectedTipoDevedor !== "todos" && (c as any).tipo_devedor_id !== selectedTipoDevedor) return false;
+      if (selectedTipoDevedor !== "todos" && (c as any).debtor_profile !== selectedTipoDevedor) return false;
       if (quitacaoDe && (!(c as any).data_quitacao || (c as any).data_quitacao < quitacaoDe)) return false;
       if (quitacaoAte && (!(c as any).data_quitacao || (c as any).data_quitacao > quitacaoAte)) return false;
       return true;
