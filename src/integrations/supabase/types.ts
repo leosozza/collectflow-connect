@@ -5578,6 +5578,47 @@ export type Database = {
           },
         ]
       }
+      webhook_logs: {
+        Row: {
+          created_at: string
+          event_type: string
+          function_name: string
+          id: string
+          message: string | null
+          payload: Json | null
+          status_code: number | null
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type?: string
+          function_name?: string
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          status_code?: number | null
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          function_name?: string
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          status_code?: number | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_campaign_recipients: {
         Row: {
           assigned_instance_id: string | null
