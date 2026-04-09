@@ -39,7 +39,8 @@ const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps
     })();
   }, [user, tenant, tenantUser, tenantLoading, processingInvite, refetch]);
 
-  if (authLoading || tenantLoading || processingInvite) {
+  // Only block UI on initial load; background refreshes are silent
+  if (authLoading || (tenantLoading && !tenant) || processingInvite) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex items-center gap-3">
