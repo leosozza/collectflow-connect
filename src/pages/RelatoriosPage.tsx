@@ -41,25 +41,29 @@ const RelatoriosPage = () => {
     enabled: !!tenant?.id,
   });
 
+  // Isolamento por tenant nos operadores
   const { data: profiles = [] } = useQuery({
-    queryKey: ["profiles"],
+    queryKey: ["profiles", tenant?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, user_id, full_name");
+      const { data } = await supabase.from("profiles").select("id, user_id, full_name").eq("tenant_id", tenant!.id);
       return (data || []).map((p: any) => ({ id: p.user_id, profileId: p.id, name: p.full_name || "Sem nome" }));
     },
+    enabled: !!tenant?.id,
   });
 
+  // === PAGAMENTO REAL CONSOLIDADO === via RPC get_agreement_financials
   const { data: agreements = [] } = useQuery({
-    queryKey: ["agreements-report", tenant?.id],
+    queryKey: ["agreement-financials-report", tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_analytics_payments", { _tenant_id: tenant!.id });
+      const { data, error } = await supabase.rpc("get_agreement_financials", { _tenant_id: tenant!.id });
       if (error) throw error;
       return (data || []).map((r: any) => ({
         ...r,
         id: r.agreement_id,
-        client_cpf: "",
-        client_name: "",
-        total_pago: Number(r.total_pago || 0),
+        total_paid_real: Number(r.total_paid_real || 0),
+        pending_balance_real: Number(r.pending_balance_real || 0),
+        proposed_total: Number(r.proposed_total || 0),
+        original_total: Number(r.original_total || 0),
       }));
     },
     enabled: !!tenant?.id,
@@ -107,11 +111,12 @@ const RelatoriosPage = () => {
   }, [clients, selectedYear, selectedMonth, selectedCredor, selectedOperator, selectedTipoDivida, selectedTipoDevedor, quitacaoDe, quitacaoAte]);
 
   // KPIs from agreements
+  // === MÉTRICA DE ACORDO === KPIs baseados em pagamento real consolidado
   const activeAgreements = filteredAgreements.filter((a: any) => a.status !== "cancelled");
   const totalNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-  const totalRecebido = filteredAgreements.filter((a: any) => a.status !== "cancelled").reduce((s: number, a: any) => s + Number(a.total_pago || 0), 0);
+  const totalRecebido = activeAgreements.reduce((s: number, a: any) => s + Number(a.total_paid_real || 0), 0);
   const totalQuebra = filteredAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-  const totalPendente = activeAgreements.filter((a: any) => ["pending", "pending_approval", "approved", "overdue"].includes(a.status)).reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+  const totalPendente = activeAgreements.reduce((s: number, a: any) => s + Number(a.pending_balance_real || 0), 0);
 
   const exportExcel = () => {
     const rows = filteredAgreements.map((a: any) => ({
