@@ -1,54 +1,63 @@
 
+Objetivo
 
-# Correções em /relatorios — Parcelas, Aging e Baixas
+Corrigir a Prestação de Contas para refletir a atuação real na carteira, sem mexer na lógica de status já consolidada.
 
-## Mudanças
+Diagnóstico
 
-### 1. Parcelas Detalhadas — mostrar apenas clientes com acordos no Rivo
+- `credorClients` hoje cruza `clients` com `agreements` por comparação direta de CPF. Se um lado vier formatado e o outro não, a lista fica vazia.
+- O Aging dentro de `PrestacaoContas.tsx` só considera `status === "pendente"` para aberto e `status === "pago"` para recebido. Isso ignora parcelas em `em_acordo`, pagamentos parciais e baixas que já atualizaram `valor_pago` mas não mudaram o status para `pago`.
+- O resumo atual mostra valores de acordos, mas não evidencia os clientes negociados, recebidos e quebrados.
+- O bloco “Ranking de Operadores” ainda está presente.
 
-**Problema**: Hoje `credorClients` usa `clients` (carteira completa). Deve mostrar apenas parcelas de clientes que possuem acordo gerado no sistema.
+Implementação
 
-**Correção** em `PrestacaoContas.tsx`:
-- Filtrar `credorClients` para incluir apenas clientes cujo CPF existe em `credorAgreements`
-- Criar um `Set` de CPFs com acordo: `new Set(credorAgreements.map(a => a.client_cpf))`
-- Usar esse Set para filtrar: `clients.filter(c => c.credor === selectedCredor && cpfsComAcordo.has(c.cpf))`
+1. `src/components/relatorios/PrestacaoContas.tsx`
+- Normalizar CPF dos dois lados com `normalizeCPF` ao cruzar `agreements` e `clients`.
+- Criar uma base única de clientes negociados por `CPF normalizado + credor`.
+- Usar contagem de CPFs únicos para novos indicadores:
+  - Clientes negociados
+  - Clientes com recebimento
+  - Clientes quebrados
 
-### 2. Aging da Carteira — novas faixas e valor recebido
+2. Aging real dentro da Prestação de Contas
+- Manter como métrica de carteira, mas apenas para clientes com acordo no Rivo do credor selecionado.
+- Calcular por faixa usando saldo real da parcela:
+  - aberto = `max(valor_parcela - valor_pago, 0)` para parcelas vencidas com saldo > 0
+  - recebido = soma de `valor_pago` por faixa de vencimento, mesmo se a parcela ainda estiver `em_acordo`
+- Não depender apenas de `status === "pendente"` / `status === "pago"`.
+- Manter buckets: 0-30, 31-90, 91-180, 181-365, 366+.
 
-**Problema**: Faixas atuais são 0-30, 31-60, 61-90, 90+. Precisam ser: **0-30, 31-90, 91-180, 181-365, 366+**.
+3. Parcelas Detalhadas
+- Passar a usar a mesma base normalizada de clientes negociados.
+- Garantir exibição de clientes negociados, com recebimento e quebrados.
+- Ordenar para destacar atividade real (recebimentos e pendências vencidas).
+- Manter o accordion fechado por padrão.
 
-**Correção** em ambos `AgingReport.tsx` e `PrestacaoContas.tsx`:
-- Atualizar `BUCKETS` / `AGING_BUCKETS` para as novas faixas
-- Adicionar coluna "Recebido" na tabela de aging: para cada faixa, somar `valor_pago` das parcelas com status `pago` que caem naquela faixa de vencimento
-- No `AgingReport.tsx`: receber `agreements` como prop para cruzar `total_paid_real` por faixa de aging, OU simplesmente somar `valor_pago` das parcelas pagas na mesma faixa
+4. Resumo da Prestação de Contas
+- Manter os indicadores financeiros atuais.
+- Acrescentar/ajustar o resumo para mostrar claramente os clientes:
+  - negociados
+  - recebidos
+  - quebrados
+- Assim o credor visualiza atuação na carteira além dos valores.
 
-### 3. Remover seção "Baixas Manuais" (e automáticas)
+5. Limpeza visual
+- Remover totalmente o bloco “Ranking de Operadores”.
+- Atualizar a exportação Excel para remover referências ao ranking e incluir os novos indicadores de clientes.
 
-**Correção** em `PrestacaoContas.tsx`:
-- Remover a seção "Baixas Manuais" (linhas 333-353)
-- Remover a query de `manual_payments` (linhas 38-50)
-- Remover `manualPaymentStats` (linhas 52-67)
-- Remover sheet "Baixas Manuais" do export Excel
-- Remover props/variáveis associadas
+6. Ajuste de integração
+- `src/pages/RelatoriosPage.tsx`: remover a prop `operators` de `PrestacaoContas` se ela deixar de ser necessária.
 
-### 4. Parcelas Detalhadas — iniciar fechada com setinha para expandir
+Compatibilidade e limite da correção
 
-**Correção** em `PrestacaoContas.tsx`:
-- Envolver a seção "Parcelas Detalhadas" em um `Accordion` (já existe componente `ui/accordion`)
-- `AccordionItem` com `AccordionTrigger` contendo o título "Parcelas Detalhadas (N)"
-- `AccordionContent` contendo a tabela
-- Iniciar fechado (não definir `defaultValue`)
+- Não alterar status de `agreements`, `clients`, `status_cobranca_id`, automações, baixa manual ou callback.
+- Como `clients` hoje não possui vínculo direto com `agreement_id`, a correção segura continuará usando o recorte por `CPF normalizado + credor` dos clientes com acordo, sem refatoração destrutiva do modelo.
 
----
+Validação
 
-## Arquivos modificados
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/components/relatorios/PrestacaoContas.tsx` | Filtrar parcelas por CPFs com acordo; novas faixas aging; remover baixas manuais; accordion em parcelas |
-| `src/components/relatorios/AgingReport.tsx` | Novas faixas (0-30, 31-90, 91-180, 181-365, 366+); coluna "Recebido" |
-
-## O que NÃO muda
-- KPIs, ranking, acordos, status, automações — tudo preservado
-- Aging continua usando `clients` (métrica de carteira)
-
+- Conferir um credor com pagamentos já recebidos para validar:
+  - Aging com valor em “Recebido”
+  - Parcelas detalhadas com clientes negociados/pagos visíveis
+  - contadores de clientes negociados, recebidos e quebrados coerentes
+  - remoção completa do Ranking de Operadores
