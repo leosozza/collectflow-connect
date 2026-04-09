@@ -1066,6 +1066,7 @@ export type Database = {
           media_mime_type: string | null
           media_url: string | null
           message_type: string
+          metadata: Json | null
           provider: string | null
           provider_message_id: string | null
           reply_to_message_id: string | null
@@ -1085,6 +1086,7 @@ export type Database = {
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
+          metadata?: Json | null
           provider?: string | null
           provider_message_id?: string | null
           reply_to_message_id?: string | null
@@ -1104,6 +1106,7 @@ export type Database = {
           media_mime_type?: string | null
           media_url?: string | null
           message_type?: string
+          metadata?: Json | null
           provider?: string | null
           provider_message_id?: string | null
           reply_to_message_id?: string | null
