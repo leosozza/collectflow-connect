@@ -82,45 +82,41 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
   // Agrupa todas as parcelas do mesmo CPF, usa a primeira parcela vencida como referência
   // para classificar o cliente na faixa de aging correta (tempo que está devendo ao credor)
   const agingData = useMemo(() => {
-    // Agrupar parcelas por CPF normalizado
-    const cpfMap = new Map<string, { earliest: Date; totalSaldo: number; totalPago: number }>();
+    // Mapa de recebido real por CPF (vindo dos agreements)
+    const recebidoPorCpf = new Map<string, number>();
+    credorAgreements.forEach((a: any) => {
+      const cpf = normalizeCPF(a.client_cpf);
+      recebidoPorCpf.set(cpf, (recebidoPorCpf.get(cpf) || 0) + Number(a.total_paid_real || 0));
+    });
 
+    // Agrupar parcelas originais por CPF
+    const cpfMap = new Map<string, { earliest: Date; totalSaldo: number }>();
     credorClients.forEach((c) => {
       const cpf = normalizeCPF(c.cpf);
       const vencimento = parseISO(c.data_vencimento);
-      const parcela = Number(c.valor_parcela) || 0;
-      const pago = Number(c.valor_pago) || 0;
-      const saldo = Math.max(parcela - pago, 0);
-
+      const saldo = Math.max(Number(c.valor_parcela) - Number(c.valor_pago), 0);
       const existing = cpfMap.get(cpf);
       if (existing) {
-        // Mantém a data mais antiga (quando começou a dever)
         if (vencimento < existing.earliest) existing.earliest = vencimento;
         existing.totalSaldo += saldo;
-        existing.totalPago += pago;
       } else {
-        cpfMap.set(cpf, { earliest: vencimento, totalSaldo: saldo, totalPago: pago });
+        cpfMap.set(cpf, { earliest: vencimento, totalSaldo: saldo });
       }
     });
 
-    // Classificar cada cliente na faixa de aging pela data mais antiga
+    // Classificar por faixa usando data mais antiga + recebido real dos agreements
     return AGING_BUCKETS.map((b) => {
-      let count = 0;
-      let totalAberto = 0;
-      let totalRecebido = 0;
-
-      cpfMap.forEach(({ earliest, totalSaldo, totalPago }) => {
+      let count = 0, totalAberto = 0, totalRecebido = 0;
+      cpfMap.forEach(({ earliest, totalSaldo }, cpf) => {
         const dias = differenceInDays(today, earliest);
         if (dias < b.min || dias > b.max) return;
-
         count++;
         totalAberto += totalSaldo;
-        totalRecebido += totalPago;
+        totalRecebido += recebidoPorCpf.get(cpf) || 0;
       });
-
       return { ...b, count, total: totalAberto, received: totalRecebido };
     });
-  }, [credorClients]);
+  }, [credorClients, credorAgreements]);
 
   // === MÉTRICA DE ACORDO === Resumo por status de acordos
   const acordosSummary = useMemo(() => {
