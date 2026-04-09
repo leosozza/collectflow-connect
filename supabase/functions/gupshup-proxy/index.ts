@@ -6,6 +6,25 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const supabaseAdmin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+async function writeLog(eventType: string, message: string, payload?: any, statusCode?: number) {
+  try {
+    await supabaseAdmin.from("webhook_logs").insert({
+      function_name: "gupshup-proxy",
+      event_type: eventType,
+      message,
+      payload: payload ? JSON.stringify(payload) : null,
+      status_code: statusCode,
+    });
+  } catch (e) {
+    console.error("Failed to write log:", e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -18,7 +37,6 @@ Deno.serve(async (req) => {
       throw new Error("apiKey and appName are required");
     }
 
-    // Try to fetch templates for this app to verify connection
     const response = await fetch("https://api.gupshup.io/sm/api/v2/wallet/balance", {
       method: "GET",
       headers: {
@@ -33,6 +51,7 @@ Deno.serve(async (req) => {
     try {
       data = JSON.parse(text);
     } catch {
+      await writeLog("error", `Gupshup retornou resposta inválida (status ${response.status})`, { raw: text.substring(0, 500) }, response.status);
       return new Response(JSON.stringify({
         success: false,
         error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
@@ -43,15 +62,18 @@ Deno.serve(async (req) => {
     }
 
     if (response.status !== 200) {
+      await writeLog("error", `Gupshup respondeu com status ${response.status}: ${data.message || "erro desconhecido"}`, { status: response.status, body: data }, response.status);
       return new Response(JSON.stringify({ 
         success: false, 
         error: data.message || "Failed to connect to Gupshup",
         status: response.status 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200, // Return 200 so the frontend can handle the error message
+        status: 200,
       });
     }
+
+    await writeLog("success", `Conexão testada com sucesso (balance endpoint)`, { body: data }, 200);
 
     return new Response(JSON.stringify({ 
       success: true, 
@@ -62,6 +84,7 @@ Deno.serve(async (req) => {
 
   } catch (err: any) {
     console.error("gupshup-proxy error:", err);
+    await writeLog("error", `Erro interno: ${err.message}`, null, 500);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

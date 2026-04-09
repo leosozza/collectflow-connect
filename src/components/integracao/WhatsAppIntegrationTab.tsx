@@ -64,7 +64,7 @@ const WhatsAppIntegrationTab = () => {
       const { data, error } = await supabase
         .from("webhook_logs")
         .select("*")
-        .eq("function_name", "gupshup-webhook")
+        .in("function_name", ["gupshup-webhook", "gupshup-proxy"])
         .order("created_at", { ascending: false })
         .limit(50);
       
