@@ -296,10 +296,9 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
             {[
               { label: "Total", value: acordosSummary.total },
-              { label: "Aprovados", value: acordosSummary.aprovados },
+              { label: "Pagos", value: acordosSummary.aprovados + acordosSummary.pagos },
               { label: "Pendentes", value: acordosSummary.pendentes },
               { label: "Vencidos", value: acordosSummary.vencidos },
-              { label: "Pagos", value: acordosSummary.pagos },
               { label: "Cancelados", value: acordosSummary.cancelados },
               { label: "Valor Negociado", value: formatCurrency(acordosSummary.valorNegociado) },
             ].map((item) => (
