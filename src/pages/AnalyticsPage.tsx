@@ -105,44 +105,38 @@ const AnalyticsPage = () => {
 
   const isOperator = profile?.role !== "admin";
 
-  // Fetch agreements with real payment data via RPC
+  // === PAGAMENTO REAL CONSOLIDADO === via RPC get_agreement_financials
   const { data: allAgreements = [] } = useQuery({
-    queryKey: ["analytics-agreements-payments", tenant?.id, isOperator ? profile?.id : "all"],
+    queryKey: ["analytics-agreement-financials", tenant?.id, isOperator ? profile?.id : "all"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_analytics_payments", {
+      const { data, error } = await supabase.rpc("get_agreement_financials", {
         _tenant_id: tenant!.id,
       });
       if (error) throw error;
-      let results = (data || []) as Array<{
-        agreement_id: string;
-        created_by: string;
-        credor: string;
-        created_at: string;
-        proposed_total: number;
-        original_total: number;
-        status: string;
-        total_pago: number;
-      }>;
+      let results = (data || []) as any[];
       if (isOperator && profile?.id) {
         results = results.filter((r) => r.created_by === profile.id);
       }
-      // Map to AgreementRow-compatible shape
-      return results.map((r) => ({
-        id: r.agreement_id,
-        client_cpf: "",
-        client_name: "",
+      return results.map((r: any) => ({
+        agreement_id: r.agreement_id,
+        client_cpf: r.client_cpf || "",
+        client_name: r.client_name || "",
         credor: r.credor,
         proposed_total: Number(r.proposed_total),
         original_total: Number(r.original_total),
         status: r.status,
         created_at: r.created_at,
         created_by: r.created_by,
-        first_due_date: r.created_at,
-        new_installments: 0,
-        new_installment_value: 0,
-        entrada_value: null,
-        total_pago: Number(r.total_pago),
-      })) as (AgreementRow & { total_pago: number })[];
+        first_due_date: r.first_due_date,
+        entrada_value: Number(r.entrada_value || 0),
+        total_paid_real: Number(r.total_paid_real || 0),
+        pending_balance_real: Number(r.pending_balance_real || 0),
+        payment_count: Number(r.payment_count || 0),
+        first_payment_date: r.first_payment_date,
+        last_payment_date: r.last_payment_date,
+        paid_via_manual: Number(r.paid_via_manual || 0),
+        paid_via_negociarie: Number(r.paid_via_negociarie || 0),
+      })) as AgreementFinancialRow[];
     },
     enabled: !!tenant?.id,
   });
@@ -158,7 +152,7 @@ const AnalyticsPage = () => {
       if (tenant?.id) query = query.eq("tenant_id", tenant.id);
       if (isOperator && profile?.id) query = query.eq("created_by", profile.id);
       const data = await fetchAllRows(query);
-      return data as AgreementRow[];
+      return data as any[];
     },
     enabled: !!tenant?.id,
   });
