@@ -1,88 +1,55 @@
 
 
-# Plano de Implementação — Paridade Gupshup (ThothAI → Rivo)
+# Análise da Integração Gupshup — Problemas Encontrados e Correções
 
-## Resumo
+## Problemas identificados
 
-Implementar 4 melhorias na integração Gupshup: coluna `metadata` para contexto de botões, persistência automática de mídia no Storage, correção do roteamento webhook, e padronização do envio de mídia.
+### 1. **Header da API Key está errado no `whatsapp-sender.ts`** (CRÍTICO)
 
-## Respostas às perguntas abertas
+A documentação oficial exige o header `apikey` (minúsculo). No nosso `sendGupshupMsg` (linha 256) estamos enviando `"apiKey"` (camelCase). Embora a Gupshup possa aceitar ambos em alguns endpoints, o padrão da documentação é `apikey`.
 
-- **Transcrição**: Sim, a coluna `metadata` (jsonb) já comportará transcrições futuras sem nova migração.
-- **Handoff IA vs Humano**: Não será implementado agora; pode ser adicionado depois via flag na conversa.
+**Correção**: Trocar `"apiKey": apiKey` → `"apikey": apiKey` no `sendGupshupMsg`.
 
----
+### 2. **Vídeo no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
 
-## 1. Migração de Banco de Dados
-
-**Arquivo**: Nova migração SQL
-
-```sql
-ALTER TABLE public.chat_messages
-  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+Segundo a documentação, o payload de vídeo aceita apenas `url` e `caption` (opcional). Nosso código envia `mimetype` que não faz parte da spec:
+```json
+// Docs: { "type": "video", "url": "...", "caption": "..." }
+// Nosso: { "type": "video", "url": "...", "caption": "...", "mimetype": "video/mp4" }
 ```
 
-- `provider_message_id` já existe (adicionado na migração `20260407174146`), não precisa re-criar.
-- `metadata` servirá para: contexto de botões simulados, transcrições futuras, dados extras do provider.
+**Correção**: Remover `mimetype` do payload de vídeo.
 
----
+### 3. **Áudio no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
 
-## 2. Edge Function `gupshup-webhook/index.ts` — Reescrever
+A documentação mostra apenas `url` no payload de áudio. Nosso código adiciona `mimetype` que não é documentado.
 
-Mudanças principais:
+**Correção**: Remover `mimetype` do payload de áudio.
 
-- **Separar `message` vs `message-event`**: Usar `if/else if` em vez de dois `if` independentes, evitando que `message-event` caia em ambos os blocos.
-- **Cascata de URLs de mídia**: Buscar URL em `payload.payload.url`, `payload.payload.originalUrl`, `payload.payload.payload.url` recursivamente (padrão ThothAI).
-- **`downloadAndUploadMedia()`**: Nova função que baixa o arquivo da Gupshup e faz upload para o bucket `chat-media` do Storage, retornando a URL pública persistida. Inclui timeout de 15s.
-- **Botões simulados**: Quando `msgType === "text"` e o conteúdo é "1", "2", "3" etc., buscar a última mensagem outbound com `metadata.buttons` na conversa para mapear a resposta numérica ao label do botão. Salvar contexto em `metadata` da mensagem.
-- **Mime type**: Extrair mime type do header `Content-Type` ao baixar a mídia.
+### 4. **File no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
 
----
+A documentação mostra `url` e `filename` apenas. Nosso código envia `mimetype` extra.
 
-## 3. `_shared/whatsapp-sender.ts` — Padronizar envio de mídia
+**Correção**: Remover `mimetype` do payload de file (document).
 
-- **Gupshup media**: Garantir `filename` e `mimetype` nos payloads de document/audio/video.
-- **Vídeo**: Adicionar `caption` no payload.
-- **Áudio**: Adicionar `mimetype: "audio/ogg"` por padrão.
-- **Document**: Incluir `mimetype` dinâmico a partir do `mimeType` passado.
+### 5. **`sendGupshupMsg` não trata resposta não-JSON** (RISCO)
 
-Snippet da mudança no `sendGupshupMedia`:
-```typescript
-} else if (gupType === "video") {
-  msgPayload.url = media.mediaUrl;
-  msgPayload.caption = media.caption || "";
-  msgPayload.mimetype = media.mimeType || "video/mp4"; // NOVO
-} else if (gupType === "audio") {
-  msgPayload.url = media.mediaUrl;
-  msgPayload.mimetype = media.mimeType || "audio/ogg"; // NOVO
-} else {
-  msgPayload.url = media.mediaUrl;
-  msgPayload.filename = media.fileName || "file";
-  msgPayload.mimetype = media.mimeType || "application/octet-stream"; // NOVO
-}
-```
+Na linha 262 do `whatsapp-sender.ts`, `await resp.json()` pode explodir se a Gupshup retornar HTML ou corpo vazio — o mesmo bug que já corrigimos no `gupshup-proxy`.
 
----
+**Correção**: Usar o padrão text-first + try/catch JSON.parse.
 
-## 4. Frontend `ChatMessage.tsx` — Ajuste de renderização
+### 6. **`gupshup-proxy` testa endpoint de wallet, não valida o `appName`**
 
-- Garantir que `<audio>` e `<video>` funcionem com URLs do Storage (já funciona, pois o bucket `chat-media` é público).
-- Nenhuma mudança estrutural necessária no `ChatPanel.tsx` — já renderiza corretamente via `ChatMessageBubble`.
+O proxy usa `/sm/api/v2/wallet/balance` que valida a API Key mas ignora o `appName`. Se o appName estiver errado, o teste passa mas o envio falha. Já tínhamos corrigido para `/wa/app/{appName}` no plano anterior, mas o código atual voltou ao endpoint de wallet.
 
----
+**Correção**: Usar `https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}` para validar ambos.
 
-## Arquivos alterados
+## Resumo das alterações
 
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---|---|
-| Nova migração SQL | Adicionar coluna `metadata` jsonb |
-| `supabase/functions/gupshup-webhook/index.ts` | Reescrever com cascata de URLs, persistência de mídia, botões simulados, fix do roteamento |
-| `supabase/functions/_shared/whatsapp-sender.ts` | Padronizar `mimetype`/`filename` no envio Gupshup |
+| `supabase/functions/_shared/whatsapp-sender.ts` | (1) Header `apikey` minúsculo; (2) Remover `mimetype` dos payloads de vídeo, áudio e file; (3) Try/catch na resposta JSON |
+| `supabase/functions/gupshup-proxy/index.ts` | Trocar endpoint de teste para `/wa/app/{appName}` |
 
----
-
-## Verificação
-
-- Deploy das edge functions e teste via `curl_edge_functions` com payloads simulados de texto, imagem e status.
-- Verificar nos logs (`webhook_logs`) se mídia é persistida corretamente.
+Nenhuma mudança de banco de dados necessária.
 
