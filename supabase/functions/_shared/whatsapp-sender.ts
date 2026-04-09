@@ -183,14 +183,11 @@ async function sendGupshupMedia(
   } else if (gupType === "video") {
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
-    msgPayload.mimetype = media.mimeType || "video/mp4";
   } else if (gupType === "audio") {
     msgPayload.url = media.mediaUrl;
-    msgPayload.mimetype = media.mimeType || "audio/ogg";
   } else {
     msgPayload.url = media.mediaUrl;
     msgPayload.filename = media.fileName || "file";
-    msgPayload.mimetype = media.mimeType || "application/octet-stream";
   }
 
   return sendGupshupMsg(phone, JSON.stringify(msgPayload), tenantSettings);
@@ -253,13 +250,20 @@ async function sendGupshupMsg(
   const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
     method: "POST",
     headers: { 
-      "apiKey": apiKey, 
+      "apikey": apiKey, 
       "Content-Type": "application/x-www-form-urlencoded" 
     },
     body: formBody.toString(),
   });
 
-  const result = await resp.json();
+  const text = await resp.text();
+  let result: any;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    console.error("Gupshup returned non-JSON:", text.substring(0, 300));
+    return { ok: false, result: { error: `Resposta inválida da Gupshup: ${text.substring(0, 200)}` }, providerMessageId: null, provider: "gupshup" };
+  }
   
   if (!resp.ok) {
     console.error("Gupshup API error:", JSON.stringify(result));
