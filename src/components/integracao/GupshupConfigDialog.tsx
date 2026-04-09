@@ -48,7 +48,7 @@ const GupshupConfigDialog = ({ open, onOpenChange, onFetchLogs }: GupshupConfigD
     setTesting(true);
     try {
       const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
-        body: { apiKey: apiKey.trim(), appName: appName.trim(), tenantId: tenant?.id },
+        body: { apiKey: apiKey.trim(), appName: appName.trim(), sourceNumber: sourceNumber.replace(/\D/g, ""), tenantId: tenant?.id },
       });
       if (error) throw new Error(error.message || "Erro ao chamar gupshup-proxy");
       if (!data?.success) throw new Error(data?.error || "Falha na conexão com Gupshup");

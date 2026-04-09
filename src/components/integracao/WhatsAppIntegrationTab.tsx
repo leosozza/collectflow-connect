@@ -100,7 +100,7 @@ const WhatsAppIntegrationTab = () => {
     toast({ title: "Testando conexão..." });
     try {
       const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
-        body: { apiKey, appName, tenantId: tenant.id },
+        body: { apiKey, appName, sourceNumber: settings.gupshup_source_number, tenantId: tenant.id },
       });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || "Falha na conexão");
