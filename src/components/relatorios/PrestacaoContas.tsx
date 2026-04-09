@@ -5,7 +5,6 @@ import { differenceInDays, parseISO } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Download, Printer, FileText } from "lucide-react";
 import { exportMultiSheetExcel, printSection } from "@/lib/exportUtils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -13,7 +12,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 interface PrestacaoContasProps {
   clients: Client[];
   agreements: any[];
-  operators: { id: string; name: string }[];
   credores: string[];
 }
 
@@ -26,23 +24,30 @@ const AGING_BUCKETS = [
   { label: "366+ dias", min: 366, max: Infinity },
 ];
 
-const PrestacaoContas = ({ clients, agreements, operators, credores }: PrestacaoContasProps) => {
+/** Remove pontos, traços e espaços do CPF para comparação segura */
+const normalizeCPF = (cpf: string) => (cpf || "").replace(/\D/g, "");
+
+const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps) => {
   const [selectedCredor, setSelectedCredor] = useState("");
   const today = new Date();
 
+  // === MÉTRICA DE ACORDO === Acordos do credor selecionado (exceto rejeitados)
   const credorAgreements = useMemo(
     () => (selectedCredor ? agreements.filter((a: any) => a.credor === selectedCredor && a.status !== "rejected") : []),
     [agreements, selectedCredor]
   );
 
-  // === PARCELAS DETALHADAS === Mostrar apenas clientes com acordo gerado no Rivo
+  // === PARCELAS DETALHADAS === Apenas clientes cujo CPF normalizado existe em acordos do credor
+  const cpfsComAcordo = useMemo(() => {
+    return new Set(credorAgreements.map((a: any) => normalizeCPF(a.client_cpf)));
+  }, [credorAgreements]);
+
   const credorClients = useMemo(() => {
     if (!selectedCredor) return [];
-    const cpfsComAcordo = new Set(credorAgreements.map((a: any) => a.client_cpf));
-    return clients.filter((c) => c.credor === selectedCredor && cpfsComAcordo.has(c.cpf));
-  }, [clients, selectedCredor, credorAgreements]);
+    return clients.filter((c) => c.credor === selectedCredor && cpfsComAcordo.has(normalizeCPF(c.cpf)));
+  }, [clients, selectedCredor, cpfsComAcordo]);
 
-  // === PAGAMENTO REAL CONSOLIDADO === Resumo por acordo com dados reais
+  // === PAGAMENTO REAL CONSOLIDADO === Resumo financeiro baseado nos acordos
   const summary = useMemo(() => {
     const activeAgreements = credorAgreements.filter((a: any) => a.status !== "cancelled");
     const valorNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
@@ -50,32 +55,61 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
     const pendente = activeAgreements.reduce((s: number, a: any) => s + Number(a.pending_balance_real || 0), 0);
     const quebra = credorAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
     const taxa = (recebido + quebra) > 0 ? (recebido / (recebido + quebra)) * 100 : 0;
-    return { total: credorAgreements.length, valorNegociado, recebido, pendente, quebra, taxa };
+
+    // Contadores de clientes únicos por CPF normalizado
+    const cpfsNegociados = new Set(credorAgreements.map((a: any) => normalizeCPF(a.client_cpf)));
+    const cpfsRecebidos = new Set(
+      activeAgreements.filter((a: any) => Number(a.total_paid_real || 0) > 0).map((a: any) => normalizeCPF(a.client_cpf))
+    );
+    const cpfsQuebrados = new Set(
+      credorAgreements.filter((a: any) => a.status === "cancelled").map((a: any) => normalizeCPF(a.client_cpf))
+    );
+
+    return {
+      total: credorAgreements.length,
+      valorNegociado,
+      recebido,
+      pendente,
+      quebra,
+      taxa,
+      clientesNegociados: cpfsNegociados.size,
+      clientesRecebidos: cpfsRecebidos.size,
+      clientesQuebrados: cpfsQuebrados.size,
+    };
   }, [credorAgreements]);
 
-  // === MÉTRICA DE CARTEIRA === Aging por parcelas vencidas + recebido
+  // === MÉTRICA DE CARTEIRA === Aging por parcelas de clientes com acordo
+  // Usa saldo real (valor_parcela - valor_pago) em vez de depender apenas do status
   const agingData = useMemo(() => {
-    const overdue = credorClients.filter((c) => c.status === "pendente" && parseISO(c.data_vencimento) < today);
-    const paid = credorClients.filter((c) => c.status === "pago");
     return AGING_BUCKETS.map((b) => {
-      const items = overdue.filter((c) => {
-        const d = differenceInDays(today, parseISO(c.data_vencimento));
-        return d >= b.min && d <= b.max;
+      let count = 0;
+      let totalAberto = 0;
+      let totalRecebido = 0;
+
+      credorClients.forEach((c) => {
+        const vencimento = parseISO(c.data_vencimento);
+        const dias = differenceInDays(today, vencimento);
+        if (dias < b.min || dias > b.max) return;
+
+        const parcela = Number(c.valor_parcela) || 0;
+        const pago = Number(c.valor_pago) || 0;
+        const saldo = Math.max(parcela - pago, 0);
+
+        // Soma recebido independentemente do status
+        if (pago > 0) totalRecebido += pago;
+
+        // Soma aberto para parcelas vencidas com saldo > 0
+        if (vencimento < today && saldo > 0) {
+          count++;
+          totalAberto += saldo;
+        }
       });
-      const paidItems = paid.filter((c) => {
-        const d = differenceInDays(today, parseISO(c.data_vencimento));
-        return d >= b.min && d <= b.max;
-      });
-      return {
-        ...b,
-        count: items.length,
-        total: items.reduce((s, c) => s + Number(c.valor_parcela), 0),
-        received: paidItems.reduce((s, c) => s + Number(c.valor_pago), 0),
-      };
+
+      return { ...b, count, total: totalAberto, received: totalRecebido };
     });
   }, [credorClients]);
 
-  // Agreements summary
+  // === MÉTRICA DE ACORDO === Resumo por status de acordos
   const acordosSummary = useMemo(() => {
     const total = credorAgreements.length;
     const aprovados = credorAgreements.filter((a: any) => a.status === "approved").length;
@@ -88,38 +122,25 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
     return { total, aprovados, pendentes, vencidos, pagos, cancelados, valorOriginal, valorNegociado };
   }, [credorAgreements]);
 
-  // === PAGAMENTO REAL CONSOLIDADO === Ranking por total_paid_real
-  const opRanking = useMemo(() => {
-    const map = new Map<string, { received: number; broken: number; count: number }>();
-    credorAgreements.forEach((a: any) => {
-      const opId = a.created_by || "sem-operador";
-      if (!map.has(opId)) map.set(opId, { received: 0, broken: 0, count: 0 });
-      const e = map.get(opId)!;
-      e.count++;
-      if (a.status !== "cancelled") e.received += Number(a.total_paid_real || 0);
-      if (a.status === "cancelled") e.broken += Number(a.proposed_total);
-    });
-    return Array.from(map.entries())
-      .map(([id, stats]) => ({ id, name: operators.find((o) => o.id === id)?.name || "Sem operador", ...stats }))
-      .sort((a, b) => b.received - a.received);
-  }, [credorAgreements, operators]);
-
   const handleExcel = () => {
     const resumoRows = [
       { Indicador: "Total Acordos", Valor: summary.total },
+      { Indicador: "Clientes Negociados", Valor: summary.clientesNegociados },
+      { Indicador: "Clientes com Recebimento", Valor: summary.clientesRecebidos },
+      { Indicador: "Clientes Quebrados", Valor: summary.clientesQuebrados },
       { Indicador: "Valor Negociado", Valor: summary.valorNegociado },
       { Indicador: "Total Recebido", Valor: summary.recebido },
       { Indicador: "Total Pendente", Valor: summary.pendente },
       { Indicador: "Total Quebra", Valor: summary.quebra },
       { Indicador: "Taxa Recuperação (%)", Valor: summary.taxa.toFixed(1) },
     ];
-    const totalOverdue = agingData.reduce((s, b) => s + b.total, 0);
+    const totalAberto = agingData.reduce((s, b) => s + b.total, 0);
     const agingRows = agingData.map((r) => ({
       Faixa: r.label,
-      Quantidade: r.count,
-      "Valor Total": r.total,
+      "Parcelas Abertas": r.count,
+      "Saldo Aberto": r.total,
       Recebido: r.received,
-      "%": totalOverdue > 0 ? ((r.total / totalOverdue) * 100).toFixed(1) + "%" : "0%",
+      "%": totalAberto > 0 ? ((r.total / totalAberto) * 100).toFixed(1) + "%" : "0%",
     }));
     const acordosRows = credorAgreements.map((a: any) => ({
       Cliente: a.client_name,
@@ -172,8 +193,8 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
     );
   }
 
-  const totalOverdue = agingData.reduce((s, b) => s + b.total, 0);
-  const totalReceived = agingData.reduce((s, b) => s + b.received, 0);
+  const totalAberto = agingData.reduce((s, b) => s + b.total, 0);
+  const totalRecebido = agingData.reduce((s, b) => s + b.received, 0);
 
   return (
     <div className="space-y-6">
@@ -203,14 +224,13 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
       </div>
 
       <div id="prestacao-contas-content" className="space-y-6">
-        {/* Resumo based on agreements */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* === PAGAMENTO REAL CONSOLIDADO === KPIs financeiros + contagem de clientes */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
             { label: "Total Acordos", value: summary.total },
             { label: "Valor Negociado", value: formatCurrency(summary.valorNegociado) },
             { label: "Recebido", value: formatCurrency(summary.recebido) },
             { label: "Pendente", value: formatCurrency(summary.pendente) },
-            { label: "Quebra", value: formatCurrency(summary.quebra) },
             { label: "Taxa Recuperação", value: `${summary.taxa.toFixed(1)}%` },
           ].map((item) => (
             <div key={item.label} className="bg-card rounded-xl border border-border p-4">
@@ -220,15 +240,31 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
           ))}
         </div>
 
-        {/* === MÉTRICA DE CARTEIRA === Aging por parcelas */}
+        {/* Contadores de clientes únicos */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-card rounded-xl border border-border p-4 text-center">
+            <p className="text-xs text-muted-foreground">Clientes Negociados</p>
+            <p className="text-2xl font-bold text-primary">{summary.clientesNegociados}</p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-4 text-center">
+            <p className="text-xs text-muted-foreground">Clientes com Recebimento</p>
+            <p className="text-2xl font-bold text-green-600">{summary.clientesRecebidos}</p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-4 text-center">
+            <p className="text-xs text-muted-foreground">Clientes Quebrados</p>
+            <p className="text-2xl font-bold text-destructive">{summary.clientesQuebrados}</p>
+          </div>
+        </div>
+
+        {/* === MÉTRICA DE CARTEIRA === Aging por parcelas de clientes com acordo */}
         <div className="bg-card rounded-xl border border-border p-5">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Aging da Carteira (Parcelas)</h3>
+          <h3 className="text-sm font-semibold text-card-foreground mb-3">Aging da Carteira (Parcelas com Acordo)</h3>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="text-xs">Faixa</TableHead>
-                <TableHead className="text-xs text-center">Qtd</TableHead>
-                <TableHead className="text-xs text-right">Valor</TableHead>
+                <TableHead className="text-xs text-center">Parcelas Abertas</TableHead>
+                <TableHead className="text-xs text-right">Saldo Aberto</TableHead>
                 <TableHead className="text-xs text-right">Recebido</TableHead>
                 <TableHead className="text-xs text-right">%</TableHead>
               </TableRow>
@@ -239,22 +275,22 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
                   <TableCell className="text-sm">{r.label}</TableCell>
                   <TableCell className="text-sm text-center">{r.count}</TableCell>
                   <TableCell className="text-sm text-right">{formatCurrency(r.total)}</TableCell>
-                  <TableCell className="text-sm text-right text-success">{formatCurrency(r.received)}</TableCell>
-                  <TableCell className="text-sm text-right">{totalOverdue > 0 ? ((r.total / totalOverdue) * 100).toFixed(1) : "0"}%</TableCell>
+                  <TableCell className="text-sm text-right text-green-600">{formatCurrency(r.received)}</TableCell>
+                  <TableCell className="text-sm text-right">{totalAberto > 0 ? ((r.total / totalAberto) * 100).toFixed(1) : "0"}%</TableCell>
                 </TableRow>
               ))}
               <TableRow className="font-semibold bg-muted/30">
                 <TableCell className="text-sm">Total</TableCell>
                 <TableCell className="text-sm text-center">{agingData.reduce((s, b) => s + b.count, 0)}</TableCell>
-                <TableCell className="text-sm text-right">{formatCurrency(totalOverdue)}</TableCell>
-                <TableCell className="text-sm text-right text-success">{formatCurrency(totalReceived)}</TableCell>
+                <TableCell className="text-sm text-right">{formatCurrency(totalAberto)}</TableCell>
+                <TableCell className="text-sm text-right text-green-600">{formatCurrency(totalRecebido)}</TableCell>
                 <TableCell className="text-sm text-right">100%</TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </div>
 
-        {/* Acordos */}
+        {/* === MÉTRICA DE ACORDO === Resumo por status de acordos */}
         <div className="bg-card rounded-xl border border-border p-5">
           <h3 className="text-sm font-semibold text-card-foreground mb-3">Acordos</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
@@ -273,38 +309,6 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Ranking operadores */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Ranking de Operadores</h3>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs w-10">#</TableHead>
-                <TableHead className="text-xs">Operador</TableHead>
-                <TableHead className="text-xs text-center">Acordos</TableHead>
-                <TableHead className="text-xs text-right">Recebido</TableHead>
-                <TableHead className="text-xs text-right">Quebra</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {opRanking.map((op, idx) => (
-                <TableRow key={op.id}>
-                  <TableCell className="text-sm font-bold text-primary">{idx + 1}</TableCell>
-                  <TableCell className="text-sm">{op.name}</TableCell>
-                  <TableCell className="text-sm text-center">{op.count}</TableCell>
-                  <TableCell className="text-sm text-right text-success">{formatCurrency(op.received)}</TableCell>
-                  <TableCell className="text-sm text-right text-destructive">{formatCurrency(op.broken)}</TableCell>
-                </TableRow>
-              ))}
-              {opRanking.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-4">Sem dados</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
         </div>
 
         {/* === PARCELAS DETALHADAS === Apenas clientes com acordo no Rivo, em accordion fechado */}
