@@ -59,7 +59,7 @@ const WhatsAppIntegrationTab = () => {
         type: l.event_type === "error" ? "log" : "http",
         status_code: l.status_code,
         level: l.event_type,
-        payload: l.payload || null,
+        payload: l.payload ? (typeof l.payload === 'string' ? l.payload : JSON.stringify(l.payload)) : null,
       })));
     } catch (err: any) {
       toast({ title: "Erro ao buscar logs", description: err.message, variant: "destructive" });
