@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       throw new Error("apiKey and appName are required");
     }
 
-    const response = await fetch(`https://api.gupshup.io/wa/api/v1/wallet/balance`, {
+    const response = await fetch(`https://api.gupshup.io/wa/api/v1/template/list/${encodeURIComponent(appName)}`, {
       method: "GET",
       headers: {
         "apikey": apiKey,
