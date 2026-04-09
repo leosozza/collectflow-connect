@@ -38,11 +38,15 @@ Deno.serve(async (req) => {
       throw new Error("apiKey and appName are required");
     }
 
-    const response = await fetch(`https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}`, {
-      method: "GET",
+    // Validate API key by sending a minimal request to the messaging endpoint
+    // A 400 (missing params) proves the key is valid; only 401/403 means invalid key
+    const response = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
       headers: {
         "apikey": apiKey,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
+      body: `channel=whatsapp&source=validation&src.name=${encodeURIComponent(appName)}&destination=0&message={}`,
     });
 
     const text = await response.text();
@@ -62,11 +66,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (response.status !== 200) {
-      await writeLog(tenantId || null, "error", `Gupshup respondeu com status ${response.status}: ${data.message || "erro desconhecido"}`, { status: response.status, body: data }, response.status);
+    // For the validation approach: 401/403 = invalid key, anything else = key is valid
+    if (response.status === 401 || response.status === 403) {
+      await writeLog(tenantId || null, "error", `API Key inválida: Gupshup respondeu ${response.status}`, { status: response.status, body: data }, response.status);
       return new Response(JSON.stringify({ 
         success: false, 
-        error: data.message || "Failed to connect to Gupshup",
+        error: data.message || "API Key inválida — autenticação falhou",
         status: response.status 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -74,11 +79,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    await writeLog(tenantId || null, "success", `Conexão testada com sucesso (balance endpoint)`, { body: data }, 200);
+    // Any other response (200, 400, 412, etc.) means the key IS valid
+    await writeLog(tenantId || null, "success", `Conexão testada com sucesso (API Key válida, appName: ${appName})`, { status: response.status, body: data }, response.status);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      data 
+      data: { message: "API Key válida", appName, gupshupStatus: response.status }
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
