@@ -220,13 +220,6 @@ const GupshupInstancesList = (_props: GupshupInstancesListProps) => {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={onAddNew}
-          >
-            <Plus className="w-4 h-4" /> Nova Instância Oficial
-          </Button>
         </CardContent>
       </Card>
 

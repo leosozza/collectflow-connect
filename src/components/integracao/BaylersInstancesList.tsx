@@ -471,13 +471,6 @@ const BaylersInstancesList = () => {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => setFormOpen(true)}
-          >
-            <Plus className="w-4 h-4" /> Nova Instância
-          </Button>
         </CardContent>
       </Card>
 
