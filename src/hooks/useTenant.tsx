@@ -75,7 +75,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      setLoading(true);
+      if (!tenant) setLoading(true);
       
       // Use SECURITY DEFINER RPC to get tenant_id (bypasses restrictive RLS)
       const { data: tenantId, error: rpcError } = await supabase
