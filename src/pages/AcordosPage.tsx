@@ -416,15 +416,7 @@ const AcordosPage = () => {
       ) : loading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
-        <AgreementsList
-          agreements={filteredAgreements}
-          isAdmin={isAdmin}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onCancel={isOperationalFilter ? handleCancel : undefined}
-          onBreak={permissions.canBreakAcordos && (statusFilter === "vigentes" || statusFilter === "overdue") ? handleBreak : undefined}
-          showOperationalActions={isOperationalFilter}
-        />
+        <AgreementsList agreements={filteredAgreements} />
       )}
     </div>
   );
