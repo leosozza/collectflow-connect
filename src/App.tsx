@@ -55,8 +55,9 @@ import CRMReportsPage from "./pages/admin/comercial/CRMReportsPage";
 /* Conditional root: landing for visitors, dashboard for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
-  const { isSuperAdmin, loading: tenantLoading } = useTenant();
-  if (loading || tenantLoading) {
+  const { tenant, isSuperAdmin, loading: tenantLoading } = useTenant();
+  // Only show full-screen spinner on initial load (no tenant yet)
+  if (loading || (tenantLoading && !tenant)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex items-center gap-3">
