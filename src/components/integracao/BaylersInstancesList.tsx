@@ -480,8 +480,11 @@ const BaylersInstancesList = ({ externalFormOpen, onExternalFormClose }: Baylers
       </Card>
 
       <BaylersInstanceForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
+        open={formOpen || !!externalFormOpen}
+        onClose={() => {
+          setFormOpen(false);
+          onExternalFormClose?.();
+        }}
         onSave={handleCreate}
         saving={saving}
         tenantName={tenant?.name || ""}
