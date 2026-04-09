@@ -235,16 +235,38 @@ const WhatsAppIntegrationTab = () => {
                     <p className="break-all whitespace-pre-wrap leading-relaxed">
                       {log.message}
                     </p>
-                    {log.payload && (
-                      <details className="mt-1">
-                        <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">Payload</summary>
-                        <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] break-all whitespace-pre-wrap max-h-40 overflow-auto">
-                          {(() => {
-                            try { return JSON.stringify(JSON.parse(log.payload), null, 2); } catch { return log.payload; }
-                          })()}
-                        </pre>
-                      </details>
-                    )}
+                    {log.payload && (() => {
+                      let parsed: any = null;
+                      try { parsed = JSON.parse(log.payload); } catch {}
+                      const hasRequestResponse = parsed && parsed.request && parsed.response;
+                      return (
+                        <div className="mt-1 space-y-1">
+                          {hasRequestResponse ? (
+                            <>
+                              <details>
+                                <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">📤 Request</summary>
+                                <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] break-all whitespace-pre-wrap max-h-40 overflow-auto">
+                                  {JSON.stringify(parsed.request, null, 2)}
+                                </pre>
+                              </details>
+                              <details>
+                                <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">📥 Response</summary>
+                                <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] break-all whitespace-pre-wrap max-h-40 overflow-auto">
+                                  {JSON.stringify(parsed.response, null, 2)}
+                                </pre>
+                              </details>
+                            </>
+                          ) : (
+                            <details>
+                              <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">Payload</summary>
+                              <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] break-all whitespace-pre-wrap max-h-40 overflow-auto">
+                                {parsed ? JSON.stringify(parsed, null, 2) : log.payload}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
