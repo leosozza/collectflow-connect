@@ -19,11 +19,10 @@ Deno.serve(async (req) => {
     }
 
     // Try to fetch templates for this app to verify connection
-    const response = await fetch("https://api.gupshup.io/sm/api/v1/template/msg", {
+    const response = await fetch("https://api.gupshup.io/sm/api/v2/wallet/balance", {
       method: "GET",
       headers: {
-        "apiKey": apiKey,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "apikey": apiKey,
       },
     });
 
