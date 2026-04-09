@@ -1,30 +1,50 @@
 
 
-# Correção: Total Recebido e Status de Vencimentos
+# Revisão do Dashboard — Análise Completa
 
 ## Diagnóstico
 
-### Problema 1 — Jaciele não aparece no "Total Recebido"
-O evento de pagamento dela é `manual_payment_confirmed` com o valor em `metadata.amount_paid` (700.014). A RPC `get_dashboard_stats` só soma eventos `payment_confirmed` usando `metadata.valor_pago`. Resultado: pagamentos manuais confirmados são ignorados.
+Após análise detalhada das RPCs, dados no banco e código do frontend, identifiquei que as correções da migration anterior foram aplicadas com sucesso. Veja o estado atual:
 
-### Problema 2 — Renato aparece como "Acordo Atrasado" mesmo tendo pago
-Renato pagou a entrada (R$ 457,60) via Negociarie (`negociarie_cobrancas` com status `pago`). A RPC `get_dashboard_vencimentos` verifica apenas `manual_payments` para detectar pagamento — nunca consulta `negociarie_cobrancas`. Como a data 07/04 < hoje (09/04), cai no check de overdue.
+### ✓ Funcionando Corretamente
 
-## Correções (1 migration SQL)
+1. **Total Recebido** — A RPC `get_dashboard_stats` agora soma corretamente:
+   - Eventos `payment_confirmed` (Negociarie) usando `metadata.valor_pago`
+   - Eventos `manual_payment_confirmed` (baixas manuais) usando `metadata.amount_paid`
+   - Confirmado nos dados: R$ 457,60 (Renato) + R$ 700,01 (Jaciele) + R$ 89,00 (Maria Cristina) = R$ 1.246,61
 
-### Migration — Atualizar ambas as RPCs
+2. **Vencimentos do Dia** — A RPC `get_dashboard_vencimentos` verifica pagamentos em:
+   - `manual_payments` (baixa manual)
+   - `negociarie_cobrancas` (pagamento via plataforma)
+   - Acordos com status `approved` (totalmente pagos)
+   - Renato no dia 08/04 aparece corretamente como "Pago" (Negociarie `:0` = pago)
 
-**`get_dashboard_stats`** — campo `_recebido`:
-- Incluir **ambos** event types: `payment_confirmed` E `manual_payment_confirmed`
-- Usar `COALESCE(metadata->>'valor_pago', metadata->>'amount_paid')::numeric` para cobrir os dois formatos de metadata
+3. **Frontend** — O mapeamento de cores/labels está correto:
+   - `paid` → Badge verde "Pago"
+   - `overdue` → Badge vermelho "Acordo Atrasado"
+   - `pending` → Badge amarelo "Pendente"
 
-**`get_dashboard_vencimentos`** — detecção de `effective_status`:
-- Adicionar verificação em `negociarie_cobrancas` (onde `status = 'pago'` e `installment_key` corresponde ao acordo/parcela) além da verificação em `manual_payments`
-- Para a entrada: checar `installment_key = agreement_id || ':0'`
-- Para parcelas regulares: checar `installment_key = agreement_id || ':' || numero_parcela`
+### ⚠ Correção Necessária (1 item)
+
+**Excluir acordos `rejected` dos vencimentos**: A RPC `get_dashboard_vencimentos` exclui apenas `cancelled`, mas deveria excluir também `rejected`. Hoje não há acordos rejeitados no banco, mas é uma questão de integridade para todos os tenants.
+
+## Alteração
+
+### Migration SQL — Atualizar `get_dashboard_vencimentos`
+
+Trocar:
+```sql
+AND a.status NOT IN ('cancelled')
+```
+Para:
+```sql
+AND a.status NOT IN ('cancelled', 'rejected')
+```
+
+Em ambas as queries (entrada e parcelas regulares).
 
 ### Impacto
-- **Total Recebido**: passará a incluir R$ 700,01 da Jaciele + os R$ 457,60 do Renato (que já aparece) + R$ 89,00 = totalizando corretamente
-- **Vencimentos**: Renato aparecerá como "Pago" em 07/04 em vez de "Acordo Atrasado"
-- Nenhuma alteração de UI necessária — o frontend já mapeia `effective_status` corretamente
+- Nenhuma alteração de UI necessária
+- Compatível com todos os tenants — as RPCs usam `tenant_id` via `auth.uid()` automaticamente
+- Nenhum risco de regressão
 
