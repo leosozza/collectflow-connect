@@ -248,7 +248,7 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
             <p className="text-xs text-muted-foreground">Clientes com Recebimento</p>
-            <p className="text-2xl font-bold text-green-600">{summary.clientesRecebidos}</p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{summary.clientesRecebidos}</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
             <p className="text-xs text-muted-foreground">Clientes Quebrados</p>
@@ -275,7 +275,7 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
                   <TableCell className="text-sm">{r.label}</TableCell>
                   <TableCell className="text-sm text-center">{r.count}</TableCell>
                   <TableCell className="text-sm text-right">{formatCurrency(r.total)}</TableCell>
-                  <TableCell className="text-sm text-right text-green-600">{formatCurrency(r.received)}</TableCell>
+                  <TableCell className="text-sm text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(r.received)}</TableCell>
                   <TableCell className="text-sm text-right">{totalAberto > 0 ? ((r.total / totalAberto) * 100).toFixed(1) : "0"}%</TableCell>
                 </TableRow>
               ))}
@@ -283,7 +283,7 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
                 <TableCell className="text-sm">Total</TableCell>
                 <TableCell className="text-sm text-center">{agingData.reduce((s, b) => s + b.count, 0)}</TableCell>
                 <TableCell className="text-sm text-right">{formatCurrency(totalAberto)}</TableCell>
-                <TableCell className="text-sm text-right text-green-600">{formatCurrency(totalRecebido)}</TableCell>
+                <TableCell className="text-sm text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(totalRecebido)}</TableCell>
                 <TableCell className="text-sm text-right">100%</TableCell>
               </TableRow>
             </TableBody>
