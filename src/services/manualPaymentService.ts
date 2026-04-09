@@ -226,7 +226,8 @@ export const manualPaymentService = {
           .eq("id", mp.agreement_id)
           .single();
 
-        if (agreement && agreement.status !== "approved") {
+        // === PAGAMENTO REAL CONSOLIDADO === Nunca regredir de completed
+        if (agreement && agreement.status !== "completed") {
           const { data: confirmedPayments } = await supabase
             .from("manual_payments" as any)
             .select("amount_paid")
@@ -235,18 +236,20 @@ export const manualPaymentService = {
 
           const { data: paidCobrancas } = await supabase
             .from("negociarie_cobrancas" as any)
-            .select("valor")
+            .select("valor_pago")
             .eq("agreement_id", mp.agreement_id)
             .eq("status", "pago");
 
           const manualTotal = ((confirmedPayments as any[]) || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
-          const cobrancaTotal = ((paidCobrancas as any[]) || []).reduce((s, c) => s + Number(c.valor || 0), 0);
-          const totalPaid = Math.max(manualTotal, cobrancaTotal, manualTotal + cobrancaTotal);
+          const cobrancaTotal = ((paidCobrancas as any[]) || []).reduce((s, c) => s + Number(c.valor_pago || 0), 0);
+          // Canais distintos — soma direta sem dupla contagem
+          const totalPaid = manualTotal + cobrancaTotal;
 
           if (totalPaid >= (agreement.proposed_total || 0) - 0.01 && agreement.proposed_total > 0) {
+            // Acordo totalmente quitado → completed (não approved)
             await supabase
               .from("agreements")
-              .update({ status: "approved" })
+              .update({ status: "completed" })
               .eq("id", mp.agreement_id);
 
             // Also update client status

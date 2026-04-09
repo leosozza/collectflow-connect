@@ -19,8 +19,10 @@ import {
 } from "recharts";
 import * as XLSX from "xlsx";
 
-interface AgreementRow {
-  id: string;
+// === MÉTRICA DE ACORDO === (dados de agreements — negociação formalizada)
+// === PAGAMENTO REAL CONSOLIDADO === (manual_payments + negociarie_cobrancas por agreement_id)
+interface AgreementFinancialRow {
+  agreement_id: string;
   client_cpf: string;
   client_name: string;
   credor: string;
@@ -30,9 +32,14 @@ interface AgreementRow {
   created_at: string;
   created_by: string;
   first_due_date: string;
-  new_installments: number;
-  new_installment_value: number;
-  entrada_value: number | null;
+  entrada_value: number;
+  total_paid_real: number;
+  pending_balance_real: number;
+  payment_count: number;
+  first_payment_date: string | null;
+  last_payment_date: string | null;
+  paid_via_manual: number;
+  paid_via_negociarie: number;
 }
 
 interface Profile {
