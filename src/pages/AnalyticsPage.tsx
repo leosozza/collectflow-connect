@@ -201,11 +201,11 @@ const AnalyticsPage = () => {
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
 
-  // Total Recebido: soma real dos pagamentos vinculados a acordos
-  const totalRecebido = activeAgreements.reduce((s, a) => s + Number((a as any).total_pago || 0), 0);
+  // === PAGAMENTO REAL CONSOLIDADO === soma de manual_payments + negociarie_cobrancas
+  const totalRecebido = activeAgreements.reduce((s, a) => s + a.total_paid_real, 0);
 
-  // Acordos com pagamento > 0
-  const acordosComPagamento = activeAgreements.filter((a) => Number((a as any).total_pago || 0) > 0);
+  // Acordos com pagamento real > 0
+  const acordosComPagamento = activeAgreements.filter((a) => a.total_paid_real > 0);
 
   // Total Pendente: soma do saldo devedor de toda a carteira (clients)
   const { data: totalCarteiraPendente = 0 } = useQuery({
@@ -257,8 +257,10 @@ const AnalyticsPage = () => {
       });
       return {
         name: label,
+        // Negociado por mês de created_at do acordo
         negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
-        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number((a as any).total_pago || 0), 0),
+        // Recebido: pagamento real consolidado (limitação: agrupado por created_at do acordo, não do pagamento)
+        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + a.total_paid_real, 0),
         quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
       };
     });
