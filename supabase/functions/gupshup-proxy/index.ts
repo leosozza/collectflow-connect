@@ -11,9 +11,10 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-async function writeLog(eventType: string, message: string, payload?: any, statusCode?: number) {
+async function writeLog(tenantId: string | null, eventType: string, message: string, payload?: any, statusCode?: number) {
   try {
     await supabaseAdmin.from("webhook_logs").insert({
+      tenant_id: tenantId,
       function_name: "gupshup-proxy",
       event_type: eventType,
       message,
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { apiKey, appName } = await req.json();
+    const { apiKey, appName, tenantId } = await req.json();
 
     if (!apiKey || !appName) {
       throw new Error("apiKey and appName are required");
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
     try {
       data = JSON.parse(text);
     } catch {
-      await writeLog("error", `Gupshup retornou resposta inválida (status ${response.status})`, { raw: text.substring(0, 500) }, response.status);
+      await writeLog(tenantId || null, "error", `Gupshup retornou resposta inválida (status ${response.status})`, { raw: text.substring(0, 500) }, response.status);
       return new Response(JSON.stringify({
         success: false,
         error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
     }
 
     if (response.status !== 200) {
-      await writeLog("error", `Gupshup respondeu com status ${response.status}: ${data.message || "erro desconhecido"}`, { status: response.status, body: data }, response.status);
+      await writeLog(tenantId || null, "error", `Gupshup respondeu com status ${response.status}: ${data.message || "erro desconhecido"}`, { status: response.status, body: data }, response.status);
       return new Response(JSON.stringify({ 
         success: false, 
         error: data.message || "Failed to connect to Gupshup",
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    await writeLog("success", `Conexão testada com sucesso (balance endpoint)`, { body: data }, 200);
+    await writeLog(tenantId || null, "success", `Conexão testada com sucesso (balance endpoint)`, { body: data }, 200);
 
     return new Response(JSON.stringify({ 
       success: true, 
@@ -84,7 +85,7 @@ Deno.serve(async (req) => {
 
   } catch (err: any) {
     console.error("gupshup-proxy error:", err);
-    await writeLog("error", `Erro interno: ${err.message}`, null, 500);
+    await writeLog(null, "error", `Erro interno: ${err.message}`, null, 500);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

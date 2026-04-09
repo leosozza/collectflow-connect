@@ -95,7 +95,7 @@ const WhatsAppIntegrationTab = () => {
     setTestingConnection(true);
     try {
       const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
-        body: { apiKey: apiKey.trim(), appName: appName.trim() },
+        body: { apiKey: apiKey.trim(), appName: appName.trim(), tenantId: tenant?.id },
       });
 
       if (error) {
