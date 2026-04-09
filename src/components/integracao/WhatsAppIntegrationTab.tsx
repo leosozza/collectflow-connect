@@ -209,7 +209,6 @@ const WhatsAppIntegrationTab = () => {
       </div>
     </div>
   );
-  );
 };
 
 export default WhatsAppIntegrationTab;
