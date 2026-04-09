@@ -1,22 +1,19 @@
 
 
-# Corrigir "Pagos" para mostrar apenas acordos completados
-
-## Problema
-Hoje a linha 299 soma `aprovados + pagos`, incluindo acordos apenas aprovados pelo admin (que ainda não foram pagos de fato). O credor só precisa ver os **efetivamente pagos** (`completed`).
+# Corrigir flash de carregamento ao focar na aba
 
 ## Alteração
 
-### `src/components/relatorios/PrestacaoContas.tsx`
+### `src/hooks/useTenant.tsx` — linha 78
 
-**Linha 299** — Trocar:
+Trocar:
 ```typescript
-{ label: "Pagos", value: acordosSummary.aprovados + acordosSummary.pagos },
+setLoading(true);
 ```
 Por:
 ```typescript
-{ label: "Pagos", value: acordosSummary.pagos },
+if (!tenant) setLoading(true);
 ```
 
-Isso faz "Pagos" refletir apenas `status === "completed"`. O campo `aprovados` continua calculado internamente mas não será exibido na prestação de contas.
+Isso garante que o spinner só aparece no primeiro carregamento. Nas atualizações subsequentes (foco de aba, refresh de sessão), os dados são buscados silenciosamente e os estados (`setTenant`, `setTenantUser`, `setPlan`) continuam sendo atualizados normalmente sem desmontar a interface.
 
