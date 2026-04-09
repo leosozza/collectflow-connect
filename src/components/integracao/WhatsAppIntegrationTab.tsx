@@ -23,6 +23,7 @@ interface LogEntry {
 }
 
 const WhatsAppIntegrationTab = () => {
+  const { tenant } = useTenant();
   const { toast } = useToast();
 
   // Type chooser state
@@ -85,6 +86,28 @@ const WhatsAppIntegrationTab = () => {
     setBaylersFormOpen(true);
   };
 
+  const handleTestConnection = async () => {
+    if (!tenant) return;
+    const settings = (tenant.settings as Record<string, any>) || {};
+    const apiKey = settings.gupshup_api_key;
+    const appName = settings.gupshup_app_name;
+    if (!apiKey || !appName) {
+      toast({ title: "Erro", description: "Configure API Key e App Name primeiro.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Testando conexão..." });
+    try {
+      const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
+        body: { apiKey, appName, tenantId: tenant.id },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || "Falha na conexão");
+      toast({ title: "Sucesso!", description: "Conexão com Gupshup validada." });
+    } catch (err: any) {
+      toast({ title: "Falha na Conexão", description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Centralized Add Button */}
@@ -101,7 +124,7 @@ const WhatsAppIntegrationTab = () => {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Official Gupshup Instances */}
-        <GupshupInstancesList />
+        <GupshupInstancesList onFetchLogs={handleFetchLogs} onTestConnection={handleTestConnection} />
 
         {/* Unofficial QR Code Instances */}
         <BaylersInstancesList externalFormOpen={baylersFormOpen} onExternalFormClose={() => setBaylersFormOpen(false)} />

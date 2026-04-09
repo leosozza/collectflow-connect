@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Star, Trash2, Radio, Pencil, Check, X, Plus, Wifi } from "lucide-react";
+import { MessageSquare, Star, Trash2, Radio, Pencil, Check, X, Wifi, ScrollText, Plug } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,10 +30,11 @@ interface GupshupInstance {
 }
 
 interface GupshupInstancesListProps {
-  // no props needed anymore - add button is centralized
+  onFetchLogs?: () => void;
+  onTestConnection?: () => void;
 }
 
-const GupshupInstancesList = (_props: GupshupInstancesListProps) => {
+const GupshupInstancesList = ({ onFetchLogs, onTestConnection }: GupshupInstancesListProps) => {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -197,6 +198,28 @@ const GupshupInstancesList = (_props: GupshupInstancesListProps) => {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {onTestConnection && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={onTestConnection}
+                        title="Testar conexão"
+                      >
+                        <Plug className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {onFetchLogs && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={onFetchLogs}
+                        title="Ver logs"
+                      >
+                        <ScrollText className="w-4 h-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
