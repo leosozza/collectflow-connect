@@ -30,10 +30,10 @@ interface GupshupInstance {
 }
 
 interface GupshupInstancesListProps {
-  onAddNew: () => void;
+  // no props needed anymore - add button is centralized
 }
 
-const GupshupInstancesList = ({ onAddNew }: GupshupInstancesListProps) => {
+const GupshupInstancesList = (_props: GupshupInstancesListProps) => {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -220,13 +220,6 @@ const GupshupInstancesList = ({ onAddNew }: GupshupInstancesListProps) => {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={onAddNew}
-          >
-            <Plus className="w-4 h-4" /> Nova Instância Oficial
-          </Button>
         </CardContent>
       </Card>
 

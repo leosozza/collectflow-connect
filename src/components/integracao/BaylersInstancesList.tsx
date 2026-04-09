@@ -40,7 +40,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const BaylersInstancesList = () => {
+interface BaylersInstancesListProps {
+  externalFormOpen?: boolean;
+  onExternalFormClose?: () => void;
+}
+
+const BaylersInstancesList = ({ externalFormOpen, onExternalFormClose }: BaylersInstancesListProps) => {
   const { tenant, refetch: refetchTenant } = useTenant();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -471,19 +476,15 @@ const BaylersInstancesList = () => {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => setFormOpen(true)}
-          >
-            <Plus className="w-4 h-4" /> Nova Instância
-          </Button>
         </CardContent>
       </Card>
 
       <BaylersInstanceForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
+        open={formOpen || !!externalFormOpen}
+        onClose={() => {
+          setFormOpen(false);
+          onExternalFormClose?.();
+        }}
         onSave={handleCreate}
         saving={saving}
         tenantName={tenant?.name || ""}

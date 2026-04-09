@@ -1,12 +1,9 @@
 import { useState } from "react";
 import { useTenant } from "@/hooks/useTenant";
-import { updateTenant } from "@/services/tenantService";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Copy, Check, ScrollText } from "lucide-react";
+import { Copy, ScrollText, Plus, MessageSquare, Shield } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +23,14 @@ interface LogEntry {
 }
 
 const WhatsAppIntegrationTab = () => {
-  const { tenant, refetch } = useTenant();
   const { toast } = useToast();
-  const settings = (tenant?.settings as Record<string, any>) || {};
 
-  // Config dialog state
+  // Type chooser state
+  const [chooserOpen, setChooserOpen] = useState(false);
+  // Config dialog state (Gupshup)
   const [configOpen, setConfigOpen] = useState(false);
+  // Baylers form trigger
+  const [baylersFormOpen, setBaylersFormOpen] = useState(false);
 
   // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
@@ -76,15 +75,72 @@ const WhatsAppIntegrationTab = () => {
     }
   };
 
+  const handleChooseOfficial = () => {
+    setChooserOpen(false);
+    setConfigOpen(true);
+  };
+
+  const handleChooseUnofficial = () => {
+    setChooserOpen(false);
+    setBaylersFormOpen(true);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Centralized Add Button */}
+      <div className="flex justify-center">
+        <Button
+          size="lg"
+          className="gap-2"
+          onClick={() => setChooserOpen(true)}
+        >
+          <Plus className="w-5 h-5" />
+          Nova Instância WhatsApp
+        </Button>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
         {/* Official Gupshup Instances */}
-        <GupshupInstancesList onAddNew={() => setConfigOpen(true)} />
+        <GupshupInstancesList />
 
         {/* Unofficial QR Code Instances */}
-        <BaylersInstancesList />
+        <BaylersInstancesList externalFormOpen={baylersFormOpen} onExternalFormClose={() => setBaylersFormOpen(false)} />
       </div>
+
+      {/* Type Chooser Dialog */}
+      <Dialog open={chooserOpen} onOpenChange={setChooserOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Qual tipo de instância deseja criar?</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            <button
+              onClick={handleChooseOfficial}
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all text-center group"
+            >
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Shield className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">WhatsApp Oficial</p>
+                <p className="text-xs text-muted-foreground mt-1">API oficial via Gupshup (BSP)</p>
+              </div>
+            </button>
+            <button
+              onClick={handleChooseUnofficial}
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-accent transition-all text-center group"
+            >
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <MessageSquare className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">WhatsApp Não Oficial</p>
+                <p className="text-xs text-muted-foreground mt-1">Conexão via QR Code</p>
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Gupshup Config Dialog */}
       <GupshupConfigDialog
