@@ -1,56 +1,37 @@
 
 
-# Corrigir "Unexpected end of JSON input" no teste Gupshup
+# Corrigir erro 405 no teste de conexão Gupshup
 
 ## Problema
 
-Na linha 30 do `gupshup-proxy/index.ts`, `await response.json()` explode se a Gupshup retornar HTML ou corpo vazio. O erro genérico chega ao frontend sem contexto.
+O endpoint `https://api.gupshup.io/sm/api/v1/template/msg` está retornando **HTTP 405 (Method Not Allowed)** para requisições GET. Essa API provavelmente espera POST ou a URL correta para listar templates inclui o `appName` no path.
 
-## Correções
+## Correção
 
-### 1. `supabase/functions/gupshup-proxy/index.ts` — linha 30-31
+### `supabase/functions/gupshup-proxy/index.ts`
 
-Trocar:
+Trocar o endpoint de validação para um que aceite GET e valide as credenciais:
+
 ```typescript
-const data = await response.json();
-console.log("Gupshup proxy test response:", data);
-```
-Por:
-```typescript
-const text = await response.text();
-console.log("Gupshup proxy raw response:", text.substring(0, 500));
+// DE:
+const response = await fetch("https://api.gupshup.io/sm/api/v1/template/msg", {
+  method: "GET",
+  headers: {
+    "apiKey": apiKey,
+    "Content-Type": "application/x-www-form-urlencoded",
+  },
+});
 
-let data: any;
-try {
-  data = JSON.parse(text);
-} catch {
-  return new Response(JSON.stringify({
-    success: false,
-    error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
-  }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// PARA:
+const response = await fetch(`https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}`, {
+  method: "GET",
+  headers: {
+    "apiKey": apiKey,
+  },
+});
 ```
 
-### 2. `src/components/integracao/WhatsAppIntegrationTab.tsx` — linhas 54-56
+Este endpoint (`/wa/app/{appName}`) retorna informações do app e valida tanto a API Key quanto o App Name em uma única chamada. Se as credenciais forem inválidas, a Gupshup retorna erro estruturado. O restante do código (parse de texto, tratamento de erros) permanece igual.
 
-Trocar:
-```typescript
-if (error || !data?.success) {
-  throw new Error(data?.error || "Falha na conexão com Gupshup");
-}
-```
-Por:
-```typescript
-if (error) {
-  throw new Error(error.message || "Erro ao chamar gupshup-proxy");
-}
-if (!data?.success) {
-  throw new Error(data?.error || "Falha na conexão com Gupshup");
-}
-```
-
-Isso garante que erros de rede (edge function inacessível) e erros da Gupshup (credenciais inválidas, HTML em vez de JSON) sejam exibidos claramente no toast.
+Após a alteração, re-deploy da edge function.
 
