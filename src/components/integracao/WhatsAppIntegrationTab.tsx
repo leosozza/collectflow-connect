@@ -20,6 +20,7 @@ interface LogEntry {
   method?: string;
   execution_time_ms?: number;
   level?: string;
+  payload?: string;
 }
 
 const WhatsAppIntegrationTab = () => {
@@ -58,6 +59,7 @@ const WhatsAppIntegrationTab = () => {
         type: l.event_type === "error" ? "log" : "http",
         status_code: l.status_code,
         level: l.event_type,
+        payload: l.payload || null,
       })));
     } catch (err: any) {
       toast({ title: "Erro ao buscar logs", description: err.message, variant: "destructive" });
@@ -211,7 +213,7 @@ const WhatsAppIntegrationTab = () => {
                           className="text-muted-foreground hover:text-foreground"
                           title="Copiar log"
                           onClick={async () => {
-                            const text = `[${formatLogTimestamp(log.timestamp)}] [${log.level || log.type}] ${log.status_code ? `(${log.status_code}) ` : ""}${log.message}`;
+                            const text = `[${formatLogTimestamp(log.timestamp)}] [${log.level || log.type}] ${log.status_code ? `(${log.status_code}) ` : ""}${log.message}${log.payload ? `\nPayload: ${log.payload}` : ""}`;
                             await navigator.clipboard.writeText(text);
                             toast({ title: "Log copiado!" });
                           }}
@@ -233,6 +235,16 @@ const WhatsAppIntegrationTab = () => {
                     <p className="break-all whitespace-pre-wrap leading-relaxed">
                       {log.message}
                     </p>
+                    {log.payload && (
+                      <details className="mt-1">
+                        <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">Payload</summary>
+                        <pre className="mt-1 p-2 rounded bg-muted/50 text-[10px] break-all whitespace-pre-wrap max-h-40 overflow-auto">
+                          {(() => {
+                            try { return JSON.stringify(JSON.parse(log.payload), null, 2); } catch { return log.payload; }
+                          })()}
+                        </pre>
+                      </details>
+                    )}
                   </div>
                 ))}
               </div>
