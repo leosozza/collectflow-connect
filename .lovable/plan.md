@@ -1,52 +1,31 @@
 
 
-# Corrigir logs não aparecendo no dialog
+# Corrigir endpoint de teste de conexão Gupshup
 
 ## Problema
 
-Os logs são gravados na tabela `webhook_logs` com `tenant_id = NULL`, mas a policy RLS exige que `tenant_id` corresponda ao tenant do usuário. Resultado: a query do frontend retorna zero registros.
+O endpoint `GET /wa/app/{appName}` retorna 401 mesmo com credenciais válidas. O curl do usuário prova que a API Key funciona no endpoint de envio (`/wa/api/v1/template/msg`). O endpoint de "app info" provavelmente requer permissões de admin que a API Key de envio não possui.
 
-## Causa raiz
+## Correção
 
-A edge function `gupshup-proxy` insere logs sem `tenant_id`. A policy RLS:
-```sql
-tenant_id IN (SELECT id FROM tenants WHERE id = webhook_logs.tenant_id)
-```
-Filtra todos os registros com `tenant_id IS NULL`.
+Trocar o endpoint de teste para `GET /sm/api/v2/wallet/balance`, que valida a API Key sem exigir permissões especiais. Esse endpoint retorna o saldo da conta e confirma que a chave é válida.
 
-## Correções
+### Alteração em `supabase/functions/gupshup-proxy/index.ts`
 
-### 1. `supabase/functions/gupshup-proxy/index.ts`
-
-Receber o `tenantId` no body da requisição e incluí-lo ao inserir na `webhook_logs`:
+Linha 41: trocar de:
 ```typescript
-const { apiKey, appName, tenantId } = await req.json();
-// ...
-await writeLog(eventType, message, payload, statusCode, tenantId);
+const response = await fetch(`https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}`, {
 ```
-
-### 2. `src/components/integracao/WhatsAppIntegrationTab.tsx`
-
-Passar o `tenant.id` na chamada ao `gupshup-proxy`:
+Para:
 ```typescript
-const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
-  body: { apiKey: apiKey.trim(), appName: appName.trim(), tenantId: tenant?.id },
-});
+const response = await fetch("https://api.gupshup.io/sm/api/v2/wallet/balance", {
 ```
 
-### 3. `supabase/functions/gupshup-webhook/index.ts`
+Isso valida que a API Key é autêntica. O `appName` será validado implicitamente quando o primeiro envio for feito.
 
-Verificar se os logs do webhook também incluem `tenant_id` ao inserir na `webhook_logs`. Se não, adicionar o tenant_id quando disponível.
-
-### 4. Corrigir policy RLS (migração)
-
-Atualizar a policy para também permitir leitura de logs com `tenant_id IS NULL` para usuários autenticados, OU garantir que todos os logs tenham tenant_id. A abordagem mais segura é garantir que todos os logs tenham tenant_id (opção das correções 1-3).
-
-## Arquivos alterados
+## Arquivo alterado
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/gupshup-proxy/index.ts` | Receber e passar `tenantId` ao `writeLog` |
-| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Enviar `tenant.id` no body |
-| `supabase/functions/gupshup-webhook/index.ts` | Incluir `tenant_id` nos inserts de `webhook_logs` |
+| `supabase/functions/gupshup-proxy/index.ts` | Trocar endpoint de `/wa/app/{appName}` para `/sm/api/v2/wallet/balance` |
 
