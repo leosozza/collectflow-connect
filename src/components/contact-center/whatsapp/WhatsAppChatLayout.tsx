@@ -341,7 +341,8 @@ const WhatsAppChatLayout = () => {
     if (!selectedConv || !tenantId) return;
     setSending(true);
     try {
-      const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${file.name}`;
+      const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-media")
         .upload(filePath, file);
