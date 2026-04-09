@@ -1,35 +1,40 @@
 
 
-# Melhorar validação do teste de conexão + preparar teste de envio real
+# Corrigir instância Gupshup não aparecendo na lista
 
-## Problema encontrado
+## Problema
 
-1. **Credencial errada salva no banco** — A API Key salva (`sk_1047c...`) é diferente da que funciona no curl (`sk_4d0b3...`). O Gupshup retorna "Invalid App Details" porque a chave não corresponde ao app "Maxfama2".
+A tabela `whatsapp_instances` tem colunas `instance_url` e `api_key` como `NOT NULL` sem valor default. O insert no `GupshupConfigDialog` (linha 101-108) não fornece esses campos, causando falha silenciosa — a instância nunca é criada.
 
-2. **Teste de conexão aceita falsos positivos** — Atualmente qualquer resposta ≠ 401/403 é considerada "sucesso", mas "Invalid App Details" com status 400 claramente indica problema.
+## Correção
 
-## Correções
+### 1. `src/components/integracao/GupshupConfigDialog.tsx`
 
-### 1. `supabase/functions/gupshup-proxy/index.ts`
-
-Após receber a resposta do Gupshup, verificar se o body contém `"status":"error"` com mensagem `"Invalid App Details"`. Se sim, retornar `success: false` com mensagem explicativa ("API Key não corresponde ao App Name informado").
+Adicionar `instance_url` e `api_key` no insert (linhas 101-108):
 
 ```typescript
-// Após parsear a resposta JSON:
-if (data?.status === "error" && data?.message === "Invalid App Details") {
-  // API Key válida mas não pertence ao app informado
-  await writeLog(tenantId, "error", `App Name "${appName}" não corresponde à API Key`, ...);
-  return Response({ success: false, error: "API Key válida, mas não corresponde ao App Name informado" });
-}
+await (supabase.from("whatsapp_instances") as any).insert({
+  tenant_id: tenant.id,
+  instance_name: instanceName,
+  phone_number: sourceNumber.replace(/\D/g, ""),
+  status: "connected",
+  provider: "gupshup",
+  provider_category: "official",
+  name: appName.trim(),
+  instance_url: "https://api.gupshup.io",
+  api_key: apiKey.trim(),
+});
 ```
 
-### 2. Ação do usuário (pré-requisito para teste de envio)
+Também adicionar tratamento de erro no insert/update para capturar falhas em vez de ignorá-las silenciosamente.
 
-Atualizar a API Key na interface de integração para a correta (`sk_4d0b33b6488d49d6ade15a3df3b0c99b`) e salvar.
+### 2. Verificar se já existe instância com dados corretos
+
+Após o fix, a instância "Maxfama2" será criada ao próximo "Salvar e ativar" e aparecerá no card da esquerda.
 
 ## Arquivo alterado
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/gupshup-proxy/index.ts` | Detectar "Invalid App Details" como erro |
+| `src/components/integracao/GupshupConfigDialog.tsx` | Adicionar `instance_url`, `api_key`, `provider_category` no insert; tratar erros do insert/update |
 
