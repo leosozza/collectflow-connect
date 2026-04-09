@@ -62,19 +62,22 @@ Deno.serve(async (req) => {
     let edgeLogs: any[] = [];
     let fnLogs: any[] = [];
 
-    try {
-      const edgeData = JSON.parse(edgeText);
-      edgeLogs = edgeData.result || edgeData || [];
-    } catch {
-      console.error("Failed to parse edge logs:", edgeText.substring(0, 500));
-    }
+    const toArray = (raw: string, label: string): any[] => {
+      try {
+        const parsed = JSON.parse(raw);
+        // Analytics API may return { result: [...] } or just [...]
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && Array.isArray(parsed.result)) return parsed.result;
+        console.error(`${label}: unexpected shape`, JSON.stringify(parsed).substring(0, 300));
+        return [];
+      } catch {
+        console.error(`${label}: failed to parse`, raw.substring(0, 300));
+        return [];
+      }
+    };
 
-    try {
-      const fnData = JSON.parse(fnText);
-      fnLogs = fnData.result || fnData || [];
-    } catch {
-      console.error("Failed to parse fn logs:", fnText.substring(0, 500));
-    }
+    edgeLogs = toArray(edgeText, "edgeLogs");
+    fnLogs = toArray(fnText, "fnLogs");
 
     // Combine and sort by timestamp desc
     const combined = [
