@@ -1,55 +1,52 @@
 
 
-# Análise da Integração Gupshup — Problemas Encontrados e Correções
+# Corrigir logs não aparecendo no dialog
 
-## Problemas identificados
+## Problema
 
-### 1. **Header da API Key está errado no `whatsapp-sender.ts`** (CRÍTICO)
+Os logs são gravados na tabela `webhook_logs` com `tenant_id = NULL`, mas a policy RLS exige que `tenant_id` corresponda ao tenant do usuário. Resultado: a query do frontend retorna zero registros.
 
-A documentação oficial exige o header `apikey` (minúsculo). No nosso `sendGupshupMsg` (linha 256) estamos enviando `"apiKey"` (camelCase). Embora a Gupshup possa aceitar ambos em alguns endpoints, o padrão da documentação é `apikey`.
+## Causa raiz
 
-**Correção**: Trocar `"apiKey": apiKey` → `"apikey": apiKey` no `sendGupshupMsg`.
+A edge function `gupshup-proxy` insere logs sem `tenant_id`. A policy RLS:
+```sql
+tenant_id IN (SELECT id FROM tenants WHERE id = webhook_logs.tenant_id)
+```
+Filtra todos os registros com `tenant_id IS NULL`.
 
-### 2. **Vídeo no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
+## Correções
 
-Segundo a documentação, o payload de vídeo aceita apenas `url` e `caption` (opcional). Nosso código envia `mimetype` que não faz parte da spec:
-```json
-// Docs: { "type": "video", "url": "...", "caption": "..." }
-// Nosso: { "type": "video", "url": "...", "caption": "...", "mimetype": "video/mp4" }
+### 1. `supabase/functions/gupshup-proxy/index.ts`
+
+Receber o `tenantId` no body da requisição e incluí-lo ao inserir na `webhook_logs`:
+```typescript
+const { apiKey, appName, tenantId } = await req.json();
+// ...
+await writeLog(eventType, message, payload, statusCode, tenantId);
 ```
 
-**Correção**: Remover `mimetype` do payload de vídeo.
+### 2. `src/components/integracao/WhatsAppIntegrationTab.tsx`
 
-### 3. **Áudio no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
+Passar o `tenant.id` na chamada ao `gupshup-proxy`:
+```typescript
+const { data, error } = await supabase.functions.invoke("gupshup-proxy", {
+  body: { apiKey: apiKey.trim(), appName: appName.trim(), tenantId: tenant?.id },
+});
+```
 
-A documentação mostra apenas `url` no payload de áudio. Nosso código adiciona `mimetype` que não é documentado.
+### 3. `supabase/functions/gupshup-webhook/index.ts`
 
-**Correção**: Remover `mimetype` do payload de áudio.
+Verificar se os logs do webhook também incluem `tenant_id` ao inserir na `webhook_logs`. Se não, adicionar o tenant_id quando disponível.
 
-### 4. **File no Gupshup não aceita `mimetype`** (ERRO DE PAYLOAD)
+### 4. Corrigir policy RLS (migração)
 
-A documentação mostra `url` e `filename` apenas. Nosso código envia `mimetype` extra.
+Atualizar a policy para também permitir leitura de logs com `tenant_id IS NULL` para usuários autenticados, OU garantir que todos os logs tenham tenant_id. A abordagem mais segura é garantir que todos os logs tenham tenant_id (opção das correções 1-3).
 
-**Correção**: Remover `mimetype` do payload de file (document).
-
-### 5. **`sendGupshupMsg` não trata resposta não-JSON** (RISCO)
-
-Na linha 262 do `whatsapp-sender.ts`, `await resp.json()` pode explodir se a Gupshup retornar HTML ou corpo vazio — o mesmo bug que já corrigimos no `gupshup-proxy`.
-
-**Correção**: Usar o padrão text-first + try/catch JSON.parse.
-
-### 6. **`gupshup-proxy` testa endpoint de wallet, não valida o `appName`**
-
-O proxy usa `/sm/api/v2/wallet/balance` que valida a API Key mas ignora o `appName`. Se o appName estiver errado, o teste passa mas o envio falha. Já tínhamos corrigido para `/wa/app/{appName}` no plano anterior, mas o código atual voltou ao endpoint de wallet.
-
-**Correção**: Usar `https://api.gupshup.io/wa/app/${encodeURIComponent(appName)}` para validar ambos.
-
-## Resumo das alterações
+## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/_shared/whatsapp-sender.ts` | (1) Header `apikey` minúsculo; (2) Remover `mimetype` dos payloads de vídeo, áudio e file; (3) Try/catch na resposta JSON |
-| `supabase/functions/gupshup-proxy/index.ts` | Trocar endpoint de teste para `/wa/app/{appName}` |
-
-Nenhuma mudança de banco de dados necessária.
+| `supabase/functions/gupshup-proxy/index.ts` | Receber e passar `tenantId` ao `writeLog` |
+| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Enviar `tenant.id` no body |
+| `supabase/functions/gupshup-webhook/index.ts` | Incluir `tenant_id` nos inserts de `webhook_logs` |
 
