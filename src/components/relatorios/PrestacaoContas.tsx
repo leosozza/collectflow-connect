@@ -115,7 +115,8 @@ const PrestacaoContas = ({ clients, agreements, credores }: PrestacaoContasProps
     const aprovados = credorAgreements.filter((a: any) => a.status === "approved").length;
     const pendentes = credorAgreements.filter((a: any) => a.status === "pending" || a.status === "pending_approval").length;
     const vencidos = credorAgreements.filter((a: any) => a.status === "overdue").length;
-    const pagos = credorAgreements.filter((a: any) => a.status === "completed").length;
+    // === PAGAMENTO REAL === Conta acordos que receberam qualquer pagamento real (completed OU com total_paid_real > 0)
+    const pagos = credorAgreements.filter((a: any) => a.status === "completed" || Number(a.total_paid_real || 0) > 0).length;
     const cancelados = credorAgreements.filter((a: any) => a.status === "cancelled").length;
     const valorOriginal = credorAgreements.reduce((s: number, a: any) => s + Number(a.original_total), 0);
     const valorNegociado = credorAgreements.filter((a: any) => a.status !== "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
