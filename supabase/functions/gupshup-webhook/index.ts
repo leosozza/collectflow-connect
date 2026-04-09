@@ -133,6 +133,7 @@ Deno.serve(async (req) => {
         } else {
           console.warn("Could not resolve tenant for destination:", destination);
           await writeLog(null, "warning", `Tenant não encontrado para destino: ${destination}`, { phone, destination }, 404);
+        }
       }
     }
 
