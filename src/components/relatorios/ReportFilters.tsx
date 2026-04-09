@@ -3,7 +3,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTenant } from "@/hooks/useTenant";
-import { fetchTiposDevedor, fetchTiposDivida } from "@/services/cadastrosService";
+import { fetchTiposDivida } from "@/services/cadastrosService";
+
+const FIXED_DEBTOR_PROFILES = [
+  { key: "ocasional", label: "Ocasional" },
+  { key: "recorrente", label: "Recorrente" },
+  { key: "resistente", label: "Resistente" },
+  { key: "insatisfeito", label: "Insatisfeito" },
+];
 
 interface ReportFiltersProps {
   selectedYear: string;
@@ -55,12 +62,6 @@ const ReportFilters = ({
 }: ReportFiltersProps) => {
   const { tenant } = useTenant();
   const yearOptions = generateYearOptions();
-
-  const { data: tiposDevedor = [] } = useQuery({
-    queryKey: ["tipos_devedor", tenant?.id],
-    queryFn: () => fetchTiposDevedor(tenant!.id),
-    enabled: !!tenant?.id,
-  });
 
   const { data: tiposDivida = [] } = useQuery({
     queryKey: ["tipos_divida", tenant?.id],
@@ -153,8 +154,8 @@ const ReportFilters = ({
             <SelectTrigger className="w-[140px] h-9 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
-              {tiposDevedor.map((t: any) => (
-                <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+              {FIXED_DEBTOR_PROFILES.map((p) => (
+                <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
