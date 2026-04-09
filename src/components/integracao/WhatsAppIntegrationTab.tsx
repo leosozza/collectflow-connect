@@ -302,6 +302,18 @@ const WhatsAppIntegrationTab = () => {
                         {formatLogTimestamp(log.timestamp)}
                       </span>
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Copiar log"
+                          onClick={async () => {
+                            const text = `[${formatLogTimestamp(log.timestamp)}] [${log.level || log.type}] ${log.status_code ? `(${log.status_code}) ` : ""}${log.message}`;
+                            await navigator.clipboard.writeText(text);
+                            toast({ title: "Log copiado!" });
+                          }}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
                         {log.type === "http" && log.status_code && (
                           <Badge variant={log.status_code < 400 ? "secondary" : "destructive"} className="text-[10px] px-1.5 py-0">
                             {log.method} {log.status_code}
