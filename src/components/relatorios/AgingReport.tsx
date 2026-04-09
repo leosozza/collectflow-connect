@@ -11,11 +11,13 @@ interface AgingReportProps {
   clients: Client[];
 }
 
+// === MÉTRICA DE CARTEIRA === Faixas de aging por parcela/título original
 const BUCKETS = [
   { label: "0-30 dias", min: 0, max: 30 },
-  { label: "31-60 dias", min: 31, max: 60 },
-  { label: "61-90 dias", min: 61, max: 90 },
-  { label: "90+ dias", min: 91, max: Infinity },
+  { label: "31-90 dias", min: 31, max: 90 },
+  { label: "91-180 dias", min: 91, max: 180 },
+  { label: "181-365 dias", min: 181, max: 365 },
+  { label: "366+ dias", min: 366, max: Infinity },
 ];
 
 const AgingReport = ({ clients }: AgingReportProps) => {
@@ -26,8 +28,16 @@ const AgingReport = ({ clients }: AgingReportProps) => {
       (c) => c.status === "pendente" && parseISO(c.data_vencimento) < today
     );
 
+    const paid = clients.filter((c) => c.status === "pago");
+
     return BUCKETS.map((bucket) => {
+      // Parcelas vencidas nesta faixa
       const items = overdue.filter((c) => {
+        const days = differenceInDays(today, parseISO(c.data_vencimento));
+        return days >= bucket.min && days <= bucket.max;
+      });
+      // Parcelas pagas cujo vencimento cai nesta faixa (recebido por aging)
+      const paidItems = paid.filter((c) => {
         const days = differenceInDays(today, parseISO(c.data_vencimento));
         return days >= bucket.min && days <= bucket.max;
       });
@@ -35,21 +45,24 @@ const AgingReport = ({ clients }: AgingReportProps) => {
         ...bucket,
         count: items.length,
         total: items.reduce((s, c) => s + Number(c.valor_parcela), 0),
+        received: paidItems.reduce((s, c) => s + Number(c.valor_pago), 0),
       };
     });
   }, [clients]);
 
   const totalOverdue = agingData.reduce((s, b) => s + b.total, 0);
   const totalCount = agingData.reduce((s, b) => s + b.count, 0);
+  const totalReceived = agingData.reduce((s, b) => s + b.received, 0);
 
   const handleExcel = () => {
     const rows = agingData.map((r) => ({
       Faixa: r.label,
       Quantidade: r.count,
       "Valor Total": r.total,
+      Recebido: r.received,
       "% do Total": totalOverdue > 0 ? ((r.total / totalOverdue) * 100).toFixed(1) + "%" : "0%",
     }));
-    rows.push({ Faixa: "Total", Quantidade: totalCount, "Valor Total": totalOverdue, "% do Total": "100%" });
+    rows.push({ Faixa: "Total", Quantidade: totalCount, "Valor Total": totalOverdue, Recebido: totalReceived, "% do Total": "100%" });
     exportToExcel(rows, "Aging", "aging_carteira");
   };
 
@@ -72,6 +85,7 @@ const AgingReport = ({ clients }: AgingReportProps) => {
             <TableHead className="text-xs">Faixa</TableHead>
             <TableHead className="text-xs text-center">Quantidade</TableHead>
             <TableHead className="text-xs text-right">Valor Total</TableHead>
+            <TableHead className="text-xs text-right">Recebido</TableHead>
             <TableHead className="text-xs text-right">% do Total</TableHead>
           </TableRow>
         </TableHeader>
@@ -81,6 +95,7 @@ const AgingReport = ({ clients }: AgingReportProps) => {
               <TableCell className="text-sm font-medium">{row.label}</TableCell>
               <TableCell className="text-sm text-center">{row.count}</TableCell>
               <TableCell className="text-sm text-right">{formatCurrency(row.total)}</TableCell>
+              <TableCell className="text-sm text-right text-success">{formatCurrency(row.received)}</TableCell>
               <TableCell className="text-sm text-right">
                 {totalOverdue > 0 ? ((row.total / totalOverdue) * 100).toFixed(1) : "0"}%
               </TableCell>
@@ -90,6 +105,7 @@ const AgingReport = ({ clients }: AgingReportProps) => {
             <TableCell className="text-sm">Total</TableCell>
             <TableCell className="text-sm text-center">{totalCount}</TableCell>
             <TableCell className="text-sm text-right">{formatCurrency(totalOverdue)}</TableCell>
+            <TableCell className="text-sm text-right text-success">{formatCurrency(totalReceived)}</TableCell>
             <TableCell className="text-sm text-right">100%</TableCell>
           </TableRow>
         </TableBody>
