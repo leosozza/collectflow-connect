@@ -15,9 +15,27 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  const writeLog = async (tenantId: string | null, eventType: string, message: string, payload?: any, statusCode?: number) => {
+    try {
+      await (supabase.from("webhook_logs") as any).insert({
+        tenant_id: tenantId,
+        function_name: "gupshup-webhook",
+        event_type: eventType,
+        message,
+        payload: payload ? JSON.parse(JSON.stringify(payload)) : null,
+        status_code: statusCode,
+      });
+    } catch (e: any) {
+      console.error("Failed to write webhook log:", e.message);
+    }
+  };
+
   try {
     const payload = await req.json();
     console.log("Gupshup webhook payload (full):", JSON.stringify(payload));
+    
+    // Log the incoming webhook
+    await writeLog(null, "inbound", `Webhook recebido: type=${payload.type || payload.eventType}`, payload, 200);
 
     const eventType = payload.type || payload.eventType || (payload.payload?.type === "text" ? "message" : null);
 
@@ -107,12 +125,14 @@ Deno.serve(async (req) => {
 
           if (rpcErr) {
             console.error("Ingest error:", rpcErr);
+            await writeLog(targetTenantId, "error", `Erro ao ingerir mensagem: ${rpcErr.message}`, { phone, externalId }, 500);
           } else {
             console.log("Gupshup inbound ingested:", JSON.stringify(result));
+            await writeLog(targetTenantId, "success", `Mensagem ingerida: from=${phone}, type=${msgType}`, result, 200);
           }
         } else {
           console.warn("Could not resolve tenant for destination:", destination);
-        }
+          await writeLog(null, "warning", `Tenant não encontrado para destino: ${destination}`, { phone, destination }, 404);
       }
     }
 
