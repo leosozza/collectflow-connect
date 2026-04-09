@@ -6069,6 +6069,30 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      get_agreement_financials: {
+        Args: { _tenant_id: string }
+        Returns: {
+          agreement_id: string
+          client_cpf: string
+          client_name: string
+          created_at: string
+          created_by: string
+          credor: string
+          entrada_value: number
+          first_due_date: string
+          first_payment_date: string
+          last_payment_date: string
+          original_total: number
+          paid_via_manual: number
+          paid_via_negociarie: number
+          payment_count: number
+          pending_balance_real: number
+          proposed_total: number
+          status: string
+          tenant_id: string
+          total_paid_real: number
+        }[]
+      }
       get_analytics_payments: {
         Args: { _tenant_id: string }
         Returns: {

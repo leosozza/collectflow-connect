@@ -19,8 +19,10 @@ import {
 } from "recharts";
 import * as XLSX from "xlsx";
 
-interface AgreementRow {
-  id: string;
+// === MÉTRICA DE ACORDO === (dados de agreements — negociação formalizada)
+// === PAGAMENTO REAL CONSOLIDADO === (manual_payments + negociarie_cobrancas por agreement_id)
+interface AgreementFinancialRow {
+  agreement_id: string;
   client_cpf: string;
   client_name: string;
   credor: string;
@@ -30,9 +32,14 @@ interface AgreementRow {
   created_at: string;
   created_by: string;
   first_due_date: string;
-  new_installments: number;
-  new_installment_value: number;
-  entrada_value: number | null;
+  entrada_value: number;
+  total_paid_real: number;
+  pending_balance_real: number;
+  payment_count: number;
+  first_payment_date: string | null;
+  last_payment_date: string | null;
+  paid_via_manual: number;
+  paid_via_negociarie: number;
 }
 
 interface Profile {
@@ -98,44 +105,38 @@ const AnalyticsPage = () => {
 
   const isOperator = profile?.role !== "admin";
 
-  // Fetch agreements with real payment data via RPC
+  // === PAGAMENTO REAL CONSOLIDADO === via RPC get_agreement_financials
   const { data: allAgreements = [] } = useQuery({
-    queryKey: ["analytics-agreements-payments", tenant?.id, isOperator ? profile?.id : "all"],
+    queryKey: ["analytics-agreement-financials", tenant?.id, isOperator ? profile?.id : "all"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_analytics_payments", {
+      const { data, error } = await supabase.rpc("get_agreement_financials", {
         _tenant_id: tenant!.id,
       });
       if (error) throw error;
-      let results = (data || []) as Array<{
-        agreement_id: string;
-        created_by: string;
-        credor: string;
-        created_at: string;
-        proposed_total: number;
-        original_total: number;
-        status: string;
-        total_pago: number;
-      }>;
+      let results = (data || []) as any[];
       if (isOperator && profile?.id) {
         results = results.filter((r) => r.created_by === profile.id);
       }
-      // Map to AgreementRow-compatible shape
-      return results.map((r) => ({
-        id: r.agreement_id,
-        client_cpf: "",
-        client_name: "",
+      return results.map((r: any) => ({
+        agreement_id: r.agreement_id,
+        client_cpf: r.client_cpf || "",
+        client_name: r.client_name || "",
         credor: r.credor,
         proposed_total: Number(r.proposed_total),
         original_total: Number(r.original_total),
         status: r.status,
         created_at: r.created_at,
         created_by: r.created_by,
-        first_due_date: r.created_at,
-        new_installments: 0,
-        new_installment_value: 0,
-        entrada_value: null,
-        total_pago: Number(r.total_pago),
-      })) as (AgreementRow & { total_pago: number })[];
+        first_due_date: r.first_due_date,
+        entrada_value: Number(r.entrada_value || 0),
+        total_paid_real: Number(r.total_paid_real || 0),
+        pending_balance_real: Number(r.pending_balance_real || 0),
+        payment_count: Number(r.payment_count || 0),
+        first_payment_date: r.first_payment_date,
+        last_payment_date: r.last_payment_date,
+        paid_via_manual: Number(r.paid_via_manual || 0),
+        paid_via_negociarie: Number(r.paid_via_negociarie || 0),
+      })) as AgreementFinancialRow[];
     },
     enabled: !!tenant?.id,
   });
@@ -151,7 +152,7 @@ const AnalyticsPage = () => {
       if (tenant?.id) query = query.eq("tenant_id", tenant.id);
       if (isOperator && profile?.id) query = query.eq("created_by", profile.id);
       const data = await fetchAllRows(query);
-      return data as AgreementRow[];
+      return data as any[];
     },
     enabled: !!tenant?.id,
   });
@@ -200,11 +201,11 @@ const AnalyticsPage = () => {
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
 
-  // Total Recebido: soma real dos pagamentos vinculados a acordos
-  const totalRecebido = activeAgreements.reduce((s, a) => s + Number((a as any).total_pago || 0), 0);
+  // === PAGAMENTO REAL CONSOLIDADO === soma de manual_payments + negociarie_cobrancas
+  const totalRecebido = activeAgreements.reduce((s, a) => s + a.total_paid_real, 0);
 
-  // Acordos com pagamento > 0
-  const acordosComPagamento = activeAgreements.filter((a) => Number((a as any).total_pago || 0) > 0);
+  // Acordos com pagamento real > 0
+  const acordosComPagamento = activeAgreements.filter((a) => a.total_paid_real > 0);
 
   // Total Pendente: soma do saldo devedor de toda a carteira (clients)
   const { data: totalCarteiraPendente = 0 } = useQuery({
@@ -256,8 +257,10 @@ const AnalyticsPage = () => {
       });
       return {
         name: label,
+        // Negociado por mês de created_at do acordo
         negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
-        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number((a as any).total_pago || 0), 0),
+        // Recebido: pagamento real consolidado (limitação: agrupado por created_at do acordo, não do pagamento)
+        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + a.total_paid_real, 0),
         quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
       };
     });

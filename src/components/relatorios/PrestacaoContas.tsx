@@ -76,12 +76,14 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
     [agreements, selectedCredor]
   );
 
-  // Summary based on agreements
+  // === PAGAMENTO REAL CONSOLIDADO === Resumo por acordo com dados reais
   const summary = useMemo(() => {
     const activeAgreements = credorAgreements.filter((a: any) => a.status !== "cancelled");
     const valorNegociado = activeAgreements.reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-    const recebido = credorAgreements.filter((a: any) => a.status === "completed").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
-    const pendente = credorAgreements.filter((a: any) => ["pending", "pending_approval", "approved", "overdue"].includes(a.status)).reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
+    // Recebido = soma real de pagamentos consolidados (não proposed_total de completed)
+    const recebido = activeAgreements.reduce((s: number, a: any) => s + Number(a.total_paid_real || 0), 0);
+    // Pendente = soma de pending_balance_real (saldo devedor real)
+    const pendente = activeAgreements.reduce((s: number, a: any) => s + Number(a.pending_balance_real || 0), 0);
     const quebra = credorAgreements.filter((a: any) => a.status === "cancelled").reduce((s: number, a: any) => s + Number(a.proposed_total), 0);
     const taxa = (recebido + quebra) > 0 ? (recebido / (recebido + quebra)) * 100 : 0;
     return { total: credorAgreements.length, valorNegociado, recebido, pendente, quebra, taxa };
@@ -113,6 +115,7 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
   }, [credorAgreements]);
 
   // Operator ranking based on agreements
+  // === PAGAMENTO REAL CONSOLIDADO === Ranking por total_paid_real (não proposed_total)
   const opRanking = useMemo(() => {
     const map = new Map<string, { received: number; broken: number; count: number }>();
     credorAgreements.forEach((a: any) => {
@@ -120,7 +123,8 @@ const PrestacaoContas = ({ clients, agreements, operators, credores }: Prestacao
       if (!map.has(opId)) map.set(opId, { received: 0, broken: 0, count: 0 });
       const e = map.get(opId)!;
       e.count++;
-      if (a.status === "completed") e.received += Number(a.proposed_total);
+      // Recebido = soma de pagamentos reais por operador
+      if (a.status !== "cancelled") e.received += Number(a.total_paid_real || 0);
       if (a.status === "cancelled") e.broken += Number(a.proposed_total);
     });
     return Array.from(map.entries())
