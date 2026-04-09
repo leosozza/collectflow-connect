@@ -184,7 +184,7 @@ const WhatsAppIntegrationTab = () => {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <MessageSquare className="w-5 h-5" />
-                Oficial (Gupshup)
+                WhatsApp Oficial
               </CardTitle>
               <div className="flex items-center gap-2">
                 {isGupshupConfigured && <Badge variant="secondary" className="text-green-700 bg-green-100">Configurado</Badge>}
