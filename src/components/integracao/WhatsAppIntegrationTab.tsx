@@ -51,7 +51,10 @@ const WhatsAppIntegrationTab = () => {
         body: { apiKey: apiKey.trim(), appName: appName.trim() },
       });
 
-      if (error || !data?.success) {
+      if (error) {
+        throw new Error(error.message || "Erro ao chamar gupshup-proxy");
+      }
+      if (!data?.success) {
         throw new Error(data?.error || "Falha na conexão com Gupshup");
       }
 

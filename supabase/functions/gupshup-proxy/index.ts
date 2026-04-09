@@ -27,8 +27,21 @@ Deno.serve(async (req) => {
       },
     });
 
-    const data = await response.json();
-    console.log("Gupshup proxy test response:", data);
+    const text = await response.text();
+    console.log("Gupshup proxy raw response:", text.substring(0, 500));
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Gupshup retornou resposta inválida (status ${response.status}): ${text.substring(0, 200)}`,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (response.status !== 200) {
       return new Response(JSON.stringify({ 
