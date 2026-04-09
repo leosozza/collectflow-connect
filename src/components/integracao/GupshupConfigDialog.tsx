@@ -88,24 +88,32 @@ const GupshupConfigDialog = ({ open, onOpenChange, onFetchLogs }: GupshupConfigD
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updErr } = await supabase
           .from("whatsapp_instances")
           .update({
             phone_number: sourceNumber.replace(/\D/g, ""),
             status: "connected",
             provider: "gupshup",
+            name: appName.trim(),
+            instance_url: "https://api.gupshup.io",
+            api_key: apiKey.trim(),
             updated_at: new Date().toISOString(),
-          })
+          } as any)
           .eq("id", existing.id);
+        if (updErr) throw updErr;
       } else {
-        await (supabase.from("whatsapp_instances") as any).insert({
+        const { error: insErr } = await (supabase.from("whatsapp_instances") as any).insert({
           tenant_id: tenant.id,
           instance_name: instanceName,
           phone_number: sourceNumber.replace(/\D/g, ""),
           status: "connected",
           provider: "gupshup",
+          provider_category: "official",
           name: appName.trim(),
+          instance_url: "https://api.gupshup.io",
+          api_key: apiKey.trim(),
         });
+        if (insErr) throw insErr;
       }
 
       await refetch();
