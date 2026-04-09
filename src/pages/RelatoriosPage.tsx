@@ -206,7 +206,6 @@ const RelatoriosPage = () => {
           <PrestacaoContas
             clients={clients}
             agreements={agreements}
-            operators={profiles}
             credores={credores}
           />
         </TabsContent>
