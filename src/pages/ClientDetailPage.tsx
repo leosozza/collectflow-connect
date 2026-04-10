@@ -257,10 +257,10 @@ const ClientDetailPage = () => {
                     <TableRow className="bg-muted/50">
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
+                      <TableHead>Devolução</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
-                      <TableHead>Devolução</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -287,10 +287,10 @@ const ClientDetailPage = () => {
                         <TableRow key={c.id}>
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
+                          <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>
-                          <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className={statusClass}>
                               {statusLabel}
