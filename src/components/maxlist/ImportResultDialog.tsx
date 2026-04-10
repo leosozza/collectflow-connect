@@ -266,6 +266,29 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
               </AccordionContent>
             </AccordionItem>
           )}
+
+          {/* Processing Logs */}
+          {report.processingLogs && report.processingLogs.length > 0 && (
+            <AccordionItem value="logs">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Logs de Processamento ({report.processingLogs.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-[300px]">
+                  <div className="space-y-1 font-mono text-xs p-2 bg-muted rounded">
+                    {report.processingLogs.map((log, i) => (
+                      <div key={i} className={`whitespace-pre-wrap break-all ${log.startsWith("[ERROR]") || log.startsWith("[EXCEPTION]") ? "text-destructive" : log.startsWith("[UPDATE]") ? "text-blue-600" : log.startsWith("[INSERT]") ? "text-emerald-600" : "text-muted-foreground"}`}>
+                        {log}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
         </Accordion>
 
         <DialogFooter className="gap-2">
