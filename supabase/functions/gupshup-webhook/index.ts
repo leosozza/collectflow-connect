@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { downloadAndUploadMedia } from "../_shared/media-persistence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,59 +30,6 @@ Deno.serve(async (req) => {
       console.error("Failed to write webhook log:", e.message);
     }
   };
-
-  // ========== MEDIA PERSISTENCE ==========
-  async function downloadAndUploadMedia(
-    mediaUrl: string,
-    tenantId: string,
-    conversationId: string,
-    mediaType: string,
-  ): Promise<{ storedUrl: string; mimeType: string } | null> {
-    if (!mediaUrl) return null;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
-      const resp = await fetch(mediaUrl, { signal: controller.signal });
-      clearTimeout(timeout);
-
-      if (!resp.ok) {
-        console.error(`Media download failed: ${resp.status} from ${mediaUrl}`);
-        return null;
-      }
-
-      const contentType = resp.headers.get("content-type") || "application/octet-stream";
-      const blob = await resp.blob();
-      const ext = getExtFromMime(contentType, mediaType);
-      const fileName = `${tenantId}/${conversationId}/${crypto.randomUUID()}${ext}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from("chat-media")
-        .upload(fileName, blob, { contentType, upsert: false });
-
-      if (uploadErr) {
-        console.error("Storage upload error:", uploadErr.message);
-        return null;
-      }
-
-      const { data: publicData } = supabase.storage.from("chat-media").getPublicUrl(fileName);
-      return { storedUrl: publicData.publicUrl, mimeType: contentType };
-    } catch (e: any) {
-      console.error("downloadAndUploadMedia error:", e.message);
-      return null;
-    }
-  }
-
-  function getExtFromMime(mime: string, fallbackType: string): string {
-    const map: Record<string, string> = {
-      "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-      "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a",
-      "video/mp4": ".mp4", "application/pdf": ".pdf",
-    };
-    if (map[mime]) return map[mime];
-    const typeMap: Record<string, string> = { image: ".jpg", audio: ".ogg", video: ".mp4", document: ".bin" };
-    return typeMap[fallbackType] || ".bin";
-  }
 
   // ========== MEDIA URL CASCADE (ThothAI pattern) ==========
   function extractMediaUrl(msgPayload: any): string {
@@ -156,26 +104,26 @@ Deno.serve(async (req) => {
         if (targetTenantId) {
           const canonicalType = ["text", "image", "audio", "video", "document"].includes(msgType) ? msgType : "text";
 
-          // Persist media if present
+          // Persist media if present — using shared module
           let finalMediaUrl = mediaUrl;
           let finalMimeType: string | null = null;
 
           if (mediaUrl && canonicalType !== "text") {
-            // We need a conversation_id for storage path — use a temp placeholder, will be resolved after ingest
-            const mediaResult = await downloadAndUploadMedia(mediaUrl, targetTenantId, "pending", canonicalType);
+            const mediaResult = await downloadAndUploadMedia(supabase, mediaUrl, targetTenantId, "pending", canonicalType);
             if (mediaResult) {
               finalMediaUrl = mediaResult.storedUrl;
               finalMimeType = mediaResult.mimeType;
+              console.log(`[gupshup-webhook] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
+            } else {
+              console.warn("[gupshup-webhook] Media persistence failed, using raw URL as fallback");
             }
           }
 
           // Build metadata for simulated buttons
           let metadata: Record<string, any> = {};
 
-          // Check for simulated button response (numeric replies like "1", "2", "3")
           if (canonicalType === "text" && /^\d{1,2}$/.test(content.trim())) {
             try {
-              // Find the last outbound message with buttons metadata in this phone's conversations
               const { data: recentOutbound } = await supabase
                 .from("chat_messages")
                 .select("metadata, conversation_id")
@@ -237,6 +185,26 @@ Deno.serve(async (req) => {
                 .from("chat_messages")
                 .update({ metadata })
                 .eq("id", result.message_id);
+            }
+
+            // ===== Trigger async transcription for inbound audio =====
+            if (canonicalType === "audio" && finalMediaUrl && result?.message_id) {
+              try {
+                console.log(`[gupshup-webhook] Triggering transcription for message ${result.message_id}`);
+                fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${serviceRoleKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    messageId: result.message_id,
+                    audioUrl: finalMediaUrl,
+                  }),
+                }).catch((e) => console.error("[gupshup-webhook] Transcription trigger failed:", e.message));
+              } catch (e: any) {
+                console.error("[gupshup-webhook] Transcription trigger error:", e.message);
+              }
             }
           }
         } else {

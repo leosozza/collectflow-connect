@@ -1,7 +1,6 @@
 /**
- * Motor único de envio WhatsApp — Fase 1 + Fase 6 (mídia)
- * Suporta: Evolution/Baylers, Gupshup, WuzAPI
- * Extraído de send-bulk-whatsapp para reutilização em campanhas, workflows e chat manual.
+ * Motor único de envio WhatsApp — suporta Evolution/Baylers, Gupshup, WuzAPI
+ * Separação explícita por provider para texto e mídia.
  */
 
 function normalizePhoneBR(phone: string): string {
@@ -111,6 +110,11 @@ async function sendEvolutionText(
 
 // ========== MEDIA SENDERS ==========
 
+/**
+ * WuzAPI media sender — fields are PascalCase.
+ * Audio does NOT support Caption in WhatsApp.
+ * Mimetype is sent for all types.
+ */
 async function sendWuzapiMedia(
   inst: any, phone: string, media: MediaPayload,
   wuzapiUrl: string, wuzapiAdminToken: string,
@@ -121,35 +125,33 @@ async function sendWuzapiMedia(
     return { ok: false, result: { error: "WuzAPI URL ou token não configurado" }, providerMessageId: null, provider: "wuzapi" };
   }
 
-  // WuzAPI uses /chat/send/image, /chat/send/document, /chat/send/audio, /chat/send/video
-  // For URL-based media, use the respective endpoints
-  const typeMap: Record<string, string> = {
-    image: "image",
-    video: "video",
-    audio: "audio",
-    document: "document",
-  };
-  const endpoint = typeMap[media.mediaType] || "document";
-  
+  const endpoint = media.mediaType === "image" ? "image"
+    : media.mediaType === "video" ? "video"
+    : media.mediaType === "audio" ? "audio"
+    : "document";
+
   const payload: any = {
     phone: `${phone}@s.whatsapp.net`,
   };
 
-  // WuzAPI expects base64 for image but can also accept URLs via document endpoint
-  // For simplicity, we send the URL as a document if it's not image
   if (endpoint === "image") {
+    payload.Image = media.mediaUrl;
     payload.Caption = media.caption || "";
-    payload.Image = media.mediaUrl; // WuzAPI also supports URLs
-  } else if (endpoint === "document") {
-    payload.Caption = media.caption || media.fileName || "";
+    payload.Mimetype = media.mimeType || "image/jpeg";
+  } else if (endpoint === "video") {
+    payload.Video = media.mediaUrl;
+    payload.Caption = media.caption || "";
+    payload.Mimetype = media.mimeType || "video/mp4";
+  } else if (endpoint === "audio") {
+    // WhatsApp does NOT support caption on audio
+    payload.Audio = media.mediaUrl;
+    payload.Mimetype = media.mimeType || "audio/ogg";
+  } else {
+    // document
     payload.Document = media.mediaUrl;
+    payload.Caption = media.caption || media.fileName || "";
     payload.FileName = media.fileName || "file";
     payload.Mimetype = media.mimeType || "application/octet-stream";
-  } else if (endpoint === "audio") {
-    payload.Audio = media.mediaUrl;
-  } else if (endpoint === "video") {
-    payload.Caption = media.caption || "";
-    payload.Video = media.mediaUrl;
   }
 
   const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/${endpoint}`, {
@@ -161,6 +163,11 @@ async function sendWuzapiMedia(
   return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
 }
 
+/**
+ * Gupshup media sender — official API.
+ * Uses different payload shapes per media type.
+ * Audio does NOT support caption.
+ */
 async function sendGupshupMedia(
   phone: string, media: MediaPayload, tenantSettings: Record<string, any>,
 ): Promise<SendResult> {
@@ -172,9 +179,7 @@ async function sendGupshupMedia(
   };
   const gupType = typeMap[media.mediaType] || "file";
 
-  const msgPayload: any = {
-    type: gupType,
-  };
+  const msgPayload: any = { type: gupType };
 
   if (gupType === "image") {
     msgPayload.originalUrl = media.mediaUrl;
@@ -184,8 +189,10 @@ async function sendGupshupMedia(
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
   } else if (gupType === "audio") {
+    // No caption for audio
     msgPayload.url = media.mediaUrl;
   } else {
+    // file/document
     msgPayload.url = media.mediaUrl;
     msgPayload.filename = media.fileName || "file";
   }
@@ -193,6 +200,11 @@ async function sendGupshupMedia(
   return sendGupshupMsg(phone, JSON.stringify(msgPayload), tenantSettings);
 }
 
+/**
+ * Evolution/Baylers media sender — non-official API.
+ * Uses sendMedia endpoint with mediatype field.
+ * Audio does NOT support caption. Document supports mimetype field.
+ */
 async function sendEvolutionMedia(
   inst: any, phone: string, media: MediaPayload,
   fallbackUrl: string, fallbackKey: string,
@@ -208,11 +220,20 @@ async function sendEvolutionMedia(
     number: phone,
     mediatype: media.mediaType,
     media: media.mediaUrl,
-    caption: media.caption || "",
   };
+
+  // WhatsApp does NOT support caption on audio
+  if (media.mediaType !== "audio") {
+    payload.caption = media.caption || "";
+  }
 
   if (media.fileName) {
     payload.fileName = media.fileName;
+  }
+
+  // Evolution accepts mimetype for document
+  if (media.mimeType && (media.mediaType === "document" || media.mediaType === "audio")) {
+    payload.mimetype = media.mimeType;
   }
 
   const resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
@@ -271,4 +292,3 @@ async function sendGupshupMsg(
 
   return { ok: resp.ok, result, providerMessageId: result?.messageId || null, provider: "gupshup" };
 }
-
