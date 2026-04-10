@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export interface RejectedRecord {
   nome?: string;
