@@ -1,54 +1,46 @@
 
 
-# Atualizar `status_cobranca_id` na reconciliação de cheque devolvido
+# Adicionar campo `data_devolucao` e garantir reconciliação completa
 
-## Problema
-A Edge Function `maxlist-import` define `status: "vencido"` para cheques devolvidos, mas não atualiza o `status_cobranca_id`. Como esse campo está em `PROTECTED_FIELDS`, ele nunca é sincronizado, e a interface continua mostrando "Quitado".
+## Resumo
 
-## Alterações em `supabase/functions/maxlist-import/index.ts`
+Adicionar a coluna `data_devolucao` na tabela `clients`, capturar o campo `CheckReturnDateQuery` da API MaxList, e usar a presença dessa data como regra definitiva para forçar status "vencido" + `status_cobranca_id` correto.
 
-### 1. Buscar ID do status "Vencido" no início (após linha ~87)
-```typescript
-const { data: statusVencido } = await supabase
-  .from("tipos_status")
-  .select("id")
-  .eq("tenant_id", tenant_id)
-  .ilike("nome", "vencido")
-  .maybeSingle();
-const vencidoStatusId = statusVencido?.id || null;
+## Alterações
+
+### 1. Migration SQL
+Adicionar coluna `data_devolucao` (tipo DATE, nullable) na tabela `clients`:
+```sql
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS data_devolucao date;
+CREATE INDEX IF NOT EXISTS idx_clients_data_devolucao ON public.clients(tenant_id, data_devolucao) WHERE data_devolucao IS NOT NULL;
 ```
 
-### 2. No mapeamento (~linha 274), quando `derivedStatus === "vencido"`, definir o `status_cobranca_id`
-Substituir a linha 274 por lógica condicional:
-```typescript
-status_cobranca_id: derivedStatus === "vencido" && vencidoStatusId
-  ? vencidoStatusId
-  : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
+### 2. Edge Function `maxlist-import/index.ts`
+
+- **SYNC_FIELDS**: adicionar `"data_devolucao"` à lista (linha 38)
+- **Mapeamento** (após linha 282): adicionar ao objeto `mapped`:
+  ```typescript
+  data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
+  ```
+- **Regra de status** (linhas 243-253): simplificar — se `rawReturnDate` existir (independente do tipo de pagamento cheque), forçar `derivedStatus = "vencido"`. Manter a lógica de cheque como está se preferir manter restrita a tipos 2/6.
+- **SELECT no update mode** (linha 334): adicionar `data_devolucao` à query de registros existentes
+- **PROTECTED_FIELDS exceção** (linhas 432-437): adicionar exceção análoga para `data_devolucao` quando status é "vencido" (ou simplesmente não incluir `data_devolucao` em PROTECTED_FIELDS — ele já não está lá, então basta estar em SYNC_FIELDS)
+
+### 3. Interface — `ClientDetailHeader.tsx`
+
+Na seção "Datas" (linha 468-471), adicionar:
+```tsx
+<InfoItem 
+  label="Data Devolução" 
+  value={client.data_devolucao ? formatDate(client.data_devolucao) : null} 
+/>
 ```
 
-### 3. Adicionar `status_cobranca_id` ao `SYNC_FIELDS` (linha 37-41)
-Para que a comparação de campos o detecte durante reconciliação.
-
-### 4. Criar exceção em `PROTECTED_FIELDS` (linhas 419-423)
-No bloco que monta o `updatePayload`, permitir `status_cobranca_id` quando o status derivado é "vencido":
-```typescript
-for (const field of Object.keys(changes)) {
-  if (PROTECTED_FIELDS.has(field)) {
-    // Exceção: permitir status_cobranca_id quando status é vencido
-    if (field === "status_cobranca_id" && rec.status === "vencido") {
-      updatePayload[field] = rec[field];
-    }
-    continue;
-  }
-  updatePayload[field] = rec[field];
-}
-```
-
-### 5. Incluir `status_cobranca_id` no SELECT do update mode (linhas 322-323)
-Adicionar o campo na query de registros existentes para permitir comparação.
-
-### 6. Deploy da Edge Function
+### 4. Deploy da Edge Function
 
 ## Resultado
-Parcelas de cheque devolvido terão tanto `status = "vencido"` quanto `status_cobranca_id` apontando para o registro correto em `tipos_status`, fazendo a interface refletir o status real.
+
+- `data_devolucao` será preenchido automaticamente na importação/reconciliação
+- Cheques devolvidos terão `status = "vencido"`, `status_cobranca_id` correto, e `data_devolucao` visível
+- Parcelas sem devolução continuam com a lógica normal (pago/pendente)
 
