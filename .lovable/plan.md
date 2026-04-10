@@ -1,53 +1,46 @@
 
 
-# Corrigir reconciliação de cheque devolvido — status_cobranca_id nunca atualizado
+# Diagnóstico: Por que a atualização não funciona
 
-## Diagnóstico
+## Problemas encontrados
 
-Investigação completa revelou:
+### 1. CRÍTICO — Coluna `meio_pagamento_id` não existe
+A Edge Function inclui o campo `meio_pagamento_id` no payload de INSERT/UPDATE, mas **essa coluna não existe na tabela `clients`**. Isso causa o erro:
+```
+Could not find the 'meio_pagamento_id' column of 'clients' in the schema cache
+```
+**Consequência: TODAS as operações de escrita falham.** Por isso o resultado mostra "0 inseridos, 0 atualizados" — os dados são processados corretamente mas nunca salvos.
 
-1. **`vencidoStatusId: null`** — A Edge Function busca `ilike("nome", "vencido")` na tabela `tipos_status`, mas esse tenant não tem status "Vencido". O status correto é **"Inadimplente"** (id `35679541-...`). Resultado: `status_cobranca_id` do registro mapeado fica `null`, e como o existente no banco é "Quitado" (`ee5a1d2e-...`), a mudança é detectada MAS o valor aplicado é `null` em vez do ID de "Inadimplente".
+### 2. `CheckReturnDateQuery` está `null` para a Leidiane
+Os logs confirmam que a API MaxSystem retorna `CheckReturnDateQuery: null` para todas as 36 parcelas da Leidiane (CPF 974.951.151-49). Isso pode significar que:
+- O filtro OData atual não inclui a condição que traz dados de devolução
+- A devolução da Leidiane é de outra "agência" ou registro diferente
 
-2. **Query fallback incompleta** — Linhas 363-366: o SELECT do fallback não inclui `status_cobranca_id` nem `data_devolucao`, impedindo comparação precisa para esses campos.
+O exemplo que você mostrou (com data de devolução preenchida) é de outro CPF (989.940.181-15).
 
-3. **Banco atual da Leidiane**: Todas as 36 parcelas com `status = "pago"`, `status_cobranca_id = Quitado`, `data_devolucao = null`. Zero mudanças aplicadas.
+## Alterações necessárias
 
-## Alterações na Edge Function `maxlist-import/index.ts`
+### 1. Migration: Criar coluna `meio_pagamento_id`
+```sql
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS meio_pagamento_id UUID REFERENCES meios_pagamento(id);
+```
+(Ou, se a tabela `meios_pagamento` não existir, apenas `UUID` sem foreign key.)
 
-### 1. Buscar "Inadimplente" como fallback (linhas 89-96)
+**Alternativa**: Se `meio_pagamento_id` não é necessário, remover o campo do mapeamento na Edge Function — opção mais segura.
 
-Alterar a query para buscar primeiro "Vencido", e se não encontrar, buscar "Inadimplente":
-
+### 2. Edge Function: Remover `meio_pagamento_id` do payload se a coluna não existir
+Na Edge Function, antes de inserir/atualizar, remover campos que não existem no schema:
 ```typescript
-// Fetch status ID: try "Vencido" first, fallback to "Inadimplente"
-let vencidoStatusId: string | null = null;
-const { data: statusVencido } = await supabase
-  .from("tipos_status").select("id")
-  .eq("tenant_id", tenant_id).ilike("nome", "vencido").maybeSingle();
-if (statusVencido?.id) {
-  vencidoStatusId = statusVencido.id;
-} else {
-  const { data: statusInadimplente } = await supabase
-    .from("tipos_status").select("id")
-    .eq("tenant_id", tenant_id).ilike("nome", "inadimplente").maybeSingle();
-  vencidoStatusId = statusInadimplente?.id || null;
-}
+// Antes de insert/update, remover campos inexistentes
+delete rec.meio_pagamento_id;
 ```
 
-### 2. Adicionar campos na query fallback (linha 365)
+### 3. Investigar filtro OData para cheque devolvido
+Adicionar log do filtro usado e verificar se precisa adicionar condição `CheckReturnDateQuery` no filtro para trazer esses dados.
 
-Adicionar `status_cobranca_id, data_devolucao` no SELECT da query de fallback para comparação precisa.
+## Recomendação
 
-### 3. Log adicional para debug
+A solução mais rápida é **remover `meio_pagamento_id` do mapped object** na Edge Function (linhas 262-295), já que essa coluna não existe. Isso desbloqueará todas as operações de escrita imediatamente.
 
-Adicionar log do `CheckReturnDateQuery` para cada parcela processada (não só o sample), para confirmar quais parcelas têm data de devolução preenchida.
-
-### 4. Deploy da Edge Function
-
-## Resultado Esperado
-
-- `vencidoStatusId` será `35679541-8088-40b1-8aa9-c75a7dd055e7` (Inadimplente)
-- Parcelas com `CheckReturnDateQuery` preenchido terão: `status = "vencido"`, `status_cobranca_id = Inadimplente`, `data_devolucao` preenchido
-- O `auto-status-sync` então recalculará o status geral do cliente de "Quitado" para "Inadimplente"
-- Na interface, o badge mostrará "Cheque Devolvido" em vermelho
+Quanto à Leidiane especificamente, os dados de devolução precisam vir da API — se a API não retorna `CheckReturnDateQuery` para ela, o sistema não tem como preencher. Pode ser necessário ajustar o filtro OData ou verificar na interface do MaxSystem se essa informação existe para o contrato 766696.
 
