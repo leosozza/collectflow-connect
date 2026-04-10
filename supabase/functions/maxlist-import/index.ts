@@ -316,6 +316,7 @@ Deno.serve(async (req) => {
     let paid = 0;
     let cancelledMaxlist = 0;
     let errors = 0;
+    const processingLogs: string[] = [];
     const updatedRecords: { nome: string; cpf: string; changes: Record<string, { old: any; new: any }> }[] = [];
 
     if (mode === "update") {
