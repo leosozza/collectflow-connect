@@ -1,46 +1,69 @@
 
 
-# Diagnóstico: Por que a atualização não funciona
+# Corrigir barra de progresso real + melhorar logs para volumes grandes
 
-## Problemas encontrados
+## Problema
 
-### 1. CRÍTICO — Coluna `meio_pagamento_id` não existe
-A Edge Function inclui o campo `meio_pagamento_id` no payload de INSERT/UPDATE, mas **essa coluna não existe na tabela `clients`**. Isso causa o erro:
+1. **Barra de progresso fake**: O frontend usa `setInterval` com incrementos aleatórios (`Math.random() * 5`) — não reflete o progresso real
+2. **Timeout em meses grandes**: Uma única chamada à Edge Function processa tudo; volumes como Março excedem o limite de tempo (150-400s)
+3. **Falta botão "Copiar Log"**: Existe "Download Logs" mas não "Copiar para clipboard"
+
+## Solução: Processamento em lotes no frontend
+
+Em vez de enviar todos os registros numa única chamada, o frontend dividirá o trabalho em lotes e chamará a Edge Function para cada lote. Isso resolve tanto o progresso real quanto os timeouts.
+
+## Alterações
+
+### 1. Edge Function `maxlist-import/index.ts` — Aceitar lote parcial
+
+Adicionar parâmetros opcionais `items` (array de registros já buscados) e `skip_fetch: true` no body. Quando presentes, a função pula o fetch da API MaxSystem e processa diretamente os itens recebidos. Isso permite que o frontend controle o batching.
+
+Adicionar log no início de cada batch: `[BATCH] Processando registros ${from}-${to} de ${total}`.
+
+### 2. Frontend `MaxListPage.tsx` — Batching com progresso real
+
+**Fluxo para importação/atualização:**
+1. Frontend busca todos os dados do MaxSystem (já faz isso na busca)
+2. Divide os `rawItems` em lotes de 500-1000 registros
+3. Para cada lote, chama `maxlist-import` com `{ items: batch, skip_fetch: true, ... }`
+4. Atualiza `importProgress` baseado em `(lotesProcessados / totalLotes) * 100`
+5. Agrega os resultados (inserted, updated, rejected, logs) de todos os lotes
+6. Exibe o resultado consolidado
+
+```text
+Frontend                    Edge Function
+   |                             |
+   |-- Batch 1 (500 items) ---->|
+   |<---- result + logs --------|  → progress = 25%
+   |                             |
+   |-- Batch 2 (500 items) ---->|
+   |<---- result + logs --------|  → progress = 50%
+   |                             |
+   |-- Batch 3 (500 items) ---->|
+   |<---- result + logs --------|  → progress = 75%
+   |                             |
+   |-- Batch 4 (500 items) ---->|
+   |<---- result + logs --------|  → progress = 100%
 ```
-Could not find the 'meio_pagamento_id' column of 'clients' in the schema cache
-```
-**Consequência: TODAS as operações de escrita falham.** Por isso o resultado mostra "0 inseridos, 0 atualizados" — os dados são processados corretamente mas nunca salvos.
 
-### 2. `CheckReturnDateQuery` está `null` para a Leidiane
-Os logs confirmam que a API MaxSystem retorna `CheckReturnDateQuery: null` para todas as 36 parcelas da Leidiane (CPF 974.951.151-49). Isso pode significar que:
-- O filtro OData atual não inclui a condição que traz dados de devolução
-- A devolução da Leidiane é de outra "agência" ou registro diferente
+**Texto da barra de progresso**: `"Processando lote 2 de 4 (1000/2000 registros)... 50%"` em vez do genérico "Importando..."
 
-O exemplo que você mostrou (com data de devolução preenchida) é de outro CPF (989.940.181-15).
+### 3. Frontend `ImportResultDialog.tsx` — Botão "Copiar Log"
 
-## Alterações necessárias
+Adicionar botão "Copiar Log" ao lado do "Download Logs" no footer, usando `navigator.clipboard.writeText()` com feedback via toast.
 
-### 1. Migration: Criar coluna `meio_pagamento_id`
-```sql
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS meio_pagamento_id UUID REFERENCES meios_pagamento(id);
-```
-(Ou, se a tabela `meios_pagamento` não existir, apenas `UUID` sem foreign key.)
+### 4. Logs mais detalhados na Edge Function
 
-**Alternativa**: Se `meio_pagamento_id` não é necessário, remover o campo do mapeamento na Edge Function — opção mais segura.
+Adicionar logs de início/fim de cada fase:
+- `[FETCH] Iniciando fetch da página N...`
+- `[FETCH] Total recebido: X registros em Ys`
+- `[BATCH] Processando registros 1-200 de 2000...`
+- `[BATCH] Lote finalizado: 180 updated, 15 inserted, 5 unchanged`
 
-### 2. Edge Function: Remover `meio_pagamento_id` do payload se a coluna não existir
-Na Edge Function, antes de inserir/atualizar, remover campos que não existem no schema:
-```typescript
-// Antes de insert/update, remover campos inexistentes
-delete rec.meio_pagamento_id;
-```
+## Resultado
 
-### 3. Investigar filtro OData para cheque devolvido
-Adicionar log do filtro usado e verificar se precisa adicionar condição `CheckReturnDateQuery` no filtro para trazer esses dados.
-
-## Recomendação
-
-A solução mais rápida é **remover `meio_pagamento_id` do mapped object** na Edge Function (linhas 262-295), já que essa coluna não existe. Isso desbloqueará todas as operações de escrita imediatamente.
-
-Quanto à Leidiane especificamente, os dados de devolução precisam vir da API — se a API não retorna `CheckReturnDateQuery` para ela, o sistema não tem como preencher. Pode ser necessário ajustar o filtro OData ou verificar na interface do MaxSystem se essa informação existe para o contrato 766696.
+- Barra de progresso reflete avanço real (por lote processado)
+- Sem timeout: cada chamada processa no máximo 500-1000 registros
+- Logs completos com botão de copiar para diagnóstico rápido
+- Texto descritivo mostra qual lote está sendo processado
 
