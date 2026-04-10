@@ -426,7 +426,7 @@ const ConversationList = ({
                             {(() => {
                               const deadline = (conv as any).sla_deadline_at;
                               const inst = instances.find(i => i.id === conv.instance_id);
-                              const isOfficial = inst?.provider_category === "official_meta";
+                              const isOfficial = inst?.provider_category === "official_meta" || inst?.provider_category === "official";
                               if (!deadline || !isOfficial) return null;
                               const deadlineDate = new Date(deadline);
                               const now = new Date();
