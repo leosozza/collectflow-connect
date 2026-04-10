@@ -727,6 +727,7 @@ const MaxListPage = () => {
         totalFetched: result?.total_fetched || 0,
         durationMs: result?.duration_ms || 0,
         mode: importMode,
+        processingLogs: result?.processing_logs || [],
       };
       setImportReport(report);
       setShowImportResult(true);
@@ -804,6 +805,7 @@ const MaxListPage = () => {
         totalFetched: result?.total_fetched || 0,
         durationMs: result?.duration_ms || 0,
         mode: "update",
+        processingLogs: result?.processing_logs || [],
       };
       setImportReport(report);
       setShowImportResult(true);

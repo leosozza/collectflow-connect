@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
+import { useState } from "react";
 
 export interface RejectedRecord {
   nome?: string;
@@ -31,6 +32,7 @@ export interface ImportReport {
   totalFetched: number;
   durationMs: number;
   mode: "import" | "update";
+  processingLogs?: string[];
 }
 
 interface Props {
@@ -267,6 +269,21 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
         </Accordion>
 
         <DialogFooter className="gap-2">
+          {report.processingLogs && report.processingLogs.length > 0 && (
+            <Button variant="outline" onClick={() => {
+              const logText = report.processingLogs!.join("\n");
+              const blob = new Blob([logText], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `Logs_${isUpdate ? "Atualizacao" : "Importacao"}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <FileText className="w-4 h-4 mr-2" />
+              Download Logs ({report.processingLogs.length})
+            </Button>
+          )}
           <Button variant="outline" onClick={handleDownload}>
             <Download className="w-4 h-4 mr-2" />
             Download Relatório
