@@ -35,7 +35,7 @@ export const fetchPaymentMethods = async (tenantId: string, credorId?: string): 
 
   const { data, error } = await query.order("nome");
   if (error) throw error;
-  return data || [];
+  return (data || []) as any as PaymentMethod[];
 };
 
 export const upsertPaymentMethod = async (method: Partial<PaymentMethod>) => {
@@ -68,7 +68,7 @@ export const fetchPaymentMappings = async (tenantId: string, credorId: string): 
     .eq("credor_id", credorId);
   
   if (error) throw error;
-  return data || [];
+  return (data || []) as any as PaymentMapping[];
 };
 
 export const upsertPaymentMapping = async (mapping: Partial<PaymentMapping>) => {
