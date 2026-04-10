@@ -86,15 +86,26 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch "Vencido" status ID for this tenant
+    // Fetch status ID: try "Vencido" first, fallback to "Inadimplente"
+    let vencidoStatusId: string | null = null;
     const { data: statusVencido } = await supabase
       .from("tipos_status")
       .select("id")
       .eq("tenant_id", tenant_id)
       .ilike("nome", "vencido")
       .maybeSingle();
-    const vencidoStatusId = statusVencido?.id || null;
-    console.log(`[maxlist-import] vencidoStatusId: ${vencidoStatusId}`);
+    if (statusVencido?.id) {
+      vencidoStatusId = statusVencido.id;
+    } else {
+      const { data: statusInadimplente } = await supabase
+        .from("tipos_status")
+        .select("id")
+        .eq("tenant_id", tenant_id)
+        .ilike("nome", "inadimplente")
+        .maybeSingle();
+      vencidoStatusId = statusInadimplente?.id || null;
+    }
+    console.log(`[maxlist-import] vencidoStatusId resolved: ${vencidoStatusId}`);
 
     // Verify user belongs to tenant
     const { data: tenantUser } = await supabase
@@ -362,7 +373,7 @@ Deno.serve(async (req) => {
           const cpfs = [...new Set(missingBatch.map((r: any) => cleanCPF(r.cpf)))];
           const { data: fallbackRows } = await supabase
             .from("clients")
-            .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id")
+            .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id, data_devolucao")
             .eq("tenant_id", tenant_id)
             .in("cpf", cpfs);
 
