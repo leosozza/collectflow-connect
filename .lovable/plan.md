@@ -1,66 +1,43 @@
 
 
-# Correção: PDF não chega pela API Oficial (Gupshup)
+# Gravador de Áudio com Pausar, Retomar e Preview
 
-## Causa raiz
+## O que será feito
 
-O log mostra claramente o problema. Quando o Gupshup envia um PDF, o payload chega com `type: "file"`:
+Reescrever o `AudioRecorder.tsx` para ter 3 estados:
+
+1. **Gravando** — botão pausar + botão descartar (lixeira)
+2. **Pausado** — botão retomar + botão preview/enviar
+3. **Preview** — player de áudio para ouvir antes de enviar + botão enviar + botão descartar
+
+### Fluxo do usuário
 
 ```text
-type: "file", payload: { name: "Cotação Sagrada Familia.pdf", url: "https://filemanager.gupshup.io/...", contentType: "application/pdf" }
+[Mic] → clica → GRAVANDO (timer pulsando, pausar, descartar)
+                    ↓ pausa
+              PAUSADO (retomar, ouvir/finalizar, descartar)
+                    ↓ finalizar
+              PREVIEW (player <audio>, enviar, descartar)
+                    ↓ enviar
+              onRecorded(blob) → volta ao estado inicial
 ```
 
-Porém, o código no `gupshup-webhook` (linha 105) faz:
+## Mudanças
 
-```typescript
-const canonicalType = ["text", "image", "audio", "video", "document"].includes(msgType) ? msgType : "text";
-```
+**Arquivo:** `src/components/contact-center/whatsapp/AudioRecorder.tsx`
 
-Como `"file"` **não está na lista**, ele cai no fallback `"text"`. Resultado:
-- `canonicalType = "text"` → a mensagem é salva como texto
-- A condição `mediaUrl && canonicalType !== "text"` impede a persistência da mídia
-- O `content` fica vazio (não há `text` nem `caption` no payload de arquivo)
-- **Só aparece o horário** — exatamente o que você viu no screenshot
+- Adicionar estados: `"idle" | "recording" | "paused" | "preview"`
+- Usar `MediaRecorder.pause()` / `MediaRecorder.resume()` (suportado em todos os navegadores modernos)
+- No estado "preview": criar `URL.createObjectURL(blob)` e renderizar `<audio controls src={...} />`
+- Botões:
+  - Gravando: **Pausar** (Pause icon) + **Descartar** (Trash icon)
+  - Pausado: **Retomar** (Mic icon) + **Parar e ouvir** (Play icon)
+  - Preview: **Enviar** (Send icon) + **Descartar** (Trash icon)
+- `onRecorded(blob)` só é chamado quando o usuário clica "Enviar" no preview
+- Timer pausa junto com a gravação
+- Revogar `objectURL` ao descartar ou enviar
 
-## Correção
+**Ícones adicionais:** `Pause, Play, Trash2, Send` do lucide-react
 
-**Arquivo:** `supabase/functions/gupshup-webhook/index.ts`
-
-### 1. Mapear `"file"` para `"document"` (linha ~105)
-
-```typescript
-// Normalizar tipo — Gupshup usa "file" para documentos
-const rawType = msgType === "file" ? "document" : msgType;
-const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
-```
-
-### 2. Extrair nome do arquivo como content (linha ~61)
-
-Adicionar fallback para `payload.name` quando o tipo for file/document:
-
-```typescript
-const content = msgPayload.payload?.text 
-  || msgPayload.payload?.caption 
-  || (msgType === "file" ? msgPayload.payload?.name : null)
-  || payload.payload?.text 
-  || "";
-```
-
-### 3. Extrair `media_mime_type` do payload Gupshup (linha ~109)
-
-O Gupshup envia `contentType` no payload. Usar como fallback para o mime type se a persistência falhar:
-
-```typescript
-let finalMimeType: string | null = msgPayload.payload?.contentType || null;
-```
-
-Assim, mesmo que o download falhe, o mime type é preservado.
-
-## Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/gupshup-webhook/index.ts` | 3 correções pontuais (~5 linhas alteradas) |
-
-Nenhuma mudança no banco, frontend ou outros edge functions necessária. O `ChatMessage.tsx` já renderiza documentos corretamente — o problema era exclusivamente o webhook não reconhecer `"file"` como documento.
+Nenhuma mudança em outros arquivos — a interface `onRecorded(blob)` permanece igual.
 
