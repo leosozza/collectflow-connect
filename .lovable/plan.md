@@ -1,46 +1,48 @@
 
 
-# Adicionar campo `data_devolucao` e garantir reconciliação completa
-
-## Resumo
-
-Adicionar a coluna `data_devolucao` na tabela `clients`, capturar o campo `CheckReturnDateQuery` da API MaxList, e usar a presença dessa data como regra definitiva para forçar status "vencido" + `status_cobranca_id` correto.
+# Ajuste visual + lógica de cheque devolvido
 
 ## Alterações
 
-### 1. Migration SQL
-Adicionar coluna `data_devolucao` (tipo DATE, nullable) na tabela `clients`:
-```sql
-ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS data_devolucao date;
-CREATE INDEX IF NOT EXISTS idx_clients_data_devolucao ON public.clients(tenant_id, data_devolucao) WHERE data_devolucao IS NOT NULL;
+### 1. Frontend — `src/pages/ClientDetailPage.tsx`
+
+**Tabela de Títulos em Aberto (linhas 257-295):**
+
+- Adicionar coluna `<TableHead>Devolução</TableHead>` após "Saldo Devedor"
+- Adicionar `<TableCell>` correspondente com `formatDate(c.data_devolucao)` ou "—"
+- Alterar lógica do Badge de status (linhas 270-279): se `c.data_devolucao` estiver preenchido, forçar label "Cheque Devolvido" com classe vermelha (`bg-destructive/10 text-destructive border-destructive/30`), independente do valor de `c.status`
+
+### 2. Edge Function — `supabase/functions/maxlist-import/index.ts`
+
+**Regra de status (linhas 239-253):** Mover a verificação de `rawReturnDate` para ANTES da verificação de `hasPagamento`, tornando-a prioritária:
+
+```
+if (rawIsCancelled) → "cancelado_maxlist"
+else if (rawReturnDate) → "vencido"          ← nova posição, antes de hasPagamento
+else if (hasPagamento) → "pago"
+else → "pendente"
 ```
 
-### 2. Edge Function `maxlist-import/index.ts`
+Isso garante que mesmo parcelas com data de pagamento preenchida sejam forçadas para "vencido" se houver devolução.
 
-- **SYNC_FIELDS**: adicionar `"data_devolucao"` à lista (linha 38)
-- **Mapeamento** (após linha 282): adicionar ao objeto `mapped`:
-  ```typescript
-  data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
-  ```
-- **Regra de status** (linhas 243-253): simplificar — se `rawReturnDate` existir (independente do tipo de pagamento cheque), forçar `derivedStatus = "vencido"`. Manter a lógica de cheque como está se preferir manter restrita a tipos 2/6.
-- **SELECT no update mode** (linha 334): adicionar `data_devolucao` à query de registros existentes
-- **PROTECTED_FIELDS exceção** (linhas 432-437): adicionar exceção análoga para `data_devolucao` quando status é "vencido" (ou simplesmente não incluir `data_devolucao` em PROTECTED_FIELDS — ele já não está lá, então basta estar em SYNC_FIELDS)
+**Exceção PROTECTED_FIELDS (linhas 432-438):** Adicionar `data_devolucao` na mesma exceção, permitindo que tanto `status_cobranca_id` quanto `data_devolucao` sejam atualizados quando `rec.status === "vencido"`:
 
-### 3. Interface — `ClientDetailHeader.tsx`
-
-Na seção "Datas" (linha 468-471), adicionar:
-```tsx
-<InfoItem 
-  label="Data Devolução" 
-  value={client.data_devolucao ? formatDate(client.data_devolucao) : null} 
-/>
+```typescript
+if (PROTECTED_FIELDS.has(field)) {
+  if ((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido") {
+    updatePayload[field] = rec[field];
+  }
+  continue;
+}
 ```
 
-### 4. Deploy da Edge Function
+(Nota: `data_devolucao` não está em `PROTECTED_FIELDS` atualmente, então já passa. Mas `status_cobranca_id` está e a exceção existente já o cobre.)
 
-## Resultado
+**Deploy** da edge function após as alterações.
 
-- `data_devolucao` será preenchido automaticamente na importação/reconciliação
-- Cheques devolvidos terão `status = "vencido"`, `status_cobranca_id` correto, e `data_devolucao` visível
-- Parcelas sem devolução continuam com a lógica normal (pago/pendente)
+### Resultado
+
+- Interface mostra "Cheque Devolvido" em vermelho para qualquer parcela com `data_devolucao`, mesmo que status no banco seja "pago"
+- Coluna "Devolução" visível na tabela de títulos
+- Backend prioriza `rawReturnDate` sobre `hasPagamento`, forçando status correto na origem
 
