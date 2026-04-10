@@ -114,6 +114,7 @@ interface MaxSystemItem {
   Discount: number | null;
   CheckReturnDateQuery: string | null;
   CheckReturnReason: string | null;
+  PaymentType: number | null;
 }
 
 interface MappedRecord {
@@ -156,9 +157,14 @@ function removeTimestamp(dateStr: string | null): string {
   return dateStr.split("T")[0]?.replace(/-/g, "/").split("/").reverse().join("/") || "";
 }
 
-function formatStatus(isCancelled: boolean, hasPagamento: boolean): string {
+function formatStatus(isCancelled: boolean, hasPagamento: boolean, paymentType: number | null, returnDate: string | null): string {
   if (isCancelled) return "CANCELADO";
-  if (hasPagamento) return "PAGO";
+  if (hasPagamento) {
+    // Regra Paliativa Cheque Devolvido: Types 2 e 6
+    const isCheque = paymentType === 2 || paymentType === 6;
+    if (isCheque && returnDate) return "VENCIDO";
+    return "PAGO";
+  }
   return "ATIVO";
 }
 
@@ -200,7 +206,7 @@ function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
     VL_SALDO: item.NetValue ?? null,
     VL_ATUALIZADO: null,
     TP_TITULO: null,
-    STATUS: formatStatus(item.IsCancelled, hasPag),
+    STATUS: formatStatus(item.IsCancelled, hasPag, item.PaymentType, item.CheckReturnDateQuery),
     NOME_MODELO: item.ModelName || null,
     OBSERVACOES: item.Observations || null,
     DT_DEVOLUCAO: removeTimestamp(item.CheckReturnDateQuery),

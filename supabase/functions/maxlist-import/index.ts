@@ -25,6 +25,7 @@ function cleanPhone(phone: string | null): string {
 const SYNC_FIELDS = [
   "data_pagamento", "valor_pago", "valor_parcela", "valor_saldo",
   "data_vencimento", "status", "cod_contrato", "numero_parcela", "model_name", "external_id",
+  "meio_pagamento_id",
 ];
 
 // Fields that must NEVER be overwritten by sync
