@@ -102,11 +102,12 @@ Deno.serve(async (req) => {
         }
 
         if (targetTenantId) {
-          const canonicalType = ["text", "image", "audio", "video", "document"].includes(msgType) ? msgType : "text";
+          const rawType = msgType === "file" ? "document" : msgType;
+          const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
 
           // Persist media if present — using shared module
           let finalMediaUrl = mediaUrl;
-          let finalMimeType: string | null = null;
+          let finalMimeType: string | null = msgPayload.payload?.contentType || null;
 
           if (mediaUrl && canonicalType !== "text") {
             const mediaResult = await downloadAndUploadMedia(supabase, mediaUrl, targetTenantId, "pending", canonicalType);
