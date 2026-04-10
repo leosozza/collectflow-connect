@@ -74,10 +74,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { tenant_id, filter, credor, field_mapping, status_cobranca_id, mode = "import" } = body;
+    const { tenant_id, filter, credor, field_mapping, status_cobranca_id, mode = "import", items: preloadedItems, skip_fetch } = body;
 
-    if (!tenant_id || !filter || !credor || !field_mapping) {
-      return errorResponse("Campos obrigatórios: tenant_id, filter, credor, field_mapping", 400);
+    if (!tenant_id || !credor || !field_mapping) {
+      return errorResponse("Campos obrigatórios: tenant_id, credor, field_mapping", 400);
+    }
+    if (!skip_fetch && !filter) {
+      return errorResponse("filter é obrigatório quando skip_fetch não está ativo", 400);
     }
 
     if (mode !== "import" && mode !== "update") {
@@ -133,55 +136,61 @@ Deno.serve(async (req) => {
       return errorResponse("MaxList não habilitado para este tenant", 403);
     }
 
-    console.log(`[maxlist-import] Starting ${mode} for tenant ${tenant_id}, credor: ${credor}`);
+    console.log(`[maxlist-import] Starting ${mode} for tenant ${tenant_id}, credor: ${credor}, skip_fetch: ${!!skip_fetch}`);
 
-    // Step 1: Fetch all pages from MaxSystem via maxsystem-proxy
-    const PAGE_SIZE = 5000;
+    // Step 1: Fetch all pages from MaxSystem via maxsystem-proxy (or use preloaded items)
     let allItems: any[] = [];
-    let skip = 0;
-    const SELECT_FIELDS = "Id,IdRecord,ResponsibleName,ResponsibleCPF,ContractNumber,Number,PaymentDateQuery,PaymentDateEffected,Value,NetValue,IsCancelled,CellPhone1,CellPhone2,HomePhone,ModelName,Email,Observations,Discount,Producer,PaymentType,CheckReturnDateQuery,CheckReturnReason";
-    
-    while (true) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
 
-      try {
-        const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}&select=${encodeURIComponent(SELECT_FIELDS)}`;
-        const resp = await fetch(url, {
-          headers: { Authorization: authHeader, "Content-Type": "application/json" },
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+    if (skip_fetch && Array.isArray(preloadedItems)) {
+      allItems = preloadedItems;
+      console.log(`[maxlist-import] Using ${allItems.length} preloaded items (skip_fetch=true)`);
+    } else {
+      const PAGE_SIZE = 5000;
+      let skip = 0;
+      const SELECT_FIELDS = "Id,IdRecord,ResponsibleName,ResponsibleCPF,ContractNumber,Number,PaymentDateQuery,PaymentDateEffected,Value,NetValue,IsCancelled,CellPhone1,CellPhone2,HomePhone,ModelName,Email,Observations,Discount,Producer,PaymentType,CheckReturnDateQuery,CheckReturnReason";
+      
+      while (true) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
 
-        if (!resp.ok) {
-          const errText = await resp.text();
-          console.error(`[maxlist-import] MaxSystem error: ${resp.status} ${errText}`);
-          return errorResponse(`Erro MaxSystem: ${resp.status}`, 502);
+        try {
+          const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}&select=${encodeURIComponent(SELECT_FIELDS)}`;
+          const resp = await fetch(url, {
+            headers: { Authorization: authHeader, "Content-Type": "application/json" },
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (!resp.ok) {
+            const errText = await resp.text();
+            console.error(`[maxlist-import] MaxSystem error: ${resp.status} ${errText}`);
+            return errorResponse(`Erro MaxSystem: ${resp.status}`, 502);
+          }
+
+          const json = await resp.json();
+          const items = json.Items || [];
+          
+          if (items.length > 0 && allItems.length === 0) {
+            console.log("[maxlist-import] Sample item received from MaxSystem:", JSON.stringify(items[0], null, 2));
+          }
+
+          allItems = allItems.concat(items);
+
+          console.log(`[maxlist-import] Fetched ${allItems.length} records so far`);
+
+          if (items.length < PAGE_SIZE) break;
+          skip += PAGE_SIZE;
+        } catch (fetchErr: any) {
+          clearTimeout(timeout);
+          if (fetchErr.name === "AbortError") {
+            return errorResponse("Timeout ao consultar MaxSystem", 504);
+          }
+          throw fetchErr;
         }
-
-        const json = await resp.json();
-        const items = json.Items || [];
-        
-        if (items.length > 0 && allItems.length === 0) {
-          console.log("[maxlist-import] Sample item received from MaxSystem:", JSON.stringify(items[0], null, 2));
-        }
-
-        allItems = allItems.concat(items);
-
-        console.log(`[maxlist-import] Fetched ${allItems.length} records so far`);
-
-        if (items.length < PAGE_SIZE) break;
-        skip += PAGE_SIZE;
-      } catch (fetchErr: any) {
-        clearTimeout(timeout);
-        if (fetchErr.name === "AbortError") {
-          return errorResponse("Timeout ao consultar MaxSystem", 504);
-        }
-        throw fetchErr;
       }
     }
 
-    console.log(`[maxlist-import] Total records from MaxSystem: ${allItems.length}`);
+    console.log(`[maxlist-import] Total records: ${allItems.length}`);
 
     // Step 1.1: Fetch Payment Mappings for this Creditor
     const { data: credorData } = await supabase
