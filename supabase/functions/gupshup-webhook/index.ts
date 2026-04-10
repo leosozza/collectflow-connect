@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       const phone = msgPayload.source || msgPayload.sender?.phone || payload.sender?.phone;
       const senderName = msgPayload.sender?.name || payload.sender?.name || phone || "";
       const msgType = msgPayload.type || "text";
-      const content = msgPayload.payload?.text || msgPayload.payload?.caption || payload.payload?.text || "";
+      const content = msgPayload.payload?.text || msgPayload.payload?.caption || (msgType === "file" ? msgPayload.payload?.name : null) || payload.payload?.text || "";
       const mediaUrl = extractMediaUrl(msgPayload);
       const externalId = msgPayload.id || payload.messageId || payload.payload?.id || "";
       const destination = msgPayload.destination || payload.destination || "";
@@ -102,11 +102,12 @@ Deno.serve(async (req) => {
         }
 
         if (targetTenantId) {
-          const canonicalType = ["text", "image", "audio", "video", "document"].includes(msgType) ? msgType : "text";
+          const rawType = msgType === "file" ? "document" : msgType;
+          const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
 
           // Persist media if present — using shared module
           let finalMediaUrl = mediaUrl;
-          let finalMimeType: string | null = null;
+          let finalMimeType: string | null = msgPayload.payload?.contentType || null;
 
           if (mediaUrl && canonicalType !== "text") {
             const mediaResult = await downloadAndUploadMedia(supabase, mediaUrl, targetTenantId, "pending", canonicalType);
