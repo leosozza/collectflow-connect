@@ -239,15 +239,11 @@ Deno.serve(async (req) => {
       let derivedStatus: string;
       if (rawIsCancelled) {
         derivedStatus = "cancelado_maxlist";
+      } else if (rawReturnDate) {
+        // Cheque devolvido — prioridade máxima sobre pagamento
+        derivedStatus = "vencido";
       } else if (hasPagamento) {
-        // Regra Paliativa Cheque Devolvido (exclusiva ybrasil)
-        // Types: 2 (CHEQUE), 6 (CHEQUE CAUÇÃO)
-        const isCheque = String(rawPaymentType) === "2" || String(rawPaymentType) === "6";
-        if (isCheque && rawReturnDate) {
-          derivedStatus = "vencido";
-        } else {
-          derivedStatus = "pago";
-        }
+        derivedStatus = "pago";
       } else {
         derivedStatus = "pendente";
       }
@@ -431,8 +427,8 @@ Deno.serve(async (req) => {
           const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
           for (const field of Object.keys(changes)) {
             if (PROTECTED_FIELDS.has(field)) {
-              // Exception: allow status_cobranca_id when derived status is vencido
-              if (field === "status_cobranca_id" && rec.status === "vencido") {
+              // Exception: allow status_cobranca_id and data_devolucao when derived status is vencido
+              if ((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido") {
                 updatePayload[field] = rec[field];
               }
               continue;
