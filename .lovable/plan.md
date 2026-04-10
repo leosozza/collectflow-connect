@@ -1,56 +1,34 @@
 
 
-# Correção: Áudio WebM rejeitado pela API Oficial (Gupshup)
+# Correção de build errors + deploy da Edge Function
 
-## Causa raiz
+## Problemas identificados
 
-O Chrome **não suporta** `audio/ogg;codecs=opus` no MediaRecorder. Mesmo que o `AudioRecorder.tsx` tente OGG primeiro, o Chrome sempre cai no fallback `audio/webm;codecs=opus`. O Gupshup rejeita WebM explicitamente.
+1. **Edge Function (`maxlist-import/index.ts`)**: Variável `result` na linha 641 não existe — o objeto foi declarado como `report` na linha 620. Trocar `result` por `report`.
 
-O log confirma: `[gupshup] Sending audio with MIME audio/webm;codecs=opus — may be incompatible with WhatsApp`
+2. **`paymentMethodsService.ts`**: Queries usando `as any` mas o retorno não tem cast adequado. Adicionar `as any` nos retornos das linhas 38 e 71.
 
-## Solução
+3. **`customFieldsService.ts`**: Tipo excessivamente profundo na query. Já tem `as unknown as CustomField[]` — confirmar que está ok ou ajustar o cast.
 
-Converter o áudio WebM para OGG **no edge function** `send-chat-message`, antes de enviar ao Gupshup. WebM/Opus e OGG/Opus usam o mesmo codec (Opus) — a diferença é apenas o container. O processo:
+## Alterações
 
-1. Quando o provider for Gupshup e o MIME do áudio for `audio/webm`:
-   - Baixar o arquivo do Storage
-   - Re-fazer upload com extensão `.ogg` e content-type `audio/ogg;codecs=opus`
-   - Usar a nova URL pública no envio ao Gupshup
+### `supabase/functions/maxlist-import/index.ts`
+- Linha 641: `JSON.stringify(result)` → `JSON.stringify(report)`
 
-2. Atualizar o MIME type passado ao sender para `audio/ogg;codecs=opus`
+### `src/services/paymentMethodsService.ts`  
+- Linha 38: `return data || [];` → `return (data || []) as any as PaymentMethod[];`
+- Linha 71: `return data || [];` → `return (data || []) as any as PaymentMapping[];`
 
-Isso funciona porque o codec interno (Opus) é idêntico — só muda o rótulo do container, e o WhatsApp/Gupshup aceita OGG/Opus.
+### `src/services/customFieldsService.ts`
+- Linha 22: adicionar cast `as any` na query para evitar inferência recursiva de tipo
 
-## Arquivos alterados
+## Deploy
 
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/send-chat-message/index.ts` | Antes de chamar `sendByProvider`, detectar Gupshup + audio/webm → re-upload como OGG no Storage e usar a nova URL |
-| `supabase/functions/_shared/whatsapp-sender.ts` | Remover o warning de WebM (não vai mais chegar WebM para Gupshup) |
+Após as correções, deploy automático da edge function `maxlist-import` via ferramenta de deploy.
 
-## Detalhe técnico
+## Resultado
 
-No `send-chat-message/index.ts`, entre os passos 6 e 7 atuais:
-
-```typescript
-// Convert WebM audio to OGG label for official API compatibility
-if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
-  const isOfficial = (instance.provider || conv.provider || "").toLowerCase() === "gupshup";
-  if (isOfficial) {
-    // Download from storage, re-upload as .ogg
-    const resp = await fetch(mediaUrl);
-    const audioBlob = await resp.arrayBuffer();
-    const oggPath = mediaUrl.split("/chat-media/")[1].replace(/\.webm$/, ".ogg");
-    await supabase.storage.from("chat-media").upload(oggPath, audioBlob, {
-      contentType: "audio/ogg;codecs=opus",
-      upsert: true,
-    });
-    const { data: oggUrl } = supabase.storage.from("chat-media").getPublicUrl(oggPath);
-    media.mediaUrl = oggUrl.publicUrl;
-    media.mimeType = "audio/ogg;codecs=opus";
-  }
-}
-```
-
-Nenhuma migração SQL necessária.
+- Build passa sem erros
+- Edge function com `getVal` e bloco `debug` funcionando
+- Frontend logando `[MaxList Debug]` no console
 
