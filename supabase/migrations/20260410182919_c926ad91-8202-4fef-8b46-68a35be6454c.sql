@@ -1,0 +1,2 @@
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS data_devolucao date;
+CREATE INDEX IF NOT EXISTS idx_clients_data_devolucao ON public.clients(tenant_id, data_devolucao) WHERE data_devolucao IS NOT NULL;

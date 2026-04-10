@@ -1504,6 +1504,7 @@ export type Database = {
           created_at: string
           credor: string
           custom_data: Json | null
+          data_devolucao: string | null
           data_pagamento: string | null
           data_quitacao: string | null
           data_vencimento: string
@@ -1559,6 +1560,7 @@ export type Database = {
           created_at?: string
           credor?: string
           custom_data?: Json | null
+          data_devolucao?: string | null
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento: string
@@ -1614,6 +1616,7 @@ export type Database = {
           created_at?: string
           credor?: string
           custom_data?: Json | null
+          data_devolucao?: string | null
           data_pagamento?: string | null
           data_quitacao?: string | null
           data_vencimento?: string
