@@ -1,24 +1,28 @@
 
 
-# Corrigir indicador de SLA para instâncias da API Oficial
+# Substituir filtro Vinculados/Não vinculados por IA/Humano
 
-## Problema
+## Análise de impacto
 
-O SLA já está sendo calculado e armazenado corretamente no banco (`sla_deadline_at`). A instância Gupshup tem `provider_category = 'official'` no banco, mas o frontend verifica `provider_category === 'official_meta'`. Como nunca bate, o relógio de SLA e o countdown no topo nunca aparecem.
+O filtro `linkFilter` (Vinculados/Não vinculados) filtra conversas por `client_id` (nulo ou não). Na prática, como você mencionou, ele não está sendo útil operacionalmente. Removê-lo **não tem impacto negativo** — a indicação visual de cliente não vinculado (anel amarelo + ícone) continuará existindo nas conversas.
 
-## Correção
+## Lógica do novo filtro
 
-Atualizar todas as verificações no frontend para aceitar tanto `"official_meta"` quanto `"official"`:
+A tabela `conversations` tem o campo `assigned_to`:
+- **`assigned_to = null`** → conversa sem operador (gerenciada por IA/bot ou aguardando)
+- **`assigned_to = UUID`** → conversa atribuída a um humano
 
-| Arquivo | Linha | Mudança |
-|---|---|---|
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | ~429 | `inst?.provider_category === "official_meta"` → incluir `"official"` |
-| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | ~410 | `selectedInstance?.provider_category === "official_meta"` → incluir `"official"` |
+O novo seletor terá 3 opções:
+- **Todos** (padrão)
+- **Com IA** — filtra `assigned_to IS NULL`
+- **Com Humano** — filtra `assigned_to IS NOT NULL`
 
-Em ambos os casos, a verificação passará a ser:
-```typescript
-const isOfficial = inst?.provider_category === "official_meta" || inst?.provider_category === "official";
-```
+## Arquivos alterados
 
-Nenhuma mudança no backend ou banco necessária — o cálculo de SLA já funciona corretamente.
+| Arquivo | Mudança |
+|---|---|
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | Renomear `linkFilter` → `handlerFilter`, trocar ícone para `Bot`, opções: Todos / Com IA / Com Humano |
+| `src/services/conversationService.ts` | Substituir lógica de `linkFilter` por `handlerFilter` que filtra pelo campo `assigned_to` |
+
+Nenhuma mudança no banco de dados necessária.
 
