@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
         valor_entrada: 0,
         valor_pago: hasPagamento ? (record.valor_parcela || record.valor_saldo || 0) : 0,
         status: derivedStatus,
-        meio_pagamento_id: meioPagamentoId,
+        // meio_pagamento_id removed — column does not exist in clients table
         phone: record.phone || "",
         phone2: record.phone2 || "",
         phone3: record.phone3 || "",
