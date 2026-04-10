@@ -1,28 +1,30 @@
 
 
-# Substituir filtro Vinculados/Não vinculados por IA/Humano
+# Adicionar filtro "Data Dev. Cheque" no MaxList
 
-## Análise de impacto
+## O que será feito
 
-O filtro `linkFilter` (Vinculados/Não vinculados) filtra conversas por `client_id` (nulo ou não). Na prática, como você mencionou, ele não está sendo útil operacionalmente. Removê-lo **não tem impacto negativo** — a indicação visual de cliente não vinculado (anel amarelo + ícone) continuará existindo nas conversas.
+Adicionar um novo filtro de data "Dev. Cheque" (devolução de cheque) na página MaxList, seguindo o mesmo padrão dos filtros existentes (Vencimento, Pagamento, Registro).
 
-## Lógica do novo filtro
+## Mudanças no arquivo `src/pages/MaxListPage.tsx`
 
-A tabela `conversations` tem o campo `assigned_to`:
-- **`assigned_to = null`** → conversa sem operador (gerenciada por IA/bot ou aguardando)
-- **`assigned_to = UUID`** → conversa atribuída a um humano
+### 1. Interface `MaxSystemItem` (~linha 96)
+Adicionar campo `CheckReturnDateQuery: string | null` à interface.
 
-O novo seletor terá 3 opções:
-- **Todos** (padrão)
-- **Com IA** — filtra `assigned_to IS NULL`
-- **Com Humano** — filtra `assigned_to IS NOT NULL`
+### 2. Interface `MappedRecord` (~linha 117)
+Adicionar campo `DT_DEVOLUCAO: string` e `MOTIVO_DEVOLUCAO: string | null`.
 
-## Arquivos alterados
+### 3. Estado de filtros (~linha 269)
+Adicionar `devDe: ""` e `devAte: ""` ao estado inicial.
 
-| Arquivo | Mudança |
-|---|---|
-| `src/components/contact-center/whatsapp/ConversationList.tsx` | Renomear `linkFilter` → `handlerFilter`, trocar ícone para `Bot`, opções: Todos / Com IA / Com Humano |
-| `src/services/conversationService.ts` | Substituir lógica de `linkFilter` por `handlerFilter` que filtra pelo campo `assigned_to` |
+### 4. Função `mapItem` (~linha 168)
+Mapear `CheckReturnDateQuery` → `DT_DEVOLUCAO` e `CheckReturnReason` → `MOTIVO_DEVOLUCAO`.
 
-Nenhuma mudança no banco de dados necessária.
+### 5. Função `buildFilter` (~linha 213)
+- Adicionar `devolucao: "CheckReturnDateQuery"` ao `fieldMap`.
+- Adicionar chamadas `addDateFilter(filters.devDe, "de", "devolucao")` e `addDateFilter(filters.devAte, "ate", "devolucao")`.
+- Quando filtro de devolução estiver ativo, adicionar `Effected+eq+false` (conforme código de referência).
+
+### 6. UI dos filtros (~linha 833)
+Mudar o grid de `md:grid-cols-3` para `md:grid-cols-4` e adicionar bloco "Dev. Cheque" com campos De/Até usando `DatePickerField`, idêntico aos demais.
 
