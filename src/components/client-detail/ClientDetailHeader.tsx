@@ -468,6 +468,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
                 <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
+                <InfoItem label="Data Devolução" value={client.data_devolucao ? formatDate(client.data_devolucao) : null} />
               </div>
 
               {/* Classificações */}

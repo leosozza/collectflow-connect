@@ -37,7 +37,7 @@ function getVal(obj: any, key: string): any {
 const SYNC_FIELDS = [
   "data_pagamento", "valor_pago", "valor_parcela", "valor_saldo",
   "data_vencimento", "status", "cod_contrato", "numero_parcela", "model_name", "external_id",
-  "meio_pagamento_id", "status_cobranca_id",
+  "meio_pagamento_id", "status_cobranca_id", "data_devolucao",
 ];
 
 // Fields that must NEVER be overwritten by sync
@@ -284,6 +284,7 @@ Deno.serve(async (req) => {
         status_cobranca_id: derivedStatus === "vencido" && vencidoStatusId
           ? vencidoStatusId
           : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
+        data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
       };
 
       if (!mapped.cpf || !mapped.nome_completo) {
@@ -331,7 +332,7 @@ Deno.serve(async (req) => {
         // Fetch existing records by external_id
         const { data: existingRows } = await supabase
           .from("clients")
-          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id")
+          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id, data_devolucao")
           .eq("tenant_id", tenant_id)
           .in("external_id", externalIds);
 
