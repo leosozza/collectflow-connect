@@ -260,23 +260,27 @@ const ClientDetailPage = () => {
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
+                      <TableHead>Devolução</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {clients.map((c) => {
+                      const hasDevolucao = !!(c as any).data_devolucao;
                       const isOverdue = c.status === "vencido" || (c.status === "pendente" && new Date(c.data_vencimento) < new Date());
                       const isEmAcordo = c.status === "em_acordo";
-                      const statusLabel = c.status === "pago" ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
-                      const statusClass = c.status === "pago"
-                        ? "bg-green-500/10 text-green-600 border-green-500/30"
-                        : isOverdue
-                          ? "bg-destructive/10 text-destructive border-destructive/30"
-                          : c.status === "quebrado"
-                            ? "bg-muted text-muted-foreground border-muted"
-                            : isEmAcordo
-                              ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
-                              : "bg-warning/10 text-warning border-warning/30";
+                      const statusLabel = hasDevolucao ? "Cheque Devolvido" : c.status === "pago" ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
+                      const statusClass = hasDevolucao
+                        ? "bg-destructive/10 text-destructive border-destructive/30"
+                        : c.status === "pago"
+                          ? "bg-green-500/10 text-green-600 border-green-500/30"
+                          : isOverdue
+                            ? "bg-destructive/10 text-destructive border-destructive/30"
+                            : c.status === "quebrado"
+                              ? "bg-muted text-muted-foreground border-muted"
+                              : isEmAcordo
+                                ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                                : "bg-warning/10 text-warning border-warning/30";
                       const valorEfetivo = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
@@ -286,6 +290,7 @@ const ClientDetailPage = () => {
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>
+                          <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className={statusClass}>
                               {statusLabel}
