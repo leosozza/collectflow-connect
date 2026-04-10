@@ -1,6 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Loader2 } from "lucide-react";
+import { Mic, Square, Pause, Play, Trash2, Send } from "lucide-react";
+
+type RecorderState = "idle" | "recording" | "paused" | "preview";
 
 interface AudioRecorderProps {
   onRecorded: (blob: Blob) => void;
@@ -8,20 +10,56 @@ interface AudioRecorderProps {
 }
 
 const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
-  const [recording, setRecording] = useState(false);
+  const [state, setState] = useState<RecorderState>("idle");
   const [duration, setDuration] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const blobRef = useRef<Blob | null>(null);
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const cleanup = () => {
+    clearTimer();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    blobRef.current = null;
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    setDuration(0);
+    setState("idle");
+  };
+
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      streamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+        ? "audio/ogg;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
-          : "audio/webm",
-      });
+          : "audio/webm";
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -30,27 +68,55 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm;codecs=opus" });
-        onRecorded(blob);
-        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        blobRef.current = blob;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        setState("preview");
+        streamRef.current?.getTracks().forEach((t) => t.stop());
       };
 
       mediaRecorder.start();
-      setRecording(true);
+      setState("recording");
       setDuration(0);
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
     } catch {
-      // Permission denied or not available
+      // Permission denied
     }
   };
 
-  const stopRecording = () => {
+  const pauseRecording = () => {
+    mediaRecorderRef.current?.pause();
+    clearTimer();
+    setState("paused");
+  };
+
+  const resumeRecording = () => {
+    mediaRecorderRef.current?.resume();
+    timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+    setState("recording");
+  };
+
+  const stopToPreview = () => {
+    clearTimer();
     mediaRecorderRef.current?.stop();
-    setRecording(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    // onstop handler will transition to "preview"
+  };
+
+  const discard = () => {
+    mediaRecorderRef.current?.stop();
+    cleanup();
+  };
+
+  const sendAudio = () => {
+    if (blobRef.current) {
+      onRecorded(blobRef.current);
     }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    blobRef.current = null;
+    setDuration(0);
+    setState("idle");
   };
 
   const formatDuration = (s: number) => {
@@ -59,31 +125,72 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
-  if (recording) {
+  // IDLE
+  if (state === "idle") {
     return (
-      <div className="flex items-center gap-2">
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8 shrink-0"
+        onClick={startRecording}
+        disabled={disabled}
+        title="Gravar áudio"
+      >
+        <Mic className="w-4 h-4" />
+      </Button>
+    );
+  }
+
+  // RECORDING
+  if (state === "recording") {
+    return (
+      <div className="flex items-center gap-1.5">
         <div className="flex items-center gap-1.5 text-destructive">
           <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-          <span className="text-xs font-medium">{formatDuration(duration)}</span>
+          <span className="text-xs font-medium tabular-nums">{formatDuration(duration)}</span>
         </div>
-        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={stopRecording}>
-          <Square className="w-3 h-3" />
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={pauseRecording} title="Pausar">
+          <Pause className="w-3.5 h-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={discard} title="Descartar">
+          <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>
     );
   }
 
+  // PAUSED
+  if (state === "paused") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+          <span className="text-xs font-medium tabular-nums">{formatDuration(duration)}</span>
+        </div>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={resumeRecording} title="Retomar">
+          <Mic className="w-3.5 h-3.5" />
+        </Button>
+        <Button size="icon" variant="default" className="h-7 w-7 bg-primary" onClick={stopToPreview} title="Ouvir">
+          <Play className="w-3.5 h-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={discard} title="Descartar">
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  // PREVIEW
   return (
-    <Button
-      size="icon"
-      variant="ghost"
-      className="h-8 w-8 shrink-0"
-      onClick={startRecording}
-      disabled={disabled}
-      title="Gravar áudio"
-    >
-      <Mic className="w-4 h-4" />
-    </Button>
+    <div className="flex items-center gap-1.5">
+      <audio src={previewUrl!} controls className="h-8 max-w-[180px]" />
+      <Button size="icon" variant="default" className="h-7 w-7 bg-[#25d366] hover:bg-[#1da851]" onClick={sendAudio} title="Enviar">
+        <Send className="w-3.5 h-3.5" />
+      </Button>
+      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={discard} title="Descartar">
+        <Trash2 className="w-3.5 h-3.5" />
+      </Button>
+    </div>
   );
 };
 
