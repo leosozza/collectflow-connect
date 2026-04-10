@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Bot, Loader2 } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Bot, Loader2, ShieldCheck, QrCode } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -362,7 +362,18 @@ const ConversationList = ({
                 <SelectItem value="all">Instâncias</SelectItem>
                 {instances.map((i) => (
                   <SelectItem key={i.id} value={i.id}>
-                    {i.name}
+                    <span className="flex items-center gap-1.5">
+                      {i.name}
+                      {(i.provider_category === "official_meta" || i.provider_category === "official") ? (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full font-medium">
+                          <ShieldCheck className="w-3 h-3" /> Oficial
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
+                          <QrCode className="w-3 h-3" /> Não Oficial
+                        </span>
+                      )}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
