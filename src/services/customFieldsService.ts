@@ -13,9 +13,9 @@ export interface CustomField {
 }
 
 export const fetchCustomFields = async (tenantId: string, credorId?: string): Promise<CustomField[]> => {
-  let query = supabase
+  let query = (supabase
     .from("custom_fields")
-    .select("*")
+    .select("*") as any)
     .eq("tenant_id", tenantId);
 
   if (credorId) {
