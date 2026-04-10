@@ -369,7 +369,18 @@ const WhatsAppChatLayout = () => {
   };
 
   const handleSendAudio = async (blob: Blob) => {
-    const file = new File([blob], `audio_${Date.now()}.webm`, { type: "audio/webm;codecs=opus" });
+    // Preserve the real MIME type from the recorder (ogg/opus preferred for official API)
+    const realMime = blob.type || "audio/ogg;codecs=opus";
+    const extMap: Record<string, string> = {
+      "audio/ogg": ".ogg",
+      "audio/ogg;codecs=opus": ".ogg",
+      "audio/mp4": ".m4a",
+      "audio/mpeg": ".mp3",
+      "audio/webm": ".webm",
+      "audio/webm;codecs=opus": ".webm",
+    };
+    const ext = extMap[realMime] || ".ogg";
+    const file = new File([blob], `audio_${Date.now()}${ext}`, { type: realMime });
     await handleSendMedia(file);
   };
 

@@ -89,11 +89,29 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
         );
       case "document":
         return (
-          <a
-            href={message.media_url || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+          <button
+            type="button"
+            onClick={async () => {
+              const url = message.media_url;
+              if (!url) return;
+              try {
+                const resp = await fetch(url);
+                const blob = await resp.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = objectUrl;
+                a.download = message.content || "documento";
+                a.target = "_blank";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+              } catch {
+                // Fallback: direct open
+                window.open(url, "_blank");
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left w-full ${
               isOutbound
                 ? "bg-[#c8efc3] dark:bg-[#004a3f] hover:bg-[#bae6b4] dark:hover:bg-[#003a34]"
                 : "bg-muted/60 hover:bg-muted"
@@ -109,7 +127,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
                  message.media_mime_type?.split("/").pop()?.toUpperCase() || "Arquivo"}
               </p>
             </div>
-          </a>
+          </button>
         );
       case "sticker":
         return message.media_url ? (
