@@ -1,30 +1,42 @@
 
 
-# Adicionar filtro "Data Dev. Cheque" no MaxList
+# Indicador visual de Oficial / Não Oficial no seletor de instâncias
 
 ## O que será feito
 
-Adicionar um novo filtro de data "Dev. Cheque" (devolução de cheque) na página MaxList, seguindo o mesmo padrão dos filtros existentes (Vencimento, Pagamento, Registro).
+Adicionar indicadores visuais no dropdown de instâncias para diferenciar rapidamente as instâncias oficiais das não oficiais:
 
-## Mudanças no arquivo `src/pages/MaxListPage.tsx`
+- **Oficial**: badge verde com ícone de escudo (ShieldCheck) + texto "Oficial"
+- **Não Oficial**: badge cinza com ícone de QR code (QrCode) + texto "Não Oficial"
 
-### 1. Interface `MaxSystemItem` (~linha 96)
-Adicionar campo `CheckReturnDateQuery: string | null` à interface.
+## Arquivo alterado
 
-### 2. Interface `MappedRecord` (~linha 117)
-Adicionar campo `DT_DEVOLUCAO: string` e `MOTIVO_DEVOLUCAO: string | null`.
+**`src/components/contact-center/whatsapp/ConversationList.tsx`** (~linhas 363-367)
 
-### 3. Estado de filtros (~linha 269)
-Adicionar `devDe: ""` e `devAte: ""` ao estado inicial.
+Cada `SelectItem` passará a exibir o nome da instância acompanhado de um badge colorido indicando a categoria:
 
-### 4. Função `mapItem` (~linha 168)
-Mapear `CheckReturnDateQuery` → `DT_DEVOLUCAO` e `CheckReturnReason` → `MOTIVO_DEVOLUCAO`.
+```tsx
+<SelectItem key={i.id} value={i.id}>
+  <span className="flex items-center gap-1.5">
+    {i.name}
+    {(i.provider_category === "official_meta" || i.provider_category === "official") ? (
+      <span className="inline-flex items-center gap-0.5 text-[9px] bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full font-medium">
+        <ShieldCheck className="w-3 h-3" /> Oficial
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-0.5 text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
+        <QrCode className="w-3 h-3" /> Não Oficial
+      </span>
+    )}
+  </span>
+</SelectItem>
+```
 
-### 5. Função `buildFilter` (~linha 213)
-- Adicionar `devolucao: "CheckReturnDateQuery"` ao `fieldMap`.
-- Adicionar chamadas `addDateFilter(filters.devDe, "de", "devolucao")` e `addDateFilter(filters.devAte, "ate", "devolucao")`.
-- Quando filtro de devolução estiver ativo, adicionar `Effected+eq+false` (conforme código de referência).
+Adicionar `ShieldCheck` e `QrCode` aos imports do lucide-react.
 
-### 6. UI dos filtros (~linha 833)
-Mudar o grid de `md:grid-cols-3` para `md:grid-cols-4` e adicionar bloco "Dev. Cheque" com campos De/Até usando `DatePickerField`, idêntico aos demais.
+## Detalhes técnicos
+
+- Usa `provider_category` já disponível no array `instances` (tipado como `{ id, name, provider_category? }`)
+- Nenhuma mudança no backend ou banco de dados
+- Apenas 1 arquivo editado
 
