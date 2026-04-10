@@ -359,7 +359,7 @@ const ConversationList = ({
                 <SelectValue placeholder="Instância" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="all">Instâncias</SelectItem>
                 {instances.map((i) => (
                   <SelectItem key={i.id} value={i.id}>
                     {i.name}
