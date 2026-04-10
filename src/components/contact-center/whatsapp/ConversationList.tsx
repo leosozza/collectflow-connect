@@ -265,7 +265,7 @@ const ConversationList = ({
                 <SelectValue placeholder="Operador" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Operadores</SelectItem>
                 {operators.map((op) => (
                   <SelectItem key={op.id} value={op.id}>
                     {op.name || "Sem nome"}
