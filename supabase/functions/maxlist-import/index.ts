@@ -143,6 +143,27 @@ Deno.serve(async (req) => {
 
     console.log(`[maxlist-import] Total records from MaxSystem: ${allItems.length}`);
 
+    // Step 1.1: Fetch Payment Mappings for this Creditor
+    const { data: credorData } = await supabase
+      .from("credores")
+      .select("id")
+      .eq("tenant_id", tenant_id)
+      .eq("razao_social", credor)
+      .maybeSingle();
+    
+    const credorId = credorData?.id;
+    const paymentMappings = new Map<string, string>();
+    if (credorId) {
+      const { data: mappings } = await supabase
+        .from("meio_pagamento_mappings")
+        .select("external_code, internal_id")
+        .eq("credor_id", credorId);
+      
+      if (mappings) {
+        for (const m of mappings) paymentMappings.set(String(m.external_code), m.internal_id);
+      }
+    }
+
     // Step 2: Map records using field_mapping
     const records: any[] = [];
     const rejected: { nome?: string; cpf?: string; reason: string }[] = [];
@@ -180,13 +201,24 @@ Deno.serve(async (req) => {
       // YBRASIL status rules
       const rawIsCancelled = (rawItem as any).IsCancelled === true;
       const rawPaymentEffected = (rawItem as any).PaymentDateEffected;
+      const rawPaymentType = (rawItem as any).PaymentType;
+      const rawReturnDate = (rawItem as any).CheckReturnDateQuery;
+      
       const hasPagamento = !!record.data_pagamento || !!rawPaymentEffected;
+      const meioPagamentoId = rawPaymentType ? paymentMappings.get(String(rawPaymentType)) : null;
 
       let derivedStatus: string;
       if (rawIsCancelled) {
         derivedStatus = "cancelado_maxlist";
       } else if (hasPagamento) {
-        derivedStatus = "pago";
+        // Regra Paliativa Cheque Devolvido (exclusiva ybrasil)
+        // Types: 2 (CHEQUE), 6 (CHEQUE CAUÇÃO)
+        const isCheque = String(rawPaymentType) === "2" || String(rawPaymentType) === "6";
+        if (isCheque && rawReturnDate) {
+          derivedStatus = "vencido";
+        } else {
+          derivedStatus = "pago";
+        }
       } else {
         derivedStatus = "pendente";
       }
@@ -211,6 +243,7 @@ Deno.serve(async (req) => {
         valor_entrada: 0,
         valor_pago: hasPagamento ? (record.valor_parcela || record.valor_saldo || 0) : 0,
         status: derivedStatus,
+        meio_pagamento_id: meioPagamentoId,
         phone: record.phone || "",
         phone2: record.phone2 || "",
         phone3: record.phone3 || "",

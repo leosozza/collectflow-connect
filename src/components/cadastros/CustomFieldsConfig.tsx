@@ -22,7 +22,11 @@ const FIELD_TYPES = [
   { value: "select", label: "Lista de opções" },
 ];
 
-const CustomFieldsConfig = () => {
+interface CustomFieldsConfigProps {
+  credorId?: string;
+}
+
+const CustomFieldsConfig = ({ credorId }: CustomFieldsConfigProps) => {
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -31,8 +35,8 @@ const CustomFieldsConfig = () => {
   const [deleteTarget, setDeleteTarget] = useState<CustomField | null>(null);
 
   const { data: fields = [], isLoading } = useQuery({
-    queryKey: ["custom-fields", tenant?.id],
-    queryFn: () => fetchCustomFields(tenant!.id),
+    queryKey: ["custom-fields", tenant?.id, credorId],
+    queryFn: () => fetchCustomFields(tenant!.id, credorId),
     enabled: !!tenant?.id,
   });
 
@@ -106,6 +110,7 @@ const CustomFieldsConfig = () => {
     } else {
       createMutation.mutate({
         tenant_id: tenant!.id,
+        credor_id: credorId,
         field_key: key,
         field_label: form.field_label.trim(),
         field_type: form.field_type,
@@ -134,13 +139,12 @@ const CustomFieldsConfig = () => {
         Crie campos extras para armazenar informações adicionais dos clientes. Estes campos ficam disponíveis no mapeamento de importação.
       </p>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-6 text-center text-muted-foreground">Carregando...</div>
-          ) : fields.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground">Nenhum campo personalizado criado</div>
-          ) : (
+      <div className="border border-border rounded-lg overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 text-center text-muted-foreground">Carregando...</div>
+        ) : fields.length === 0 ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">Nenhum campo personalizado criado</div>
+        ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -179,8 +183,7 @@ const CustomFieldsConfig = () => {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={(v) => !v && closeDialog()}>
         <DialogContent>

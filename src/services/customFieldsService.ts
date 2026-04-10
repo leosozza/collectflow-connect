@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface CustomField {
   id: string;
   tenant_id: string;
+  credor_id?: string;
   field_key: string;
   field_label: string;
   field_type: string;
@@ -11,18 +12,26 @@ export interface CustomField {
   created_at: string;
 }
 
-export const fetchCustomFields = async (tenantId: string): Promise<CustomField[]> => {
-  const { data, error } = await supabase
+export const fetchCustomFields = async (tenantId: string, credorId?: string): Promise<CustomField[]> => {
+  let query = supabase
     .from("custom_fields")
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("field_label");
+    .eq("tenant_id", tenantId);
+
+  if (credorId) {
+    query = query.eq("credor_id", credorId);
+  } else {
+    query = query.is("credor_id", null);
+  }
+
+  const { data, error } = await query.order("field_label");
   if (error) throw error;
   return (data || []) as unknown as CustomField[];
 };
 
 export const createCustomField = async (field: {
   tenant_id: string;
+  credor_id?: string;
   field_key: string;
   field_label: string;
   field_type: string;

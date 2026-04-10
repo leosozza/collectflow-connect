@@ -144,12 +144,19 @@ export const setEquipeMembros = async (equipeId: string, profileIds: string[], t
 };
 
 // ====== TIPOS DEVEDOR ======
-export const fetchTiposDevedor = async (tenantId: string) => {
-  const { data, error } = await supabase
+export const fetchTiposDevedor = async (tenantId: string, credorId?: string) => {
+  let query = supabase
     .from("tipos_devedor" as any)
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("nome");
+    .eq("tenant_id", tenantId);
+
+  if (credorId) {
+    query = query.eq("credor_id", credorId);
+  } else {
+    query = query.is("credor_id", null);
+  }
+
+  const { data, error } = await query.order("nome");
   if (error) throw error;
   return data || [];
 };
@@ -170,12 +177,19 @@ export const deleteTipoDevedor = async (id: string) => {
 };
 
 // ====== TIPOS DIVIDA ======
-export const fetchTiposDivida = async (tenantId: string) => {
-  const { data, error } = await supabase
+export const fetchTiposDivida = async (tenantId: string, credorId?: string) => {
+  let query = supabase
     .from("tipos_divida" as any)
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("nome");
+    .eq("tenant_id", tenantId);
+
+  if (credorId) {
+    query = query.eq("credor_id", credorId);
+  } else {
+    query = query.is("credor_id", null);
+  }
+
+  const { data, error } = await query.order("nome");
   if (error) throw error;
   return data || [];
 };

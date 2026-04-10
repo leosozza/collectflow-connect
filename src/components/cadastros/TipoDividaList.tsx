@@ -14,7 +14,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 const DEFAULT_TIPOS = ["Boleto", "Cartão de Crédito", "Promissória", "Cheque", "Financiamento", "Empréstimo", "Mensalidade"];
 
-const TipoDividaList = () => {
+interface TipoDividaListProps {
+  credorId?: string;
+}
+
+const TipoDividaList = ({ credorId }: TipoDividaListProps) => {
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -25,8 +29,8 @@ const TipoDividaList = () => {
   const [seeding, setSeeding] = useState(false);
 
   const { data: tipos = [], isLoading } = useQuery({
-    queryKey: ["tipos_divida", tenant?.id],
-    queryFn: () => fetchTiposDivida(tenant!.id),
+    queryKey: ["tipos_divida", tenant?.id, credorId],
+    queryFn: () => fetchTiposDivida(tenant!.id, credorId),
     enabled: !!tenant?.id,
   });
 
@@ -47,7 +51,7 @@ const TipoDividaList = () => {
     setSeeding(true);
     try {
       for (const nome of DEFAULT_TIPOS) {
-        await upsertTipoDivida({ tenant_id: tenant.id, nome });
+        await upsertTipoDivida({ tenant_id: tenant.id, credor_id: credorId, nome });
       }
       queryClient.invalidateQueries({ queryKey: ["tipos_divida"] });
       toast.success("Tipos padrão carregados!");
@@ -62,7 +66,13 @@ const TipoDividaList = () => {
   const openEdit = (t: any) => { setEditing(t); setNome(t.nome); setDescricao(t.descricao || ""); setDialogOpen(true); };
   const handleSave = () => {
     if (!nome.trim()) { toast.error("Nome obrigatório"); return; }
-    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), descricao: descricao.trim() || null });
+    saveMutation.mutate({ 
+      ...(editing?.id ? { id: editing.id } : {}), 
+      tenant_id: tenant!.id, 
+      credor_id: credorId,
+      nome: nome.trim(), 
+      descricao: descricao.trim() || null 
+    });
   };
 
   const filtered = tipos.filter((t: any) => t.nome.toLowerCase().includes(search.toLowerCase()));

@@ -12,6 +12,8 @@ import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import CredorDebtorCategoriesConfig from "./CredorDebtorCategoriesConfig";
 import CredorDocumentTemplates from "./CredorDocumentTemplates";
+import TipoDividaList from "./TipoDividaList";
+import PaymentMethodsConfig from "./PaymentMethodsConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -601,16 +603,44 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
                 <div className="text-left">
                   <h4 className="text-sm font-medium text-foreground">Campos Personalizados</h4>
-                  <p className="text-xs text-muted-foreground">Crie campos extras para armazenar informações adicionais dos clientes</p>
+                  <p className="text-xs text-muted-foreground">Adicione campos específicos para a operação deste credor</p>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-4">
-                <CustomFieldsConfig />
+                <CustomFieldsConfig credorId={editing?.id} />
               </CollapsibleContent>
             </Collapsible>
 
-            {/* 5. Categorização do Devedor */}
+            {/* 5. Meios de Pagamento & Integração */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Meios de Pagamento & Integração</h4>
+                  <p className="text-xs text-muted-foreground">Mapeie como o Rivo identifica os pagamentos vindos do cliente</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <PaymentMethodsConfig credorId={editing?.id} />
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 6. Tipos de Dívida & Títulos */}
+            <Collapsible className="border-t border-border py-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
+                <div className="text-left">
+                  <h4 className="text-sm font-medium text-foreground">Tipos de Dívida</h4>
+                  <p className="text-xs text-muted-foreground">Gerencie as categorias de débitos aceitas para este credor</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 -rotate-90 group-data-[state=open]:rotate-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <TipoDividaList credorId={editing?.id} />
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* 7. Categorização do Devedor */}
             <Collapsible className="border-t border-border py-4">
               <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer group">
                 <div className="text-left">

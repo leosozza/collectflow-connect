@@ -81,7 +81,6 @@ const CadastrosPage = () => {
         { key: "usuarios", label: "Usuários", icon: UserCog, badge: usuariosCount ?? null },
         { key: "equipes", label: "Equipes", icon: Users, badge: equipes?.length ?? null },
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
-        { key: "tipo_divida", label: "Tipo de Dívida", icon: FileText },
         { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
         { key: "tabulacoes", label: "Tabulações de Atendimento", icon: Headset },
       ],
@@ -177,7 +176,6 @@ const CadastrosPage = () => {
         {active === "usuarios" && <UsersPage />}
         {active === "equipes" && <EquipeList />}
         {active === "tipo_devedor" && <TipoDevedorList />}
-        {active === "tipo_divida" && <TipoDividaList />}
         {active === "tipo_status" && <TipoStatusList />}
         
         {(active === "tabulacoes" || active === "tabulacao_chamada") && <DispositionTabsWrapper />}
