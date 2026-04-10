@@ -1,47 +1,24 @@
 
 
-# Corrigir teste de conexão — incluir número de telefone real
+# Corrigir indicador de SLA para instâncias da API Oficial
 
 ## Problema
 
-O `gupshup-proxy` envia `source=validation` e `destination=0` como valores fictícios. A Gupshup rejeita com "Invalid App Details" porque o `source` não corresponde a nenhum número registrado no app. O curl do usuário funciona porque usa o número real `5511971306153`.
+O SLA já está sendo calculado e armazenado corretamente no banco (`sla_deadline_at`). A instância Gupshup tem `provider_category = 'official'` no banco, mas o frontend verifica `provider_category === 'official_meta'`. Como nunca bate, o relógio de SLA e o countdown no topo nunca aparecem.
 
 ## Correção
 
-### 1. `src/components/integracao/GupshupConfigDialog.tsx`
+Atualizar todas as verificações no frontend para aceitar tanto `"official_meta"` quanto `"official"`:
 
-Enviar o `sourceNumber` junto no body da chamada ao proxy:
+| Arquivo | Linha | Mudança |
+|---|---|---|
+| `src/components/contact-center/whatsapp/ConversationList.tsx` | ~429 | `inst?.provider_category === "official_meta"` → incluir `"official"` |
+| `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` | ~410 | `selectedInstance?.provider_category === "official_meta"` → incluir `"official"` |
 
+Em ambos os casos, a verificação passará a ser:
 ```typescript
-body: { apiKey, appName, sourceNumber: sourceNumber.trim(), tenantId: tenant?.id }
+const isOfficial = inst?.provider_category === "official_meta" || inst?.provider_category === "official";
 ```
 
-### 2. `supabase/functions/gupshup-proxy/index.ts`
-
-- Extrair `sourceNumber` do body da request
-- Usar o número real no campo `source` em vez de `"validation"`
-- Usar um destino válido (o próprio número) em vez de `"0"`
-
-```typescript
-const { apiKey, appName, tenantId, sourceNumber } = await req.json();
-const src = sourceNumber || "validation";
-const dst = sourceNumber || "0";
-const requestBody = `channel=whatsapp&source=${encodeURIComponent(src)}&src.name=${encodeURIComponent(appName)}&destination=${encodeURIComponent(dst)}&message={}`;
-```
-
-### 3. `WhatsAppIntegrationTab.tsx`
-
-Atualizar `handleTestConnection` para enviar o `sourceNumber` das settings do tenant:
-
-```typescript
-body: { apiKey, appName, sourceNumber: settings.gupshup_source_number, tenantId: tenant.id }
-```
-
-## Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/components/integracao/GupshupConfigDialog.tsx` | Enviar `sourceNumber` no body |
-| `supabase/functions/gupshup-proxy/index.ts` | Usar número real no `source` e `destination` |
-| `src/components/integracao/WhatsAppIntegrationTab.tsx` | Enviar `sourceNumber` no teste externo |
+Nenhuma mudança no backend ou banco necessária — o cálculo de SLA já funciona corretamente.
 
