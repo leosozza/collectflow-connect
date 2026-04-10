@@ -189,7 +189,7 @@ const ConversationList = ({
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [operatorFilter, setOperatorFilter] = useState<string>("all");
-  const [linkFilter, setLinkFilter] = useState<string>("all");
+  const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -202,9 +202,9 @@ const ConversationList = ({
       operatorFilter,
       search,
       unreadOnly,
-      linkFilter,
+      handlerFilter,
     });
-  }, [statusFilter, instanceFilter, operatorFilter, search, unreadOnly, linkFilter]);
+  }, [statusFilter, instanceFilter, operatorFilter, search, unreadOnly, handlerFilter]);
 
   // Debounced search
   const handleSearchChange = useCallback((value: string) => {
@@ -323,15 +323,15 @@ const ConversationList = ({
 
         {/* Row 4: Link + Instance filters */}
         <div className="flex gap-1.5">
-          <Select value={linkFilter} onValueChange={setLinkFilter}>
+          <Select value={handlerFilter} onValueChange={setHandlerFilter}>
             <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
-              <Link2Off className="w-3 h-3 mr-1 shrink-0" />
-              <SelectValue placeholder="Vínculo" />
+              <Bot className="w-3 h-3 mr-1 shrink-0" />
+              <SelectValue placeholder="Atendente" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="linked">Vinculados</SelectItem>
-              <SelectItem value="unlinked">Não vinculados</SelectItem>
+              <SelectItem value="ai">Com IA</SelectItem>
+              <SelectItem value="human">Com Humano</SelectItem>
             </SelectContent>
           </Select>
           {tags.length > 0 && (

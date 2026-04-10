@@ -51,7 +51,7 @@ export interface ConversationFilters {
   operatorFilter?: string;
   search?: string;
   unreadOnly?: boolean;
-  linkFilter?: string;
+  handlerFilter?: string;
 }
 
 export async function fetchQuickReplies(tenantId: string): Promise<QuickReply[]> {
@@ -115,10 +115,10 @@ export async function fetchConversations(
     query = query.gt("unread_count", 0);
   }
 
-  if (filters.linkFilter === "linked") {
-    query = query.not("client_id", "is", null);
-  } else if (filters.linkFilter === "unlinked") {
-    query = query.is("client_id", null);
+  if (filters.handlerFilter === "ai") {
+    query = query.is("assigned_to", null);
+  } else if (filters.handlerFilter === "human") {
+    query = query.not("assigned_to", "is", null);
   }
 
   if (filters.search && filters.search.trim()) {
