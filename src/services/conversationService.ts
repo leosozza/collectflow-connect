@@ -32,6 +32,7 @@ export interface ChatMessage {
   external_id: string | null;
   is_internal: boolean;
   reply_to_message_id: string | null;
+  metadata?: Record<string, any> | null;
   created_at: string;
 }
 
