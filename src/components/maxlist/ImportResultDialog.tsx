@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
+import { useState } from "react";
 
 export interface RejectedRecord {
   nome?: string;
@@ -31,6 +32,7 @@ export interface ImportReport {
   totalFetched: number;
   durationMs: number;
   mode: "import" | "update";
+  processingLogs?: string[];
 }
 
 interface Props {
@@ -264,9 +266,47 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
               </AccordionContent>
             </AccordionItem>
           )}
+
+          {/* Processing Logs */}
+          {report.processingLogs && report.processingLogs.length > 0 && (
+            <AccordionItem value="logs">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Logs de Processamento ({report.processingLogs.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-[300px]">
+                  <div className="space-y-1 font-mono text-xs p-2 bg-muted rounded">
+                    {report.processingLogs.map((log, i) => (
+                      <div key={i} className={`whitespace-pre-wrap break-all ${log.startsWith("[ERROR]") || log.startsWith("[EXCEPTION]") ? "text-destructive" : log.startsWith("[UPDATE]") ? "text-blue-600" : log.startsWith("[INSERT]") ? "text-emerald-600" : "text-muted-foreground"}`}>
+                        {log}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
         </Accordion>
 
         <DialogFooter className="gap-2">
+          {report.processingLogs && report.processingLogs.length > 0 && (
+            <Button variant="outline" onClick={() => {
+              const logText = report.processingLogs!.join("\n");
+              const blob = new Blob([logText], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `Logs_${isUpdate ? "Atualizacao" : "Importacao"}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <FileText className="w-4 h-4 mr-2" />
+              Download Logs ({report.processingLogs.length})
+            </Button>
+          )}
           <Button variant="outline" onClick={handleDownload}>
             <Download className="w-4 h-4 mr-2" />
             Download Relatório
