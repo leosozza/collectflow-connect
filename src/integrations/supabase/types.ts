@@ -2573,6 +2573,7 @@ export type Database = {
       custom_fields: {
         Row: {
           created_at: string | null
+          credor_id: string | null
           field_key: string
           field_label: string
           field_type: string
@@ -2583,6 +2584,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          credor_id?: string | null
           field_key: string
           field_label: string
           field_type?: string
@@ -2593,6 +2595,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          credor_id?: string | null
           field_key?: string
           field_label?: string
           field_type?: string
@@ -2602,6 +2605,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "custom_fields_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "custom_fields_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -3373,6 +3383,97 @@ export type Database = {
           },
           {
             foreignKeyName: "manual_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meio_pagamento_mappings: {
+        Row: {
+          created_at: string
+          credor_id: string
+          external_code: string
+          id: string
+          internal_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          credor_id: string
+          external_code: string
+          id?: string
+          internal_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          credor_id?: string
+          external_code?: string
+          id?: string
+          internal_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meio_pagamento_mappings_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meio_pagamento_mappings_internal_id_fkey"
+            columns: ["internal_id"]
+            isOneToOne: false
+            referencedRelation: "meios_pagamento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meio_pagamento_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meios_pagamento: {
+        Row: {
+          created_at: string
+          credor_id: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          credor_id?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          credor_id?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meios_pagamento_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meios_pagamento_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -5301,6 +5402,7 @@ export type Database = {
       tipos_devedor: {
         Row: {
           created_at: string
+          credor_id: string | null
           descricao: string | null
           id: string
           nome: string
@@ -5308,6 +5410,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          credor_id?: string | null
           descricao?: string | null
           id?: string
           nome: string
@@ -5315,12 +5418,20 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          credor_id?: string | null
           descricao?: string | null
           id?: string
           nome?: string
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tipos_devedor_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tipos_devedor_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -5333,6 +5444,7 @@ export type Database = {
       tipos_divida: {
         Row: {
           created_at: string
+          credor_id: string | null
           descricao: string | null
           id: string
           nome: string
@@ -5340,6 +5452,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          credor_id?: string | null
           descricao?: string | null
           id?: string
           nome: string
@@ -5347,12 +5460,20 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          credor_id?: string | null
           descricao?: string | null
           id?: string
           nome?: string
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tipos_divida_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tipos_divida_tenant_id_fkey"
             columns: ["tenant_id"]
