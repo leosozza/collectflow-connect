@@ -364,13 +364,9 @@ const ConversationList = ({
                   <SelectItem key={i.id} value={i.id}>
                     <span className="flex items-center gap-1.5">
                       {i.name}
-                      {(i.provider_category === "official_meta" || i.provider_category === "official") ? (
+                      {(i.provider_category === "official_meta" || i.provider_category === "official") && (
                         <span className="inline-flex items-center gap-0.5 text-[9px] bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full font-medium">
                           <ShieldCheck className="w-3 h-3" /> Oficial
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
-                          <QrCode className="w-3 h-3" /> Não Oficial
                         </span>
                       )}
                     </span>
