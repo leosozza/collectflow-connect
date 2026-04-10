@@ -1192,8 +1192,8 @@ const MaxListPage = () => {
           <CardContent className="py-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Importando...</span>
-                <span className="font-medium">{Math.min(importProgress, 100).toFixed(2)}%</span>
+                <span className="text-muted-foreground">{importProgressText || "Importando..."}</span>
+                <span className="font-medium">{Math.min(importProgress, 100).toFixed(0)}%</span>
               </div>
               <Progress value={Math.min(importProgress, 100)} />
             </div>

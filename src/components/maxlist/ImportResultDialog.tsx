@@ -293,19 +293,32 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
 
         <DialogFooter className="gap-2">
           {report.processingLogs && report.processingLogs.length > 0 && (
-            <Button variant="outline" onClick={() => {
-              const logText = report.processingLogs!.join("\n");
-              const blob = new Blob([logText], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `Logs_${isUpdate ? "Atualizacao" : "Importacao"}.txt`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}>
-              <FileText className="w-4 h-4 mr-2" />
-              Download Logs ({report.processingLogs.length})
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => {
+                const logText = report.processingLogs!.join("\n");
+                navigator.clipboard.writeText(logText).then(() => {
+                  toast.success("Log copiado para a área de transferência");
+                }).catch(() => {
+                  toast.error("Erro ao copiar log");
+                });
+              }}>
+                <Copy className="w-4 h-4 mr-2" />
+                Copiar Log ({report.processingLogs.length})
+              </Button>
+              <Button variant="outline" onClick={() => {
+                const logText = report.processingLogs!.join("\n");
+                const blob = new Blob([logText], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `Logs_${isUpdate ? "Atualizacao" : "Importacao"}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}>
+                <FileText className="w-4 h-4 mr-2" />
+                Download Logs ({report.processingLogs.length})
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={handleDownload}>
             <Download className="w-4 h-4 mr-2" />
