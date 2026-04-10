@@ -299,6 +299,7 @@ const MaxListPage = () => {
   const [searchProgress, setSearchProgress] = useState("");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [importProgressText, setImportProgressText] = useState("");
   const [selectedStatusCobrancaId, setSelectedStatusCobrancaId] = useState<string>("__auto__");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [pendingMappingData, setPendingMappingData] = useState<MappedRecord[]>([]);
@@ -679,69 +680,160 @@ const MaxListPage = () => {
     };
   };
 
+  const IMPORT_BATCH_SIZE = 500;
+
   const handleImportOrUpdate = async (_mapping: Record<string, string>, importMode: "import" | "update") => {
     setShowMappingDialog(false);
     setImporting(true);
     setImportProgress(0);
+    setImportProgressText("Preparando dados...");
 
     const actionLabel = importMode === "update" ? "update" : "import";
-    logAction({ action: `${actionLabel}_started`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, count: someSelected ? selectedIndexes.size : rawItems.length } });
+    const sourceRawItems = someSelected
+      ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => rawItems[i])
+      : rawItems;
 
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
+    logAction({ action: `${actionLabel}_started`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, count: sourceRawItems.length } });
+
+    const startTime = Date.now();
+
     try {
-      const filter = buildFilter(filters);
-      setImportProgress(10);
-      progressInterval = setInterval(() => {
-        setImportProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 5));
-      }, 800);
+      // If we have raw items loaded, use client-side batching
+      if (sourceRawItems.length > 0) {
+        const totalItems = sourceRawItems.length;
+        const totalBatches = Math.ceil(totalItems / IMPORT_BATCH_SIZE);
+        
+        // Aggregated results
+        let totalInserted = 0;
+        let totalUpdated = 0;
+        let totalUnchanged = 0;
+        let totalPaid = 0;
+        let totalCancelledMaxlist = 0;
+        let totalDuplicatesDiscarded = 0;
+        let totalErrors = 0;
+        let totalFetched = totalItems;
+        const allUpdatedRecords: any[] = [];
+        const allRejectedRecords: any[] = [];
+        const allLogs: string[] = [];
 
-      const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
-        body: {
-          tenant_id: tenant.id,
-          filter,
-          credor: selectedCredorName,
-          field_mapping: _mapping,
-          status_cobranca_id: selectedStatusCobrancaId,
+        for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+          const from = batchIdx * IMPORT_BATCH_SIZE;
+          const to = Math.min(from + IMPORT_BATCH_SIZE, totalItems);
+          const batchItems = sourceRawItems.slice(from, to);
+
+          const progressPct = Math.round(((batchIdx) / totalBatches) * 100);
+          setImportProgress(progressPct);
+          setImportProgressText(`Processando lote ${batchIdx + 1} de ${totalBatches} (${from + 1}-${to} de ${totalItems})... ${progressPct}%`);
+
+          allLogs.push(`[BATCH] Enviando lote ${batchIdx + 1}/${totalBatches} (registros ${from + 1}-${to})`);
+
+          const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+            body: {
+              tenant_id: tenant.id,
+              credor: selectedCredorName,
+              field_mapping: _mapping,
+              status_cobranca_id: selectedStatusCobrancaId,
+              mode: importMode,
+              items: batchItems,
+              skip_fetch: true,
+            },
+          });
+
+          if (error) {
+            allLogs.push(`[ERROR] Lote ${batchIdx + 1} falhou: ${error.message}`);
+            totalErrors += batchItems.length;
+            continue;
+          }
+
+          if (result?.debug && batchIdx === 0) {
+            console.log("[MaxList Debug]", result.debug);
+          }
+
+          totalInserted += result?.inserted || 0;
+          totalUpdated += result?.updated || 0;
+          totalUnchanged += result?.unchanged || 0;
+          totalPaid += result?.paid || 0;
+          totalCancelledMaxlist += result?.cancelled_maxlist || 0;
+          totalDuplicatesDiscarded += result?.duplicates_discarded || 0;
+          totalErrors += result?.errors || 0;
+          if (result?.updated_records) allUpdatedRecords.push(...result.updated_records);
+          if (result?.rejected_records) allRejectedRecords.push(...result.rejected_records);
+          if (result?.processing_logs) allLogs.push(...result.processing_logs);
+
+          allLogs.push(`[BATCH] Lote ${batchIdx + 1} finalizado: ${result?.inserted || 0} inseridos, ${result?.updated || 0} atualizados, ${result?.unchanged || 0} sem alteração`);
+        }
+
+        setImportProgress(100);
+        setImportProgressText("Concluído!");
+
+        const durationMs = Date.now() - startTime;
+        const report: ImportReport = {
+          inserted: totalInserted,
+          updated: allUpdatedRecords.slice(0, 500).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+          rejected: allRejectedRecords.slice(0, 100).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
+          skipped: totalErrors,
+          unchanged: totalUnchanged,
+          paid: totalPaid,
+          cancelledMaxlist: totalCancelledMaxlist,
+          duplicatesDiscarded: totalDuplicatesDiscarded,
+          totalFetched,
+          durationMs,
           mode: importMode,
-        },
-      });
+          processingLogs: allLogs.slice(0, 2000),
+        };
+        setImportReport(report);
+        setShowImportResult(true);
 
-      if (error) throw error;
+        logAction({ action: `${actionLabel}_completed`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged, paid: totalPaid, cancelled_maxlist: totalCancelledMaxlist, rejected: allRejectedRecords.length, duration_ms: durationMs, batches: totalBatches } });
 
-      if (result?.debug) {
-        console.log("[MaxList Debug]", result.debug);
+        const label = importMode === "update" ? "Atualização" : "Importação";
+        toast.success(`${label} concluída! ${totalInserted + totalUpdated} registros processados em ${Math.round(durationMs / 1000)}s`);
+      } else {
+        // Fallback: no raw items, call edge function with filter (single call)
+        const filter = buildFilter(filters);
+        setImportProgressText("Processando no servidor...");
+        setImportProgress(10);
+
+        const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+          body: {
+            tenant_id: tenant.id,
+            filter,
+            credor: selectedCredorName,
+            field_mapping: _mapping,
+            status_cobranca_id: selectedStatusCobrancaId,
+            mode: importMode,
+          },
+        });
+
+        if (error) throw error;
+        setImportProgress(100);
+
+        const report: ImportReport = {
+          inserted: result?.inserted || 0,
+          updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+          rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
+          skipped: result?.errors || 0,
+          unchanged: result?.unchanged || 0,
+          paid: result?.paid || 0,
+          cancelledMaxlist: result?.cancelled_maxlist || 0,
+          duplicatesDiscarded: result?.duplicates_discarded || 0,
+          totalFetched: result?.total_fetched || 0,
+          durationMs: result?.duration_ms || 0,
+          mode: importMode,
+          processingLogs: result?.processing_logs || [],
+        };
+        setImportReport(report);
+        setShowImportResult(true);
+
+        const label = importMode === "update" ? "Atualização" : "Importação";
+        toast.success(`${label} concluída! ${(result?.inserted || 0) + (result?.updated || 0)} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
       }
-
-      if (progressInterval) clearInterval(progressInterval);
-      setImportProgress(100);
-
-      const report: ImportReport = {
-        inserted: result?.inserted || 0,
-        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
-        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
-        skipped: result?.errors || 0,
-        unchanged: result?.unchanged || 0,
-        paid: result?.paid || 0,
-        cancelledMaxlist: result?.cancelled_maxlist || 0,
-        duplicatesDiscarded: result?.duplicates_discarded || 0,
-        totalFetched: result?.total_fetched || 0,
-        durationMs: result?.duration_ms || 0,
-        mode: importMode,
-        processingLogs: result?.processing_logs || [],
-      };
-      setImportReport(report);
-      setShowImportResult(true);
-
-      logAction({ action: `${actionLabel}_completed`, entity_type: "import", details: { module: "maxlist", mode: importMode, credor: selectedCredorName, inserted: result?.inserted, updated: result?.updated, unchanged: result?.unchanged, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, rejected: result?.rejected, duration_ms: result?.duration_ms } });
-
-      const label = importMode === "update" ? "Atualização" : "Importação";
-      toast.success(`${label} concluída! ${(result?.inserted || 0) + (result?.updated || 0)} registros processados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
     } catch (err: any) {
       toast.error(err.message || "Erro na importação");
       logAction({ action: "import_failed", entity_type: "import", details: { module: "maxlist", credor: selectedCredorName, error: err.message } });
     } finally {
-      if (progressInterval) clearInterval(progressInterval);
       setImporting(false);
+      setImportProgressText("");
     }
   };
 
@@ -757,9 +849,11 @@ const MaxListPage = () => {
     setUpdatingPagos(true);
     setShowUpdatePagosDialog(false);
     setImporting(true);
-    setImportProgress(10);
+    setImportProgress(0);
+    setImportProgressText("Buscando dados do MaxSystem...");
 
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
+    const startTime = Date.now();
+
     try {
       // Build payment date filter
       const pagDe = `${updatePagosDe}T00:00:00`;
@@ -773,53 +867,124 @@ const MaxListPage = () => {
 
       logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
 
-      progressInterval = setInterval(() => {
-        setImportProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 5));
-      }, 800);
+      // Step 1: Fetch all items from MaxSystem first
+      setImportProgressText("Buscando registros do MaxSystem...");
+      setImportProgress(5);
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const PAGE_SIZE = 5000;
+      let allFetchedItems: any[] = [];
+      let skip = 0;
 
-      const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
-        body: {
-          tenant_id: tenant.id,
-          filter,
-          credor: updatePagosCredor,
-          field_mapping: fieldMapping,
-          status_cobranca_id: "__auto__",
-          mode: "update",
-        },
-      });
+      while (true) {
+        const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "Erro ao consultar MaxSystem");
+        }
+        const json = await response.json();
+        const items = json.Items || [];
+        allFetchedItems = allFetchedItems.concat(items);
+        setImportProgressText(`Buscando registros... ${allFetchedItems.length} encontrados`);
+        if (items.length < PAGE_SIZE) break;
+        skip += PAGE_SIZE;
+      }
 
-      if (error) throw error;
+      if (allFetchedItems.length === 0) {
+        toast.info("Nenhum registro encontrado no período");
+        return;
+      }
 
-      if (progressInterval) clearInterval(progressInterval);
+      setImportProgressText(`${allFetchedItems.length} registros encontrados. Iniciando processamento em lotes...`);
+      setImportProgress(10);
+
+      // Step 2: Process in batches
+      const totalItems = allFetchedItems.length;
+      const totalBatches = Math.ceil(totalItems / IMPORT_BATCH_SIZE);
+      let totalInserted = 0, totalUpdated = 0, totalUnchanged = 0, totalPaid = 0;
+      let totalCancelledMaxlist = 0, totalDuplicatesDiscarded = 0, totalErrors = 0;
+      const allUpdatedRecords: any[] = [];
+      const allRejectedRecords: any[] = [];
+      const allLogs: string[] = [];
+
+      for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+        const from = batchIdx * IMPORT_BATCH_SIZE;
+        const to = Math.min(from + IMPORT_BATCH_SIZE, totalItems);
+        const batchItems = allFetchedItems.slice(from, to);
+
+        const progressPct = Math.round(10 + ((batchIdx) / totalBatches) * 90);
+        setImportProgress(progressPct);
+        setImportProgressText(`Processando lote ${batchIdx + 1} de ${totalBatches} (${from + 1}-${to} de ${totalItems})... ${progressPct}%`);
+
+        allLogs.push(`[BATCH] Enviando lote ${batchIdx + 1}/${totalBatches} (registros ${from + 1}-${to})`);
+
+        const { data: result, error } = await supabase.functions.invoke("maxlist-import", {
+          body: {
+            tenant_id: tenant.id,
+            credor: updatePagosCredor,
+            field_mapping: fieldMapping,
+            status_cobranca_id: "__auto__",
+            mode: "update",
+            items: batchItems,
+            skip_fetch: true,
+          },
+        });
+
+        if (error) {
+          allLogs.push(`[ERROR] Lote ${batchIdx + 1} falhou: ${error.message}`);
+          totalErrors += batchItems.length;
+          continue;
+        }
+
+        totalInserted += result?.inserted || 0;
+        totalUpdated += result?.updated || 0;
+        totalUnchanged += result?.unchanged || 0;
+        totalPaid += result?.paid || 0;
+        totalCancelledMaxlist += result?.cancelled_maxlist || 0;
+        totalDuplicatesDiscarded += result?.duplicates_discarded || 0;
+        totalErrors += result?.errors || 0;
+        if (result?.updated_records) allUpdatedRecords.push(...result.updated_records);
+        if (result?.rejected_records) allRejectedRecords.push(...result.rejected_records);
+        if (result?.processing_logs) allLogs.push(...result.processing_logs);
+
+        allLogs.push(`[BATCH] Lote ${batchIdx + 1} finalizado: ${result?.inserted || 0} inseridos, ${result?.updated || 0} atualizados, ${result?.unchanged || 0} sem alteração`);
+      }
+
       setImportProgress(100);
+      setImportProgressText("Concluído!");
 
+      const durationMs = Date.now() - startTime;
       const report: ImportReport = {
-        inserted: result?.inserted || 0,
-        updated: (result?.updated_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
-        rejected: (result?.rejected_records || []).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
-        skipped: result?.errors || 0,
-        unchanged: result?.unchanged || 0,
-        paid: result?.paid || 0,
-        cancelledMaxlist: result?.cancelled_maxlist || 0,
-        duplicatesDiscarded: result?.duplicates_discarded || 0,
-        totalFetched: result?.total_fetched || 0,
-        durationMs: result?.duration_ms || 0,
+        inserted: totalInserted,
+        updated: allUpdatedRecords.slice(0, 500).map((r: any) => ({ nome: r.nome, cpf: r.cpf, changes: r.changes })),
+        rejected: allRejectedRecords.slice(0, 100).map((r: any) => ({ nome: r.nome, cpf: r.cpf, reason: r.reason })),
+        skipped: totalErrors,
+        unchanged: totalUnchanged,
+        paid: totalPaid,
+        cancelledMaxlist: totalCancelledMaxlist,
+        duplicatesDiscarded: totalDuplicatesDiscarded,
+        totalFetched: totalItems,
+        durationMs,
         mode: "update",
-        processingLogs: result?.processing_logs || [],
+        processingLogs: allLogs.slice(0, 2000),
       };
       setImportReport(report);
       setShowImportResult(true);
 
-      logAction({ action: "update_pagos_completed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, inserted: result?.inserted, updated: result?.updated, paid: result?.paid, cancelled_maxlist: result?.cancelled_maxlist, unchanged: result?.unchanged, duration_ms: result?.duration_ms } });
+      logAction({ action: "update_pagos_completed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, inserted: totalInserted, updated: totalUpdated, paid: totalPaid, cancelled_maxlist: totalCancelledMaxlist, unchanged: totalUnchanged, duration_ms: durationMs, batches: totalBatches } });
 
-      toast.success(`Atualização de pagos concluída! ${result?.paid || 0} pagamentos sincronizados em ${Math.round((result?.duration_ms || 0) / 1000)}s`);
+      toast.success(`Atualização de pagos concluída! ${totalPaid} pagamentos sincronizados em ${Math.round(durationMs / 1000)}s`);
     } catch (err: any) {
       toast.error(err.message || "Erro na atualização de pagos");
       logAction({ action: "update_pagos_failed", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, error: err.message } });
     } finally {
-      if (progressInterval) clearInterval(progressInterval);
       setImporting(false);
       setUpdatingPagos(false);
+      setImportProgressText("");
     }
   };
 
@@ -1027,8 +1192,8 @@ const MaxListPage = () => {
           <CardContent className="py-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Importando...</span>
-                <span className="font-medium">{Math.min(importProgress, 100).toFixed(2)}%</span>
+                <span className="text-muted-foreground">{importProgressText || "Importando..."}</span>
+                <span className="font-medium">{Math.min(importProgress, 100).toFixed(0)}%</span>
               </div>
               <Progress value={Math.min(importProgress, 100)} />
             </div>
