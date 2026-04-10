@@ -37,7 +37,7 @@ function getVal(obj: any, key: string): any {
 const SYNC_FIELDS = [
   "data_pagamento", "valor_pago", "valor_parcela", "valor_saldo",
   "data_vencimento", "status", "cod_contrato", "numero_parcela", "model_name", "external_id",
-  "meio_pagamento_id",
+  "meio_pagamento_id", "status_cobranca_id",
 ];
 
 // Fields that must NEVER be overwritten by sync
@@ -85,6 +85,16 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Fetch "Vencido" status ID for this tenant
+    const { data: statusVencido } = await supabase
+      .from("tipos_status")
+      .select("id")
+      .eq("tenant_id", tenant_id)
+      .ilike("nome", "vencido")
+      .maybeSingle();
+    const vencidoStatusId = statusVencido?.id || null;
+    console.log(`[maxlist-import] vencidoStatusId: ${vencidoStatusId}`);
 
     // Verify user belongs to tenant
     const { data: tenantUser } = await supabase
@@ -271,7 +281,9 @@ Deno.serve(async (req) => {
         observacoes: record.observacoes || null,
         ...(Object.keys(custom_data).length > 0 ? { custom_data } : {}),
         updated_at: new Date().toISOString(),
-        status_cobranca_id: status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null),
+        status_cobranca_id: derivedStatus === "vencido" && vencidoStatusId
+          ? vencidoStatusId
+          : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
       };
 
       if (!mapped.cpf || !mapped.nome_completo) {
@@ -319,7 +331,7 @@ Deno.serve(async (req) => {
         // Fetch existing records by external_id
         const { data: existingRows } = await supabase
           .from("clients")
-          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id")
+          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id")
           .eq("tenant_id", tenant_id)
           .in("external_id", externalIds);
 
@@ -417,9 +429,14 @@ Deno.serve(async (req) => {
           // Build update payload (only changed sync fields)
           const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
           for (const field of Object.keys(changes)) {
-            if (!PROTECTED_FIELDS.has(field)) {
-              updatePayload[field] = rec[field];
+            if (PROTECTED_FIELDS.has(field)) {
+              // Exception: allow status_cobranca_id when derived status is vencido
+              if (field === "status_cobranca_id" && rec.status === "vencido") {
+                updatePayload[field] = rec[field];
+              }
+              continue;
             }
+            updatePayload[field] = rec[field];
           }
 
           try {
