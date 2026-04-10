@@ -380,62 +380,76 @@ Deno.serve(async (req) => {
         const toInsert: any[] = [];
 
         for (const rec of batch) {
+          const recLabel = `CPF=${rec.cpf} parcela=${rec.numero_parcela} ext=${rec.external_id}`;
           let existing = existingMap.get(rec.external_id);
           if (!existing) {
             const fbKey = `${rec.cod_contrato || ""}-${rec.numero_parcela || 1}-${cleanCPF(rec.cpf)}`;
             existing = fallbackMap.get(fbKey);
+            if (existing) processingLogs.push(`[FALLBACK] ${recLabel} → matched by contract key`);
           }
 
           if (!existing) {
-            // New record
             toInsert.push(rec);
             inserted++;
             if (rec.status === "pago") paid++;
             if (rec.status === "cancelado_maxlist") cancelledMaxlist++;
+            processingLogs.push(`[INSERT] ${recLabel} status=${rec.status}`);
             continue;
           }
 
           // Compare fields
           const changes: Record<string, { old: any; new: any }> = {};
+          const fieldLog: string[] = [];
           for (const field of SYNC_FIELDS) {
             let oldVal = existing[field] ?? null;
             let newVal = rec[field] ?? null;
 
-            // Status Normalization: Treat "Quitado" and "pago" as equivalent for the comparison
             if (field === "status") {
               const normOld = String(oldVal ?? "").toLowerCase();
               const normNew = String(newVal ?? "").toLowerCase();
-              // If both are payment-like, don't mark as changed unless one is different (e.g. from pago to vencido)
               if ((normOld === "quitado" || normOld === "pago") && normNew === "pago") {
+                fieldLog.push(`${field}: "${oldVal}"→"${newVal}" (skip, equivalent)`);
                 continue; 
               }
-              if (normOld === normNew) continue;
+              if (normOld === normNew) {
+                fieldLog.push(`${field}: "${oldVal}"="${newVal}" (skip, same)`);
+                continue;
+              }
             }
 
             const oldStr = String(oldVal ?? "");
             const newStr = String(newVal ?? "");
             if (oldStr !== newStr) {
               changes[field] = { old: oldVal, new: newVal };
+              fieldLog.push(`${field}: "${oldVal}"→"${newVal}" (CHANGED)`);
             }
           }
 
           if (Object.keys(changes).length === 0) {
             unchanged++;
+            processingLogs.push(`[UNCHANGED] ${recLabel} | ${fieldLog.join("; ")}`);
             continue;
           }
 
-          // Build update payload (only changed sync fields)
+          // Build update payload
           const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
+          const appliedFields: string[] = [];
+          const skippedFields: string[] = [];
           for (const field of Object.keys(changes)) {
             if (PROTECTED_FIELDS.has(field)) {
-              // Exception: allow status_cobranca_id and data_devolucao when derived status is vencido
               if ((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido") {
                 updatePayload[field] = rec[field];
+                appliedFields.push(`${field}(protected-exception)`);
+              } else {
+                skippedFields.push(`${field}(PROTECTED)`);
               }
               continue;
             }
             updatePayload[field] = rec[field];
+            appliedFields.push(field);
           }
+
+          processingLogs.push(`[UPDATE] ${recLabel} | applied=[${appliedFields.join(",")}] skipped=[${skippedFields.join(",")}] changes={${fieldLog.join("; ")}}`);
 
           try {
             const { error } = await supabase
@@ -446,6 +460,7 @@ Deno.serve(async (req) => {
 
             if (error) {
               console.error(`[maxlist-import] Update error for ${existing.id}:`, error.message);
+              processingLogs.push(`[ERROR] ${recLabel} → ${error.message}`);
               errors++;
             } else {
               updated++;
@@ -461,6 +476,7 @@ Deno.serve(async (req) => {
             }
           } catch (err: any) {
             console.error(`[maxlist-import] Update exception:`, err.message);
+            processingLogs.push(`[EXCEPTION] ${recLabel} → ${err.message}`);
             errors++;
           }
         }
