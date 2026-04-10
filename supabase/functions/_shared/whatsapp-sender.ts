@@ -171,13 +171,6 @@ async function sendWuzapiMedia(
 async function sendGupshupMedia(
   phone: string, media: MediaPayload, tenantSettings: Record<string, any>,
 ): Promise<SendResult> {
-  // Log warning for potentially incompatible audio but don't reject — let Gupshup try
-  if (media.mediaType === "audio" && media.mimeType) {
-    const mime = media.mimeType.toLowerCase();
-    if (mime.includes("webm")) {
-      console.warn(`[gupshup] Sending audio with MIME ${mime} — may be incompatible with WhatsApp`);
-    }
-  }
 
   const typeMap: Record<string, string> = {
     image: "image",

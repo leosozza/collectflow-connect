@@ -128,6 +128,40 @@ Deno.serve(async (req) => {
       };
     }
 
+    // 6b. Convert WebM audio to OGG label for official API (Gupshup) compatibility
+    if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
+      const providerName = (instance?.provider || conv.provider || "").toLowerCase();
+      if (providerName === "gupshup") {
+        try {
+          const dlResp = await fetch(mediaUrl);
+          if (dlResp.ok) {
+            const audioBytes = await dlResp.arrayBuffer();
+            const storagePath = mediaUrl.includes("/chat-media/")
+              ? mediaUrl.split("/chat-media/")[1].replace(/\.webm(\?.*)?$/, ".ogg")
+              : `${tenantId}/${conversationId}/audio_${Date.now()}.ogg`;
+
+            const { error: upErr } = await supabase.storage
+              .from("chat-media")
+              .upload(storagePath, audioBytes, {
+                contentType: "audio/ogg;codecs=opus",
+                upsert: true,
+              });
+
+            if (!upErr) {
+              const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
+              media.mediaUrl = oggUrlData.publicUrl;
+              media.mimeType = "audio/ogg;codecs=opus";
+              console.log("[send-chat-message] Converted WebM → OGG label for Gupshup");
+            } else {
+              console.error("[send-chat-message] OGG re-upload failed:", upErr.message);
+            }
+          }
+        } catch (convErr) {
+          console.error("[send-chat-message] WebM→OGG conversion error:", convErr);
+        }
+      }
+    }
+
     // 7. Send via multiprovider
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
