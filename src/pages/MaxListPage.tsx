@@ -112,6 +112,8 @@ interface MaxSystemItem {
   Observations: string | null;
   NetValue: number | null;
   Discount: number | null;
+  CheckReturnDateQuery: string | null;
+  CheckReturnReason: string | null;
 }
 
 interface MappedRecord {
@@ -145,6 +147,8 @@ interface MappedRecord {
   STATUS: string;
   NOME_MODELO: string | null;
   OBSERVACOES: string | null;
+  DT_DEVOLUCAO: string;
+  MOTIVO_DEVOLUCAO: string | null;
 }
 
 function removeTimestamp(dateStr: string | null): string {
@@ -199,6 +203,8 @@ function mapItem(item: MaxSystemItem, credorName: string): MappedRecord {
     STATUS: formatStatus(item.IsCancelled, hasPag),
     NOME_MODELO: item.ModelName || null,
     OBSERVACOES: item.Observations || null,
+    DT_DEVOLUCAO: removeTimestamp(item.CheckReturnDateQuery),
+    MOTIVO_DEVOLUCAO: item.CheckReturnReason || null,
   };
 }
 
@@ -220,6 +226,7 @@ function buildFilter(filters: Record<string, string | string[]>): string {
       vencimento: "PaymentDateQuery",
       pagamento: "PaymentDateEffectedQuery",
       registro: "RegisteredDateQuery",
+      devolucao: "CheckReturnDateQuery",
     };
     const field = fieldMap[type];
     if (direction === "de") parts.push(`${field}+ge+datetime'${iso}'`);
@@ -232,6 +239,14 @@ function buildFilter(filters: Record<string, string | string[]>): string {
   addDateFilter(filters.pagAte, "ate", "pagamento");
   addDateFilter(filters.regDe, "de", "registro");
   addDateFilter(filters.regAte, "ate", "registro");
+  addDateFilter(filters.devDe, "de", "devolucao");
+  addDateFilter(filters.devAte, "ate", "devolucao");
+
+  // Quando filtro de devolução ativo, adicionar Effected+eq+false
+  if ((filters.devDe && typeof filters.devDe === 'string' && filters.devDe.trim()) ||
+      (filters.devAte && typeof filters.devAte === 'string' && filters.devAte.trim())) {
+    parts.push("Effected+eq+false");
+  }
 
   const cpf = filters.cpf;
   if (cpf && typeof cpf === 'string' && cpf.trim()) {
@@ -267,7 +282,7 @@ const MaxListPage = () => {
   const navigate = useNavigate();
 
   const [filters, setFilters] = useState({
-    vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "",
+    vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "", devDe: "", devAte: "",
     cpf: "", contrato: "", status: "todos", agencias: [] as string[],
   });
   const [data, setData] = useState<MappedRecord[]>([]);
@@ -830,7 +845,7 @@ const MaxListPage = () => {
           <CardTitle className="text-base">Filtros de Busca</CardTitle>
         </CardHeader>
         <CardContent>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="space-y-2">
               <Label className="font-semibold">Vencimento</Label>
               <div className="grid grid-cols-2 gap-2">
@@ -867,6 +882,19 @@ const MaxListPage = () => {
                 <div>
                   <Label className="text-xs text-muted-foreground">Até</Label>
                   <DatePickerField value={filters.regAte} onChange={(v) => updateFilter("regAte", v)} />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Dev. Cheque</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">De</Label>
+                  <DatePickerField value={filters.devDe} onChange={(v) => updateFilter("devDe", v)} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Até</Label>
+                  <DatePickerField value={filters.devAte} onChange={(v) => updateFilter("devAte", v)} />
                 </div>
               </div>
             </div>
