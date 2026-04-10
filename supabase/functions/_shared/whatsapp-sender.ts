@@ -171,17 +171,11 @@ async function sendWuzapiMedia(
 async function sendGupshupMedia(
   phone: string, media: MediaPayload, tenantSettings: Record<string, any>,
 ): Promise<SendResult> {
-  // Reject incompatible audio formats for official API
+  // Log warning for potentially incompatible audio but don't reject — let Gupshup try
   if (media.mediaType === "audio" && media.mimeType) {
     const mime = media.mimeType.toLowerCase();
     if (mime.includes("webm")) {
-      console.error(`[gupshup] Rejecting incompatible audio MIME: ${mime}`);
-      return {
-        ok: false,
-        result: { error: `Formato de áudio incompatível com API oficial: ${mime}. Use OGG/Opus, MP3 ou M4A.` },
-        providerMessageId: null,
-        provider: "gupshup",
-      };
+      console.warn(`[gupshup] Sending audio with MIME ${mime} — may be incompatible with WhatsApp`);
     }
   }
 
