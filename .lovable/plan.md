@@ -1,34 +1,54 @@
 
 
-# Correção de build errors + deploy da Edge Function
+# Atualizar `status_cobranca_id` na reconciliação de cheque devolvido
 
-## Problemas identificados
+## Problema
+A Edge Function `maxlist-import` define `status: "vencido"` para cheques devolvidos, mas não atualiza o `status_cobranca_id`. Como esse campo está em `PROTECTED_FIELDS`, ele nunca é sincronizado, e a interface continua mostrando "Quitado".
 
-1. **Edge Function (`maxlist-import/index.ts`)**: Variável `result` na linha 641 não existe — o objeto foi declarado como `report` na linha 620. Trocar `result` por `report`.
+## Alterações em `supabase/functions/maxlist-import/index.ts`
 
-2. **`paymentMethodsService.ts`**: Queries usando `as any` mas o retorno não tem cast adequado. Adicionar `as any` nos retornos das linhas 38 e 71.
+### 1. Buscar ID do status "Vencido" no início (após linha ~87)
+```typescript
+const { data: statusVencido } = await supabase
+  .from("tipos_status")
+  .select("id")
+  .eq("tenant_id", tenant_id)
+  .ilike("nome", "vencido")
+  .maybeSingle();
+const vencidoStatusId = statusVencido?.id || null;
+```
 
-3. **`customFieldsService.ts`**: Tipo excessivamente profundo na query. Já tem `as unknown as CustomField[]` — confirmar que está ok ou ajustar o cast.
+### 2. No mapeamento (~linha 274), quando `derivedStatus === "vencido"`, definir o `status_cobranca_id`
+Substituir a linha 274 por lógica condicional:
+```typescript
+status_cobranca_id: derivedStatus === "vencido" && vencidoStatusId
+  ? vencidoStatusId
+  : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
+```
 
-## Alterações
+### 3. Adicionar `status_cobranca_id` ao `SYNC_FIELDS` (linha 37-41)
+Para que a comparação de campos o detecte durante reconciliação.
 
-### `supabase/functions/maxlist-import/index.ts`
-- Linha 641: `JSON.stringify(result)` → `JSON.stringify(report)`
+### 4. Criar exceção em `PROTECTED_FIELDS` (linhas 419-423)
+No bloco que monta o `updatePayload`, permitir `status_cobranca_id` quando o status derivado é "vencido":
+```typescript
+for (const field of Object.keys(changes)) {
+  if (PROTECTED_FIELDS.has(field)) {
+    // Exceção: permitir status_cobranca_id quando status é vencido
+    if (field === "status_cobranca_id" && rec.status === "vencido") {
+      updatePayload[field] = rec[field];
+    }
+    continue;
+  }
+  updatePayload[field] = rec[field];
+}
+```
 
-### `src/services/paymentMethodsService.ts`  
-- Linha 38: `return data || [];` → `return (data || []) as any as PaymentMethod[];`
-- Linha 71: `return data || [];` → `return (data || []) as any as PaymentMapping[];`
+### 5. Incluir `status_cobranca_id` no SELECT do update mode (linhas 322-323)
+Adicionar o campo na query de registros existentes para permitir comparação.
 
-### `src/services/customFieldsService.ts`
-- Linha 22: adicionar cast `as any` na query para evitar inferência recursiva de tipo
-
-## Deploy
-
-Após as correções, deploy automático da edge function `maxlist-import` via ferramenta de deploy.
+### 6. Deploy da Edge Function
 
 ## Resultado
-
-- Build passa sem erros
-- Edge function com `getVal` e bloco `debug` funcionando
-- Frontend logando `[MaxList Debug]` no console
+Parcelas de cheque devolvido terão tanto `status = "vencido"` quanto `status_cobranca_id` apontando para o registro correto em `tipos_status`, fazendo a interface refletir o status real.
 
