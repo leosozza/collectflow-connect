@@ -301,7 +301,7 @@ Deno.serve(async (req) => {
         // Fetch existing records by external_id
         const { data: existingRows } = await supabase
           .from("clients")
-          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo")
+          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id")
           .eq("tenant_id", tenant_id)
           .in("external_id", externalIds);
 
@@ -334,7 +334,7 @@ Deno.serve(async (req) => {
           const cpfs = [...new Set(missingBatch.map((r: any) => cleanCPF(r.cpf)))];
           const { data: fallbackRows } = await supabase
             .from("clients")
-            .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo")
+            .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id")
             .eq("tenant_id", tenant_id)
             .in("cpf", cpfs);
 
@@ -370,8 +370,20 @@ Deno.serve(async (req) => {
           // Compare fields
           const changes: Record<string, { old: any; new: any }> = {};
           for (const field of SYNC_FIELDS) {
-            const oldVal = existing[field] ?? null;
-            const newVal = rec[field] ?? null;
+            let oldVal = existing[field] ?? null;
+            let newVal = rec[field] ?? null;
+
+            // Status Normalization: Treat "Quitado" and "pago" as equivalent for the comparison
+            if (field === "status") {
+              const normOld = String(oldVal ?? "").toLowerCase();
+              const normNew = String(newVal ?? "").toLowerCase();
+              // If both are payment-like, don't mark as changed unless one is different (e.g. from pago to vencido)
+              if ((normOld === "quitado" || normOld === "pago") && normNew === "pago") {
+                continue; 
+              }
+              if (normOld === normNew) continue;
+            }
+
             const oldStr = String(oldVal ?? "");
             const newStr = String(newVal ?? "");
             if (oldStr !== newStr) {

@@ -545,6 +545,7 @@ const MaxListPage = () => {
     "Number", "Value", "NetValue", "Discount",
     "PaymentDateQuery", "PaymentDateEffected", "IsCancelled",
     "ModelName", "Observations", "Id", "Producer",
+    "PaymentType", "CheckReturnDateQuery", "CheckReturnReason",
   ]);
 
   /** Detect if mapping uses legacy spreadsheet keys and convert to API keys */
