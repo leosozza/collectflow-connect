@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { downloadAndUploadMedia } from "../_shared/media-persistence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== Handle connection state changes (needs instance lookup) =====
+    // ===== Handle connection state changes =====
     if (event === "connection.update") {
       const state = body.data?.state;
       const sender = body.sender;
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== Handle message events via consolidated RPC v2 =====
+    // ===== Handle message events =====
     if (event === "messages.upsert") {
       const msgData = body.data;
       if (!msgData) {
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
       // Parse message content
       let messageType = "text";
       let content = "";
-      let mediaUrl = "";
+      let rawMediaUrl = "";
       let mediaMimeType = "";
 
       const msg = msgData.message;
@@ -81,27 +82,58 @@ Deno.serve(async (req) => {
         messageType = "image";
         content = msg.imageMessage.caption || "";
         mediaMimeType = msg.imageMessage.mimetype || "image/jpeg";
-        mediaUrl = msgData.mediaUrl || "";
+        rawMediaUrl = msgData.mediaUrl || "";
       } else if (msg?.audioMessage) {
         messageType = "audio";
         mediaMimeType = msg.audioMessage.mimetype || "audio/ogg";
-        mediaUrl = msgData.mediaUrl || "";
+        rawMediaUrl = msgData.mediaUrl || "";
       } else if (msg?.videoMessage) {
         messageType = "video";
         content = msg.videoMessage.caption || "";
         mediaMimeType = msg.videoMessage.mimetype || "video/mp4";
-        mediaUrl = msgData.mediaUrl || "";
+        rawMediaUrl = msgData.mediaUrl || "";
       } else if (msg?.documentMessage) {
         messageType = "document";
         content = msg.documentMessage.fileName || "";
         mediaMimeType = msg.documentMessage.mimetype || "application/octet-stream";
-        mediaUrl = msgData.mediaUrl || "";
+        rawMediaUrl = msgData.mediaUrl || "";
       } else if (msg?.stickerMessage) {
         messageType = "sticker";
-        mediaUrl = msgData.mediaUrl || "";
+        rawMediaUrl = msgData.mediaUrl || "";
       }
 
-      // Single RPC call — no separate instance lookup needed
+      // ===== Persist media to Storage =====
+      let finalMediaUrl = rawMediaUrl;
+      let finalMimeType = mediaMimeType;
+
+      if (rawMediaUrl && messageType !== "text") {
+        // Lookup instance to get tenant_id for storage path
+        const { data: instRow } = await supabase
+          .from("whatsapp_instances")
+          .select("tenant_id")
+          .eq("instance_name", instanceName)
+          .maybeSingle();
+
+        const tenantId = instRow?.tenant_id || "unknown";
+
+        const mediaResult = await downloadAndUploadMedia(
+          supabase,
+          rawMediaUrl,
+          tenantId,
+          "pending",
+          messageType,
+        );
+
+        if (mediaResult) {
+          finalMediaUrl = mediaResult.storedUrl;
+          finalMimeType = mediaResult.mimeType || mediaMimeType;
+          console.log(`[whatsapp-webhook] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
+        } else {
+          console.warn("[whatsapp-webhook] Media persistence failed, using raw URL as fallback");
+        }
+      }
+
+      // Single RPC call
       const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event_v2", {
         _instance_name: instanceName,
         _channel_type: "whatsapp",
@@ -110,8 +142,8 @@ Deno.serve(async (req) => {
         _direction: fromMe ? "outbound" : "inbound",
         _message_type: messageType,
         _content: content || null,
-        _media_url: mediaUrl || null,
-        _media_mime_type: mediaMimeType || null,
+        _media_url: finalMediaUrl || null,
+        _media_mime_type: finalMimeType || null,
         _external_id: externalId || null,
         _provider_message_id: null,
         _actor_type: "human",
@@ -124,6 +156,27 @@ Deno.serve(async (req) => {
       }
 
       console.log("Ingested:", JSON.stringify(result));
+
+      // ===== Trigger async transcription for inbound audio =====
+      if (messageType === "audio" && !fromMe && finalMediaUrl && result?.message_id) {
+        try {
+          console.log(`[whatsapp-webhook] Triggering transcription for message ${result.message_id}`);
+          // Fire-and-forget — don't await
+          fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messageId: result.message_id,
+              audioUrl: finalMediaUrl,
+            }),
+          }).catch((e) => console.error("[whatsapp-webhook] Transcription trigger failed:", e.message));
+        } catch (e: any) {
+          console.error("[whatsapp-webhook] Transcription trigger error:", e.message);
+        }
+      }
 
       return new Response(JSON.stringify({ ok: true, ...result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

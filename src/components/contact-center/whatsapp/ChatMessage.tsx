@@ -1,5 +1,5 @@
 import { ChatMessage as ChatMessageType } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio } from "lucide-react";
 import { format } from "date-fns";
 
 interface ChatMessageProps {
@@ -26,6 +26,11 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
     : null;
   const hasReplyRef = !!message.reply_to_message_id;
 
+  // Extract metadata
+  const metadata = (message as any).metadata as Record<string, any> | null;
+  const transcription = metadata?.transcription as string | undefined;
+  const transcriptionError = metadata?.transcription_error as string | undefined;
+
   const renderContent = () => {
     switch (message.message_type) {
       case "image":
@@ -35,8 +40,9 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
               <img
                 src={message.media_url}
                 alt="Imagem"
-                className="max-w-[280px] rounded-md mb-1"
+                className="max-w-[280px] rounded-md mb-1 cursor-pointer hover:opacity-90 transition-opacity"
                 loading="lazy"
+                onClick={() => window.open(message.media_url!, "_blank")}
               />
             )}
             {message.content && <p className="text-[14.2px] leading-[19px]">{message.content}</p>}
@@ -44,9 +50,31 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
         );
       case "audio":
         return (
-          <audio controls className="max-w-[250px]">
-            <source src={message.media_url || ""} type={message.media_mime_type || "audio/ogg"} />
-          </audio>
+          <div className="space-y-1.5">
+            <audio controls className="max-w-[250px]">
+              <source src={message.media_url || ""} type={message.media_mime_type || "audio/ogg"} />
+            </audio>
+            {/* Transcription block */}
+            {transcription && (
+              <div className={`flex items-start gap-1.5 px-2 py-1.5 rounded text-[12px] leading-[16px] ${
+                isOutbound
+                  ? "bg-[#c8efc3] dark:bg-[#004a3f]"
+                  : "bg-muted/50"
+              }`}>
+                <FileAudio className="w-3 h-3 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                <div>
+                  <span className="font-medium text-[10px] text-muted-foreground block mb-0.5">Transcrição</span>
+                  <span className="text-foreground/80 whitespace-pre-wrap">{transcription}</span>
+                </div>
+              </div>
+            )}
+            {transcriptionError && !transcription && (
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground italic">
+                <AlertCircle className="w-2.5 h-2.5" />
+                <span>Transcrição indisponível</span>
+              </div>
+            )}
+          </div>
         );
       case "video":
         return (
@@ -65,9 +93,22 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
             href={message.media_url || "#"}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[14.2px] underline text-primary"
+            className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+              isOutbound
+                ? "bg-[#c8efc3] dark:bg-[#004a3f] hover:bg-[#bae6b4] dark:hover:bg-[#003a34]"
+                : "bg-muted/60 hover:bg-muted"
+            }`}
           >
-            📎 {message.content || "Documento"}
+            <FileText className="w-8 h-8 text-primary flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium truncate">
+                {message.content || "Documento"}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {message.media_mime_type === "application/pdf" ? "PDF" : 
+                 message.media_mime_type?.split("/").pop()?.toUpperCase() || "Arquivo"}
+              </p>
+            </div>
           </a>
         );
       case "sticker":
