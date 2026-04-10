@@ -1,137 +1,66 @@
 
 
-# Correção e Completude de Mídia + Transcrição no WhatsApp
+# Correção: PDF não chega pela API Oficial (Gupshup)
 
-## Resumo
+## Causa raiz
 
-O sistema já possui a base para mídia (webhooks, sender, UI), mas tem lacunas: o webhook não-oficial não persiste mídia no Storage, a separação oficial/não-oficial precisa ser reforçada, e transcrição de áudio não existe. Este plano corrige e completa em 5 fases sequenciais.
+O log mostra claramente o problema. Quando o Gupshup envia um PDF, o payload chega com `type: "file"`:
 
----
+```text
+type: "file", payload: { name: "Cotação Sagrada Familia.pdf", url: "https://filemanager.gupshup.io/...", contentType: "application/pdf" }
+```
 
-## Fase 1 — Recebimento de Mídia por Provider
+Porém, o código no `gupshup-webhook` (linha 105) faz:
 
-### Webhook Não-Oficial (`whatsapp-webhook/index.ts`)
-**Problema**: O webhook salva `msgData.mediaUrl` diretamente do provider (URL efêmera), sem baixar e persistir no Storage.
+```typescript
+const canonicalType = ["text", "image", "audio", "video", "document"].includes(msgType) ? msgType : "text";
+```
 
-**Correção**:
-- Após parsear a mídia (image/audio/video/document), buscar a instância para obter `tenant_id`
-- Baixar a mídia da URL do provider (Evolution/WuzAPI fornecem `mediaUrl` no payload)
-- Para Evolution: se `mediaUrl` não vier no payload, usar endpoint `GET /chat/getBase64FromMediaMessage/{instance}` para obter o arquivo
-- Upload no bucket `chat-media` com path `{tenant_id}/{conv_id_ou_pending}/{uuid}.{ext}`
-- Substituir `mediaUrl` pela URL pública do Storage antes de chamar o RPC
-- Reutilizar a função `downloadAndUploadMedia` (já existe no gupshup-webhook) extraindo-a para `_shared/media-persistence.ts`
+Como `"file"` **não está na lista**, ele cai no fallback `"text"`. Resultado:
+- `canonicalType = "text"` → a mensagem é salva como texto
+- A condição `mediaUrl && canonicalType !== "text"` impede a persistência da mídia
+- O `content` fica vazio (não há `text` nem `caption` no payload de arquivo)
+- **Só aparece o horário** — exatamente o que você viu no screenshot
 
-### Webhook Oficial (`gupshup-webhook/index.ts`)
-**Problema**: Já faz download e upload de mídia, mas usa `"pending"` como conversationId no path. Funciona, mas é inconsistente.
+## Correção
 
-**Correção**:
-- Manter a lógica existente (já funcional)
-- Apenas alinhar o path de storage para usar `tenant_id/pending/` (já faz isso)
-- Garantir que `media_mime_type` seja extraído corretamente do header `content-type` do download (já faz)
+**Arquivo:** `supabase/functions/gupshup-webhook/index.ts`
 
-### Novo arquivo: `_shared/media-persistence.ts`
-Extrair a função `downloadAndUploadMedia` e `getExtFromMime` do `gupshup-webhook` para um módulo compartilhado, reutilizável por ambos os webhooks.
+### 1. Mapear `"file"` para `"document"` (linha ~105)
 
----
+```typescript
+// Normalizar tipo — Gupshup usa "file" para documentos
+const rawType = msgType === "file" ? "document" : msgType;
+const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
+```
 
-## Fase 2 — Envio de Mídia por Provider
+### 2. Extrair nome do arquivo como content (linha ~61)
 
-### `send-chat-message/index.ts`
-**Estado atual**: Já recebe `mediaUrl`, `mediaType`, `mediaMimeType`, `fileName` e delega ao `whatsapp-sender`. Funcional.
+Adicionar fallback para `payload.name` quando o tipo for file/document:
 
-**Correção mínima**:
-- Validar que `mediaType` é um dos valores válidos (`image`, `video`, `audio`, `document`)
-- Garantir que `mimeType` seja passado ao sender (já faz)
+```typescript
+const content = msgPayload.payload?.text 
+  || msgPayload.payload?.caption 
+  || (msgType === "file" ? msgPayload.payload?.name : null)
+  || payload.payload?.text 
+  || "";
+```
 
-### `_shared/whatsapp-sender.ts`
-**Estado atual**: Já tem `sendEvolutionMedia`, `sendWuzapiMedia`, `sendGupshupMedia` separados por provider.
+### 3. Extrair `media_mime_type` do payload Gupshup (linha ~109)
 
-**Correções**:
-- **Evolution**: endpoint `sendMedia` usa `mediatype` e `media` (URL). Para áudio, Evolution espera `mediatype: "audio"` e aceita URL. Verificar se `caption` não é enviado para áudio (WhatsApp não suporta caption em áudio). Remover caption de áudio.
-- **WuzAPI**: Os campos são `Image`, `Audio`, `Video`, `Document` (PascalCase). Ajustar campo `Mimetype` para todos os tipos (não só document). Para áudio, não enviar Caption.
-- **Gupshup**: Para `image` usa `originalUrl`/`previewUrl`; para `video`/`audio`/`file` usa `url`. Está correto. Remover caption de áudio.
-- Adicionar `mimeType` no payload do Evolution quando enviando document (Evolution aceita `mimetype` no body).
+O Gupshup envia `contentType` no payload. Usar como fallback para o mime type se a persistência falhar:
 
----
+```typescript
+let finalMimeType: string | null = msgPayload.payload?.contentType || null;
+```
 
-## Fase 3 — Transcrição de Áudio
+Assim, mesmo que o download falhe, o mime type é preservado.
 
-### Migração SQL
-- Coluna `metadata` JSONB já existe em `chat_messages` (migration `20260409200614`). Usar `metadata.transcription` para guardar o texto.
+## Arquivos alterados
 
-### Nova Edge Function: `transcribe-audio/index.ts`
-- Recebe `{ messageId, audioUrl }` 
-- Baixa o áudio da URL
-- Usa **Lovable AI Gateway** (`google/gemini-2.5-flash`) para transcrever — envia o áudio como base64 no prompt multimodal, pedindo transcrição em português
-- Salva resultado em `chat_messages.metadata = { transcription: "texto..." }`
-- Se falhar, salva `metadata = { transcription_error: "motivo" }` sem perder o áudio
-- Não bloqueia ingestão — é chamada assincronamente
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/gupshup-webhook/index.ts` | 3 correções pontuais (~5 linhas alteradas) |
 
-### Integração nos Webhooks
-- Após ingestão bem-sucedida de áudio inbound, chamar `transcribe-audio` via `supabase.functions.invoke` (fire-and-forget, sem await bloqueante)
-- Aplicar tanto no `whatsapp-webhook` quanto no `gupshup-webhook`
-
-### UI (`ChatMessage.tsx`)
-- No case `"audio"`: após o player, verificar `message.metadata?.transcription`
-- Se existir, renderizar bloco discreto abaixo: ícone de transcrição + texto em fonte menor com label "Transcrição"
-- Se existir `transcription_error`, mostrar indicador sutil de falha
-
----
-
-## Fase 4 — Frontend de Mídia
-
-### `ChatMessage.tsx`
-- **Imagem**: Adicionar `onClick` para abrir em nova aba (ou lightbox simples via `window.open`)
-- **Vídeo**: Já funcional com `<video controls>`
-- **Áudio**: Já funcional com `<audio controls>`. Adicionar bloco de transcrição (Fase 3)
-- **Documento**: Melhorar card — mostrar ícone de arquivo + nome + tamanho se disponível, em vez de apenas link com emoji
-
-### `ChatInput.tsx`
-- Já funcional. Sem mudanças necessárias.
-
-### `conversationService.ts` → `sendMediaMessage`
-- Já funcional. Sem mudanças necessárias.
-
-### `WhatsAppChatLayout.tsx` → `handleSendMedia` / `handleSendAudio`
-- Já funcional. Sem mudanças necessárias.
-
-### Interface `ChatMessage` em `conversationService.ts`
-- Adicionar campo opcional `metadata?: Record<string, any>` ao tipo `ChatMessage`
-- Garantir que o `select()` do fetch de mensagens inclua `metadata`
-
----
-
-## Fase 5 — Logs, Status e Robustez
-
-### Logs de erro
-- Em `_shared/media-persistence.ts`: logar erros de download/upload com `console.error` detalhado
-- Em `transcribe-audio`: logar falhas de transcrição
-- Nenhuma falha de mídia/transcrição deve quebrar a conversa
-
-### Status de mídia
-- Já funciona via `messages.update` nos webhooks (statusMap 2→sent, 3→delivered, 4→read)
-- Gupshup já trata status (delivered, read, failed)
-- Sem mudança necessária
-
-### Provider message ID
-- `send-chat-message` já persiste `providerMessageId` via RPC
-- Webhooks já recebem `external_id`
-- Sem mudança necessária
-
----
-
-## Arquivos Afetados
-
-| Arquivo | Tipo | Descrição |
-|---|---|---|
-| `supabase/functions/_shared/media-persistence.ts` | **Novo** | Funções `downloadAndUploadMedia` e `getExtFromMime` extraídas |
-| `supabase/functions/whatsapp-webhook/index.ts` | Editar | Adicionar persistência de mídia via `_shared/media-persistence.ts` |
-| `supabase/functions/gupshup-webhook/index.ts` | Editar | Usar `_shared/media-persistence.ts` em vez de função inline |
-| `supabase/functions/_shared/whatsapp-sender.ts` | Editar | Corrigir caption em áudio, adicionar mimeType em Evolution |
-| `supabase/functions/transcribe-audio/index.ts` | **Novo** | Edge function de transcrição via Lovable AI |
-| `src/components/contact-center/whatsapp/ChatMessage.tsx` | Editar | Transcrição, melhorar documento, click em imagem |
-| `src/services/conversationService.ts` | Editar | Adicionar `metadata` ao tipo e ao select |
-
-### Migração SQL
-- Nenhuma necessária (coluna `metadata` JSONB já existe)
+Nenhuma mudança no banco, frontend ou outros edge functions necessária. O `ChatMessage.tsx` já renderiza documentos corretamente — o problema era exclusivamente o webhook não reconhecer `"file"` como documento.
 
