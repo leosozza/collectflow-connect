@@ -1,48 +1,53 @@
 
 
-# Ajuste visual + lógica de cheque devolvido
+# Corrigir reconciliação de cheque devolvido — status_cobranca_id nunca atualizado
 
-## Alterações
+## Diagnóstico
 
-### 1. Frontend — `src/pages/ClientDetailPage.tsx`
+Investigação completa revelou:
 
-**Tabela de Títulos em Aberto (linhas 257-295):**
+1. **`vencidoStatusId: null`** — A Edge Function busca `ilike("nome", "vencido")` na tabela `tipos_status`, mas esse tenant não tem status "Vencido". O status correto é **"Inadimplente"** (id `35679541-...`). Resultado: `status_cobranca_id` do registro mapeado fica `null`, e como o existente no banco é "Quitado" (`ee5a1d2e-...`), a mudança é detectada MAS o valor aplicado é `null` em vez do ID de "Inadimplente".
 
-- Adicionar coluna `<TableHead>Devolução</TableHead>` após "Saldo Devedor"
-- Adicionar `<TableCell>` correspondente com `formatDate(c.data_devolucao)` ou "—"
-- Alterar lógica do Badge de status (linhas 270-279): se `c.data_devolucao` estiver preenchido, forçar label "Cheque Devolvido" com classe vermelha (`bg-destructive/10 text-destructive border-destructive/30`), independente do valor de `c.status`
+2. **Query fallback incompleta** — Linhas 363-366: o SELECT do fallback não inclui `status_cobranca_id` nem `data_devolucao`, impedindo comparação precisa para esses campos.
 
-### 2. Edge Function — `supabase/functions/maxlist-import/index.ts`
+3. **Banco atual da Leidiane**: Todas as 36 parcelas com `status = "pago"`, `status_cobranca_id = Quitado`, `data_devolucao = null`. Zero mudanças aplicadas.
 
-**Regra de status (linhas 239-253):** Mover a verificação de `rawReturnDate` para ANTES da verificação de `hasPagamento`, tornando-a prioritária:
+## Alterações na Edge Function `maxlist-import/index.ts`
 
-```
-if (rawIsCancelled) → "cancelado_maxlist"
-else if (rawReturnDate) → "vencido"          ← nova posição, antes de hasPagamento
-else if (hasPagamento) → "pago"
-else → "pendente"
-```
+### 1. Buscar "Inadimplente" como fallback (linhas 89-96)
 
-Isso garante que mesmo parcelas com data de pagamento preenchida sejam forçadas para "vencido" se houver devolução.
-
-**Exceção PROTECTED_FIELDS (linhas 432-438):** Adicionar `data_devolucao` na mesma exceção, permitindo que tanto `status_cobranca_id` quanto `data_devolucao` sejam atualizados quando `rec.status === "vencido"`:
+Alterar a query para buscar primeiro "Vencido", e se não encontrar, buscar "Inadimplente":
 
 ```typescript
-if (PROTECTED_FIELDS.has(field)) {
-  if ((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido") {
-    updatePayload[field] = rec[field];
-  }
-  continue;
+// Fetch status ID: try "Vencido" first, fallback to "Inadimplente"
+let vencidoStatusId: string | null = null;
+const { data: statusVencido } = await supabase
+  .from("tipos_status").select("id")
+  .eq("tenant_id", tenant_id).ilike("nome", "vencido").maybeSingle();
+if (statusVencido?.id) {
+  vencidoStatusId = statusVencido.id;
+} else {
+  const { data: statusInadimplente } = await supabase
+    .from("tipos_status").select("id")
+    .eq("tenant_id", tenant_id).ilike("nome", "inadimplente").maybeSingle();
+  vencidoStatusId = statusInadimplente?.id || null;
 }
 ```
 
-(Nota: `data_devolucao` não está em `PROTECTED_FIELDS` atualmente, então já passa. Mas `status_cobranca_id` está e a exceção existente já o cobre.)
+### 2. Adicionar campos na query fallback (linha 365)
 
-**Deploy** da edge function após as alterações.
+Adicionar `status_cobranca_id, data_devolucao` no SELECT da query de fallback para comparação precisa.
 
-### Resultado
+### 3. Log adicional para debug
 
-- Interface mostra "Cheque Devolvido" em vermelho para qualquer parcela com `data_devolucao`, mesmo que status no banco seja "pago"
-- Coluna "Devolução" visível na tabela de títulos
-- Backend prioriza `rawReturnDate` sobre `hasPagamento`, forçando status correto na origem
+Adicionar log do `CheckReturnDateQuery` para cada parcela processada (não só o sample), para confirmar quais parcelas têm data de devolução preenchida.
+
+### 4. Deploy da Edge Function
+
+## Resultado Esperado
+
+- `vencidoStatusId` será `35679541-8088-40b1-8aa9-c75a7dd055e7` (Inadimplente)
+- Parcelas com `CheckReturnDateQuery` preenchido terão: `status = "vencido"`, `status_cobranca_id = Inadimplente`, `data_devolucao` preenchido
+- O `auto-status-sync` então recalculará o status geral do cliente de "Quitado" para "Inadimplente"
+- Na interface, o badge mostrará "Cheque Devolvido" em vermelho
 
