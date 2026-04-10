@@ -832,12 +832,13 @@ const MaxListPage = () => {
             </Badge>
           )}
           <Button
-            variant="default"
+            variant="outline"
             onClick={() => setShowUpdatePagosDialog(true)}
             disabled={importing || updatingPagos}
+            className="border-primary text-primary hover:bg-primary/10"
           >
-            {updatingPagos ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            Atualizar Pagos
+            {updatingPagos ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sincronizar por Período
           </Button>
           <Button variant="outline" onClick={() => setShowSettings(true)}>
             <Settings className="w-4 h-4 mr-2" />

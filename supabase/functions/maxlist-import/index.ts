@@ -106,13 +106,14 @@ Deno.serve(async (req) => {
     const PAGE_SIZE = 5000;
     let allItems: any[] = [];
     let skip = 0;
-
+    const SELECT_FIELDS = "Id,IdRecord,ResponsibleName,ResponsibleCPF,ContractNumber,Number,PaymentDateQuery,PaymentDateEffected,Value,NetValue,IsCancelled,CellPhone1,CellPhone2,HomePhone,ModelName,Email,Observations,Discount,Producer,PaymentType,CheckReturnDateQuery,CheckReturnReason";
+    
     while (true) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
 
       try {
-        const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}`;
+        const url = `${supabaseUrl}/functions/v1/maxsystem-proxy?filter=${encodeURIComponent(filter)}&top=${PAGE_SIZE}&skip=${skip}&select=${encodeURIComponent(SELECT_FIELDS)}`;
         const resp = await fetch(url, {
           headers: { Authorization: authHeader, "Content-Type": "application/json" },
           signal: controller.signal,
@@ -127,6 +128,11 @@ Deno.serve(async (req) => {
 
         const json = await resp.json();
         const items = json.Items || [];
+        
+        if (items.length > 0 && allItems.length === 0) {
+          console.log("[maxlist-import] Sample item received from MaxSystem:", JSON.stringify(items[0], null, 2));
+        }
+
         allItems = allItems.concat(items);
 
         console.log(`[maxlist-import] Fetched ${allItems.length} records so far`);
