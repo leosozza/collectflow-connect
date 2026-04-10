@@ -21,6 +21,18 @@ function cleanPhone(phone: string | null): string {
   return String(phone).replace(/[^\d]/g, "");
 }
 
+/** Helper for case-insensitive access to object properties */
+function getVal(obj: any, key: string): any {
+  if (!obj || typeof obj !== "object") return undefined;
+  if (key in obj) return obj[key];
+  
+  const lowerKey = key.toLowerCase();
+  for (const k of Object.keys(obj)) {
+    if (k.toLowerCase() === lowerKey) return obj[k];
+  }
+  return undefined;
+}
+
 // Fields that can be updated from MaxSystem origin
 const SYNC_FIELDS = [
   "data_pagamento", "valor_pago", "valor_parcela", "valor_saldo",
@@ -205,11 +217,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // YBRASIL status rules
-      const rawIsCancelled = (rawItem as any).IsCancelled === true;
-      const rawPaymentEffected = (rawItem as any).PaymentDateEffected;
-      const rawPaymentType = (rawItem as any).PaymentType;
-      const rawReturnDate = (rawItem as any).CheckReturnDateQuery;
+      // YBRASIL status rules (using getVal for case-insensitivity)
+      const rawIsCancelled = getVal(rawItem, "IsCancelled") === true;
+      const rawPaymentEffected = getVal(rawItem, "PaymentDateEffected");
+      const rawPaymentType = getVal(rawItem, "PaymentType");
+      const rawReturnDate = getVal(rawItem, "CheckReturnDateQuery");
       
       const hasPagamento = !!record.data_pagamento || !!rawPaymentEffected;
       const meioPagamentoId = rawPaymentType ? paymentMappings.get(String(rawPaymentType)) : null;
@@ -616,14 +628,18 @@ Deno.serve(async (req) => {
       unchanged,
       rejected: rejected.length,
       rejected_records: rejected.slice(0, 100),
-      duplicates_discarded: duplicatesDiscarded,
-      errors,
-      duration_ms: durationMs,
-      updated_records: updatedRecords.slice(0, 200),
+      duration_ms: Date.now() - startTime,
+      debug: {
+        raw: allItems.length > 0 ? allItems[0] : null,
+        mapped: records.length > 0 ? records[0] : null,
+        sync_fields: SYNC_FIELDS,
+        filters: filter,
+        mode,
+      }
     };
-    console.log(`[maxlist-import] Complete: mode=${mode}, inserted=${inserted}, updated=${updated}, unchanged=${unchanged}, paid=${paid}, cancelled=${cancelledMaxlist}`);
 
-    return new Response(JSON.stringify(report), {
+    return new Response(JSON.stringify(result), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {

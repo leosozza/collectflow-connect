@@ -708,6 +708,10 @@ const MaxListPage = () => {
 
       if (error) throw error;
 
+      if (result?.debug) {
+        console.log("[MaxList Debug]", result.debug);
+      }
+
       if (progressInterval) clearInterval(progressInterval);
       setImportProgress(100);
 
