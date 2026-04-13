@@ -264,6 +264,11 @@ function buildFilter(filters: Record<string, string | string[]>): string {
     parts.push(`ContractNumber+eq+'${contrato.trim()}'`);
   }
 
+  // Novo filtro de performance: Apenas Pagos
+  if (filters.somentePagos === true) {
+    parts.push("PaymentDateEffectedQuery+ne+null");
+  }
+
   if (filters.status === "ativo") {
     parts.push(`IsCancelled+eq+false`);
   } else if (filters.status === "cancelado") {
@@ -289,7 +294,7 @@ const MaxListPage = () => {
 
   const [filters, setFilters] = useState({
     vencDe: "", vencAte: "", pagDe: "", pagAte: "", regDe: "", regAte: "", devDe: "", devAte: "",
-    cpf: "", contrato: "", status: "todos", agencias: [] as string[],
+    cpf: "", contrato: "", status: "todos", agencias: [] as string[], somentePagos: false,
   });
   const [data, setData] = useState<MappedRecord[]>([]);
   const [rawItems, setRawItems] = useState<MaxSystemItem[]>([]);
@@ -1119,6 +1124,20 @@ const MaxListPage = () => {
                 searchable
                 searchPlaceholder="Buscar agência..."
               />
+            </div>
+            <div className="flex items-end pb-2">
+              <div className="flex items-center space-x-2 bg-primary/5 p-2 rounded-md border border-primary/10">
+                <input
+                  type="checkbox"
+                  id="somentePagos"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={!!filters.somentePagos}
+                  onChange={(e) => updateFilter("somentePagos", e.target.checked)}
+                />
+                <Label htmlFor="somentePagos" className="text-sm font-semibold cursor-pointer text-primary">
+                  Sincronizar Apenas Pagos
+                </Label>
+              </div>
             </div>
           </div>
           <div className="flex gap-2 mt-4">
