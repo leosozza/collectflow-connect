@@ -1,38 +1,48 @@
 
+Objetivo
 
-# Corrigir exibição dos valores do Dashboard
+Voltar o dashboard para a leitura original, sem o card "Quitados no Mês", mantendo a interpretação correta de que o restante do valor vem de acordos já quitados e não de pendências.
 
-## Diagnóstico
+O que encontrei
 
-Após análise detalhada dos dados:
+- O cálculo de "Pendentes" já está novamente na semântica correta: acordos `completed` não entram nele.
+- O que sobrou da última alteração foi o campo auxiliar `total_quitados` no backend e o card "Quitados no Mês" no frontend.
+- Esse campo extra só está sendo usado no dashboard atual, então a reversão é pequena e localizada.
 
-- **Recebido (R$ 6.125,17)** — CORRETO. Já inclui os R$ 2.658,74 dos 4 acordos quitados no mês. Os pagamentos foram registrados como eventos e são contabilizados.
-- **Pendente (R$ 10.712,07)** — CORRETO no cálculo (parcelas que vencem no mês menos o que já foi recebido).
-- **Negociado / Total de Primeira Parcela (R$ 19.042,51)** — soma apenas a PRIMEIRA parcela de cada acordo criado no mês.
+Plano
 
-O problema é que **"Negociado" e "Pendente" medem coisas diferentes**: Negociado = primeira parcela de acordos criados no mês. Pendente = TODAS as parcelas com vencimento no mês. Por isso a soma Recebido + Pendente não bate com Negociado — **nunca deveria bater, são métricas distintas**.
+1. Reverter o campo auxiliar no backend
+- Atualizar a função `get_dashboard_stats` para remover `total_quitados` do retorno.
+- Remover a variável `_quitados` e a consulta que soma acordos `completed`.
+- Manter sem mudança os cálculos atuais de:
+  - `total_recebido`
+  - `total_pendente`
+  - `total_negociado`
+  - `total_negociado_mes`
 
-## Solução proposta
+2. Limpar o dashboard
+- Remover `total_quitados` da interface `DashboardStats`.
+- Remover o card "Quitados no Mês".
+- Ajustar a grade dos KPIs para voltar ao layout original sem esse card extra.
+- Remover qualquer texto visual diretamente ligado a esse indicador extra, se houver.
 
-Reverter a migration anterior (que não causou dano mas é desnecessária) e melhorar a **clareza visual** do dashboard para eliminar a confusão:
+3. Preservar o entendimento original
+- O dashboard volta a mostrar só os KPIs principais.
+- A explicação continua sendo esta:
+  - "Total de Primeira Parcela" inclui acordos criados no mês.
+  - "Pendentes" mostra apenas o que ainda está em aberto.
+  - O restante do valor corresponde a acordos já quitados, então não aparece como pendência.
 
-### 1. Reverter a migration anterior
-Remover `'completed'` do filtro de Pendente, voltando para `('pending', 'approved', 'overdue')`. Isso não altera os valores finais (a subtração neutralizava), mas mantém a semântica correta: pendente = parcelas de acordos que ainda não foram quitados.
+Resultado esperado
 
-### 2. Adicionar card "Quitados no Mês"
-Adicionar um novo card no dashboard mostrando o valor total dos acordos completados no mês (~R$ 2.658). Isso torna visível a parcela que "desaparecia" e permite ao usuário entender a decomposição:
+- Sai o card "Quitados no Mês".
+- O dashboard volta a ficar como antes dessa última mudança visual.
+- Nenhum dado será alterado.
+- Nenhuma regra principal de cálculo será mexida além da remoção do campo auxiliar.
 
-```
-Negociado = Recebido (inclui quitados) + Pendente (acordos ativos) + diferença de bases*
-```
+Detalhes técnicos
 
-### 3. Adicionar tooltip explicativo
-Nos cards "Negociado" e "Pendente", adicionar tooltips curtos explicando o que cada métrica mede:
-- Negociado: "Soma da primeira parcela dos acordos criados no mês"
-- Pendente: "Parcelas com vencimento no mês, menos os valores já recebidos"
-
-## Alterações técnicas
-
-- **1 migration SQL**: Reverter filtro de Pendente + adicionar retorno de `_quitados` na RPC
-- **1 arquivo frontend**: `src/pages/DashboardPage.tsx` — adicionar card "Quitados" e tooltips
-
+- Arquivos principais:
+  - `src/pages/DashboardPage.tsx`
+  - nova migration para atualizar `get_dashboard_stats`
+- Não vou editar manualmente o arquivo gerado de tipos da integração; ele deve refletir a função atualizada automaticamente depois da mudança no backend.
