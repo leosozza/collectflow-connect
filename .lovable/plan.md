@@ -1,48 +1,68 @@
 
-Objetivo
 
-Voltar o dashboard para a leitura original, sem o card "Quitados no Mês", mantendo a interpretação correta de que o restante do valor vem de acordos já quitados e não de pendências.
+# Múltiplas Entradas na Calculadora de Acordos
 
-O que encontrei
+## Problema
+Atualmente o `AgreementCalculator.tsx` suporta apenas uma entrada (data + valor). O usuário precisa poder adicionar múltiplas entradas (ex: Entrada 1, Entrada 2, etc.).
 
-- O cálculo de "Pendentes" já está novamente na semântica correta: acordos `completed` não entram nele.
-- O que sobrou da última alteração foi o campo auxiliar `total_quitados` no backend e o card "Quitados no Mês" no frontend.
-- Esse campo extra só está sendo usado no dashboard atual, então a reversão é pequena e localizada.
+## Estratégia de persistência
 
-Plano
+O banco já possui:
+- `entrada_value` (numeric) — armazenará a **soma** de todas as entradas
+- `entrada_date` (date) — armazenará a data da **primeira** entrada
+- `custom_installment_values` (jsonb) — armazenará os valores individuais: `{"entrada": 500, "entrada_2": 300, "entrada_3": 200}`
+- `custom_installment_dates` (jsonb) — armazenará as datas individuais: `{"entrada": "2026-04-15", "entrada_2": "2026-04-20"}`
 
-1. Reverter o campo auxiliar no backend
-- Atualizar a função `get_dashboard_stats` para remover `total_quitados` do retorno.
-- Remover a variável `_quitados` e a consulta que soma acordos `completed`.
-- Manter sem mudança os cálculos atuais de:
-  - `total_recebido`
-  - `total_pendente`
-  - `total_negociado`
-  - `total_negociado_mes`
+**Nenhuma migration necessária** — os campos JSONB já existem e suportam essa estrutura.
 
-2. Limpar o dashboard
-- Remover `total_quitados` da interface `DashboardStats`.
-- Remover o card "Quitados no Mês".
-- Ajustar a grade dos KPIs para voltar ao layout original sem esse card extra.
-- Remover qualquer texto visual diretamente ligado a esse indicador extra, se houver.
+## Alterações
 
-3. Preservar o entendimento original
-- O dashboard volta a mostrar só os KPIs principais.
-- A explicação continua sendo esta:
-  - "Total de Primeira Parcela" inclui acordos criados no mês.
-  - "Pendentes" mostra apenas o que ainda está em aberto.
-  - O restante do valor corresponde a acordos já quitados, então não aparece como pendência.
+### 1. `src/components/client-detail/AgreementCalculator.tsx`
 
-Resultado esperado
+**Estado**: Substituir `entradaDate` (string) e `entradaValue` (number) por um array:
+```ts
+interface EntradaItem { date: string; value: number | "" }
+const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0 }]);
+```
 
-- Sai o card "Quitados no Mês".
-- O dashboard volta a ficar como antes dessa última mudança visual.
-- Nenhum dado será alterado.
-- Nenhuma regra principal de cálculo será mexida além da remoção do campo auxiliar.
+**UI (Seção "Condições do Acordo")**: Substituir os 2 campos fixos de entrada por uma lista dinâmica:
+- Cada linha mostra: label "Entrada N", campo data, campo valor, botão remover (se N > 1)
+- Botão "+" para adicionar nova linha de entrada
+- Layout compacto mantendo o estilo atual (h-7, text-xs)
 
-Detalhes técnicos
+**Cálculo**: `numEntrada` passa a ser a soma de todos os valores de entrada. `remainingAfterEntrada` permanece `totalAtualizado - somaEntradas`.
 
-- Arquivos principais:
-  - `src/pages/DashboardPage.tsx`
-  - nova migration para atualizar `get_dashboard_stats`
-- Não vou editar manualmente o arquivo gerado de tipos da integração; ele deve refletir a função atualizada automaticamente depois da mudança no backend.
+**Simulação (`handleSimulate`)**: Cada entrada gera uma linha individual na tabela de simulação (number: 0 para todas, mas com label "Entrada 1", "Entrada 2", etc.). Ajustar `SimulatedInstallment` para incluir campo `label` opcional.
+
+**Gravação (`handleSubmit`)**: Ao montar `AgreementFormData`:
+- `entrada_value` = soma de todas as entradas
+- `entrada_date` = data da primeira entrada
+- Montar `custom_installment_dates` e `custom_installment_values` com chaves `"entrada"`, `"entrada_2"`, `"entrada_3"`, etc.
+
+### 2. `src/services/agreementService.ts`
+
+Atualizar `AgreementFormData` para aceitar campos opcionais:
+```ts
+custom_installment_dates?: Record<string, string>;
+custom_installment_values?: Record<string, number>;
+```
+Esses campos já existem na interface `Agreement` e no banco — basta passá-los no insert.
+
+### 3. `src/lib/agreementInstallmentClassifier.ts`
+
+Já suporta múltiplas entradas via `custom_installment_dates`/`custom_installment_values` com a chave `"entrada"`. Ajustar `buildInstallmentSchedule` para iterar sobre chaves `"entrada"`, `"entrada_2"`, etc., gerando uma `VirtualInstallment` para cada.
+
+### 4. Tabela de simulação (display)
+
+Na tabela de simulação, mostrar:
+- "Entrada 1" em vez de "Entrada" quando há múltiplas
+- "Entrada 2", "Entrada 3", etc. para as adicionais
+- Parcelas regulares continuam como `01/XX`, `02/XX`
+
+## Resultado esperado
+- Botão "+" visível ao lado dos campos de entrada
+- Cada entrada é uma linha editável independente
+- Simulação mostra todas as entradas individualmente
+- Acordo gravado corretamente com breakdown nas colunas JSONB existentes
+- Classificação de parcelas (`agreementInstallmentClassifier`) reconhece múltiplas entradas
+
