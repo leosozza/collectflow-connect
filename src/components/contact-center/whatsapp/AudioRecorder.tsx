@@ -50,20 +50,24 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
 
   const startRecording = async () => {
     try {
+      console.log("[AudioRecorder] Iniciando gravação...");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-        ? "audio/mp4" // AAC is great for WA Official
-        : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
-          ? "audio/ogg;codecs=opus"
-          : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-            ? "audio/webm;codecs=opus"
-            : "audio/webm";
+      const formats = [
+        "audio/ogg;codecs=opus",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/aac"
+      ];
+
+      const mimeType = formats.find(f => MediaRecorder.isTypeSupported(f)) || "audio/webm";
+      console.log("[AudioRecorder] Formato selecionado:", mimeType);
 
       const mediaRecorder = new MediaRecorder(stream, { 
         mimeType,
-        audioBitsPerSecond: 128000 // Standard quality
+        audioBitsPerSecond: 128000 
       });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -75,6 +79,8 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         blobRef.current = blob;
+        console.log("[AudioRecorder] Gravação finalizada. Tamanho:", blob.size, "MIME:", blob.type);
+        
         const url = URL.createObjectURL(blob);
         setPreviewUrl(url);
         setState("preview");
@@ -85,8 +91,8 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
       setState("recording");
       setDuration(0);
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
-    } catch {
-      // Permission denied
+    } catch (err: any) {
+      console.error("[AudioRecorder] Erro ao acessar microfone:", err);
     }
   };
 

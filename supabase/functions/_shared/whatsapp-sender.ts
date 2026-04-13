@@ -146,6 +146,9 @@ async function sendWuzapiMedia(
     // WhatsApp does NOT support caption on audio
     payload.Audio = media.mediaUrl;
     payload.Mimetype = media.mimeType || "audio/ogg";
+    if (payload.Mimetype.includes("webm")) {
+      payload.Mimetype = "audio/ogg";
+    }
   } else {
     // document
     payload.Document = media.mediaUrl;
@@ -192,6 +195,7 @@ async function sendGupshupMedia(
   } else if (gupType === "audio") {
     // No caption for audio
     msgPayload.url = media.mediaUrl;
+    msgPayload.mimetype = media.mimeType || "audio/ogg";
   } else {
     // file/document
     msgPayload.url = media.mediaUrl;

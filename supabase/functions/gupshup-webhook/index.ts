@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.json();
     console.log("Gupshup webhook payload (full):", JSON.stringify(payload));
-    
+
     await writeLog(null, "inbound", `Webhook recebido: type=${payload.type || payload.eventType}`, payload, 200);
 
     const eventType = payload.type || payload.eventType || (payload.payload?.type === "text" ? "message" : null);
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // ===== Inbound message =====
     if (eventType === "message") {
       const msgPayload = payload.payload || {};
-      
+
       const phone = msgPayload.source || msgPayload.sender?.phone || payload.sender?.phone;
       const senderName = msgPayload.sender?.name || payload.sender?.name || phone || "";
       const msgType = msgPayload.type || "text";
@@ -214,36 +214,42 @@ Deno.serve(async (req) => {
         }
       }
     }
-    // ===== Status update (delivered, read, failed, sent, etc) =====
+    // ===== Status update (delivered, read, failed) =====
     else if (eventType === "message-event" || eventType === "status") {
-      const payloadData = payload.payload || {};
-      const status = payloadData.type || payload.status;
-      const gsMessageId = payloadData.gsId || payloadData.id || payload.messageId;
+      const status = payload.payload?.type || payload.payload?.status || payload.status;
+      const gsMessageId = payload.payload?.gsId || payload.payload?.id || payload.messageId;
 
       if (gsMessageId && status) {
-        // Detailed log for failures
-        if (status === "failed" || status === "error") {
-          const cause = payloadData.cause || payloadData.payload?.cause || "Unknown cause";
-          const errorCode = payloadData.errorCode || payloadData.payload?.errorCode || "";
-          console.error(`[gupshup-webhook] Delivery FAILED: gsId=${gsMessageId}, cause=${cause}, code=${errorCode}`);
-        }
-
+        const isFailed = status === "failed" || status === "error";
         const mappedStatus =
           status === "delivered" ? "delivered" :
-          status === "read" ? "read" :
-          status === "failed" || status === "error" ? "failed" :
-          status === "sent" ? "sent" : status;
+            status === "read" ? "read" :
+              isFailed ? "failed" :
+                status === "sent" ? "sent" : status;
 
-        console.log(`[gupshup-webhook] Updating status: gsId=${gsMessageId} -> ${mappedStatus}`);
-
-        const { error: updateErr } = await supabase
-          .from("chat_messages")
-          .update({ status: mappedStatus })
-          .or(`external_id.eq.${gsMessageId},provider_message_id.eq.${gsMessageId}`);
+        const updateData: any = { status: mappedStatus };
         
-        if (updateErr) {
-          console.error(`[gupshup-webhook] DB update failed for gsId=${gsMessageId}:`, updateErr.message);
+        // Se falhou, capturamos o erro detalhado para diagnóstico
+        if (isFailed) {
+          const detail = payload.payload?.payload || payload.payload || {};
+          const errorCode = detail.code || detail.errorCode;
+          const reason = detail.reason || detail.cause || detail.text;
+          
+          updateData.metadata = { 
+            error_code: errorCode,
+            error_reason: reason,
+            failed_at: new Date().toISOString()
+          };
+          
+          console.error(`[gupshup-webhook] Message ${gsMessageId} FAILED: code=${errorCode}, reason=${reason}`);
+          await writeLog(null, "error", `Mensagem falhou: ${gsMessageId}`, { gsMessageId, errorCode, reason }, 200);
         }
+
+        await Promise.all([
+          supabase.from("chat_messages")
+            .update(updateData)
+            .or(`external_id.eq.${gsMessageId},provider_message_id.eq.${gsMessageId}`),
+        ]);
       }
     }
 
