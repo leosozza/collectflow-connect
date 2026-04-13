@@ -64,8 +64,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [descontoReais, setDescontoReais] = useState<number>(0);
 
   // Agreement form
-  const [entradaDate, setEntradaDate] = useState("");
-  const [entradaValue, setEntradaValue] = useState<number | "">(0);
+  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0 }]);
   const [numParcelas, setNumParcelas] = useState<number>(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
@@ -139,9 +138,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   useEffect(() => {
     setSimulated(false);
     setSimulatedInstallments([]);
-  }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradaValue, numParcelas, firstDueDate, formaPagto, intervalo]);
+  }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradas, numParcelas, firstDueDate, formaPagto, intervalo]);
 
-  const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
+  const numEntrada = entradas.reduce((sum, e) => sum + (typeof e.value === "number" ? e.value : 0), 0);
 
   // Per-row calculations
   const rowCalcs = useMemo(() => {
