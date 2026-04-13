@@ -620,15 +620,40 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 pb-3">
+            {/* Dynamic entradas */}
+            {entradas.map((ent, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Data Entrada ${idx + 1}` : "Data Entrada"}</Label>
+                  <Input type="date" value={ent.date} onChange={(e) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], date: e.target.value };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
+                  <Input type="number" min={0} value={ent.value} onChange={(e) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], value: e.target.value === "" ? "" : Number(e.target.value) };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" placeholder="0,00" />
+                </div>
+                <div className="flex gap-1">
+                  {entradas.length > 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas(entradas.filter((_, i) => i !== idx))}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  )}
+                  {idx === entradas.length - 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: 0 }])}>
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Data Entrada</Label>
-                <Input type="date" value={entradaDate} onChange={(e) => setEntradaDate(e.target.value)} className="h-7 text-xs px-2" />
-              </div>
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Valor Entrada</Label>
-                <Input type="number" min={0} value={entradaValue} onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))} className="h-7 text-xs px-2" placeholder="0,00" />
-              </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px]">Parcelas</Label>
                 <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-7 text-xs px-2" />
