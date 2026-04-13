@@ -1,10 +1,18 @@
 
 
-# Fix: Remover código duplicado no MaxListPage.tsx
+# Remover 3 índices redundantes do banco de dados
 
-## Problema
-O arquivo `MaxListPage.tsx` tem código duplicado/órfão das linhas 1187-1357. O componente termina corretamente na linha 1186 (`export default MaxListPage;`), mas depois há JSX solto que causa erro de sintaxe e impede a página de abrir.
+## Alteração
 
-## Correção
-Deletar as linhas 1187-1357 do arquivo. Essas linhas são uma cópia parcial do final do componente que foi acidentalmente deixada durante a edição anterior (batching).
+Uma única migration SQL para dropar os 3 índices identificados como seguros para remoção:
+
+```sql
+DROP INDEX IF EXISTS idx_clients_nome_completo_trgm;  -- 25 MB, 0 scans
+DROP INDEX IF EXISTS idx_clients_external_id;          -- 19 MB, 10 scans (coberto pelo UNIQUE constraint)
+DROP INDEX IF EXISTS idx_clients_credor;               -- 3 MB, 0 scans (coberto pelo idx_clients_tenant_credor)
+```
+
+**Resultado**: ~47 MB liberados + INSERTs/UPDATEs mais rápidos nas importações.
+
+Nenhuma alteração de código é necessária — nenhum desses índices é referenciado no código da aplicação.
 
