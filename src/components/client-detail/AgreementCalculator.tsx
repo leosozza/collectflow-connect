@@ -718,10 +718,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {simulatedInstallments.map((inst) => (
-                      <TableRow key={inst.number} className="text-xs">
+                    {simulatedInstallments.map((inst, idx) => (
+                      <TableRow key={`${inst.number}-${idx}`} className="text-xs">
                         <TableCell className="px-3 font-medium">
-                          {inst.number === 0 ? "Entrada" : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
+                          {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
                         </TableCell>
                         <TableCell className="px-3">
                           <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
@@ -730,6 +730,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                         <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
                       </TableRow>
                     ))}
+
                     <TableRow className="bg-emerald-50 dark:bg-emerald-950/30 border-t-2 text-xs font-bold">
                       <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
                       <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">

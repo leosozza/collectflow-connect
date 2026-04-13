@@ -20,19 +20,36 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
   const installments: VirtualInstallment[] = [];
   const customDates = (agreement.custom_installment_dates as Record<string, string> | null) || {};
   const customValues = (agreement.custom_installment_values as Record<string, number> | null) || {};
-  const hasEntrada = (agreement.entrada_value ?? 0) > 0;
 
-  if (hasEntrada) {
-    const entradaDateStr = customDates["entrada"] || agreement.entrada_date || agreement.first_due_date;
+  // Collect all entrada keys (entrada, entrada_2, entrada_3, ...)
+  const entradaKeys: string[] = [];
+  if ((agreement.entrada_value ?? 0) > 0) {
+    // Check for multiple entradas in custom values
+    const customEntradaKeys = Object.keys(customValues).filter(k => k.startsWith("entrada")).sort((a, b) => {
+      const numA = a === "entrada" ? 1 : parseInt(a.replace("entrada_", ""));
+      const numB = b === "entrada" ? 1 : parseInt(b.replace("entrada_", ""));
+      return numA - numB;
+    });
+    if (customEntradaKeys.length > 0) {
+      entradaKeys.push(...customEntradaKeys);
+    } else {
+      entradaKeys.push("entrada");
+    }
+  }
+
+  entradaKeys.forEach((key, idx) => {
+    const entradaDateStr = customDates[key] || agreement.entrada_date || agreement.first_due_date;
     installments.push({
       agreementId: agreement.id,
       number: 0,
-      key: "entrada",
+      key,
       dueDate: new Date(entradaDateStr + "T00:00:00"),
-      value: customValues["entrada"] ?? agreement.entrada_value ?? 0,
+      value: customValues[key] ?? agreement.entrada_value ?? 0,
       isEntrada: true,
     });
-  }
+  });
+
+  const hasEntrada = entradaKeys.length > 0;
 
   for (let i = 0; i < agreement.new_installments; i++) {
     const instNum = (hasEntrada ? 1 : 0) + i + 1;
