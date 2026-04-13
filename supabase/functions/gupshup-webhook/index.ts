@@ -216,39 +216,19 @@ Deno.serve(async (req) => {
     }
     // ===== Status update (delivered, read, failed) =====
     else if (eventType === "message-event" || eventType === "status") {
-      const status = payload.payload?.type || payload.payload?.status || payload.status;
+      const status = payload.payload?.type || payload.status;
       const gsMessageId = payload.payload?.gsId || payload.payload?.id || payload.messageId;
 
       if (gsMessageId && status) {
-        const isFailed = status === "failed" || status === "error";
         const mappedStatus =
           status === "delivered" ? "delivered" :
             status === "read" ? "read" :
-              isFailed ? "failed" :
+              status === "failed" || status === "error" ? "failed" :
                 status === "sent" ? "sent" : status;
 
-        const updateData: any = { status: mappedStatus };
-        
-        // Se falhou, capturamos o erro detalhado para diagnóstico
-        if (isFailed) {
-          const detail = payload.payload?.payload || payload.payload || {};
-          const errorCode = detail.code || detail.errorCode;
-          const reason = detail.reason || detail.cause || detail.text;
-          
-          updateData.metadata = { 
-            error_code: errorCode,
-            error_reason: reason,
-            failed_at: new Date().toISOString()
-          };
-          
-          console.error(`[gupshup-webhook] Message ${gsMessageId} FAILED: code=${errorCode}, reason=${reason}`);
-          await writeLog(null, "error", `Mensagem falhou: ${gsMessageId}`, { gsMessageId, errorCode, reason }, 200);
-        }
-
         await Promise.all([
-          supabase.from("chat_messages")
-            .update(updateData)
-            .or(`external_id.eq.${gsMessageId},provider_message_id.eq.${gsMessageId}`),
+          supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
+          supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
         ]);
       }
     }

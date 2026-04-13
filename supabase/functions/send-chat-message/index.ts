@@ -122,56 +122,43 @@ Deno.serve(async (req) => {
       media = {
         mediaUrl,
         mediaType,
-        caption: mediaType === "audio" ? undefined : (content || fileName || ""),
+        caption: content || fileName || "",
         fileName: fileName || undefined,
         mimeType: mediaMimeType || undefined,
       };
     }
 
-    // 6b. Normalização de áudio para Gupshup (Official API)
-    if (media && media.mediaType === "audio") {
+    // 6b. Convert WebM audio to OGG label for official API (Gupshup) compatibility
+    if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
       const providerName = (instance?.provider || conv.provider || "").toLowerCase();
       if (providerName === "gupshup") {
-        const isWebM = media.mimeType?.includes("webm") || media.mediaUrl.toLowerCase().endsWith(".webm");
-        
-        if (isWebM) {
-          console.log("[send-chat-message] Corrigindo áudio WebM para Gupshup...");
-          try {
-            const dlResp = await fetch(mediaUrl);
-            if (dlResp.ok) {
-              const audioBytes = await dlResp.arrayBuffer();
-              const storagePath = mediaUrl.includes("/chat-media/")
-                ? mediaUrl.split("/chat-media/")[1].replace(/\.webm(\?.*)?$/, ".ogg")
-                : `${tenantId}/${conversationId}/audio_${Date.now()}.ogg`;
+        try {
+          const dlResp = await fetch(mediaUrl);
+          if (dlResp.ok) {
+            const audioBytes = await dlResp.arrayBuffer();
+            const storagePath = mediaUrl.includes("/chat-media/")
+              ? mediaUrl.split("/chat-media/")[1].replace(/\.webm(\?.*)?$/, ".ogg")
+              : `${tenantId}/${conversationId}/audio_${Date.now()}.ogg`;
 
-              const { error: upErr } = await supabase.storage
-                .from("chat-media")
-                .upload(storagePath, audioBytes, {
-                  contentType: "audio/ogg;codecs=opus",
-                  upsert: true,
-                });
+            const { error: upErr } = await supabase.storage
+              .from("chat-media")
+              .upload(storagePath, audioBytes, {
+                contentType: "audio/ogg;codecs=opus",
+                upsert: true,
+              });
 
-              if (!upErr) {
-                const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
-                media.mediaUrl = oggUrlData.publicUrl;
-                media.mimeType = "audio/ogg;codecs=opus";
-                console.log("[send-chat-message] Normalizado com sucesso: WebM -> OGG (Storage)");
-              } else {
-                console.error("[send-chat-message] Falha ao re-upar OGG:", upErr.message);
-              }
+            if (!upErr) {
+              const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
+              media.mediaUrl = oggUrlData.publicUrl;
+              media.mimeType = "audio/ogg;codecs=opus";
+              console.log("[send-chat-message] Converted WebM → OGG label for Gupshup");
+            } else {
+              console.error("[send-chat-message] OGG re-upload failed:", upErr.message);
             }
-          } catch (convErr) {
-            console.error("[send-chat-message] Erro na normalização de áudio:", convErr);
           }
-        } else {
-          // Se não for WebM, garantimos que o mimeType seja ao menos algo que a Gupshup aceite bem
-          if (!media.mimeType || media.mimeType === "audio/mpeg") {
-            media.mimeType = "audio/ogg";
-          }
+        } catch (convErr) {
+          console.error("[send-chat-message] WebM→OGG conversion error:", convErr);
         }
-        
-        // WhatsApp Official NÃO suporta caption em áudio
-        delete media.caption;
       }
     }
 
