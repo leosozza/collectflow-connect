@@ -215,6 +215,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
       });
     });
+    const baseDate = new Date(firstDueDate + "T00:00:00");
     for (let i = 0; i < numParcelas; i++) {
       const d = new Date(baseDate);
       if (intervalo === "mensal") {
