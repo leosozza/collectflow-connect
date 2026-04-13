@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,12 @@ interface SimulatedInstallment {
   method: string;
   dueDate: string;
   value: number;
+  label?: string;
+}
+
+interface EntradaItem {
+  date: string;
+  value: number | "";
 }
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
@@ -57,8 +64,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [descontoReais, setDescontoReais] = useState<number>(0);
 
   // Agreement form
-  const [entradaDate, setEntradaDate] = useState("");
-  const [entradaValue, setEntradaValue] = useState<number | "">(0);
+  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0 }]);
   const [numParcelas, setNumParcelas] = useState<number>(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
@@ -132,9 +138,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   useEffect(() => {
     setSimulated(false);
     setSimulatedInstallments([]);
-  }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradaValue, numParcelas, firstDueDate, formaPagto, intervalo]);
+  }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradas, numParcelas, firstDueDate, formaPagto, intervalo]);
 
-  const numEntrada = typeof entradaValue === "number" ? entradaValue : 0;
+  const numEntrada = entradas.reduce((sum, e) => sum + (typeof e.value === "number" ? e.value : 0), 0);
 
   // Per-row calculations
   const rowCalcs = useMemo(() => {
@@ -197,16 +203,18 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     const installments: SimulatedInstallment[] = [];
 
-    // Add entrada as installment 0 if present
-    if (numEntrada > 0 && entradaDate) {
+    const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+
+    // Add each entrada as individual installment
+    validEntradas.forEach((ent, idx) => {
       installments.push({
         number: 0,
         method: formaPagto,
-        dueDate: entradaDate,
-        value: numEntrada,
+        dueDate: ent.date,
+        value: typeof ent.value === "number" ? ent.value : 0,
+        label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
       });
-    }
-
+    });
     const baseDate = new Date(firstDueDate + "T00:00:00");
     for (let i = 0; i < numParcelas; i++) {
       const d = new Date(baseDate);
@@ -227,7 +235,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     setSimulatedInstallments(installments);
     setSimulated(true);
-  }, [firstDueDate, selectedIds, numEntrada, entradaDate, formaPagto, numParcelas, intervalo, installmentValue]);
+  }, [firstDueDate, selectedIds, entradas, formaPagto, numParcelas, intervalo, installmentValue]);
 
   // Out-of-standard detection
   const outOfStandard = useMemo(() => {
@@ -369,6 +377,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       setEnrichingAddress(false);
       setAddressStatus("");
 
+      // Build custom installment maps for multiple entradas
+      const customDates: Record<string, string> = {};
+      const customValues: Record<string, number> = {};
+      const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+      validEntradas.forEach((ent, idx) => {
+        const key = idx === 0 ? "entrada" : `entrada_${idx + 1}`;
+        customDates[key] = ent.date;
+        customValues[key] = typeof ent.value === "number" ? ent.value : 0;
+      });
+
       const data: AgreementFormData = {
         client_cpf: cpf,
         client_name: clientName,
@@ -380,7 +398,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
         entrada_value: numEntrada > 0 ? numEntrada : undefined,
-        entrada_date: numEntrada > 0 && entradaDate ? entradaDate : undefined,
+        entrada_date: validEntradas.length > 0 ? validEntradas[0].date : undefined,
+        custom_installment_dates: Object.keys(customDates).length > 0 ? customDates : undefined,
+        custom_installment_values: Object.keys(customValues).length > 0 ? customValues : undefined,
         notes: notes || undefined,
       };
 
@@ -600,15 +620,40 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 pb-3">
+            {/* Dynamic entradas */}
+            {entradas.map((ent, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Data Entrada ${idx + 1}` : "Data Entrada"}</Label>
+                  <Input type="date" value={ent.date} onChange={(e) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], date: e.target.value };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
+                  <Input type="number" min={0} value={ent.value} onChange={(e) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], value: e.target.value === "" ? "" : Number(e.target.value) };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" placeholder="0,00" />
+                </div>
+                <div className="flex gap-1">
+                  {entradas.length > 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas(entradas.filter((_, i) => i !== idx))}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  )}
+                  {idx === entradas.length - 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: 0 }])}>
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Data Entrada</Label>
-                <Input type="date" value={entradaDate} onChange={(e) => setEntradaDate(e.target.value)} className="h-7 text-xs px-2" />
-              </div>
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Valor Entrada</Label>
-                <Input type="number" min={0} value={entradaValue} onChange={(e) => setEntradaValue(e.target.value === "" ? "" : Number(e.target.value))} className="h-7 text-xs px-2" placeholder="0,00" />
-              </div>
               <div className="space-y-0.5">
                 <Label className="text-[10px]">Parcelas</Label>
                 <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-7 text-xs px-2" />
@@ -673,10 +718,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {simulatedInstallments.map((inst) => (
-                      <TableRow key={inst.number} className="text-xs">
+                    {simulatedInstallments.map((inst, idx) => (
+                      <TableRow key={`${inst.number}-${idx}`} className="text-xs">
                         <TableCell className="px-3 font-medium">
-                          {inst.number === 0 ? "Entrada" : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
+                          {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
                         </TableCell>
                         <TableCell className="px-3">
                           <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
@@ -685,6 +730,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                         <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
                       </TableRow>
                     ))}
+
                     <TableRow className="bg-emerald-50 dark:bg-emerald-950/30 border-t-2 text-xs font-bold">
                       <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
                       <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
