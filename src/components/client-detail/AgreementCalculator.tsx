@@ -43,6 +43,12 @@ interface SimulatedInstallment {
   method: string;
   dueDate: string;
   value: number;
+  label?: string;
+}
+
+interface EntradaItem {
+  date: string;
+  value: number | "";
 }
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
