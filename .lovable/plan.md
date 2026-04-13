@@ -1,68 +1,50 @@
 
 
-# Múltiplas Entradas na Calculadora de Acordos
+# Forma de Pagamento Individual por Entrada
 
 ## Problema
-Atualmente o `AgreementCalculator.tsx` suporta apenas uma entrada (data + valor). O usuário precisa poder adicionar múltiplas entradas (ex: Entrada 1, Entrada 2, etc.).
+Atualmente existe um único campo "Forma Pagto" que se aplica a todas as entradas e parcelas. O usuário precisa definir formas de pagamento diferentes para cada entrada (ex: Entrada 1 = PIX, Entrada 2 = Cartão, Parcelas = Boleto).
 
-## Estratégia de persistência
+## Solução
 
-O banco já possui:
-- `entrada_value` (numeric) — armazenará a **soma** de todas as entradas
-- `entrada_date` (date) — armazenará a data da **primeira** entrada
-- `custom_installment_values` (jsonb) — armazenará os valores individuais: `{"entrada": 500, "entrada_2": 300, "entrada_3": 200}`
-- `custom_installment_dates` (jsonb) — armazenará as datas individuais: `{"entrada": "2026-04-15", "entrada_2": "2026-04-20"}`
+### 1. Atualizar o estado `EntradaItem` para incluir forma de pagamento
 
-**Nenhuma migration necessária** — os campos JSONB já existem e suportam essa estrutura.
-
-## Alterações
-
-### 1. `src/components/client-detail/AgreementCalculator.tsx`
-
-**Estado**: Substituir `entradaDate` (string) e `entradaValue` (number) por um array:
+Adicionar campo `method` à interface:
 ```ts
-interface EntradaItem { date: string; value: number | "" }
-const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0 }]);
+interface EntradaItem { date: string; value: number | ""; method: string }
+```
+Inicializar com `method: "BOLETO"`.
+
+### 2. Adicionar Select de forma de pagamento em cada linha de entrada
+
+Na UI de cada entrada (linhas 624-655), adicionar um `Select` compacto ao lado dos campos de data e valor. O grid passa de `[1fr_1fr_auto]` para `[1fr_1fr_auto_auto]` ou similar para acomodar o novo campo sem quebrar o layout.
+
+### 3. Manter o campo "Forma Pagto" existente para as parcelas regulares
+
+O `formaPagto` global (linha 69) continua controlando apenas as parcelas regulares (01/XX, 02/XX...). As labels podem ser ajustadas para "Forma Pagto Parcelas" para clareza.
+
+### 4. Atualizar `handleSimulate`
+
+Na criação dos installments de entrada (linhas 209-217), usar `ent.method` em vez de `formaPagto`:
+```ts
+method: ent.method,
 ```
 
-**UI (Seção "Condições do Acordo")**: Substituir os 2 campos fixos de entrada por uma lista dinâmica:
-- Cada linha mostra: label "Entrada N", campo data, campo valor, botão remover (se N > 1)
-- Botão "+" para adicionar nova linha de entrada
-- Layout compacto mantendo o estilo atual (h-7, text-xs)
+### 5. Persistência nos campos JSONB
 
-**Cálculo**: `numEntrada` passa a ser a soma de todos os valores de entrada. `remainingAfterEntrada` permanece `totalAtualizado - somaEntradas`.
-
-**Simulação (`handleSimulate`)**: Cada entrada gera uma linha individual na tabela de simulação (number: 0 para todas, mas com label "Entrada 1", "Entrada 2", etc.). Ajustar `SimulatedInstallment` para incluir campo `label` opcional.
-
-**Gravação (`handleSubmit`)**: Ao montar `AgreementFormData`:
-- `entrada_value` = soma de todas as entradas
-- `entrada_date` = data da primeira entrada
-- Montar `custom_installment_dates` e `custom_installment_values` com chaves `"entrada"`, `"entrada_2"`, `"entrada_3"`, etc.
-
-### 2. `src/services/agreementService.ts`
-
-Atualizar `AgreementFormData` para aceitar campos opcionais:
+Adicionar a forma de pagamento de cada entrada no `custom_installment_values` existente, usando chaves como `entrada_method`, `entrada_2_method`, etc. Ou criar um campo separado no JSONB. Como `custom_installment_values` já é JSONB flexível, a abordagem mais limpa é enriquecer o mapa:
 ```ts
-custom_installment_dates?: Record<string, string>;
-custom_installment_values?: Record<string, number>;
+customValues[`${key}_method`] = ent.method; // "BOLETO", "PIX", "CARTAO"
 ```
-Esses campos já existem na interface `Agreement` e no banco — basta passá-los no insert.
 
-### 3. `src/lib/agreementInstallmentClassifier.ts`
+### 6. Atualizar `agreementInstallmentClassifier.ts`
 
-Já suporta múltiplas entradas via `custom_installment_dates`/`custom_installment_values` com a chave `"entrada"`. Ajustar `buildInstallmentSchedule` para iterar sobre chaves `"entrada"`, `"entrada_2"`, etc., gerando uma `VirtualInstallment` para cada.
+Ao construir as parcelas virtuais de entrada, ler a chave `_method` correspondente do JSONB para classificar corretamente a forma de pagamento de cada entrada.
 
-### 4. Tabela de simulação (display)
+## Arquivos a alterar
+- `src/components/client-detail/AgreementCalculator.tsx` — interface, UI, simulação e submissão
+- `src/lib/agreementInstallmentClassifier.ts` — leitura da forma de pagamento por entrada
 
-Na tabela de simulação, mostrar:
-- "Entrada 1" em vez de "Entrada" quando há múltiplas
-- "Entrada 2", "Entrada 3", etc. para as adicionais
-- Parcelas regulares continuam como `01/XX`, `02/XX`
-
-## Resultado esperado
-- Botão "+" visível ao lado dos campos de entrada
-- Cada entrada é uma linha editável independente
-- Simulação mostra todas as entradas individualmente
-- Acordo gravado corretamente com breakdown nas colunas JSONB existentes
-- Classificação de parcelas (`agreementInstallmentClassifier`) reconhece múltiplas entradas
+## Sem migrations necessárias
+Os campos JSONB existentes comportam os dados adicionais.
 
