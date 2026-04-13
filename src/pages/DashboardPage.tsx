@@ -42,6 +42,7 @@ interface DashboardStats {
   total_pendente: number;
   acordos_dia: number;
   acordos_mes: number;
+  total_quitados: number;
 }
 
 interface VencimentoRow {
