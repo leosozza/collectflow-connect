@@ -35,14 +35,14 @@ const ClientAttachments = ({ cpf }: Props) => {
 
   const deleteMutation = useMutation({
     mutationFn: async (attachment: any) => {
-      // Delete from storage
-      await supabase.storage.from("client-attachments").remove([attachment.file_path]);
-      // Delete metadata
+      // Delete metadata first (if RLS blocks, file stays intact)
       const { error } = await supabase
         .from("client_attachments" as any)
         .delete()
         .eq("id", attachment.id);
       if (error) throw error;
+      // Then delete from storage (best-effort)
+      await supabase.storage.from("client-attachments").remove([attachment.file_path]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-attachments", cpf] });
