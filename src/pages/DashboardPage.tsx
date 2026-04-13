@@ -5,7 +5,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GlassCalendar } from "@/components/ui/glass-calendar";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ interface DashboardStats {
   total_pendente: number;
   acordos_dia: number;
   acordos_mes: number;
+  total_quitados: number;
 }
 
 interface VencimentoRow {
@@ -215,7 +217,19 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
-          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <p className="text-xs text-primary-foreground/80 font-medium">Total de Primeira Parcela no Mês</p>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-primary-foreground/60 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  Soma da primeira parcela de cada acordo criado no mês
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <p className="text-3xl font-bold text-primary-foreground tracking-tight">
             {formatCurrency(stats?.total_negociado ?? 0)}
           </p>
@@ -261,10 +275,11 @@ const DashboardPage = () => {
       </div>
 
       {/* Stat cards row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
         <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
+        <StatCard title="Quitados no Mês" value={formatCurrency(stats?.total_quitados ?? 0)} icon="received" tooltip="Valor total dos acordos completamente quitados no mês" />
+        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" tooltip="Parcelas com vencimento no mês, menos os valores já recebidos" />
         <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>

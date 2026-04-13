@@ -1,10 +1,12 @@
-import { TrendingUp, TrendingDown, DollarSign, AlertTriangle, Percent, Wallet, FileText } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, AlertTriangle, Percent, Wallet, FileText, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface StatCardProps {
   title: string;
   value: string;
   icon: "projected" | "received" | "broken" | "commission" | "receivable" | "percent" | "agreement";
   trend?: string;
+  tooltip?: string;
 }
 
 const iconMap = {
@@ -37,7 +39,7 @@ const bgMap = {
   agreement: "bg-accent",
 };
 
-const StatCard = ({ title, value, icon, trend }: StatCardProps) => {
+const StatCard = ({ title, value, icon, trend, tooltip }: StatCardProps) => {
   const Icon = iconMap[icon];
   const color = colorMap[icon];
   const bg = bgMap[icon];
@@ -45,7 +47,21 @@ const StatCard = ({ title, value, icon, trend }: StatCardProps) => {
   return (
     <div className="stat-card animate-fade-in">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-muted-foreground font-medium">{title}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-sm text-muted-foreground font-medium">{title}</span>
+          {tooltip && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-muted-foreground/60 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  {tooltip}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
         <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
           <Icon className={`w-5 h-5 ${color}`} />
         </div>
