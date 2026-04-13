@@ -338,18 +338,19 @@ Deno.serve(async (req) => {
     let errors = 0;
     const processingLogs: string[] = [];
     const updatedRecords: { nome: string; cpf: string; changes: Record<string, { old: any; new: any }> }[] = [];
+    const BATCH_SIZE = 500;
 
     if (mode === "update") {
-      // === UPDATE MODE: Intelligent reconciliation ===
-      const BATCH = 200;
-      for (let i = 0; i < finalRecords.length; i += BATCH) {
-        const batch = finalRecords.slice(i, i + BATCH);
-        const externalIds = batch.map((r: any) => r.external_id);
+      // === UPDATE MODE: Intelligent reconciliation via Bulk Upsert ===
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < finalRecords.length; i += CHUNK_SIZE) {
+        const chunk = finalRecords.slice(i, i + CHUNK_SIZE);
+        const externalIds = chunk.map((r: any) => r.external_id);
 
-        // Fetch existing records by external_id
+        // Fetch existing records by external_id in large batches
         const { data: existingRows } = await supabase
           .from("clients")
-          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id, data_devolucao")
+          .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, status_cobranca_id, data_devolucao")
           .eq("tenant_id", tenant_id)
           .in("external_id", externalIds);
 
@@ -360,195 +361,111 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Also build fallback map by cod_contrato+numero_parcela+cpf
-        const fallbackMap = new Map<string, any>();
-        if (existingRows) {
-          for (const row of existingRows) {
-            const key = `${row.cod_contrato || ""}-${row.numero_parcela || 1}-${cleanCPF(row.cpf)}`;
-            fallbackMap.set(key, row);
-          }
-        }
-
-        // For records not found by external_id, try fallback lookup
-        const missingBatch: any[] = [];
-        for (const rec of batch) {
-          if (!existingMap.has(rec.external_id)) {
-            missingBatch.push(rec);
-          }
-        }
-
-        if (missingBatch.length > 0) {
-          // Batch fallback query by CPFs
-          const cpfs = [...new Set(missingBatch.map((r: any) => cleanCPF(r.cpf)))];
-          const { data: fallbackRows } = await supabase
-            .from("clients")
-            .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, meio_pagamento_id, status_cobranca_id, data_devolucao")
-            .eq("tenant_id", tenant_id)
-            .in("cpf", cpfs);
-
-          if (fallbackRows) {
-            for (const row of fallbackRows) {
-              const key = `${row.cod_contrato || ""}-${row.numero_parcela || 1}-${cleanCPF(row.cpf)}`;
-              if (!fallbackMap.has(key)) {
-                fallbackMap.set(key, row);
-              }
-            }
-          }
-        }
-
-        // Process each record
-        const toInsert: any[] = [];
-
-        for (const rec of batch) {
-          const recLabel = `CPF=${rec.cpf} parcela=${rec.numero_parcela} ext=${rec.external_id}`;
-          let existing = existingMap.get(rec.external_id);
-          if (!existing) {
-            const fbKey = `${rec.cod_contrato || ""}-${rec.numero_parcela || 1}-${cleanCPF(rec.cpf)}`;
-            existing = fallbackMap.get(fbKey);
-            if (existing) processingLogs.push(`[FALLBACK] ${recLabel} → matched by contract key`);
-          }
+        const toUpsert: any[] = [];
+        
+        for (const rec of chunk) {
+          const existing = existingMap.get(rec.external_id);
 
           if (!existing) {
-            toInsert.push(rec);
+            // New record: queue for insert
+            toUpsert.push(rec);
             inserted++;
             if (rec.status === "pago") paid++;
             if (rec.status === "cancelado_maxlist") cancelledMaxlist++;
-            processingLogs.push(`[INSERT] ${recLabel} status=${rec.status}`);
             continue;
           }
 
-          // Compare fields
+          // Compare fields to see if update is actually needed
+          let needsUpdate = false;
           const changes: Record<string, { old: any; new: any }> = {};
-          const fieldLog: string[] = [];
+          
           for (const field of SYNC_FIELDS) {
-            let oldVal = existing[field] ?? null;
-            let newVal = rec[field] ?? null;
+            const oldVal = existing[field] ?? null;
+            const newVal = rec[field] ?? null;
 
             if (field === "status") {
               const normOld = String(oldVal ?? "").toLowerCase();
               const normNew = String(newVal ?? "").toLowerCase();
-              if ((normOld === "quitado" || normOld === "pago") && normNew === "pago") {
-                fieldLog.push(`${field}: "${oldVal}"→"${newVal}" (skip, equivalent)`);
-                continue; 
-              }
-              if (normOld === normNew) {
-                fieldLog.push(`${field}: "${oldVal}"="${newVal}" (skip, same)`);
-                continue;
-              }
+              if ((normOld === "quitado" || normOld === "pago") && normNew === "pago") continue;
+              if (normOld === normNew) continue;
             }
 
-            const oldStr = String(oldVal ?? "");
-            const newStr = String(newVal ?? "");
-            if (oldStr !== newStr) {
+            if (String(oldVal ?? "") !== String(newVal ?? "")) {
+              if (PROTECTED_FIELDS.has(field)) {
+                // Exceptional case: status_cobranca_id and data_devolucao can be updated even if protected if status is vencido
+                if (!((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido")) {
+                  continue; 
+                }
+              }
+              needsUpdate = true;
               changes[field] = { old: oldVal, new: newVal };
-              fieldLog.push(`${field}: "${oldVal}"→"${newVal}" (CHANGED)`);
             }
           }
 
-          if (Object.keys(changes).length === 0) {
+          if (needsUpdate) {
+            // Build merged record for upsert
+            const updatedRec = {
+              ...rec,
+              id: existing.id, // Mandatory to target existing row in upsert
+              updated_at: new Date().toISOString()
+            };
+            toUpsert.push(updatedRec);
+            updated++;
+            
+            if (changes.status && rec.status === "pago") paid++;
+            if (changes.status && rec.status === "cancelado_maxlist") cancelledMaxlist++;
+            
+            if (updatedRecords.length < 100) {
+              updatedRecords.push({
+                nome: existing.nome_completo || rec.nome_completo,
+                cpf: rec.cpf,
+                changes,
+              });
+            }
+          } else {
             unchanged++;
-            processingLogs.push(`[UNCHANGED] ${recLabel} | ${fieldLog.join("; ")}`);
-            continue;
-          }
-
-          // Build update payload
-          const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
-          const appliedFields: string[] = [];
-          const skippedFields: string[] = [];
-          for (const field of Object.keys(changes)) {
-            if (PROTECTED_FIELDS.has(field)) {
-              if ((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido") {
-                updatePayload[field] = rec[field];
-                appliedFields.push(`${field}(protected-exception)`);
-              } else {
-                skippedFields.push(`${field}(PROTECTED)`);
-              }
-              continue;
-            }
-            updatePayload[field] = rec[field];
-            appliedFields.push(field);
-          }
-
-          processingLogs.push(`[UPDATE] ${recLabel} | applied=[${appliedFields.join(",")}] skipped=[${skippedFields.join(",")}] changes={${fieldLog.join("; ")}}`);
-
-          try {
-            const { error } = await supabase
-              .from("clients")
-              .update(updatePayload)
-              .eq("id", existing.id)
-              .eq("tenant_id", tenant_id);
-
-            if (error) {
-              console.error(`[maxlist-import] Update error for ${existing.id}:`, error.message);
-              processingLogs.push(`[ERROR] ${recLabel} → ${error.message}`);
-              errors++;
-            } else {
-              updated++;
-              if (changes.status && rec.status === "pago") paid++;
-              if (changes.status && rec.status === "cancelado_maxlist") cancelledMaxlist++;
-              if (updatedRecords.length < 500) {
-                updatedRecords.push({
-                  nome: existing.nome_completo || rec.nome_completo,
-                  cpf: rec.cpf,
-                  changes,
-                });
-              }
-            }
-          } catch (err: any) {
-            console.error(`[maxlist-import] Update exception:`, err.message);
-            processingLogs.push(`[EXCEPTION] ${recLabel} → ${err.message}`);
-            errors++;
           }
         }
 
-        // Insert new records in batch
-        if (toInsert.length > 0) {
-          try {
-            const { error } = await supabase
-              .from("clients")
-              .upsert(toInsert, { onConflict: "external_id,tenant_id" });
+        // Apply chunk changes in one single database call
+        if (toUpsert.length > 0) {
+          const { error: upsertErr } = await supabase
+            .from("clients")
+            .upsert(toUpsert, { onConflict: "external_id,tenant_id" });
 
-            if (error) {
-              console.error(`[maxlist-import] Insert batch error:`, error.message);
-              errors += toInsert.length;
-              inserted -= toInsert.length; // revert counter
-            }
-          } catch (err: any) {
-            console.error(`[maxlist-import] Insert batch exception:`, err.message);
-            errors += toInsert.length;
-            inserted -= toInsert.length;
+          if (upsertErr) {
+            console.error(`[maxlist-import] Chunk upsert error:`, upsertErr.message);
+            errors += toUpsert.length;
+          }
+          
+          if (processingLogs.length < 50) {
+            processingLogs.push(`Processed chunk ${i/CHUNK_SIZE + 1}: upserted ${toUpsert.length}`);
           }
         }
       }
     } else {
       // === IMPORT MODE: Upsert in batches ===
-      const BATCH_SIZE = 500;
       for (let i = 0; i < finalRecords.length; i += BATCH_SIZE) {
         const batch = finalRecords.slice(i, i + BATCH_SIZE);
-        try {
-          const { data: result, error } = await supabase
-            .from("clients")
-            .upsert(batch, { onConflict: "external_id,tenant_id" })
-            .select("id");
+        const { data: result, error } = await supabase
+          .from("clients")
+          .upsert(batch, { onConflict: "external_id,tenant_id" })
+          .select("id");
 
-          if (error) {
-            console.error(`[maxlist-import] Batch error:`, error.message);
-            errors += batch.length;
-          } else {
-            inserted += result?.length ?? batch.length;
-          }
-        } catch (err: any) {
-          console.error(`[maxlist-import] Batch exception:`, err.message);
+        if (error) {
+          console.error(`[maxlist-import] Batch error:`, error.message);
           errors += batch.length;
+        } else {
+          inserted += result?.length ?? batch.length;
         }
       }
 
-      // Count statuses for import mode
       for (const r of finalRecords) {
         if (r.status === "pago") paid++;
         if (r.status === "cancelado_maxlist") cancelledMaxlist++;
       }
     }
+
 
     // === Consolidate client_profiles (canonical source) ===
     try {
