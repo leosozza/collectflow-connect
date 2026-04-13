@@ -122,44 +122,10 @@ Deno.serve(async (req) => {
       media = {
         mediaUrl,
         mediaType,
-        caption: content || fileName || "",
+        caption: (mediaType === "audio" ? "" : (content || fileName || "")), // Audio doesn't support caption in WA Official
         fileName: fileName || undefined,
         mimeType: mediaMimeType || undefined,
       };
-    }
-
-    // 6b. Convert WebM audio to OGG label for official API (Gupshup) compatibility
-    if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
-      const providerName = (instance?.provider || conv.provider || "").toLowerCase();
-      if (providerName === "gupshup") {
-        try {
-          const dlResp = await fetch(mediaUrl);
-          if (dlResp.ok) {
-            const audioBytes = await dlResp.arrayBuffer();
-            const storagePath = mediaUrl.includes("/chat-media/")
-              ? mediaUrl.split("/chat-media/")[1].replace(/\.webm(\?.*)?$/, ".ogg")
-              : `${tenantId}/${conversationId}/audio_${Date.now()}.ogg`;
-
-            const { error: upErr } = await supabase.storage
-              .from("chat-media")
-              .upload(storagePath, audioBytes, {
-                contentType: "audio/ogg;codecs=opus",
-                upsert: true,
-              });
-
-            if (!upErr) {
-              const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
-              media.mediaUrl = oggUrlData.publicUrl;
-              media.mimeType = "audio/ogg;codecs=opus";
-              console.log("[send-chat-message] Converted WebM → OGG label for Gupshup");
-            } else {
-              console.error("[send-chat-message] OGG re-upload failed:", upErr.message);
-            }
-          }
-        } catch (convErr) {
-          console.error("[send-chat-message] WebM→OGG conversion error:", convErr);
-        }
-      }
     }
 
     // 7. Send via multiprovider
@@ -167,6 +133,12 @@ Deno.serve(async (req) => {
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
     const wuzapiUrl = Deno.env.get("WUZAPI_API_URL") || "";
     const wuzapiToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
+
+    const providerName = (instance?.provider || conv.provider || "").toLowerCase();
+    
+    if (media?.mediaType === "audio") {
+      console.log(`[send-chat-message] Outbound Audio: provider=${providerName}, mime=${media.mimeType}, url=${media.mediaUrl}`);
+    }
 
     const sendResult = await sendByProvider(
       {
@@ -186,9 +158,11 @@ Deno.serve(async (req) => {
     );
 
     if (!sendResult.ok) {
-      console.error("Send failed:", JSON.stringify(sendResult.result));
+      console.error(`[send-chat-message] Send failed (${providerName}):`, JSON.stringify(sendResult.result));
       return jsonResp({ error: "Erro ao enviar mensagem", details: sendResult.result }, 502);
     }
+    
+    console.log(`[send-chat-message] Send success (${providerName}): msgId=${sendResult.providerMessageId}`);
 
     // 8. Determine message_type for RPC
     const msgType = media ? mediaType : "text";

@@ -214,22 +214,36 @@ Deno.serve(async (req) => {
         }
       }
     }
-    // ===== Status update (delivered, read, failed) =====
+    // ===== Status update (delivered, read, failed, sent, etc) =====
     else if (eventType === "message-event" || eventType === "status") {
-      const status = payload.payload?.type || payload.status;
-      const gsMessageId = payload.payload?.gsId || payload.payload?.id || payload.messageId;
+      const payloadData = payload.payload || {};
+      const status = payloadData.type || payload.status;
+      const gsMessageId = payloadData.gsId || payloadData.id || payload.messageId;
 
       if (gsMessageId && status) {
+        // Detailed log for failures
+        if (status === "failed" || status === "error") {
+          const cause = payloadData.cause || payloadData.payload?.cause || "Unknown cause";
+          const errorCode = payloadData.errorCode || payloadData.payload?.errorCode || "";
+          console.error(`[gupshup-webhook] Delivery FAILED: gsId=${gsMessageId}, cause=${cause}, code=${errorCode}`);
+        }
+
         const mappedStatus =
           status === "delivered" ? "delivered" :
           status === "read" ? "read" :
           status === "failed" || status === "error" ? "failed" :
           status === "sent" ? "sent" : status;
 
-        await Promise.all([
-          supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
-          supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
-        ]);
+        console.log(`[gupshup-webhook] Updating status: gsId=${gsMessageId} -> ${mappedStatus}`);
+
+        const { error: updateErr } = await supabase
+          .from("chat_messages")
+          .update({ status: mappedStatus })
+          .or(`external_id.eq.${gsMessageId},provider_message_id.eq.${gsMessageId}`);
+        
+        if (updateErr) {
+          console.error(`[gupshup-webhook] DB update failed for gsId=${gsMessageId}:`, updateErr.message);
+        }
       }
     }
 
