@@ -377,6 +377,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       setEnrichingAddress(false);
       setAddressStatus("");
 
+      // Build custom installment maps for multiple entradas
+      const customDates: Record<string, string> = {};
+      const customValues: Record<string, number> = {};
+      const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+      validEntradas.forEach((ent, idx) => {
+        const key = idx === 0 ? "entrada" : `entrada_${idx + 1}`;
+        customDates[key] = ent.date;
+        customValues[key] = typeof ent.value === "number" ? ent.value : 0;
+      });
+
       const data: AgreementFormData = {
         client_cpf: cpf,
         client_name: clientName,
@@ -388,7 +398,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
         entrada_value: numEntrada > 0 ? numEntrada : undefined,
-        entrada_date: numEntrada > 0 && entradaDate ? entradaDate : undefined,
+        entrada_date: validEntradas.length > 0 ? validEntradas[0].date : undefined,
+        custom_installment_dates: Object.keys(customDates).length > 0 ? customDates : undefined,
+        custom_installment_values: Object.keys(customValues).length > 0 ? customValues : undefined,
         notes: notes || undefined,
       };
 
