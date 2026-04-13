@@ -6328,7 +6328,6 @@ export type Database = {
           total_pendente: number
           total_projetado: number
           total_quebra: number
-          total_quitados: number
           total_recebido: number
         }[]
       }
