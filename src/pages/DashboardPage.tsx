@@ -217,7 +217,19 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
-          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <p className="text-xs text-primary-foreground/80 font-medium">Total de Primeira Parcela no Mês</p>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 text-primary-foreground/60 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  Soma da primeira parcela de cada acordo criado no mês
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <p className="text-3xl font-bold text-primary-foreground tracking-tight">
             {formatCurrency(stats?.total_negociado ?? 0)}
           </p>
