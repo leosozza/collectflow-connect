@@ -49,6 +49,7 @@ interface SimulatedInstallment {
 interface EntradaItem {
   date: string;
   value: number | "";
+  method: string;
 }
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
@@ -64,7 +65,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [descontoReais, setDescontoReais] = useState<number>(0);
 
   // Agreement form
-  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0 }]);
+  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
   const [numParcelas, setNumParcelas] = useState<number>(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
@@ -209,7 +210,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     validEntradas.forEach((ent, idx) => {
       installments.push({
         number: 0,
-        method: formaPagto,
+        method: ent.method,
         dueDate: ent.date,
         value: typeof ent.value === "number" ? ent.value : 0,
         label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
@@ -385,6 +386,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         const key = idx === 0 ? "entrada" : `entrada_${idx + 1}`;
         customDates[key] = ent.date;
         customValues[key] = typeof ent.value === "number" ? ent.value : 0;
+        customValues[`${key}_method`] = ent.method as any;
       });
 
       const data: AgreementFormData = {
@@ -622,7 +624,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           <CardContent className="space-y-2 pb-3">
             {/* Dynamic entradas */}
             {entradas.map((ent, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+              <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
                 <div className="space-y-0.5">
                   <Label className="text-[10px]">{entradas.length > 1 ? `Data Entrada ${idx + 1}` : "Data Entrada"}</Label>
                   <Input type="date" value={ent.date} onChange={(e) => {
@@ -639,14 +641,29 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     setEntradas(next);
                   }} className="h-7 text-xs px-2" placeholder="0,00" />
                 </div>
-                <div className="flex gap-1">
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Pagto ${idx + 1}` : "Pagto Entrada"}</Label>
+                  <Select value={ent.method} onValueChange={(val) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], method: val };
+                    setEntradas(next);
+                  }}>
+                    <SelectTrigger className="h-7 text-xs min-w-[90px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BOLETO">Boleto</SelectItem>
+                      <SelectItem value="PIX">Pix</SelectItem>
+                      <SelectItem value="CARTAO">Cartão</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-1 pb-0.5">
                   {entradas.length > 1 && (
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas(entradas.filter((_, i) => i !== idx))}>
                       <Trash2 className="w-3 h-3 text-destructive" />
                     </Button>
                   )}
                   {idx === entradas.length - 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: 0 }])}>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: 0, method: "BOLETO" }])}>
                       <Plus className="w-3 h-3" />
                     </Button>
                   )}
@@ -661,7 +678,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-0.5">
-                <Label className="text-[10px]">Forma Pagto</Label>
+                <Label className="text-[10px]">Pagto Parcelas</Label>
                 <Select value={formaPagto} onValueChange={setFormaPagto}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
