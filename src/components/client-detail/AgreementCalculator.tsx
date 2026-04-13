@@ -203,17 +203,18 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     const installments: SimulatedInstallment[] = [];
 
-    // Add entrada as installment 0 if present
-    if (numEntrada > 0 && entradaDate) {
+    const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+
+    // Add each entrada as individual installment
+    validEntradas.forEach((ent, idx) => {
       installments.push({
         number: 0,
         method: formaPagto,
-        dueDate: entradaDate,
-        value: numEntrada,
+        dueDate: ent.date,
+        value: typeof ent.value === "number" ? ent.value : 0,
+        label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
       });
-    }
-
-    const baseDate = new Date(firstDueDate + "T00:00:00");
+    });
     for (let i = 0; i < numParcelas; i++) {
       const d = new Date(baseDate);
       if (intervalo === "mensal") {
@@ -233,7 +234,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     setSimulatedInstallments(installments);
     setSimulated(true);
-  }, [firstDueDate, selectedIds, numEntrada, entradaDate, formaPagto, numParcelas, intervalo, installmentValue]);
+  }, [firstDueDate, selectedIds, entradas, formaPagto, numParcelas, intervalo, installmentValue]);
 
   // Out-of-standard detection
   const outOfStandard = useMemo(() => {
