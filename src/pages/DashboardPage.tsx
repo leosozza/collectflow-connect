@@ -275,10 +275,11 @@ const DashboardPage = () => {
       </div>
 
       {/* Stat cards row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
         <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
+        <StatCard title="Quitados no Mês" value={formatCurrency(stats?.total_quitados ?? 0)} icon="received" tooltip="Valor total dos acordos completamente quitados no mês" />
+        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" tooltip="Parcelas com vencimento no mês, menos os valores já recebidos" />
         <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
