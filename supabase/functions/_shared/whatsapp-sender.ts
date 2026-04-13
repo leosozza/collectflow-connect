@@ -127,8 +127,8 @@ async function sendWuzapiMedia(
 
   const endpoint = media.mediaType === "image" ? "image"
     : media.mediaType === "video" ? "video"
-    : media.mediaType === "audio" ? "audio"
-    : "document";
+      : media.mediaType === "audio" ? "audio"
+        : "document";
 
   const payload: any = {
     phone: `${phone}@s.whatsapp.net`,
@@ -146,9 +146,6 @@ async function sendWuzapiMedia(
     // WhatsApp does NOT support caption on audio
     payload.Audio = media.mediaUrl;
     payload.Mimetype = media.mimeType || "audio/ogg";
-    if (payload.Mimetype.includes("webm")) {
-      payload.Mimetype = "audio/ogg";
-    }
   } else {
     // document
     payload.Document = media.mediaUrl;
@@ -196,6 +193,7 @@ async function sendGupshupMedia(
     // No caption for audio
     msgPayload.url = media.mediaUrl;
     msgPayload.mimetype = media.mimeType || "audio/ogg";
+    msgPayload.filename = media.fileName || "audio.ogg";
   } else {
     // file/document
     msgPayload.url = media.mediaUrl;
@@ -258,7 +256,7 @@ async function sendGupshupMsg(
   const apiKey = tenantSettings.gupshup_api_key;
   const sourceNumber = tenantSettings.gupshup_source_number;
   const appName = tenantSettings.gupshup_app_id || tenantSettings.gupshup_app_name || "";
-  
+
   if (!apiKey || !sourceNumber) {
     return { ok: false, result: { error: "Credenciais Gupshup não configuradas no tenant" }, providerMessageId: null, provider: "gupshup" };
   }
@@ -275,9 +273,9 @@ async function sendGupshupMsg(
 
   const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
     method: "POST",
-    headers: { 
-      "apikey": apiKey, 
-      "Content-Type": "application/x-www-form-urlencoded" 
+    headers: {
+      "apikey": apiKey,
+      "Content-Type": "application/x-www-form-urlencoded"
     },
     body: formBody.toString(),
   });
@@ -290,7 +288,7 @@ async function sendGupshupMsg(
     console.error("Gupshup returned non-JSON:", text.substring(0, 300));
     return { ok: false, result: { error: `Resposta inválida da Gupshup: ${text.substring(0, 200)}` }, providerMessageId: null, provider: "gupshup" };
   }
-  
+
   if (!resp.ok) {
     console.error("Gupshup API error:", JSON.stringify(result));
   }
