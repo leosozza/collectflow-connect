@@ -63,6 +63,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
   const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
   const [descontoReais, setDescontoReais] = useState<number | "">(0);
+  const [discountSource, setDiscountSource] = useState<"percent" | "amount">("percent");
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
@@ -171,11 +172,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     const totalMulta = selected.reduce((s, r) => s + r.multaVal, 0);
     const totalHonorarios = selected.reduce((s, r) => s + r.honorariosVal, 0);
     const totalBruto = selected.reduce((s, r) => s + r.total, 0);
-    const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
-    const descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
+
+    let descontoVal: number;
+    if (discountSource === "amount") {
+      descontoVal = Math.round(Math.min(typeof descontoReais === "number" ? descontoReais : 0, totalBruto) * 100) / 100;
+    } else {
+      const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
+      descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
+    }
     const totalAtualizado = Math.round(Math.max(0, totalBruto - descontoVal) * 100) / 100;
     return { totalOriginal, totalBase, totalJuros, totalMulta, totalHonorarios, totalBruto, descontoVal, totalAtualizado };
-  }, [rowCalcs, selectedIds, descontoPercent]);
+  }, [rowCalcs, selectedIds, descontoPercent, descontoReais, discountSource]);
 
   const remainingAfterEntrada = Math.max(0, totals.totalAtualizado - numEntrada);
   const installmentValue = numParcelas > 0 ? Math.round((remainingAfterEntrada / numParcelas) * 100) / 100 : 0;
@@ -397,7 +404,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         credor,
         original_total: totals.totalOriginal,
         proposed_total: totals.totalAtualizado,
-        discount_percent: typeof descontoPercent === "number" ? descontoPercent : 0,
+        discount_percent: totals.totalBruto > 0 ? Math.round((totals.descontoVal / totals.totalBruto) * 100 * 100) / 100 : 0,
         new_installments: numParcelas,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
@@ -510,9 +517,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">% Desc.</Label>
               <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => {
                 const raw = e.target.value;
-                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); return; }
+                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
                 const pct = Number(raw);
                 setDescontoPercent(pct);
+                setDiscountSource("percent");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoReais(bruto > 0 ? Math.round(bruto * (pct / 100) * 100) / 100 : 0);
               }} className="h-7 text-xs px-2" />
@@ -521,9 +529,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">R$ Desc.</Label>
               <Input type="number" min={0} step={0.01} value={descontoReais} onChange={(e) => {
                 const raw = e.target.value;
-                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); return; }
+                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
                 const val = Number(raw);
                 setDescontoReais(val);
+                setDiscountSource("amount");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoPercent(bruto > 0 ? Math.round((val / bruto) * 100 * 100) / 100 : 0);
               }} className="h-7 text-xs px-2" />
