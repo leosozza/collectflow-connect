@@ -404,7 +404,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         credor,
         original_total: totals.totalOriginal,
         proposed_total: totals.totalAtualizado,
-        discount_percent: typeof descontoPercent === "number" ? descontoPercent : 0,
+        discount_percent: totals.totalBruto > 0 ? Math.round((totals.descontoVal / totals.totalBruto) * 100 * 100) / 100 : 0,
         new_installments: numParcelas,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
