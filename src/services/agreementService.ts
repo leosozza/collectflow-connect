@@ -291,6 +291,9 @@ export const createAgreement = async (
       }
     }
 
+    // Recalc score after agreement creation
+    recalcScoreForCpf(data.client_cpf).catch(() => {});
+
     return agreement;
   } catch (error) {
     handleServiceError(error, MODULE);
