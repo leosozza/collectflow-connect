@@ -1,82 +1,58 @@
 
-# Corrigir desconto faltando 1 centavo
 
-## Diagnóstico
-O erro está em `src/components/client-detail/AgreementCalculator.tsx`.
+# Preencher tipo_divida_id via sincronização MaxList
 
-Hoje o fluxo faz isso:
-- o usuário digita um valor em `R$ Desc.` (ex.: `11,00`)
-- o componente converte esse valor para `% Desc.` e já arredonda o percentual para 2 casas
-- depois o total é recalculado a partir desse percentual arredondado
+## Garantia de segurança
 
-No caso do print:
+A alteração **não afeta registros que já têm tipo_divida_id preenchido**. O campo está na lista `PROTECTED_FIELDS`, e o código de reconciliação (modo update) só atualiza campos protegidos quando o valor existente é NULL. Isso significa:
+
+- Cheques que já receberam tipo_divida_id → **não serão tocados**
+- Registros com NULL → **receberão o tipo correto**
+- A atualização mensal continua funcionando normalmente
+
+## O que muda
+
+### Arquivo: `supabase/functions/maxlist-import/index.ts`
+
+**Antes** (linhas 113-122): busca apenas "Cheque" em `tipos_divida`.
+
+**Depois**: busca **todos** os `tipos_divida` do tenant e cria um mapa `PaymentType → tipo_divida_id`:
+
 ```text
-Total bruto:      R$ 998,66
-R$ digitado:      R$ 11,00
-% salvo na UI:    1,10%
-Recalculo:        998,66 × 1,10% = R$ 10,99
+PaymentType → tipo_divida_id
+1 (Dinheiro)        → fdda7e09...
+2 (Cheque)          → f750a86e... (TESS)
+3 (Débito)          → 49ea87a9... (Cartão de Crédito TESS)
+4 (Crédito)         → 49ea87a9... (Cartão de Crédito TESS)
+5 (Boleto)          → 2cd925fd... (TESS)
+6 (Cheque Caução)   → 5654b6a2...
+7 (Transf. Bancária)→ 51c16e0b...
+10, 11              → NULL (sem equivalente)
 ```
 
-Por isso o campo mostra `11`, mas a linha de desconto e o valor atualizado usam `10,99`.
+**Linha 316**: substituir a condicional de cheque por lookup no mapa completo:
+```typescript
+// Antes
+tipo_divida_id: record.tipo_divida_id || ((rawPaymentType === 2 || rawPaymentType === 6) ? chequeTipoDividaId : null)
 
-## Correção proposta
+// Depois
+tipo_divida_id: record.tipo_divida_id || paymentTypeToDividaMap.get(String(rawPaymentType)) || null
+```
 
-### 1. Definir a origem real do desconto
-Adicionar um estado para saber qual campo foi editado por último:
-- `"percent"` quando o usuário altera `% Desc.`
-- `"amount"` quando o usuário altera `R$ Desc.`
+## Lógica de resolução do mapa
 
-### 2. Centralizar o cálculo do desconto
-Criar um cálculo único para:
-- `descontoVal`
-- `totalAtualizado`
-- `remainingAfterEntrada`
-- `installmentValue`
-- `proposed_total`
+1. Buscar todos `tipos_divida` do tenant
+2. Criar mapa por nome (case-insensitive): `"boleto" → id`, `"cheque" → id`, etc.
+3. Mapear cada PaymentType para o nome correspondente
+4. Priorizar tipo_divida com `credor_id` do credor atual; senão, usar genérico
 
-Esse cálculo deve usar:
-- o percentual quando a origem for `%`
-- o valor em reais quando a origem for `R$`
+## Nenhuma outra alteração
 
-Assim, se o usuário digitar `R$ 11,00`, o desconto final usado pelo sistema será exatamente `R$ 11,00`.
+- Sem mudança no frontend
+- Sem migration
+- Sem alteração na lógica de PROTECTED_FIELDS ou reconciliação
 
-### 3. Manter os dois campos sincronizados só para exibição
-Os campos continuam se atualizando entre si visualmente, mas:
-- o campo editado define o valor real do cálculo
-- o outro campo vira apenas reflexo calculado
+## Como usar
 
-Exemplo:
-- editou `% Desc.` → `R$ Desc.` é derivado
-- editou `R$ Desc.` → `% Desc.` é derivado
+Após deploy, usar "Atualizar Parcelas" ou "Sincronizar por Período" no MaxList. Os 419k registros com NULL receberão o tipo_divida_id correto progressivamente.
 
-### 4. Padronizar arredondamento em helper
-Usar um helper único, por exemplo:
-- `roundMoney(value)` para 2 casas
-
-Aplicar esse helper em todos os pontos financeiros do componente para evitar novas divergências de 1 centavo.
-
-### 5. Garantir consistência ao gravar
-Na gravação do acordo:
-- `proposed_total` deve sair do desconto efetivo final
-- `new_installment_value` deve sair do mesmo total final
-- `discount_percent` deve refletir o desconto efetivo, sem afetar o valor em reais digitado
-
-## Arquivo a alterar
-- `src/components/client-detail/AgreementCalculator.tsx`
-
-## Resultado esperado
-- digitando `R$ 11,00`, a linha “Desconto” mostrará `R$ 11,00`
-- o “Valor Atualizado” ficará exatamente `R$ 987,66`
-- a simulação e a gravação do acordo usarão esse mesmo valor final
-- não haverá mais divergência de 1 centavo entre campo, resumo e cálculo final
-
-## Validação
-Após implementar, validar:
-1. o caso do print (`R$ Desc. = 11`)
-2. edição por `% Desc.`
-3. troca de títulos selecionados
-4. simulação das parcelas
-5. gravação do acordo e valor salvo
-
-## Detalhe técnico
-Sem migration. É uma correção de lógica frontend.
