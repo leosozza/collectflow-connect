@@ -49,11 +49,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Stable setter: only update user state when the user ID actually changes
+  const setUserStable = (newUser: User | null) => {
+    setUser(prev => {
+      if (prev?.id === newUser?.id) return prev;
+      return newUser;
+    });
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
-        setUser(session?.user ?? null);
+        setUserStable(session?.user ?? null);
         if (session?.user) {
           setTimeout(() => {
             fetchProfile(session.user.id);
@@ -67,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      setUserStable(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
       }
