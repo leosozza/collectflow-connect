@@ -1,75 +1,58 @@
 
 
-# Anti-Ban Backend Lock — Plano de Implementação
+# Documento PDF de Funcionalidades + Atualização do Roadmap
 
 ## Resumo
 
-Substituir o delay fixo de 200ms entre mensagens por um sistema de throttling robusto no backend, com intervalos aleatórios de 8-15s e pausas de 2 minutos a cada 15 mensagens por instância. O frontend será atualizado para polling de progresso em tempo real, já que a campanha agora levará muito mais tempo.
+Gerar um PDF profissional listando todas as funcionalidades do RiVO Connect, categorizadas em: **Prontas**, **Em Desenvolvimento** e **Futuras**. Simultaneamente, atualizar o arquivo `docs/SCORE_V1_ROADMAP.md` para um roadmap geral do produto.
 
-## Mudanças
+## PDF — Estrutura do Documento
 
-### 1. Edge Function `supabase/functions/send-bulk-whatsapp/index.ts`
+**Título**: "RiVO Connect — Mapa de Funcionalidades"
+**Formato**: PDF A4, cores da marca, gerado via ReportLab
 
-**Constantes hardcoded (não parametrizáveis pelo frontend):**
-```text
-ANTI_BAN_MIN_DELAY_MS = 8000
-ANTI_BAN_MAX_DELAY_MS = 15000
-BATCH_REST_THRESHOLD = 15        (mensagens por instância)
-BATCH_REST_DURATION_MS = 120000  (2 minutos)
-MAX_EXECUTION_MS = 380000        (380s, margem para o limite de 400s)
-```
+### Seções do PDF:
 
-**Lógica de delay:**
-- Substituir `await new Promise((r) => setTimeout(r, 200))` por `8000 + Math.random() * 7000`
-- Manter um contador por instância (`instanceSendCounts: Map<string, number>`)
-- A cada 15 envios de uma mesma instância, aplicar pausa de 120s
-- Antes de cada pausa longa ou ao atingir ~380s, salvar checkpoint (sent_count, failed_count, progress_metadata com `remaining`, `instance_counts`, `last_chunk_at`)
+**1. Funcionalidades Prontas (✅)**
+- **CRM de Cobrança**: Carteira de clientes (tabela + kanban), detalhe do devedor, histórico, filtros avançados, importação de planilhas
+- **Contact Center WhatsApp**: Chat em tempo real, múltiplas instâncias (Evolution/WuzAPI/Gupshup/Baylers), vinculação de cliente, tabulação na conversa, perfil do devedor (hover selector), disparo em lote com Anti-Ban
+- **Contact Center Telefonia**: Integração 3CPlus, discador, tabulação de chamadas
+- **Gestão de Acordos**: Calculadora de acordos, parcelas, assinatura digital (facial + digital), portal do devedor
+- **Portal do Devedor**: Consulta por CPF, lista de dívidas, negociação, checkout com Asaas, assinatura biométrica
+- **Documentos**: Geração de 5 tipos (acordo, recibo, quitação, descrição de dívida, notificação extrajudicial), templates por credor/tenant/default, preview A4, download PDF
+- **Automação**: Réguas de cobrança, workflows visuais (ReactFlow), triggers automáticos (vencimento, sem contato), templates WhatsApp
+- **Score Operacional V1**: Motor heurístico de 4 dimensões, timeline de eventos, recálculo automático, metadados (canal preferido, fila sugerida)
+- **Gamificação**: Ranking, conquistas, metas, loja de recompensas, campanhas, carteira de pontos
+- **Integrações**: Serasa, Protesto, TargetData (enriquecimento), Asaas (pagamentos), MaxSystem, CobCloud, Negociarie
+- **Relatórios**: Aging, evolução, comparativos, exportação CSV/XLSX
+- **Financeiro**: Despesas, checkout de pagamentos, comissões por faixa
+- **Administração**: Multi-tenant, controle de módulos, gestão de usuários e roles, auditoria, sistema de tokens
+- **IA**: Sugestão de respostas no WhatsApp, suporte via IA
+- **API Pública**: REST API de clientes com documentação
+- **Notificações**: Sistema em tempo real, celebração de acordos
 
-**Diferenciação de origem (preparação futura):**
-- Ler `origin_type` do registro da campanha (já existente ou adicionar campo)
-- Se `origin_type === 'AI_AGENT'`, usar delays menores (futuro); para `OP_CARTEIRA` manter os limites rigorosos
+**2. Em Desenvolvimento (🔧)**
+- **Anti-Ban Backend Lock**: Throttling inteligente para disparos WhatsApp (8-15s + pausas de lote) — recém-implementado, em validação
+- **Perfil do Devedor no Discador**: Seletor hover no atendimento telefônico
+- **Score V1 — Calibração**: Ajuste fino dos pesos do motor heurístico com dados reais
 
-**Checkpoint robusto:**
-- Após cada mensagem enviada (não apenas por chunk), atualizar `sent_count`/`failed_count` na campanha para que o frontend possa fazer polling
-- Ao atingir o timeout de 380s, retornar `{ status: "partial", remaining }` — o frontend re-invoca automaticamente
+**3. Funcionalidades Futuras (🔮)**
+- **Score V2 — Vinculação automática WhatsApp↔cliente** por telefone
+- **Score V3 — IA por Voz e Texto**: Speech-to-text, análise semântica de chamadas e WhatsApp
+- **Score V4 — Avançado**: IA complementar, dashboards operacionais, A/B testing
+- **IA Negociação WhatsApp**: Agente autônomo de negociação
+- **IA Negociação Telefonia**: Agente de voz para negociação
+- **Dashboard de eventos por cliente**
+- **Machine Learning supervisionado** para predição
 
-### 2. Frontend `src/services/whatsappCampaignService.ts`
+## Roadmap — Atualização
 
-**Nova função `pollCampaignProgress`:**
-- Buscar status da campanha a cada 5s via `supabase.from("whatsapp_campaigns").select(...).eq("id", campaignId)`
-- Retorna `{ status, sent_count, failed_count, progress_metadata }`
+Criar/atualizar `docs/ROADMAP.md` com visão geral do produto (não apenas score), incluindo as fases acima.
 
-**Atualizar `startCampaign`:**
-- Após invocar a edge function, se o retorno for `partial`, re-invocar automaticamente em loop até `completed`/`failed`/`completed_with_errors`
-
-### 3. Frontend `src/components/carteira/WhatsAppBulkDialog.tsx`
-
-**Step 4 — UX de progresso atualizada:**
-- Substituir o spinner genérico por um painel de progresso detalhado:
-  - Badge "Modo Anti-Ban Ativo" (verde com ícone de escudo)
-  - Barra de progresso com `sent / total` atualizada via polling
-  - Texto: "Enviando com intervalos de segurança para proteger suas instâncias..."
-  - Contador: "X de Y enviados · Z falhas"
-  - Estimativa de tempo: baseada em ~11.5s por mensagem + pausas de lote
-- Polling via `useEffect` + `setInterval` a cada 5s enquanto `sending === true`
-- Permitir fechar o dialog sem cancelar a campanha (continua em background)
-
-### 4. Novo campo na tabela `whatsapp_campaigns` (migração)
-
-Adicionar coluna `origin_type text default 'OP_CARTEIRA'` para diferenciar disparos de operadores vs IA no futuro.
-
-## Arquivos afetados
+## Arquivos
 
 | Ação | Arquivo |
 |---|---|
-| Editar | `supabase/functions/send-bulk-whatsapp/index.ts` |
-| Editar | `src/services/whatsappCampaignService.ts` |
-| Editar | `src/components/carteira/WhatsAppBulkDialog.tsx` |
-| Migração | Adicionar `origin_type` em `whatsapp_campaigns` |
-
-## Impacto operacional
-
-- Uma campanha de 100 destinatários levará ~20-25 minutos (vs ~20s antes)
-- O operador pode fechar o dialog e a campanha continua processando no backend
-- O sistema se auto-resume via re-invocação quando atinge o timeout da Edge Function
+| Gerar | `/mnt/documents/RiVO_Connect_Funcionalidades.pdf` |
+| Criar/Atualizar | `docs/ROADMAP.md` (roadmap geral do produto) |
 
