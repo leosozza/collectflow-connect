@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link, Outlet } from "react-router-dom";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -33,11 +33,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import SupportFloatingButton from "@/components/support/SupportFloatingButton";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
-
-const AppLayout = ({ children }: AppLayoutProps) => {
+const AppLayout = () => {
   const { profile, signOut } = useAuth();
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const permissions = usePermissions();
@@ -331,7 +327,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </header>
 
         <main className={`flex-1 overflow-auto ${isFullBleedRoute ? "" : "p-4 lg:p-6"}`}>
-          {children}
+          <Outlet />
         </main>
       </div>
 

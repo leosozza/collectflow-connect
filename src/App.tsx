@@ -52,11 +52,11 @@ import CRMLeadsPage from "./pages/admin/comercial/CRMLeadsPage";
 import CRMCompaniesPage from "./pages/admin/comercial/CRMCompaniesPage";
 import CRMActivitiesPage from "./pages/admin/comercial/CRMActivitiesPage";
 import CRMReportsPage from "./pages/admin/comercial/CRMReportsPage";
-/* Conditional root: landing for visitors, dashboard for logged-in users */
+
+/* Conditional root: landing for visitors, redirect for logged-in users */
 const RootPage = () => {
   const { user, loading } = useAuth();
   const { tenant, isSuperAdmin, loading: tenantLoading } = useTenant();
-  // Only show full-screen spinner on initial load (no tenant yet)
   if (loading || (tenantLoading && !tenant)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -69,13 +69,7 @@ const RootPage = () => {
   }
   if (!user) return <LandingPage />;
   if (isSuperAdmin) return <Navigate to="/admin" replace />;
-  return (
-    <ProtectedRoute requireTenant>
-      <AppLayout>
-        <Index />
-      </AppLayout>
-    </ProtectedRoute>
-  );
+  return <Navigate to="/dashboard" replace />;
 };
 
 const queryClient = new QueryClient({
@@ -106,232 +100,34 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/"
-              element={<RootPage />}
-            />
-            <Route
-              path="/carteira"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <CarteiraPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/carteira/:cpf"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ClientDetailPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cadastro"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <CadastroPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cadastros/:tab?"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <CadastrosPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/usuarios"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <UsersPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/configuracoes"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ConfiguracoesPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contact-center/telefonia"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="telefonia">
-                      <ContactCenterPage channel="telefonia" />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contact-center/whatsapp"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="whatsapp">
-                      <ContactCenterPage channel="whatsapp" />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/central-empresa"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <TenantSettingsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/integracao"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="integracoes">
-                      <IntegracaoPage />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/perfil"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <PerfilPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/gamificacao"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="gamificacao">
-                      <GamificacaoPage />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/automacao"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="automacao">
-                      <AutomacaoPage />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/relatorios"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ModuleGuard module="relatorios">
-                      <RelatoriosPage />
-                    </ModuleGuard>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/acordos"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AcordosPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AnalyticsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/auditoria"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AuditoriaPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/atendimento/:clientId?"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <AtendimentoPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/signs"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <SignsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/maxlist"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <MaxListPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/api-docs"
-              element={
-                <ProtectedRoute requireTenant>
-                  <AppLayout>
-                    <ApiDocsPage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/" element={<RootPage />} />
+
+            {/* All tenant-protected routes sharing persistent AppLayout */}
+            <Route element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}>
+              <Route path="dashboard" element={<Index />} />
+              <Route path="carteira" element={<CarteiraPage />} />
+              <Route path="carteira/:cpf" element={<ClientDetailPage />} />
+              <Route path="cadastro" element={<CadastroPage />} />
+              <Route path="cadastros/:tab?" element={<CadastrosPage />} />
+              <Route path="usuarios" element={<UsersPage />} />
+              <Route path="configuracoes" element={<ConfiguracoesPage />} />
+              <Route path="contact-center/telefonia" element={<ModuleGuard module="telefonia"><ContactCenterPage channel="telefonia" /></ModuleGuard>} />
+              <Route path="contact-center/whatsapp" element={<ModuleGuard module="whatsapp"><ContactCenterPage channel="whatsapp" /></ModuleGuard>} />
+              <Route path="central-empresa" element={<TenantSettingsPage />} />
+              <Route path="integracao" element={<ModuleGuard module="integracoes"><IntegracaoPage /></ModuleGuard>} />
+              <Route path="perfil" element={<PerfilPage />} />
+              <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>} />
+              <Route path="automacao" element={<ModuleGuard module="automacao"><AutomacaoPage /></ModuleGuard>} />
+              <Route path="relatorios" element={<ModuleGuard module="relatorios"><RelatoriosPage /></ModuleGuard>} />
+              <Route path="acordos" element={<AcordosPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="auditoria" element={<AuditoriaPage />} />
+              <Route path="atendimento/:clientId?" element={<AtendimentoPage />} />
+              <Route path="signs" element={<SignsPage />} />
+              <Route path="maxlist" element={<MaxListPage />} />
+              <Route path="api-docs" element={<ApiDocsPage />} />
+            </Route>
+
             <Route path="/api-docs-public" element={<ApiDocsPublicPage />} />
             <Route path="/site" element={<LandingPage />} />
             <Route path="/portal" element={<PortalPage />} />
@@ -346,7 +142,6 @@ const App = () => (
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/suporte" element={<SupportAdminPage />} />
               <Route path="/admin/tenants" element={<SuperAdminPage />} />
-              
               <Route path="/admin/financeiro" element={<AdminFinanceiroPage />} />
               <Route path="/admin/treinamentos" element={<AdminTreinamentosPage />} />
               <Route path="/admin/configuracoes" element={<AdminConfiguracoesPage />} />
