@@ -257,6 +257,9 @@ const LogDetailPanel = ({ log }: { log: AuditLog }) => {
   if (!details || Object.keys(details).length === 0) {
     return <p className="text-xs text-muted-foreground italic">Nenhum detalhe registrado para esta ação.</p>;
   }
+  if (log.action === "maxlist_import" || log.action === "maxlist_update") {
+    return <MaxListDetail details={details} />;
+  }
   if (log.action === "import_completed" || log.action === "import_started" || log.entity_type === "import") {
     return <ImportDetail details={details} />;
   }
