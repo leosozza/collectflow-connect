@@ -117,7 +117,11 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
         created_at: new Date().toISOString(),
       };
 
-      setTenantUser(tuData as TenantUser);
+      // Only update if role or tenant actually changed
+      setTenantUser(prev => {
+        if (prev?.tenant_id === tuData.tenant_id && prev?.role === tuData.role) return prev;
+        return tuData as TenantUser;
+      });
 
       // Fetch tenant
       const { data: tenantData, error: tenantError } = await supabase
@@ -141,9 +145,17 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
             .single();
           planData = pd;
         }
-        // Set everything atomically before marking loading=false
-        setTenant(tenantData as Tenant);
-        if (planData) setPlan(planData as Plan);
+        // Only update if tenant actually changed
+        setTenant(prev => {
+          if (prev?.id === tenantData.id && prev?.updated_at === tenantData.updated_at) return prev;
+          return tenantData as Tenant;
+        });
+        if (planData) {
+          setPlan(prev => {
+            if (prev?.id === planData.id) return prev;
+            return planData as Plan;
+          });
+        }
       }
     } catch (err) {
       console.error("Error fetching tenant data:", err);
@@ -154,7 +166,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchTenantData();
-  }, [user, authLoading]);
+  }, [user?.id, authLoading]);
 
   const isSuperAdmin = tenantUser?.role === "super_admin";
   const isTenantAdmin = tenantUser?.role === "admin" || isSuperAdmin;
