@@ -63,6 +63,122 @@ const entityLabels: Record<string, string> = {
 };
 
 /* ─── Detail renderers ─── */
+const fieldLabelsAudit: Record<string, string> = {
+  nome_completo: "Nome",
+  phone: "Telefone 1",
+  phone2: "Telefone 2",
+  phone3: "Telefone 3",
+  valor_parcela: "Valor Parcela",
+  valor_pago: "Valor Pago",
+  valor_saldo: "Valor Saldo",
+  status: "Status",
+  data_vencimento: "Vencimento",
+  data_pagamento: "Pagamento",
+  status_cobranca_id: "Status Cobrança",
+  cod_contrato: "Contrato",
+  numero_parcela: "Nº Parcela",
+  model_name: "Modelo",
+  external_id: "ID Externo",
+  data_devolucao: "Data Devolução",
+  motivo_devolucao: "Motivo Devolução",
+  tipo_divida_id: "Tipo Dívida",
+};
+
+const MaxListDetail = ({ details }: { details: Record<string, any> }) => {
+  const updatedClients = (details.updated_clients || []) as Array<{ cpf: string; nome: string; changes: Record<string, { old: any; new: any }> }>;
+
+  const handleDownloadCSV = () => {
+    if (updatedClients.length === 0) return;
+    const rows = updatedClients.map(c => {
+      const changesStr = Object.entries(c.changes)
+        .map(([k, v]) => `${fieldLabelsAudit[k] || k}: ${v.old ?? "—"} → ${v.new ?? "—"}`)
+        .join("; ");
+      return `"${c.cpf}","${c.nome}","${changesStr}"`;
+    });
+    const csv = `CPF,Nome,Alterações\n${rows.join("\n")}`;
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `maxlist_alterados_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Credor", value: details.credor },
+          { label: "Modo", value: details.mode === "update" ? "Atualização" : "Importação" },
+          { label: "Total Consultado", value: details.total_fetched },
+          { label: "Inseridos", value: details.inserted },
+          { label: "Atualizados", value: details.updated },
+          { label: "Pagos", value: details.paid },
+          { label: "Cancelados", value: details.cancelled_maxlist },
+          { label: "Sem Alteração", value: details.unchanged },
+          { label: "Rejeitados", value: details.rejected },
+          { label: "Duplicidades", value: details.duplicates_discarded },
+          { label: "Erros", value: details.errors },
+          { label: "Duração", value: details.duration_ms ? `${Math.round(details.duration_ms / 1000)}s` : undefined },
+        ]
+          .filter((item) => item.value !== undefined && item.value !== null)
+          .map((item) => (
+            <div key={item.label} className="bg-background rounded-lg border border-border p-2.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+              <p className="text-sm font-semibold text-foreground mt-0.5">{String(item.value)}</p>
+            </div>
+          ))}
+      </div>
+
+      {updatedClients.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-foreground">
+              {updatedClients.length} cliente(s) alterado(s)
+            </p>
+            <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              Download CSV
+            </Button>
+          </div>
+          <ScrollArea className="max-h-[200px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">CPF</TableHead>
+                  <TableHead className="text-xs">Nome</TableHead>
+                  <TableHead className="text-xs">Alterações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {updatedClients.slice(0, 50).map((c, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-xs">{c.cpf}</TableCell>
+                    <TableCell className="text-xs">{c.nome}</TableCell>
+                    <TableCell className="text-xs">
+                      {Object.entries(c.changes).map(([field, val]) => (
+                        <span key={field} className="mr-2">
+                          <span className="font-medium">{fieldLabelsAudit[field] || field}:</span>{" "}
+                          <span className="text-muted-foreground line-through">{String(val.old ?? "—")}</span>{" → "}
+                          <span className="font-medium">{String(val.new ?? "—")}</span>
+                        </span>
+                      ))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          {updatedClients.length > 50 && (
+            <p className="text-[10px] text-muted-foreground">Mostrando 50 de {updatedClients.length}. Faça download do CSV para ver todos.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ImportDetail = ({ details }: { details: Record<string, any> }) => (
   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
     {[
