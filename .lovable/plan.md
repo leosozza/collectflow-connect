@@ -1,49 +1,66 @@
 
 
-# Rastreabilidade MaxList: Auditoria Detalhada + Histórico do Cliente
+# Correção do Módulo de Gamificação — Métricas, Filtros por Credor e Persistência
 
-## Problema
-1. A sincronização MaxList registra apenas 1 resumo em `audit_logs` — não há como ver quais clientes foram alterados
-2. Alterações feitas pela sincronização não aparecem no histórico individual do cliente
+## Problemas Identificados
+
+1. **`maior_valor_promessas`** usa `totalReceived` em vez da soma de `proposed_total` de acordos ativos
+2. **`menor_valor_quebra`** usa contagem de quebras em vez do valor monetário real
+3. **`menor_taxa_quebra`** retorna score 0 para operadores sem acordos (deveria ser 100)
+4. **Sem filtro por credor** — campanhas com credores vinculados ignoram esse filtro
+5. **`upsertOperatorPoints` nunca é chamado** — o ranking global não é atualizado
+6. **Gamificação depende de entrada na página** — não há trigger automático em pagamentos/acordos
+
+## Dados Relevantes
+
+- `agreements.credor` e `clients.credor` são **strings** (razao_social), não FKs
+- `campaign_credores` referencia `credores.id` (UUID)
+- Para filtrar por credor da campanha, preciso buscar `razao_social` dos credores vinculados e filtrar por string
 
 ## Solução
 
-### 1. Edge Function `maxlist-import/index.ts` — Registrar alterações em `client_update_logs`
+### 1. Arquivo: `src/hooks/useGamificationTrigger.ts`
 
-No modo **update**, após o upsert de cada chunk com sucesso, inserir em batch na tabela `client_update_logs` os registros que tiveram alterações detectadas (`changes`). Campos:
+**a) Corrigir `updateCampaignScores` — buscar dados reais por métrica e filtrar por credor**
 
-- `client_id`: ID do registro existente
-- `tenant_id`: tenant corrente
-- `source`: `"maxlist"`
-- `changes`: objeto `{ campo: { old, new } }` já calculado
-- `updated_by`: null (ação de sistema)
+Refatorar `updateCampaignScores` para:
+- Buscar os credores vinculados à campanha (`campaign_credores` → `credores.razao_social`)
+- Quando houver credores, filtrar queries de `agreements` e `clients` por `.in("credor", credorNames)`
+- Para cada métrica, buscar dados reais:
+  - **`maior_valor_promessas`**: `SUM(proposed_total)` de agreements com status `pending` ou `approved`
+  - **`menor_valor_quebra`**: `SUM(proposed_total)` de agreements com status `cancelled`
+  - **`menor_taxa_quebra`**: Se não há acordos, score = 100 (performance perfeita inicial)
+  - **`maior_valor_recebido`** e **`maior_qtd_acordos`**: filtrar por credores quando aplicável
 
-O trigger existente `trg_client_event_from_update_log` cria automaticamente um `client_event` do tipo `field_update` com source `maxlist` — isso faz a alteração aparecer no **histórico/timeline do cliente** sem código adicional.
+**b) Chamar `upsertOperatorPoints` ao final de `triggerGamificationUpdate`**
 
-Inserção em batches de 200 para não impactar performance. Limitado a registros que realmente tiveram mudanças (já filtrados pelo diff existente).
+Após calcular todas as métricas e achievements, chamar:
+```typescript
+await upsertOperatorPoints({
+  tenant_id, operator_id: profileId,
+  year, month, points: calculatedPoints,
+  payments_count, breaks_count, total_received
+});
+```
 
-### 2. Audit Log detalhado com lista de CPFs alterados
+### 2. Trigger automático em pagamentos e acordos
 
-No `audit_logs` já existente, adicionar ao campo `details` a lista de CPFs e nomes dos clientes que foram atualizados (`updated_clients`), limitado aos primeiros 500 para não explodir o tamanho do JSON.
+Nos locais onde já existe `triggerGamificationUpdate()`:
+- `AgreementForm.tsx` (ao fechar acordo) — ✅ já existe
+- `ClientsPage.tsx` (ao registrar pagamento) — ✅ já existe
 
-### 3. AuditoriaPage — Seção de download CSV dos alterados
+Esses triggers já estão implementados. O problema real era que `upsertOperatorPoints` não era chamado, então os pontos nunca persistiam. Corrigir isso resolve a questão.
 
-Na página de Auditoria, quando o log selecionado for `maxlist_update` ou `maxlist_import`:
-- Exibir lista dos clientes alterados (se disponível em `details.updated_clients`)
-- Botão "Download CSV" que exporta: CPF, Nome, Campos Alterados (de → para)
+### 3. Arquivo: `src/components/gamificacao/CampaignForm.tsx`
 
-Adicionar `maxlist_update` e `maxlist_import` ao mapa `actionLabels`.
-
-### 4. ClientUpdateHistory — Label "MaxList"
-
-Adicionar `maxlist: "MaxList"` ao `SOURCE_LABELS` no componente `ClientUpdateHistory.tsx` para que o badge exiba "MaxList" em vez de "maxlist".
+O formulário já salva credores corretamente via `saveCampaignCredores` no `CampaignsManagementTab.tsx`. Nenhuma alteração necessária aqui.
 
 ## Arquivos alterados
-- `supabase/functions/maxlist-import/index.ts` — inserir em `client_update_logs` após upsert
-- `src/pages/AuditoriaPage.tsx` — exibir detalhes e CSV para logs MaxList
-- `src/components/client-detail/ClientUpdateHistory.tsx` — adicionar label "MaxList"
+- `src/hooks/useGamificationTrigger.ts` — refatoração principal (métricas reais, filtro por credor, persistência de pontos)
 
 ## Resultado
-- Cada cliente alterado pela sincronização MaxList terá o registro no seu histórico individual com source "MaxList"
-- Na Auditoria, será possível ver e baixar CSV com todos os clientes afetados por cada sincronização
+- Rankings refletem valores financeiros reais
+- Campanhas com credores vinculados filtram apenas registros desses credores
+- Pontos são persistidos no `operator_points` a cada trigger
+- Operadores sem acordos começam com 100% de performance
 
