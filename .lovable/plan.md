@@ -1,54 +1,70 @@
 
 
-# Estabilização e Escalabilidade Multi-Tenant — Status e Plano
+# Auditoria das Alterações de Hoje — Inconsistências Encontradas
 
-## Diagnóstico por Item
-
-### 1. Layout Routes (AppLayout + Outlet) — JÁ IMPLEMENTADO ✓
-O `App.tsx` já usa layout routes com `<Outlet />`. O `AppLayout` é montado uma única vez como wrapper das rotas autenticadas (linha 106 do App.tsx). Nenhuma ação necessária.
-
-### 2. Webhook Gupshup — PRECISA CORREÇÃO
-O loop `for` nas linhas 78-87 de `gupshup-webhook/index.ts` itera sobre **todos os tenants** para encontrar o número de origem. Com muitos tenants, isso degrada performance.
-
-**Correção:** Substituir o loop por uma query direta usando filtro JSONB:
-```sql
-SELECT id FROM tenants
-WHERE settings->>'gupshup_source_number' LIKE '%' || cleaned_destination
-LIMIT 1
-```
-Isso resolve o tenant em O(1) em vez de O(n).
-
-### 3. Gamificação (Métricas + Filtros + Persistência) — JÁ IMPLEMENTADO ✓
-Todas as correções solicitadas já foram aplicadas em iterações anteriores:
-- `maior_valor_promessas` → soma de `proposed_total` de acordos pending/approved
-- `menor_valor_quebra` → valor financeiro de `proposed_total` de acordos cancelled (invertido para ranking)
-- `menor_taxa_quebra` → retorna 100 (performance perfeita) quando não há acordos
-- Filtro por credores via `campaign_credores` → `getCampaignCredorNames()` implementado
-- Persistência via `upsertOperatorPoints` → chamado em cada trigger
-
-### 4. Consistência Multi-Tenant — PARCIALMENTE IMPLEMENTADO
-
-**4a. `useTenant` multi-tenant** — O hook atual assume um tenant por usuário (via `get_my_tenant_id()`). Para suportar múltiplos tenants, precisaríamos de um seletor de tenant — mas isso é uma mudança de produto significativa. Por ora, o sistema funciona corretamente para o modelo atual (1 tenant por usuário).
-
-**4b. `auto-status-sync` na CarteiraPage** — PRECISA CORREÇÃO. O `auto-status-sync` é chamado no mount da CarteiraPage (linha 314), causando uma chamada HTTP pesada toda vez que o usuário abre a carteira. O `maxlist-import` já chama `auto-status-sync` automaticamente ao final da importação (linha 629). A chamada no mount é redundante e deve ser removida.
+## Resumo das Mudanças do Dia
+1. ✅ Remoção de Relatórios, Analytics e Auditoria da sidebar
+2. ✅ Remoção do `auto-status-sync` no mount da CarteiraPage
+3. ✅ Otimização do webhook Gupshup (O(1))
+4. ✅ Hook `recalcScoreForCpf` criado
+5. ✅ Integração do recálculo no `agreementService`
+6. ⚠️ Trigger SQL para recálculo automático de score
+7. ⚠️ Imports não utilizados no AppLayout
 
 ---
 
-## Plano de Implementação
+## 🔴 CRÍTICO: Trigger de Score Automático NÃO Funciona
 
-### Arquivo 1: `supabase/functions/gupshup-webhook/index.ts`
-- Remover o loop `for` (linhas 73-87)
-- Substituir por query direta: buscar tenant onde `settings->>'gupshup_source_number'` corresponde ao `destination` da mensagem
-- Manter o fallback por `whatsapp_instances` (já existe)
+**O problema:** O trigger SQL (`trg_recalc_score_on_event`) chama a Edge Function `calculate-propensity` via `pg_net` usando o **service_role key**. Porém, a função valida autenticação assim:
 
-### Arquivo 2: `src/pages/CarteiraPage.tsx`
-- Remover o `useEffect` que chama `auto-status-sync` no mount (linhas 311-325)
-- Remover o `syncCalledRef`
-- A sincronização continua ocorrendo automaticamente após importações (MaxList e ClientsPage)
+```text
+anonClient.auth.getUser(service_role_token)  →  FALHA (não é um user JWT)
+→  retorna 401 Unauthorized
+→  score NUNCA é calculado via trigger
+```
+
+O `service_role_key` é uma chave de serviço, não um token de usuário. A função tenta resolver o `user.id` para encontrar o `tenant_id`, mas com service_role não há usuário associado.
+
+**Evidência:** Os logs mostram muitos ciclos de boot/shutdown sem nenhum log de processamento real — a função recebe a chamada, falha no auth e retorna 401 silenciosamente.
+
+**Correção necessária:** Modificar a Edge Function `calculate-propensity` para aceitar dois modos de autenticação:
+1. **User JWT** (modo atual, do frontend) — resolve tenant via `user.id → tenant_users`
+2. **Service Role + tenant_id no body** (modo trigger) — quando chamado pelo banco, o body deve incluir `tenant_id` junto com `cpf`, e a função reconhece o service_role key sem tentar `getUser()`
+
+O trigger SQL também precisa ser atualizado para incluir `tenant_id` no body da requisição.
+
+---
+
+## 🟡 MENOR: Imports Não Utilizados no AppLayout
+
+Após a remoção dos links de Relatórios, Analytics e Auditoria, 3 ícones ficaram órfãos no import:
+- `BarChart3` (era Analytics)
+- `FileBarChart` (era Relatórios)
+- `ShieldCheck` (era Auditoria)
+
+Não causa erro, mas é código morto que deve ser limpo.
+
+---
+
+## Plano de Correção
+
+### Arquivo 1: `supabase/functions/calculate-propensity/index.ts`
+- Após verificar o `authHeader`, checar se o token é o `SUPABASE_SERVICE_ROLE_KEY`
+- Se for service_role: extrair `tenant_id` diretamente do body (sem chamar `getUser`)
+- Se for user JWT: manter fluxo atual (resolve tenant via `tenant_users`)
+- Isso permite que tanto o frontend quanto o trigger SQL funcionem
+
+### Arquivo 2: Migration SQL — Atualizar trigger
+- Alterar a função `trigger_score_recalc()` para incluir `tenant_id` no JSON body:
+  ```sql
+  body := jsonb_build_object('cpf', _clean_cpf, 'tenant_id', NEW.tenant_id)
+  ```
+
+### Arquivo 3: `src/components/AppLayout.tsx`
+- Remover imports de `BarChart3`, `FileBarChart`, `ShieldCheck`
 
 ### Resultado
-- **Webhook**: Resolução de tenant em tempo constante, pronto para centenas de tenants
-- **Carteira**: Carregamento mais rápido sem chamada HTTP desnecessária no mount
-- **Gamificação**: Já estável (confirmado)
-- **Layout**: Já otimizado (confirmado)
+- Score operacional será recalculado automaticamente via trigger (a cada evento)
+- Frontend continua funcionando normalmente
+- Código limpo sem imports órfãos
 
