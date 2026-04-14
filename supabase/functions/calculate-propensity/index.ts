@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── New 5-dimension additive model (0-100) ──
+// ── Interfaces ──
 
 interface ClientEvent {
   event_type: string;
@@ -26,11 +26,15 @@ interface ScoreResult {
   suggested_profile: string | null;
 }
 
+// ── Helpers ──
+
 function daysBetween(d1: Date, d2: Date): number {
   return Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / 86400000));
 }
 
 const POSITIVE_CONTACT = new Set(["cpc", "answered", "completed", "connected"]);
+
+// ── Score calculation (5-dimension additive model, 0-100) ──
 
 function calculateScore(
   events: ClientEvent[],
@@ -49,10 +53,9 @@ function calculateScore(
     };
   }
 
-  // ── 1. CONTATO (0 a +30) — recency of last contact ──
   let lastContactDays = -1;
   let callEvents = 0, whatsappEvents = 0;
-  let whatsappInbound = 0, whatsappOutbound = 0;
+  let whatsappInbound = 0;
   let totalResponses = 0, totalOutreach = 0;
   let agreementsCreated = 0, agreementsCancelled = 0, agreementsSigned = 0;
   let paymentConfirmed = false, partialPayment = false;
@@ -61,8 +64,6 @@ function calculateScore(
 
   for (const ev of events) {
     const daysAgo = daysBetween(new Date(ev.created_at), now);
-
-    // Track channel
     if (ev.event_channel === "call") callEvents++;
     if (ev.event_channel === "whatsapp") whatsappEvents++;
 
@@ -90,7 +91,6 @@ function calculateScore(
         break;
       }
       case "whatsapp_outbound": {
-        whatsappOutbound++;
         totalOutreach++;
         break;
       }
@@ -126,7 +126,7 @@ function calculateScore(
     }
   }
 
-  // ── DIM 1: Contato (0 to +30) ──
+  // DIM 1: Contato (0 to +30)
   let contactScore = 0;
   if (lastContactDays >= 0) {
     if (lastContactDays <= 7) contactScore = 30;
@@ -134,93 +134,70 @@ function calculateScore(
     else contactScore = 10;
   }
 
-  // ── DIM 2: Engajamento (0 to +30) — sinais reais de propensão ──
+  // DIM 2: Engajamento (0 to +30)
   let engagementScore = 0;
-  // Respondeu no WhatsApp (+5 por mensagem, max +10)
   engagementScore += Math.min(whatsappInbound * 5, 10);
-  // Contato efetivo por ligação/disposition (+5)
   if (lastContactDays >= 0) engagementScore += 5;
-  // Formalizou intenção de negociação (+5)
   if (agreementsCreated > 0) engagementScore += 5;
-  // Formalizou negociação (+5)
   if (agreementsSigned > 0) engagementScore += 5;
-  // Pagamento parcial/entrada (+5)
   if (partialPayment) engagementScore += 5;
-  // Pagamento confirmado (+10)
   if (paymentConfirmed) engagementScore += 10;
-  // Cap at 30
   engagementScore = Math.min(engagementScore, 30);
 
-  // ── DIM 3: Histórico de pagamento (-20 to +25) ──
+  // DIM 3: Histórico de pagamento (-20 to +25)
   let paymentScore = 0;
-  if (paymentConfirmed && agreementsCancelled === 0) {
-    paymentScore = 25;
-  } else if (partialPayment && agreementsCancelled === 0) {
-    paymentScore = 15;
-  } else if (paymentConfirmed && agreementsCancelled > 0) {
-    paymentScore = 5;
-  } else if (agreementsCancelled > 0 && !paymentConfirmed) {
-    paymentScore = -20;
-  } else if (agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed) {
-    paymentScore = -5;
-  }
+  if (paymentConfirmed && agreementsCancelled === 0) paymentScore = 25;
+  else if (partialPayment && agreementsCancelled === 0) paymentScore = 15;
+  else if (paymentConfirmed && agreementsCancelled > 0) paymentScore = 5;
+  else if (agreementsCancelled > 0 && !paymentConfirmed) paymentScore = -20;
+  else if (agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed) paymentScore = -5;
 
-  // ── DIM 4: Perfil do devedor (-25 to +20) ──
+  // DIM 4: Perfil do devedor (-25 to +20)
   let profileScore = 0;
   const profile = clientData.debtor_profile;
   if (profile === "ocasional") profileScore = 20;
   else if (profile === "recorrente") profileScore = 5;
   else if (profile === "insatisfeito") profileScore = -10;
   else if (profile === "resistente") profileScore = -25;
-  // null/unknown = 0
 
-  // ── DIM 5: Tempo de atraso (-20 to +10) ──
+  // DIM 5: Tempo de atraso (-20 to +10)
   let delayScore = 0;
   if (clientData.data_vencimento) {
     const venc = new Date(clientData.data_vencimento);
     const delayDays = daysBetween(venc, now);
-    if (delayDays <= 0) delayScore = 10; // not overdue
+    if (delayDays <= 0) delayScore = 10;
     else if (delayDays <= 30) delayScore = 10;
     else if (delayDays <= 90) delayScore = 0;
     else if (delayDays <= 180) delayScore = -10;
     else delayScore = -20;
   }
 
-  // ── Final score (sum, clamp 0-100) ──
-  // Base offset: 10 (so a client with no signals at all gets ~10, not 0)
+  // Final score (sum, clamp 0-100)
   const rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
-  // ── preferred_channel ──
+  // preferred_channel
   let preferred_channel = "unknown";
   if (callEvents > 0 && whatsappEvents > 0) {
     preferred_channel = callEvents > whatsappEvents * 1.5 ? "call" : whatsappEvents > callEvents * 1.5 ? "whatsapp" : "mixed";
-  } else if (callEvents > 0) {
-    preferred_channel = "call";
-  } else if (whatsappEvents > 0) {
-    preferred_channel = "whatsapp";
-  }
+  } else if (callEvents > 0) preferred_channel = "call";
+  else if (whatsappEvents > 0) preferred_channel = "whatsapp";
 
-  // ── suggested_queue ──
+  // suggested_queue
   let suggested_queue: string;
   if (score >= 75) suggested_queue = "priority_high";
   else if (score >= 50) suggested_queue = "priority_medium";
   else suggested_queue = "priority_low";
   if (events.length < 3) suggested_queue = "low_history";
 
-  // ── suggested_profile ──
+  // suggested_profile
   let suggested_profile: string | null = null;
-  if (hasComplaints) {
-    suggested_profile = "insatisfeito";
-  } else if (!paymentConfirmed && totalResponses === 0 && score < 50) {
-    suggested_profile = "resistente";
-  } else if (overdueEvents >= 2 || agreementsCancelled >= 2) {
-    suggested_profile = "recorrente";
-  } else if (paymentConfirmed || agreementsSigned > 0) {
-    suggested_profile = "ocasional";
-  }
+  if (hasComplaints) suggested_profile = "insatisfeito";
+  else if (!paymentConfirmed && totalResponses === 0 && score < 50) suggested_profile = "resistente";
+  else if (overdueEvents >= 2 || agreementsCancelled >= 2) suggested_profile = "recorrente";
+  else if (paymentConfirmed || agreementsSigned > 0) suggested_profile = "ocasional";
 
-  // ── score_reason ──
+  // score_reason
   const reasons: string[] = [];
   if (events.length < 3) reasons.push("Histórico limitado");
   if (contactScore >= 20) reasons.push("Contato recente");
@@ -234,13 +211,70 @@ function calculateScore(
   if (delayScore <= -10) reasons.push("Atraso prolongado");
   const score_reason = reasons.length > 0 ? reasons.slice(0, 3).join("; ") : "Score calculado com base no histórico";
 
-  // ── score_confidence ──
+  // score_confidence
   let score_confidence = "low";
   if (events.length >= 10) score_confidence = "high";
   else if (events.length >= 4) score_confidence = "medium";
 
   return { cpf: "", score, preferred_channel, suggested_queue, score_reason, score_confidence, suggested_profile };
 }
+
+// ── Resolve tenant: supports User JWT or Service Role + tenant_id ──
+
+async function resolveTenantId(
+  req: Request,
+  authHeader: string,
+  body: Record<string, unknown>
+): Promise<{ tenantId: string; supabase: ReturnType<typeof createClient> } | Response> {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const token = authHeader.replace("Bearer ", "");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  // Mode 1: Service Role (from DB trigger) — tenant_id must be in body
+  if (token === serviceRoleKey) {
+    const tenantId = body.tenant_id as string;
+    if (!tenantId) {
+      return new Response(JSON.stringify({ error: "tenant_id required for service role calls" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return { tenantId, supabase };
+  }
+
+  // Mode 2: User JWT (from frontend)
+  const anonClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const { data: { user }, error: userErr } = await anonClient.auth.getUser();
+  if (userErr || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: tenantUser } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!tenantUser) {
+    return new Response(JSON.stringify({ error: "Tenant não encontrado" }), {
+      status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return { tenantId: tenantUser.tenant_id, supabase };
+}
+
+// ── Main handler ──
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -253,43 +287,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: userErr } = await anonClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { data: tenantUser } = await supabase
-      .from("tenant_users")
-      .select("tenant_id")
-      .eq("user_id", user.id)
-      .single();
-
-    if (!tenantUser) {
-      return new Response(JSON.stringify({ error: "Tenant não encontrado" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const tenantId = tenantUser.tenant_id;
     const body = await req.json().catch(() => ({}));
+    const resolved = await resolveTenantId(req, authHeader, body);
+
+    // If resolved is a Response, it's an error — return it
+    if (resolved instanceof Response) return resolved;
+
+    const { tenantId, supabase } = resolved;
     const { cpf } = body;
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000);
 
-    // Get clients to score (with debtor_profile and data_vencimento)
+    // Get clients to score
     let clientsQuery = supabase
       .from("clients")
       .select("cpf, debtor_profile, data_vencimento")
@@ -309,7 +318,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Group by clean CPF, keep client data
+    // Group by clean CPF
     const cpfDataMap = new Map<string, { debtor_profile: string | null; data_vencimento: string | null }>();
     const uniqueCpfs: string[] = [];
     for (const c of allClients) {
@@ -318,12 +327,10 @@ Deno.serve(async (req) => {
         cpfDataMap.set(clean, { debtor_profile: c.debtor_profile, data_vencimento: c.data_vencimento });
         uniqueCpfs.push(clean);
       } else {
-        // Keep earliest vencimento
         const existing = cpfDataMap.get(clean)!;
         if (!existing.data_vencimento || (c.data_vencimento && c.data_vencimento < existing.data_vencimento)) {
           existing.data_vencimento = c.data_vencimento;
         }
-        // Keep profile if set
         if (!existing.debtor_profile && c.debtor_profile) {
           existing.debtor_profile = c.debtor_profile;
         }
