@@ -154,19 +154,25 @@ async function sendWuzapiMedia(
     payload.Mimetype = media.mimeType || "application/octet-stream";
   }
 
+  console.log(`[wuzapi-sender] Sending ${endpoint}: url=${media.mediaUrl.substring(0, 80)}, mime=${payload.Mimetype}`);
+
   const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/${endpoint}`, {
     method: "POST",
     headers: { "Token": token, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   const result = await resp.json();
+  if (!resp.ok) {
+    console.error(`[wuzapi-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+  }
   return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
 }
 
 /**
  * Gupshup media sender — official API.
  * Uses different payload shapes per media type.
- * Audio does NOT support caption.
+ * Audio does NOT support caption. Audio REQUIRES filename.
+ * Document REQUIRES filename. Image uses originalUrl + previewUrl.
  */
 async function sendGupshupMedia(
   phone: string, media: MediaPayload, tenantSettings: Record<string, any>,
@@ -190,15 +196,24 @@ async function sendGupshupMedia(
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
   } else if (gupType === "audio") {
-    // No caption for audio
+    // No caption for audio — Gupshup requires url + filename
     msgPayload.url = media.mediaUrl;
     msgPayload.mimetype = media.mimeType || "audio/ogg";
-    msgPayload.filename = media.fileName || "audio.ogg";
+    // Always provide a filename with correct extension
+    const audioExt = (media.mimeType || "").includes("mp3") ? ".mp3"
+      : (media.mimeType || "").includes("mp4") || (media.mimeType || "").includes("m4a") ? ".m4a"
+        : ".ogg";
+    msgPayload.filename = media.fileName || `audio${audioExt}`;
   } else {
-    // file/document
+    // file/document — requires url + filename
     msgPayload.url = media.mediaUrl;
-    msgPayload.filename = media.fileName || "file";
+    msgPayload.filename = media.fileName || "documento";
+    if (media.caption) {
+      msgPayload.caption = media.caption;
+    }
   }
+
+  console.log(`[gupshup-sender] Sending ${gupType}: payload=${JSON.stringify(msgPayload).substring(0, 200)}`);
 
   return sendGupshupMsg(phone, JSON.stringify(msgPayload), tenantSettings);
 }
@@ -206,7 +221,7 @@ async function sendGupshupMedia(
 /**
  * Evolution/Baylers media sender — non-official API.
  * Uses sendMedia endpoint with mediatype field.
- * Audio does NOT support caption. Document supports mimetype field.
+ * Audio does NOT support caption. Mimetype sent for all types.
  */
 async function sendEvolutionMedia(
   inst: any, phone: string, media: MediaPayload,
@@ -234,10 +249,12 @@ async function sendEvolutionMedia(
     payload.fileName = media.fileName;
   }
 
-  // Evolution accepts mimetype for document
-  if (media.mimeType && (media.mediaType === "document" || media.mediaType === "audio")) {
+  // Evolution accepts mimetype for all media types
+  if (media.mimeType) {
     payload.mimetype = media.mimeType;
   }
+
+  console.log(`[evolution-sender] Sending ${media.mediaType}: url=${media.mediaUrl.substring(0, 80)}, mime=${media.mimeType}`);
 
   const resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
     method: "POST",
@@ -245,6 +262,9 @@ async function sendEvolutionMedia(
     body: JSON.stringify(payload),
   });
   const result = await resp.json();
+  if (!resp.ok) {
+    console.error(`[evolution-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+  }
   return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
 }
 
@@ -261,7 +281,7 @@ async function sendGupshupMsg(
     return { ok: false, result: { error: "Credenciais Gupshup não configuradas no tenant" }, providerMessageId: null, provider: "gupshup" };
   }
 
-  console.log(`Gupshup outbound: to=${phone}, source=${sourceNumber}, app=${appName}`);
+  console.log(`[gupshup-sender] Outbound: to=${phone}, source=${sourceNumber}, app=${appName}, msg=${messageJson.substring(0, 150)}`);
 
   const formBody = new URLSearchParams({
     channel: "whatsapp",
@@ -285,12 +305,12 @@ async function sendGupshupMsg(
   try {
     result = JSON.parse(text);
   } catch {
-    console.error("Gupshup returned non-JSON:", text.substring(0, 300));
+    console.error("[gupshup-sender] Non-JSON response:", text.substring(0, 300));
     return { ok: false, result: { error: `Resposta inválida da Gupshup: ${text.substring(0, 200)}` }, providerMessageId: null, provider: "gupshup" };
   }
 
   if (!resp.ok) {
-    console.error("Gupshup API error:", JSON.stringify(result));
+    console.error(`[gupshup-sender] API error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
   }
 
   return { ok: resp.ok, result, providerMessageId: result?.messageId || null, provider: "gupshup" };

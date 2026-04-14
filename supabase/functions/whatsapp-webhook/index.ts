@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json();
-    console.log("Webhook received:", JSON.stringify(body).slice(0, 500));
+    console.log("[provider=unofficial] Webhook received:", JSON.stringify(body).slice(0, 500));
 
     const event = body.event;
     const instanceName = body.instance;
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       const externalId = msgData.key?.id || "";
       const pushName = msgData.pushName || "";
 
-      // Parse message content
+      // Parse message content — explicit per type
       let messageType = "text";
       let content = "";
       let rawMediaUrl = "";
@@ -102,6 +102,8 @@ Deno.serve(async (req) => {
         rawMediaUrl = msgData.mediaUrl || "";
       }
 
+      console.log(`[provider=unofficial] Parsed: type=${messageType}, mime=${mediaMimeType}, hasMedia=${!!rawMediaUrl}, fromMe=${fromMe}`);
+
       // ===== Persist media to Storage =====
       let finalMediaUrl = rawMediaUrl;
       let finalMimeType = mediaMimeType;
@@ -120,16 +122,18 @@ Deno.serve(async (req) => {
           supabase,
           rawMediaUrl,
           tenantId,
-          "pending",
+          "inbound",
           messageType,
+          mediaMimeType, // pass provider MIME as fallback
         );
 
         if (mediaResult) {
           finalMediaUrl = mediaResult.storedUrl;
-          finalMimeType = mediaResult.mimeType || mediaMimeType;
-          console.log(`[whatsapp-webhook] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
+          // Prefer provider-reported MIME over download content-type for consistency
+          finalMimeType = mediaMimeType || mediaResult.mimeType;
+          console.log(`[provider=unofficial] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
         } else {
-          console.warn("[whatsapp-webhook] Media persistence failed, using raw URL as fallback");
+          console.warn("[provider=unofficial] Media persistence failed, using raw URL as fallback");
         }
       }
 
@@ -151,17 +155,16 @@ Deno.serve(async (req) => {
       });
 
       if (rpcErr) {
-        console.error("ingest_channel_event_v2 error:", rpcErr);
+        console.error("[provider=unofficial] ingest_channel_event_v2 error:", rpcErr);
         throw rpcErr;
       }
 
-      console.log("Ingested:", JSON.stringify(result));
+      console.log("[provider=unofficial] Ingested:", JSON.stringify(result));
 
-      // ===== Trigger async transcription for inbound audio =====
-      if (messageType === "audio" && !fromMe && finalMediaUrl && result?.message_id) {
+      // ===== Trigger async transcription for audio (inbound + outbound) =====
+      if (messageType === "audio" && finalMediaUrl && result?.message_id) {
         try {
-          console.log(`[whatsapp-webhook] Triggering transcription for message ${result.message_id}`);
-          // Fire-and-forget — don't await
+          console.log(`[provider=unofficial] Triggering transcription for message ${result.message_id} (${fromMe ? 'outbound' : 'inbound'})`);
           fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
             method: "POST",
             headers: {
@@ -172,9 +175,9 @@ Deno.serve(async (req) => {
               messageId: result.message_id,
               audioUrl: finalMediaUrl,
             }),
-          }).catch((e) => console.error("[whatsapp-webhook] Transcription trigger failed:", e.message));
+          }).catch((e) => console.error("[provider=unofficial] Transcription trigger failed:", e.message));
         } catch (e: any) {
-          console.error("[whatsapp-webhook] Transcription trigger error:", e.message);
+          console.error("[provider=unofficial] Transcription trigger error:", e.message);
         }
       }
 
@@ -212,7 +215,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error("whatsapp-webhook error:", err);
+    console.error("[provider=unofficial] whatsapp-webhook error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

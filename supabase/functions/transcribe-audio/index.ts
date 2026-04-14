@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const startTime = Date.now();
     console.log(`[transcribe-audio] Processing message ${messageId}, audio: ${audioUrl.substring(0, 100)}`);
 
     // Download audio
@@ -67,7 +68,21 @@ Deno.serve(async (req) => {
     const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioBlob)));
     const mimeType = audioResp.headers.get("content-type") || "audio/ogg";
 
-    console.log(`[transcribe-audio] Audio downloaded: ${audioBlob.byteLength} bytes, ${mimeType}`);
+    console.log(`[transcribe-audio] Audio downloaded: ${audioBlob.byteLength} bytes, ${mimeType}, ${Date.now() - startTime}ms`);
+
+    // Determine format for Gemini — map common WhatsApp formats
+    let audioFormat = "wav"; // safe default
+    if (mimeType.includes("mp3") || mimeType.includes("mpeg")) {
+      audioFormat = "mp3";
+    } else if (mimeType.includes("mp4") || mimeType.includes("m4a")) {
+      audioFormat = "mp4";
+    } else if (mimeType.includes("ogg") || mimeType.includes("opus")) {
+      audioFormat = "wav"; // Gemini handles OGG via wav fallback
+    } else if (mimeType.includes("webm")) {
+      audioFormat = "wav";
+    } else if (mimeType.includes("amr")) {
+      audioFormat = "wav";
+    }
 
     // Call Lovable AI Gateway with multimodal prompt
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -90,7 +105,7 @@ Deno.serve(async (req) => {
                 type: "input_audio",
                 input_audio: {
                   data: audioBase64,
-                  format: mimeType.includes("mp3") ? "mp3" : mimeType.includes("mp4") || mimeType.includes("m4a") ? "mp4" : "wav",
+                  format: audioFormat,
                 },
               },
               {
@@ -115,12 +130,13 @@ Deno.serve(async (req) => {
 
     const aiResult = await aiResp.json();
     const transcription = aiResult.choices?.[0]?.message?.content?.trim() || "";
+    const elapsed = Date.now() - startTime;
 
     if (!transcription) {
-      console.warn("[transcribe-audio] Empty transcription result");
+      console.warn(`[transcribe-audio] Empty transcription result (${elapsed}ms)`);
       await updateMetadata(supabase, messageId, { transcription_error: "Empty transcription" });
     } else {
-      console.log(`[transcribe-audio] Transcription (${transcription.length} chars): ${transcription.substring(0, 100)}...`);
+      console.log(`[transcribe-audio] Transcription (${transcription.length} chars, ${elapsed}ms): ${transcription.substring(0, 100)}...`);
       await updateMetadata(supabase, messageId, { transcription });
     }
 

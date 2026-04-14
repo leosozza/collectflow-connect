@@ -49,7 +49,6 @@ Deno.serve(async (req) => {
       conversationId,
       content,
       replyToMessageId,
-      // Media fields (optional)
       mediaUrl,
       mediaType,
       mediaMimeType,
@@ -107,6 +106,8 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "Instância WhatsApp não encontrada para esta conversa" }, 404);
     }
 
+    const providerName = (instance?.provider || conv.provider || "").toLowerCase();
+
     // 5. Tenant settings
     const { data: tenant } = await supabase
       .from("tenants")
@@ -118,6 +119,10 @@ Deno.serve(async (req) => {
 
     // 6. Build media payload if applicable
     let media: MediaPayload | null = null;
+    // Track the final URL to persist (may differ from original after conversion)
+    let persistMediaUrl = mediaUrl || null;
+    let persistMimeType = mediaMimeType || null;
+
     if (mediaUrl && mediaType) {
       media = {
         mediaUrl,
@@ -128,9 +133,8 @@ Deno.serve(async (req) => {
       };
     }
 
-    // 6b. Convert WebM audio to OGG label for official API (Gupshup) compatibility
+    // 6b. Convert WebM audio to OGG for official API (Gupshup) compatibility
     if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
-      const providerName = (instance?.provider || conv.provider || "").toLowerCase();
       if (providerName === "gupshup") {
         try {
           const dlResp = await fetch(mediaUrl);
@@ -151,13 +155,16 @@ Deno.serve(async (req) => {
               const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
               media.mediaUrl = oggUrlData.publicUrl;
               media.mimeType = "audio/ogg;codecs=opus";
-              console.log("[send-chat-message] Converted WebM → OGG label for Gupshup");
+              // Update persist values to the converted file
+              persistMediaUrl = oggUrlData.publicUrl;
+              persistMimeType = "audio/ogg;codecs=opus";
+              console.log(`[send-chat-message] [provider=${providerName}] Converted WebM → OGG for Gupshup`);
             } else {
-              console.error("[send-chat-message] OGG re-upload failed:", upErr.message);
+              console.error(`[send-chat-message] [provider=${providerName}] OGG re-upload failed:`, upErr.message);
             }
           }
         } catch (convErr) {
-          console.error("[send-chat-message] WebM→OGG conversion error:", convErr);
+          console.error(`[send-chat-message] [provider=${providerName}] WebM→OGG conversion error:`, convErr);
         }
       }
     }
@@ -167,6 +174,8 @@ Deno.serve(async (req) => {
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
     const wuzapiUrl = Deno.env.get("WUZAPI_API_URL") || "";
     const wuzapiToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
+
+    console.log(`[send-chat-message] [provider=${providerName}] Sending ${media ? media.mediaType : 'text'} to ${conv.remote_phone}`);
 
     const sendResult = await sendByProvider(
       {
@@ -186,14 +195,48 @@ Deno.serve(async (req) => {
     );
 
     if (!sendResult.ok) {
-      console.error("Send failed:", JSON.stringify(sendResult.result));
+      console.error(`[send-chat-message] [provider=${providerName}] Send failed:`, JSON.stringify(sendResult.result));
+
+      // Persist failed message so it shows in chat with failed status
+      await supabase.rpc("ingest_channel_event", {
+        _tenant_id: tenantId,
+        _endpoint_id: instanceId,
+        _channel_type: conv.channel_type || "whatsapp",
+        _provider: sendResult.provider || instance.provider || null,
+        _remote_phone: conv.remote_phone,
+        _remote_name: conv.remote_phone,
+        _direction: "outbound",
+        _message_type: media ? mediaType : "text",
+        _content: content || fileName || null,
+        _media_url: persistMediaUrl,
+        _media_mime_type: persistMimeType,
+        _external_id: null,
+        _provider_message_id: null,
+        _actor_type: "human",
+        _status: "failed",
+      });
+
+      // Log failure to webhook_logs
+      try {
+        await (supabase.from("webhook_logs") as any).insert({
+          tenant_id: tenantId,
+          function_name: "send-chat-message",
+          event_type: "send_failed",
+          message: `Falha ao enviar ${media ? mediaType : 'text'} via ${providerName}: ${JSON.stringify(sendResult.result).substring(0, 300)}`,
+          payload: { provider: providerName, mediaType: media?.mediaType, mimeType: media?.mimeType, error: sendResult.result },
+          status_code: 502,
+        });
+      } catch (_) { /* non-critical */ }
+
       return jsonResp({ error: "Erro ao enviar mensagem", details: sendResult.result }, 502);
     }
+
+    console.log(`[send-chat-message] [provider=${providerName}] Sent OK, providerMessageId=${sendResult.providerMessageId}`);
 
     // 8. Determine message_type for RPC
     const msgType = media ? mediaType : "text";
 
-    // 9. Persist via ingest_channel_event RPC
+    // 9. Persist via ingest_channel_event RPC — use converted URLs
     const { data: rpcResult, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
       _tenant_id: tenantId,
       _endpoint_id: instanceId,
@@ -204,8 +247,8 @@ Deno.serve(async (req) => {
       _direction: "outbound",
       _message_type: msgType,
       _content: content || fileName || null,
-      _media_url: mediaUrl || null,
-      _media_mime_type: mediaMimeType || null,
+      _media_url: persistMediaUrl,
+      _media_mime_type: persistMimeType,
       _external_id: sendResult.providerMessageId || null,
       _provider_message_id: sendResult.providerMessageId || null,
       _actor_type: "human",
@@ -213,7 +256,7 @@ Deno.serve(async (req) => {
     });
 
     if (rpcErr) {
-      console.error("ingest_channel_event error:", rpcErr);
+      console.error("[send-chat-message] ingest_channel_event error:", rpcErr);
       return jsonResp({
         error: "Mensagem enviada mas houve erro ao persistir",
         send_ok: true,
@@ -235,6 +278,26 @@ Deno.serve(async (req) => {
         .from("conversations")
         .update({ status: "open" })
         .eq("id", conversationId);
+    }
+
+    // 12. Trigger transcription for outbound audio (operator recordings)
+    if (msgType === "audio" && persistMediaUrl && rpcResult?.message_id) {
+      try {
+        console.log(`[send-chat-message] Triggering transcription for outbound audio ${rpcResult.message_id}`);
+        fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messageId: rpcResult.message_id,
+            audioUrl: persistMediaUrl,
+          }),
+        }).catch((e) => console.error("[send-chat-message] Transcription trigger failed:", e.message));
+      } catch (e: any) {
+        console.error("[send-chat-message] Transcription trigger error:", e.message);
+      }
     }
 
     return jsonResp({
