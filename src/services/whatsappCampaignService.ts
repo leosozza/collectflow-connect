@@ -27,6 +27,8 @@ export interface WhatsAppCampaign {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  origin_type?: string;
+  progress_metadata?: Record<string, any> | null;
 }
 
 export interface WhatsAppCampaignRecipient {
@@ -64,6 +66,14 @@ export interface DeduplicatedRecipient {
   phone: string;
   representativeClientId: string;
   recipientName: string;
+}
+
+export interface CampaignProgress {
+  status: string;
+  sent_count: number;
+  failed_count: number;
+  total_unique_recipients: number;
+  progress_metadata: Record<string, any> | null;
 }
 
 // ---- Phone normalization ----
@@ -130,7 +140,6 @@ export function distributeRoundRobin(
 export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
   const OPERATIONAL_STATUSES = ["active", "connected", "connecting", "open"];
 
-  // 1) Fetch DB instances with capability fields (no strict status filter)
   const { data, error } = await supabase
     .from("whatsapp_instances" as any)
     .select("id, name, instance_name, phone_number, provider, status, provider_category, is_default, supports_manual_bulk")
@@ -138,14 +147,12 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
 
   if (error) throw error;
 
-  // 2) Filter by eligibility: supports bulk AND (operational status OR is_default)
   const eligible = ((data || []) as unknown as EligibleInstance[]).filter((i) => {
     const hasOperationalStatus = OPERATIONAL_STATUSES.includes(i.status);
-    const isBulkCapable = i.supports_manual_bulk !== false; // true or null (legacy)
+    const isBulkCapable = i.supports_manual_bulk !== false;
     return isBulkCapable && (hasOperationalStatus || i.is_default);
   });
 
-  // 3) Sort: default first, then connected/active, then others
   eligible.sort((a, b) => {
     if (a.is_default && !b.is_default) return -1;
     if (!a.is_default && b.is_default) return 1;
@@ -154,7 +161,6 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
     return aConn - bConn;
   });
 
-  // 4) Check tenant settings for Gupshup official
   try {
     const { data: tenantData } = await supabase
       .from("tenants")
@@ -236,7 +242,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       total_unique_recipients: input.total_unique_recipients,
       created_by: input.created_by,
       name: input.name || `Disparo Carteira ${new Date().toLocaleDateString("pt-BR")}`,
-      origin_type: "carteira",
+      origin_type: "OP_CARTEIRA",
     } as any)
     .select()
     .single();
@@ -271,12 +277,55 @@ export async function createRecipients(
   }
 }
 
+// ---- Start campaign with auto-resume for partial completions ----
+
 export async function startCampaign(campaignId: string): Promise<any> {
-  const { data, error } = await supabase.functions.invoke("send-bulk-whatsapp", {
-    body: { campaign_id: campaignId },
-  });
-  if (error) throw error;
-  return data;
+  const MAX_RETRIES = 50; // safety limit for re-invocations
+  let attempt = 0;
+  let lastResult: any = null;
+
+  while (attempt < MAX_RETRIES) {
+    attempt++;
+    const { data, error } = await supabase.functions.invoke("send-bulk-whatsapp", {
+      body: { campaign_id: campaignId },
+    });
+
+    if (error) throw error;
+    lastResult = data;
+
+    // If partial, re-invoke automatically
+    if (data?.status === "partial" && (data?.remaining || 0) > 0) {
+      console.log(`[Campaign] Partial completion, ${data.remaining} remaining. Re-invoking (attempt ${attempt})...`);
+      // Small delay before re-invocation
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+
+    // Completed or failed — stop
+    break;
+  }
+
+  return lastResult;
+}
+
+// ---- Poll campaign progress (for real-time UI updates) ----
+
+export async function pollCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
+  const { data, error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .select("status, sent_count, failed_count, total_unique_recipients, progress_metadata")
+    .eq("id", campaignId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    status: (data as any).status,
+    sent_count: (data as any).sent_count || 0,
+    failed_count: (data as any).failed_count || 0,
+    total_unique_recipients: (data as any).total_unique_recipients || 0,
+    progress_metadata: (data as any).progress_metadata || null,
+  };
 }
 
 export async function fetchCampaigns(tenantId: string): Promise<WhatsAppCampaign[]> {

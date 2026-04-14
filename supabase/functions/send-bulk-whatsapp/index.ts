@@ -3,6 +3,34 @@ import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { resolveTemplate } from "../_shared/template-resolver.ts";
 import { logMessage } from "../_shared/message-logger.ts";
 
+// ===== Anti-Ban Constants (HARDCODED — not configurable by frontend) =====
+const ANTI_BAN_MIN_DELAY_MS = 8000;   // 8 seconds minimum between messages
+const ANTI_BAN_MAX_DELAY_MS = 15000;  // 15 seconds maximum between messages
+const BATCH_REST_THRESHOLD = 15;       // pause after every 15 messages per instance
+const BATCH_REST_DURATION_MS = 120000; // 2-minute rest between batches
+const MAX_EXECUTION_MS = 380000;       // 380s safety margin (Edge Runtime limit ~400s)
+const CHUNK_SIZE = 100;
+
+// AI agents can use faster delays (future use)
+const AI_AGENT_MIN_DELAY_MS = 3000;
+const AI_AGENT_MAX_DELAY_MS = 6000;
+const AI_AGENT_BATCH_REST_THRESHOLD = 25;
+const AI_AGENT_BATCH_REST_DURATION_MS = 60000;
+
+function getAntiBanDelay(originType: string): number {
+  if (originType === "AI_AGENT") {
+    return AI_AGENT_MIN_DELAY_MS + Math.random() * (AI_AGENT_MAX_DELAY_MS - AI_AGENT_MIN_DELAY_MS);
+  }
+  return ANTI_BAN_MIN_DELAY_MS + Math.random() * (ANTI_BAN_MAX_DELAY_MS - ANTI_BAN_MIN_DELAY_MS);
+}
+
+function getBatchRestConfig(originType: string): { threshold: number; duration: number } {
+  if (originType === "AI_AGENT") {
+    return { threshold: AI_AGENT_BATCH_REST_THRESHOLD, duration: AI_AGENT_BATCH_REST_DURATION_MS };
+  }
+  return { threshold: BATCH_REST_THRESHOLD, duration: BATCH_REST_DURATION_MS };
+}
+
 // ===== Helper: persist conversation + outbound message via canonical RPC =====
 async function ensureConversationAndMessage(
   supabase: any,
@@ -47,9 +75,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const CHUNK_SIZE = 100;
-const MAX_EXECUTION_MS = 50000; // 50s safety margin before edge function timeout
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -167,7 +192,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// ===== Campaign-based flow with chunked processing + checkpoint =====
+// ===== Campaign-based flow with anti-ban throttling + checkpoint =====
 async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: string) {
   const startTime = Date.now();
 
@@ -186,6 +211,10 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     });
   }
 
+  // Determine origin type for anti-ban config
+  const originType: string = campaign.origin_type || "OP_CARTEIRA";
+  const batchConfig = getBatchRestConfig(originType);
+
   // Load tenant settings
   const { data: tenantData } = await supabase
     .from("tenants")
@@ -201,13 +230,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       .update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", campaignId);
   }
-
-  // Count total pending for progress tracking
-  const { count: totalPending } = await supabase
-    .from("whatsapp_campaign_recipients")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaignId)
-    .eq("status", "pending");
 
   // Global env vars
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
@@ -227,6 +249,9 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
   // Instance cache to avoid repeated lookups
   const instanceCache = new Map<string, any>();
+
+  // Per-instance send counter for batch resting (across all chunks in this invocation)
+  const instanceSendCounts = new Map<string, number>();
 
   // Process in chunks
   while (true) {
@@ -276,12 +301,13 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
     // Process chunk
     for (const recipient of recipients) {
-      // Time check within chunk
+      // Time check within chunk — leave margin for checkpoint save
       if (Date.now() - startTime > MAX_EXECUTION_MS) {
         timedOut = true;
         break;
       }
 
+      const instanceId = recipient.assigned_instance_id || "__gupshup__";
       let inst = instanceCache.get(recipient.assigned_instance_id);
 
       if (!inst && !recipient.assigned_instance_id && gupshupConfigured) {
@@ -295,7 +321,51 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           .eq("id", recipient.id);
         chunkFailed++;
         totalFailed++;
+
+        // Update checkpoint after each message
+        await supabase
+          .from("whatsapp_campaigns")
+          .update({
+            sent_count: totalSent,
+            failed_count: totalFailed,
+            progress_metadata: { processed: totalSent + totalFailed, last_chunk_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", campaignId);
+
         continue;
+      }
+
+      // ===== BATCH RESTING: Check if this instance needs a pause =====
+      const currentCount = instanceSendCounts.get(instanceId) || 0;
+      if (currentCount > 0 && currentCount % batchConfig.threshold === 0) {
+        console.log(`[Anti-Ban] Batch rest for instance ${instanceId}: ${batchConfig.duration}ms pause after ${currentCount} messages`);
+
+        // Check if we have enough time for the rest
+        const timeRemaining = MAX_EXECUTION_MS - (Date.now() - startTime);
+        if (timeRemaining < batchConfig.duration + 20000) {
+          // Not enough time for rest + at least one more message — checkpoint and exit
+          timedOut = true;
+          break;
+        }
+
+        // Save checkpoint before long pause
+        await supabase
+          .from("whatsapp_campaigns")
+          .update({
+            sent_count: totalSent,
+            failed_count: totalFailed,
+            progress_metadata: {
+              processed: totalSent + totalFailed,
+              batch_resting: true,
+              instance_id: instanceId,
+              last_chunk_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", campaignId);
+
+        await new Promise((r) => setTimeout(r, batchConfig.duration));
       }
 
       const client = clientMap.get(recipient.representative_client_id) || null;
@@ -344,6 +414,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         if (status === "sent") {
           chunkSent++;
           totalSent++;
+          instanceSendCounts.set(instanceId, (instanceSendCounts.get(instanceId) || 0) + 1);
           await ensureConversationAndMessage(
             supabase, tenantId, recipient.assigned_instance_id,
             recipient.phone, recipient.recipient_name,
@@ -387,20 +458,27 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         errors.push(`${recipient.recipient_name}: ${err.message}`);
       }
 
-      // Throttle: 200ms between messages
-      await new Promise((r) => setTimeout(r, 200));
-    }
+      // ===== ANTI-BAN THROTTLE: Random delay between messages =====
+      const delay = getAntiBanDelay(originType);
+      console.log(`[Anti-Ban] Waiting ${Math.round(delay)}ms before next message (origin: ${originType})`);
+      await new Promise((r) => setTimeout(r, delay));
 
-    // Update checkpoint after each chunk
-    await supabase
-      .from("whatsapp_campaigns")
-      .update({
-        sent_count: totalSent,
-        failed_count: totalFailed,
-        progress_metadata: { processed: totalSent + totalFailed, last_chunk_at: new Date().toISOString() },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", campaignId);
+      // Update checkpoint after EACH message for real-time polling
+      await supabase
+        .from("whatsapp_campaigns")
+        .update({
+          sent_count: totalSent,
+          failed_count: totalFailed,
+          progress_metadata: {
+            processed: totalSent + totalFailed,
+            last_chunk_at: new Date().toISOString(),
+            anti_ban_active: true,
+            origin_type: originType,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaignId);
+    }
 
     if (timedOut) break;
   }
@@ -421,7 +499,14 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       .update({
         sent_count: totalSent,
         failed_count: totalFailed,
-        progress_metadata: { processed: totalSent + totalFailed, remaining, timed_out: true, last_chunk_at: new Date().toISOString() },
+        progress_metadata: {
+          processed: totalSent + totalFailed,
+          remaining,
+          timed_out: true,
+          last_chunk_at: new Date().toISOString(),
+          anti_ban_active: true,
+          origin_type: originType,
+        },
         updated_at: new Date().toISOString(),
       })
       .eq("id", campaignId);
@@ -444,7 +529,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       sent_count: totalSent,
       failed_count: totalFailed,
       completed_at: new Date().toISOString(),
-      progress_metadata: { processed: totalSent + totalFailed, remaining: 0 },
+      progress_metadata: { processed: totalSent + totalFailed, remaining: 0, anti_ban_active: true },
       updated_at: new Date().toISOString(),
     })
     .eq("id", campaignId);

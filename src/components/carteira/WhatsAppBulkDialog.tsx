@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTemplates, WhatsAppTemplate } from "@/services/whatsappTemplateService";
@@ -11,7 +11,9 @@ import {
   createRecipients,
   startCampaign,
   deriveProviderCategory,
+  pollCampaignProgress,
   EligibleInstance,
+  CampaignProgress,
 } from "@/services/whatsappCampaignService";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,8 @@ import {
   Phone,
   Shuffle,
   AlertTriangle,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,6 +61,16 @@ interface WhatsAppBulkDialogProps {
 
 type Step = 1 | 2 | 3 | 4;
 
+const AVG_DELAY_PER_MESSAGE_S = 11.5; // average of 8-15s
+const BATCH_REST_S = 120; // 2 min rest every 15 messages
+const BATCH_SIZE = 15;
+
+function estimateTimeMinutes(totalRecipients: number): number {
+  const batches = Math.floor(totalRecipients / BATCH_SIZE);
+  const totalDelayS = totalRecipients * AVG_DELAY_PER_MESSAGE_S + batches * BATCH_REST_S;
+  return Math.ceil(totalDelayS / 60);
+}
+
 const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDialogProps) => {
   const { tenant } = useTenant();
   const { user } = useAuth();
@@ -66,7 +80,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [useCustom, setUseCustom] = useState(false);
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<CampaignProgress | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: templates = [] } = useQuery({
     queryKey: ["whatsapp-templates", tenant?.id],
@@ -80,6 +97,14 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     enabled: !!tenant?.id && open,
   });
 
+  // Cleanup polling on unmount or close
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) {
       setStep(1);
@@ -89,8 +114,28 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setUseCustom(false);
       setSelectedInstanceIds([]);
       setSending(false);
+      setCampaignId(null);
+      setProgress(null);
+      stopPolling();
     }
-  }, [open]);
+  }, [open, stopPolling]);
+
+  // Polling for campaign progress
+  useEffect(() => {
+    if (sending && campaignId) {
+      pollingRef.current = setInterval(async () => {
+        const p = await pollCampaignProgress(campaignId);
+        if (p) {
+          setProgress(p);
+          // If campaign finished, stop polling
+          if (["completed", "completed_with_errors", "failed"].includes(p.status)) {
+            stopPolling();
+          }
+        }
+      }, 5000);
+    }
+    return stopPolling;
+  }, [sending, campaignId, stopPolling]);
 
   // Auto-select all instances
   useEffect(() => {
@@ -180,23 +225,27 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         provider_category: providerCategory,
       });
 
+      setCampaignId(campaign.id);
       await createRecipients(campaign.id, tenant.id, distributed, template);
+
+      // startCampaign now handles auto-resume internally
       const data = await startCampaign(campaign.id);
 
       setResult({
-        sent: data?.sent || 0,
-        failed: data?.failed || 0,
+        sent: data?.totalSent || data?.sent || 0,
+        failed: data?.totalFailed || data?.failed || 0,
         errors: data?.errors || [],
         finalStatus: data?.finalStatus || undefined,
       });
 
-      if (data?.sent > 0) toast.success(`${data.sent} mensagens enviadas!`);
-      if (data?.failed > 0) toast.warning(`${data.failed} falhas no envio`);
+      if ((data?.totalSent || data?.sent || 0) > 0) toast.success(`${data?.totalSent || data?.sent} mensagens enviadas!`);
+      if ((data?.totalFailed || data?.failed || 0) > 0) toast.warning(`${data?.totalFailed || data?.failed} falhas no envio`);
     } catch (err: any) {
       toast.error("Erro ao enviar: " + (err.message || ""));
       setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
     } finally {
       setSending(false);
+      stopPolling();
     }
   };
 
@@ -303,6 +352,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
   const renderStep3 = () => {
     const validationErrors = getValidationErrors();
+    const estimatedMin = estimateTimeMinutes(dedup.recipients.length);
 
     return (
       <div className="space-y-4">
@@ -323,6 +373,18 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             {dedup.excludedCount} cliente(s) sem telefone válido (excluídos)
           </div>
         )}
+
+        {/* Anti-Ban notice */}
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-700 text-sm">
+          <ShieldCheck className="w-5 h-5 shrink-0" />
+          <div>
+            <p className="font-medium">Modo Anti-Ban Ativo</p>
+            <p className="text-xs mt-0.5">
+              Intervalos de 8-15s entre mensagens + pausa de 2min a cada 15 envios por instância.
+              Tempo estimado: <strong>~{estimatedMin} minutos</strong>
+            </p>
+          </div>
+        </div>
 
         {validationErrors.length > 0 && (
           <div className="space-y-1 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
@@ -358,7 +420,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
           <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
           <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
-          <p><strong>Modo:</strong> Round-robin automático</p>
+          <p><strong>Modo:</strong> Round-robin automático com proteção Anti-Ban</p>
         </div>
       </div>
     );
@@ -375,46 +437,108 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     return <Badge variant={info.variant} className="text-sm px-3 py-1">{info.label}</Badge>;
   };
 
-  const renderStep4 = () => (
-    <div className="space-y-4 py-4">
-      {sending ? (
-        <div className="text-center space-y-3">
-          <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary" />
-          <p className="text-sm text-muted-foreground">Criando campanha e enviando mensagens...</p>
-          <Progress value={undefined} className="h-2" />
-        </div>
-      ) : result ? (
-        <>
-          <div className="text-center space-y-3">
-            {getCampaignStatusBadge()}
-            <div className="flex justify-center gap-6 mt-2">
-              <div className="flex items-center gap-2 text-primary">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="text-lg font-semibold">{result.sent} enviados</span>
+  const renderStep4 = () => {
+    const totalRecipients = dedup.recipients.length;
+    const currentSent = progress?.sent_count || 0;
+    const currentFailed = progress?.failed_count || 0;
+    const currentProcessed = currentSent + currentFailed;
+    const progressPct = totalRecipients > 0 ? Math.round((currentProcessed / totalRecipients) * 100) : 0;
+    const estimatedMin = estimateTimeMinutes(totalRecipients);
+    const remainingRecipients = totalRecipients - currentProcessed;
+    const estimatedRemainingMin = estimateTimeMinutes(remainingRecipients > 0 ? remainingRecipients : 0);
+
+    return (
+      <div className="space-y-4 py-4">
+        {sending ? (
+          <div className="space-y-4">
+            {/* Anti-Ban Badge */}
+            <div className="flex items-center justify-center gap-2">
+              <Badge className="bg-green-100 text-green-800 border-green-300 gap-1.5 px-3 py-1.5">
+                <ShieldCheck className="w-4 h-4" />
+                Modo Anti-Ban Ativo
+              </Badge>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-2">
+              <Progress value={progressPct} className="h-3" />
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {currentProcessed} de {totalRecipients} processados
+                </span>
+                <span className="font-medium text-primary">{progressPct}%</span>
               </div>
-              {result.failed > 0 && (
-                <div className="flex items-center gap-2 text-destructive">
-                  <XCircle className="w-5 h-5" />
-                  <span className="text-lg font-semibold">{result.failed} falhas</span>
-                </div>
-              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Total processado: {result.sent + result.failed} destinatário(s)
+
+            {/* Counters */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded-lg bg-muted/50">
+                <p className="text-lg font-bold text-primary">{currentSent}</p>
+                <p className="text-xs text-muted-foreground">Enviados</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/50">
+                <p className="text-lg font-bold text-destructive">{currentFailed}</p>
+                <p className="text-xs text-muted-foreground">Falhas</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/50">
+                <p className="text-lg font-bold text-muted-foreground">{remainingRecipients > 0 ? remainingRecipients : 0}</p>
+                <p className="text-xs text-muted-foreground">Restantes</p>
+              </div>
+            </div>
+
+            {/* Time estimate */}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Clock className="w-4 h-4" />
+              {currentProcessed > 0
+                ? `~${estimatedRemainingMin} min restante${estimatedRemainingMin !== 1 ? "s" : ""}`
+                : `Tempo estimado: ~${estimatedMin} minutos`
+              }
+            </div>
+
+            {/* Explanation */}
+            <p className="text-xs text-center text-muted-foreground">
+              Enviando com intervalos de segurança para proteger suas instâncias.
+              Você pode fechar esta janela — a campanha continua em segundo plano.
             </p>
-          </div>
-          {result.errors.length > 0 && (
-            <div className="bg-muted rounded-lg p-3 max-h-32 overflow-y-auto">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Detalhes das falhas:</p>
-              {result.errors.map((e, i) => (
-                <p key={i} className="text-xs text-muted-foreground">{e}</p>
-              ))}
+
+            {/* Spinner */}
+            <div className="flex justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
-          )}
-        </>
-      ) : null}
-    </div>
-  );
+          </div>
+        ) : result ? (
+          <>
+            <div className="text-center space-y-3">
+              {getCampaignStatusBadge()}
+              <div className="flex justify-center gap-6 mt-2">
+                <div className="flex items-center gap-2 text-primary">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-lg font-semibold">{result.sent} enviados</span>
+                </div>
+                {result.failed > 0 && (
+                  <div className="flex items-center gap-2 text-destructive">
+                    <XCircle className="w-5 h-5" />
+                    <span className="text-lg font-semibold">{result.failed} falhas</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Total processado: {result.sent + result.failed} destinatário(s)
+              </p>
+            </div>
+            {result.errors.length > 0 && (
+              <div className="bg-muted rounded-lg p-3 max-h-32 overflow-y-auto">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Detalhes das falhas:</p>
+                {result.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-muted-foreground">{e}</p>
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -428,7 +552,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             {step === 1 && "Defina a mensagem para envio"}
             {step === 2 && "Selecione as instâncias de envio"}
             {step === 3 && "Confirme o resumo da campanha"}
-            {step === 4 && (sending ? "Processando campanha..." : "Resultado do envio")}
+            {step === 4 && (sending ? "Processando campanha em modo seguro..." : "Resultado do envio")}
           </DialogDescription>
         </DialogHeader>
 
@@ -452,7 +576,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           )}
           <div className="flex gap-2 ml-auto">
             <Button variant="outline" onClick={onClose}>
-              {step === 4 && !sending ? "Fechar" : "Cancelar"}
+              {step === 4 && !sending ? "Fechar" : sending ? "Fechar (continua em 2º plano)" : "Cancelar"}
             </Button>
             {step === 1 && (
               <Button onClick={() => setStep(2)} disabled={!canProceedStep1} className="gap-1">
@@ -466,7 +590,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             )}
             {step === 3 && (
               <Button onClick={handleSend} disabled={sending || getValidationErrors().length > 0} className="gap-2">
-                <MessageSquare className="w-4 h-4" />
+                <ShieldCheck className="w-4 h-4" />
                 Criar Campanha e Enviar
               </Button>
             )}
