@@ -1,66 +1,49 @@
 
 
-# Correção do Módulo de Gamificação — Métricas, Filtros por Credor e Persistência
+# Módulos ausentes na Sidebar para role `admin`
 
-## Problemas Identificados
+## Análise
 
-1. **`maior_valor_promessas`** usa `totalReceived` em vez da soma de `proposed_total` de acordos ativos
-2. **`menor_valor_quebra`** usa contagem de quebras em vez do valor monetário real
-3. **`menor_taxa_quebra`** retorna score 0 para operadores sem acordos (deveria ser 100)
-4. **Sem filtro por credor** — campanhas com credores vinculados ignoram esse filtro
-5. **`upsertOperatorPoints` nunca é chamado** — o ranking global não é atualizado
-6. **Gamificação depende de entrada na página** — não há trigger automático em pagamentos/acordos
+Comparando o sistema de permissões (`usePermissions.ts`) com a sidebar (`AppLayout.tsx`), identifiquei que **vários módulos com permissões definidas para `admin` não aparecem na sidebar**:
 
-## Dados Relevantes
+| Módulo | Permissão definida para admin? | Na sidebar? |
+|--------|-------------------------------|-------------|
+| Dashboard | ✅ | ✅ |
+| Gamificação | ✅ | ✅ |
+| Carteira | ✅ | ✅ |
+| Acordos | ✅ | ✅ |
+| **Relatórios** | ✅ `["view"]` | ❌ **Ausente** |
+| **Analytics** | ✅ `["view_all"]` | ❌ **Ausente** |
+| Automação | ✅ | ✅ |
+| Contact Center | ✅ | ✅ |
+| Cadastros | ✅ | ✅ |
+| **Financeiro** | ✅ `["view","manage"]` | ❌ **Ausente** |
+| Configurações | ✅ | ✅ |
+| Central Empresa | ✅ | ✅ |
+| **Liberações** | ✅ `["view","approve"]` | ❌ **Ausente** |
+| **Agendados** | ✅ `["view_own","view_all"]` | ❌ **Ausente** |
+| **Campanhas WhatsApp** | ✅ (todas as ações) | ❌ **Ausente** |
 
-- `agreements.credor` e `clients.credor` são **strings** (razao_social), não FKs
-- `campaign_credores` referencia `credores.id` (UUID)
-- Para filtrar por credor da campanha, preciso buscar `razao_social` dos credores vinculados e filtrar por string
+São **6 módulos** que o admin tem permissão mas não consegue acessar pela sidebar. Isso explica a diferença entre o seu acesso (super_admin, que pode ter rotas extras) e o da Barbara (admin).
 
 ## Solução
 
-### 1. Arquivo: `src/hooks/useGamificationTrigger.ts`
+### Arquivo: `src/components/AppLayout.tsx`
 
-**a) Corrigir `updateCampaignScores` — buscar dados reais por métrica e filtrar por credor**
+Adicionar na sidebar os links que faltam, controlados pelas permissões já existentes:
 
-Refatorar `updateCampaignScores` para:
-- Buscar os credores vinculados à campanha (`campaign_credores` → `credores.razao_social`)
-- Quando houver credores, filtrar queries de `agreements` e `clients` por `.in("credor", credorNames)`
-- Para cada métrica, buscar dados reais:
-  - **`maior_valor_promessas`**: `SUM(proposed_total)` de agreements com status `pending` ou `approved`
-  - **`menor_valor_quebra`**: `SUM(proposed_total)` de agreements com status `cancelled`
-  - **`menor_taxa_quebra`**: Se não há acordos, score = 100 (performance perfeita inicial)
-  - **`maior_valor_recebido`** e **`maior_qtd_acordos`**: filtrar por credores quando aplicável
+1. **Relatórios** — `permissions.canViewRelatorios` → `/relatorios` (ícone `FileBarChart`)
+2. **Analytics** — `permissions.canViewOwnAnalytics` → `/analytics` (ícone `BarChart3`)
+3. **Financeiro** — `permissions.canViewFinanceiro` → `/financeiro` (se a página existir como tenant-level, ou verificar se já está em Configurações)
+4. **Liberações** — `permissions.canViewLiberacoes` → precisa confirmar se existe rota tenant-level
+5. **Agendados** — `permissions.canViewOwnAgendados` → precisa confirmar se existe rota tenant-level
+6. **Campanhas WhatsApp** — `permissions.canViewCampanhasWhatsApp` → pode ser sub-item do Contact Center ou item próprio
 
-**b) Chamar `upsertOperatorPoints` ao final de `triggerGamificationUpdate`**
+### Verificação necessária antes da implementação
 
-Após calcular todas as métricas e achievements, chamar:
-```typescript
-await upsertOperatorPoints({
-  tenant_id, operator_id: profileId,
-  year, month, points: calculatedPoints,
-  payments_count, breaks_count, total_received
-});
-```
+Preciso verificar quais dessas rotas realmente existem em `App.tsx` para tenant-level (não admin). Já confirmei que `/relatorios` e `/analytics` existem. Para Financeiro, Liberações e Agendados, preciso verificar se há páginas correspondentes ou se estão embutidos em outras seções.
 
-### 2. Trigger automático em pagamentos e acordos
+### Resultado
 
-Nos locais onde já existe `triggerGamificationUpdate()`:
-- `AgreementForm.tsx` (ao fechar acordo) — ✅ já existe
-- `ClientsPage.tsx` (ao registrar pagamento) — ✅ já existe
-
-Esses triggers já estão implementados. O problema real era que `upsertOperatorPoints` não era chamado, então os pontos nunca persistiam. Corrigir isso resolve a questão.
-
-### 3. Arquivo: `src/components/gamificacao/CampaignForm.tsx`
-
-O formulário já salva credores corretamente via `saveCampaignCredores` no `CampaignsManagementTab.tsx`. Nenhuma alteração necessária aqui.
-
-## Arquivos alterados
-- `src/hooks/useGamificationTrigger.ts` — refatoração principal (métricas reais, filtro por credor, persistência de pontos)
-
-## Resultado
-- Rankings refletem valores financeiros reais
-- Campanhas com credores vinculados filtram apenas registros desses credores
-- Pontos são persistidos no `operator_points` a cada trigger
-- Operadores sem acordos começam com 100% de performance
+A Barbara (e qualquer admin) terá os mesmos itens na sidebar que o super_admin (exceto o painel Super Admin), bastando adicionar os links faltantes condicionados pelas permissões já definidas.
 
