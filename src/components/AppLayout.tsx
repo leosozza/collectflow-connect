@@ -294,7 +294,7 @@ const AppLayout = () => {
                 "/acordos": "Acordos",
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
-                "/cadastros": "Cadastros",
+                "/auditoria": "Auditoria",
                 "/configuracoes": "Configurações",
                 "/central-empresa": "Central Empresa",
                 "/signs": "Assinatura Digital",
