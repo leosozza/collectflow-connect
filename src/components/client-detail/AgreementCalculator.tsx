@@ -517,9 +517,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">% Desc.</Label>
               <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => {
                 const raw = e.target.value;
-                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); return; }
+                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
                 const pct = Number(raw);
                 setDescontoPercent(pct);
+                setDiscountSource("percent");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoReais(bruto > 0 ? Math.round(bruto * (pct / 100) * 100) / 100 : 0);
               }} className="h-7 text-xs px-2" />
@@ -528,9 +529,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">R$ Desc.</Label>
               <Input type="number" min={0} step={0.01} value={descontoReais} onChange={(e) => {
                 const raw = e.target.value;
-                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); return; }
+                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
                 const val = Number(raw);
                 setDescontoReais(val);
+                setDiscountSource("amount");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoPercent(bruto > 0 ? Math.round((val / bruto) * 100 * 100) / 100 : 0);
               }} className="h-7 text-xs px-2" />
