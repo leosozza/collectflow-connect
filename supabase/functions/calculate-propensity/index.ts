@@ -338,7 +338,7 @@ Deno.serve(async (req) => {
     }
 
     const allScores: ScoreResult[] = [];
-    const BATCH = 100;
+    const BATCH = 25;
 
     for (let i = 0; i < uniqueCpfs.length; i += BATCH) {
       const batch = uniqueCpfs.slice(i, i + BATCH);
@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
         return [c, formatted];
       });
 
-      const { data: events } = await supabase
+      const { data: events, error: evError } = await supabase
         .from("client_events")
         .select("client_cpf, event_type, event_source, event_channel, event_value, metadata, created_at")
         .eq("tenant_id", tenantId)
@@ -356,6 +356,10 @@ Deno.serve(async (req) => {
         .in("client_cpf", cpfPatterns)
         .order("created_at", { ascending: false })
         .limit(5000);
+
+      if (evError) {
+        console.error(`[calculate-propensity] Events query error batch ${i}:`, evError.message);
+      }
 
       const eventsByCpf: Record<string, ClientEvent[]> = {};
       for (const ev of (events || [])) {
