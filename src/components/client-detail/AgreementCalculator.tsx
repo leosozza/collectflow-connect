@@ -172,11 +172,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     const totalMulta = selected.reduce((s, r) => s + r.multaVal, 0);
     const totalHonorarios = selected.reduce((s, r) => s + r.honorariosVal, 0);
     const totalBruto = selected.reduce((s, r) => s + r.total, 0);
-    const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
-    const descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
+
+    let descontoVal: number;
+    if (discountSource === "amount") {
+      descontoVal = Math.round(Math.min(typeof descontoReais === "number" ? descontoReais : 0, totalBruto) * 100) / 100;
+    } else {
+      const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
+      descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
+    }
     const totalAtualizado = Math.round(Math.max(0, totalBruto - descontoVal) * 100) / 100;
     return { totalOriginal, totalBase, totalJuros, totalMulta, totalHonorarios, totalBruto, descontoVal, totalAtualizado };
-  }, [rowCalcs, selectedIds, descontoPercent]);
+  }, [rowCalcs, selectedIds, descontoPercent, descontoReais, discountSource]);
 
   const remainingAfterEntrada = Math.max(0, totals.totalAtualizado - numEntrada);
   const installmentValue = numParcelas > 0 ? Math.round((remainingAfterEntrada / numParcelas) * 100) / 100 : 0;
