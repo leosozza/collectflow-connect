@@ -243,7 +243,7 @@ Deno.serve(async (req) => {
       try {
         // Skip past-due installments
         if (inst.dueDate < today) {
-          console.log(`[generate-agreement-boletos] Skipping installment ${inst.number} — past due (${inst.dueDate})`);
+          console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — past due (${inst.dueDate})`);
           continue;
         }
 
@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
           }],
         };
 
-        console.log(`[generate-agreement-boletos] Generating boleto for installment ${inst.number}`);
+        console.log(`[generate-agreement-boletos] Generating boleto for installment ${inst.key}`);
         const apiResult = await negociarieRequest("POST", "/cobranca/nova", payload);
 
         const parcelaResult = Array.isArray(apiResult?.parcelas) && apiResult.parcelas.length > 0
@@ -330,12 +330,13 @@ Deno.serve(async (req) => {
           } as any);
 
         result.success++;
-        console.log(`[generate-agreement-boletos] Boleto ${inst.number} generated successfully`);
+        console.log(`[generate-agreement-boletos] Boleto ${inst.key} generated successfully`);
       } catch (err: any) {
         result.failed++;
-        const msg = `Parcela ${inst.number === 0 ? "Entrada" : inst.number}: ${err.message || "Erro desconhecido"}`;
+        const label = inst.isEntrada ? (inst.key === "entrada" ? "Entrada" : `Entrada ${inst.key.split("_")[1]}`) : `Parcela ${inst.key}`;
+        const msg = `${label}: ${err.message || "Erro desconhecido"}`;
         result.errors.push(msg);
-        console.error(`[generate-agreement-boletos] Error for installment ${inst.number}:`, err.message);
+        console.error(`[generate-agreement-boletos] Error for installment ${inst.key}:`, err.message);
       }
     }
 
