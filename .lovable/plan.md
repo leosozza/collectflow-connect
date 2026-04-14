@@ -1,31 +1,34 @@
 
 
-# Backfill de Score para CPFs com Eventos Existentes
+# Seletor de Perfil do Devedor (Hover) — Plano
 
-## Situação
-- O trigger automático só atua em **novos** `INSERT` na `client_events`
-- **357 CPFs** já possuem eventos mas score = 0
-- Nenhum score foi calculado até agora
+## O que será feito
 
-## Solução
+Criar um componente `DebtorProfileBadge` que exibe o perfil atual como um badge compacto. Ao passar o mouse, um `HoverCard` revela os 4 perfis para seleção. O componente será posicionado **dentro do card de Tabulação** no `ContactSidebar`, como uma seção adicional após "Status".
 
-Executar a Edge Function `calculate-propensity` **sem filtro de CPF** (modo batch), que já percorre todos os CPFs com eventos e calcula o score de cada um. Isso pode ser feito de duas formas:
+## Componente: `src/components/shared/DebtorProfileBadge.tsx`
 
-### Opção 1: Via botão existente na CarteiraPage
-O botão "Recalcular Score" já chama a função no modo batch. Basta clicar.
+- Badge compacto mostrando perfil atual (ex: "Ocasional" com bolinha verde) ou "Definir perfil" se vazio
+- `HoverCard` ao passar o mouse com os 4 perfis clicáveis:
+  - Ocasional (verde) — Atrasou, mas paga
+  - Recorrente (amarelo) — Sempre atrasa
+  - Insatisfeito (laranja) — Reclamações/contestação
+  - Resistente (vermelho) — Não quer pagar
+- Ao clicar: atualiza `clients.debtor_profile`, insere evento `debtor_profile_changed` em `client_events`, chama `recalcScoreForCpf`
+- Props: `clientId`, `clientCpf`, `currentProfile`, `onProfileChanged`
 
-### Opção 2: Chamada direta (mais confiável para volume)
-Invocar a função via código sem CPF específico, processando todos os 357 CPFs em lote.
+## Integração no ContactSidebar
 
-## Implementação recomendada
-Criar um script de backfill temporário que:
-1. Busca todos os CPFs distintos em `client_events`
-2. Chama `calculate-propensity` em batches de 50 CPFs
-3. Loga progresso
+1. Adicionar `debtor_profile` ao select do `SimpleClient` (linha 57)
+2. Renderizar `DebtorProfileBadge` dentro do card de Tabulação (`DispositionSelector`), ou logo abaixo dele, como uma seção "Perfil do Devedor" — visível apenas quando há cliente vinculado
+3. Passar callback para atualizar o state local após mudança
 
-Após o backfill, os novos eventos continuam sendo processados automaticamente pelo trigger.
+## Arquivos
 
-## Escopo
-- Nenhuma alteração de schema ou trigger
-- Apenas execução da função existente para os dados históricos
+| Ação | Arquivo |
+|---|---|
+| Criar | `src/components/shared/DebtorProfileBadge.tsx` |
+| Editar | `src/components/contact-center/whatsapp/ContactSidebar.tsx` — adicionar `debtor_profile` ao select e renderizar o badge próximo à Tabulação |
+
+Nenhuma alteração de banco de dados necessária — a coluna `debtor_profile` já existe na tabela `clients`.
 
