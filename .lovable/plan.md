@@ -1,70 +1,31 @@
 
 
-# Auditoria das Alterações de Hoje — Inconsistências Encontradas
+# Backfill de Score para CPFs com Eventos Existentes
 
-## Resumo das Mudanças do Dia
-1. ✅ Remoção de Relatórios, Analytics e Auditoria da sidebar
-2. ✅ Remoção do `auto-status-sync` no mount da CarteiraPage
-3. ✅ Otimização do webhook Gupshup (O(1))
-4. ✅ Hook `recalcScoreForCpf` criado
-5. ✅ Integração do recálculo no `agreementService`
-6. ⚠️ Trigger SQL para recálculo automático de score
-7. ⚠️ Imports não utilizados no AppLayout
+## Situação
+- O trigger automático só atua em **novos** `INSERT` na `client_events`
+- **357 CPFs** já possuem eventos mas score = 0
+- Nenhum score foi calculado até agora
 
----
+## Solução
 
-## 🔴 CRÍTICO: Trigger de Score Automático NÃO Funciona
+Executar a Edge Function `calculate-propensity` **sem filtro de CPF** (modo batch), que já percorre todos os CPFs com eventos e calcula o score de cada um. Isso pode ser feito de duas formas:
 
-**O problema:** O trigger SQL (`trg_recalc_score_on_event`) chama a Edge Function `calculate-propensity` via `pg_net` usando o **service_role key**. Porém, a função valida autenticação assim:
+### Opção 1: Via botão existente na CarteiraPage
+O botão "Recalcular Score" já chama a função no modo batch. Basta clicar.
 
-```text
-anonClient.auth.getUser(service_role_token)  →  FALHA (não é um user JWT)
-→  retorna 401 Unauthorized
-→  score NUNCA é calculado via trigger
-```
+### Opção 2: Chamada direta (mais confiável para volume)
+Invocar a função via código sem CPF específico, processando todos os 357 CPFs em lote.
 
-O `service_role_key` é uma chave de serviço, não um token de usuário. A função tenta resolver o `user.id` para encontrar o `tenant_id`, mas com service_role não há usuário associado.
+## Implementação recomendada
+Criar um script de backfill temporário que:
+1. Busca todos os CPFs distintos em `client_events`
+2. Chama `calculate-propensity` em batches de 50 CPFs
+3. Loga progresso
 
-**Evidência:** Os logs mostram muitos ciclos de boot/shutdown sem nenhum log de processamento real — a função recebe a chamada, falha no auth e retorna 401 silenciosamente.
+Após o backfill, os novos eventos continuam sendo processados automaticamente pelo trigger.
 
-**Correção necessária:** Modificar a Edge Function `calculate-propensity` para aceitar dois modos de autenticação:
-1. **User JWT** (modo atual, do frontend) — resolve tenant via `user.id → tenant_users`
-2. **Service Role + tenant_id no body** (modo trigger) — quando chamado pelo banco, o body deve incluir `tenant_id` junto com `cpf`, e a função reconhece o service_role key sem tentar `getUser()`
-
-O trigger SQL também precisa ser atualizado para incluir `tenant_id` no body da requisição.
-
----
-
-## 🟡 MENOR: Imports Não Utilizados no AppLayout
-
-Após a remoção dos links de Relatórios, Analytics e Auditoria, 3 ícones ficaram órfãos no import:
-- `BarChart3` (era Analytics)
-- `FileBarChart` (era Relatórios)
-- `ShieldCheck` (era Auditoria)
-
-Não causa erro, mas é código morto que deve ser limpo.
-
----
-
-## Plano de Correção
-
-### Arquivo 1: `supabase/functions/calculate-propensity/index.ts`
-- Após verificar o `authHeader`, checar se o token é o `SUPABASE_SERVICE_ROLE_KEY`
-- Se for service_role: extrair `tenant_id` diretamente do body (sem chamar `getUser`)
-- Se for user JWT: manter fluxo atual (resolve tenant via `tenant_users`)
-- Isso permite que tanto o frontend quanto o trigger SQL funcionem
-
-### Arquivo 2: Migration SQL — Atualizar trigger
-- Alterar a função `trigger_score_recalc()` para incluir `tenant_id` no JSON body:
-  ```sql
-  body := jsonb_build_object('cpf', _clean_cpf, 'tenant_id', NEW.tenant_id)
-  ```
-
-### Arquivo 3: `src/components/AppLayout.tsx`
-- Remover imports de `BarChart3`, `FileBarChart`, `ShieldCheck`
-
-### Resultado
-- Score operacional será recalculado automaticamente via trigger (a cada evento)
-- Frontend continua funcionando normalmente
-- Código limpo sem imports órfãos
+## Escopo
+- Nenhuma alteração de schema ou trigger
+- Apenas execução da função existente para os dados históricos
 
