@@ -6347,6 +6347,12 @@ export type Database = {
           valor_parcela: number
         }[]
       }
+      get_distinct_event_cpfs: {
+        Args: { p_since: string; p_tenant_id: string }
+        Returns: {
+          cpf: string
+        }[]
+      }
       get_my_enabled_modules: { Args: never; Returns: string[] }
       get_my_permission_profile: {
         Args: never
