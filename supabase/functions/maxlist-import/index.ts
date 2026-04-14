@@ -498,6 +498,45 @@ Deno.serve(async (req) => {
           if (upsertErr) {
             console.error(`[maxlist-import] Chunk upsert error:`, upsertErr.message);
             errors += toUpsert.length;
+          } else {
+            // Log individual changes to client_update_logs for history tracking
+            const updateLogs: any[] = [];
+            for (const rec of toUpsert) {
+              const existing = existingMap.get(rec.external_id);
+              if (!existing || !rec.id) continue; // Only for updated records (not new inserts)
+              const recChanges: Record<string, { old: any; new: any }> = {};
+              for (const field of SYNC_FIELDS) {
+                const oldVal = existing[field] ?? null;
+                const newVal = rec[field] ?? null;
+                if (String(oldVal ?? "") !== String(newVal ?? "")) {
+                  recChanges[field] = { old: oldVal, new: newVal };
+                }
+              }
+              if (Object.keys(recChanges).length > 0) {
+                updateLogs.push({
+                  client_id: rec.id,
+                  tenant_id,
+                  source: "maxlist",
+                  changes: recChanges,
+                  updated_by: null,
+                });
+              }
+            }
+
+            // Insert update logs in sub-batches of 200
+            const LOG_BATCH = 200;
+            for (let j = 0; j < updateLogs.length; j += LOG_BATCH) {
+              const logBatch = updateLogs.slice(j, j + LOG_BATCH);
+              const { error: logErr } = await supabase
+                .from("client_update_logs")
+                .insert(logBatch);
+              if (logErr) {
+                console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
+              }
+            }
+            if (updateLogs.length > 0) {
+              console.log(`[maxlist-import] Logged ${updateLogs.length} individual changes to client_update_logs`);
+            }
           }
 
           if (processingLogs.length < 50) {
@@ -618,7 +657,13 @@ Deno.serve(async (req) => {
       console.error("[maxlist-import] import_logs exception:", e.message);
     }
 
-    // Audit log
+    // Audit log — include list of updated clients for CSV export (max 500)
+    const updatedClientsSummary = updatedRecords.slice(0, 500).map(u => ({
+      cpf: u.cpf,
+      nome: u.nome,
+      changes: u.changes,
+    }));
+
     try {
       const { error: auditErr } = await supabase.from("audit_logs").insert({
         tenant_id,
@@ -640,6 +685,7 @@ Deno.serve(async (req) => {
           duplicates_discarded: duplicatesDiscarded,
           errors,
           duration_ms: durationMs,
+          updated_clients: updatedClientsSummary,
         },
       });
       if (auditErr) console.error("[maxlist-import] audit_logs error:", auditErr.message);

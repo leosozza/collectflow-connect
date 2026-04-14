@@ -11,7 +11,7 @@ interface Props {
 const SOURCE_LABELS: Record<string, string> = {
   import: "Importação Planilha",
   api: "API",
-  maxlist: "MaxList",
+  maxlist: "Sincronização MaxList",
   manual: "Edição Manual",
   regua: "Ação da Régua",
   whatsapp_auto: "WhatsApp Automático",
