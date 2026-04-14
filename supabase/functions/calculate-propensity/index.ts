@@ -298,47 +298,73 @@ Deno.serve(async (req) => {
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000);
 
-    // Get clients to score
-    let clientsQuery = supabase
-      .from("clients")
-      .select("cpf, debtor_profile, data_vencimento")
-      .eq("tenant_id", tenantId);
+    // In batch mode (no cpf), first get CPFs that have events, then fetch their client data
+    let targetCpfs: string[] = [];
 
     if (cpf) {
-      const clean = cpf.replace(/\D/g, "");
-      const formatted = clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-      clientsQuery = clientsQuery.or(`cpf.eq.${clean},cpf.eq.${formatted}`);
-    }
+      targetCpfs = [cpf.replace(/\D/g, "")];
+    } else {
+      // Get distinct CPFs from recent events using RPC (efficient)
+      const { data: eventCpfs, error: rpcErr } = await supabase
+        .rpc("get_distinct_event_cpfs", {
+          p_tenant_id: tenantId,
+          p_since: ninetyDaysAgo.toISOString(),
+        });
 
-    const { data: allClients } = await clientsQuery;
+      if (rpcErr) {
+        console.error("[calculate-propensity] RPC error:", rpcErr.message);
+      }
 
-    if (!allClients || allClients.length === 0) {
-      return new Response(JSON.stringify({ scores: [], message: "Nenhum cliente encontrado" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Group by clean CPF
-    const cpfDataMap = new Map<string, { debtor_profile: string | null; data_vencimento: string | null }>();
-    const uniqueCpfs: string[] = [];
-    for (const c of allClients) {
-      const clean = c.cpf.replace(/\D/g, "");
-      if (!cpfDataMap.has(clean)) {
-        cpfDataMap.set(clean, { debtor_profile: c.debtor_profile, data_vencimento: c.data_vencimento });
-        uniqueCpfs.push(clean);
-      } else {
-        const existing = cpfDataMap.get(clean)!;
-        if (!existing.data_vencimento || (c.data_vencimento && c.data_vencimento < existing.data_vencimento)) {
-          existing.data_vencimento = c.data_vencimento;
-        }
-        if (!existing.debtor_profile && c.debtor_profile) {
-          existing.debtor_profile = c.debtor_profile;
+      if (eventCpfs && eventCpfs.length > 0) {
+        for (const e of eventCpfs) {
+          if (e.cpf && e.cpf.length >= 11) targetCpfs.push(e.cpf);
         }
       }
     }
 
+    if (targetCpfs.length === 0) {
+      return new Response(JSON.stringify({ scores: [], message: "Nenhum CPF com eventos recentes" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Fetch client data for target CPFs in batches
+    const cpfDataMap = new Map<string, { debtor_profile: string | null; data_vencimento: string | null }>();
+    const CLIENT_BATCH = 50;
+
+    for (let i = 0; i < targetCpfs.length; i += CLIENT_BATCH) {
+      const batch = targetCpfs.slice(i, i + CLIENT_BATCH);
+      const cpfPatterns = batch.flatMap(c => {
+        const formatted = c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+        return [c, formatted];
+      });
+
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("cpf, debtor_profile, data_vencimento")
+        .eq("tenant_id", tenantId)
+        .in("cpf", cpfPatterns);
+
+      for (const c of (clients || [])) {
+        const clean = c.cpf.replace(/\D/g, "");
+        if (!cpfDataMap.has(clean)) {
+          cpfDataMap.set(clean, { debtor_profile: c.debtor_profile, data_vencimento: c.data_vencimento });
+        } else {
+          const existing = cpfDataMap.get(clean)!;
+          if (!existing.data_vencimento || (c.data_vencimento && c.data_vencimento < existing.data_vencimento)) {
+            existing.data_vencimento = c.data_vencimento;
+          }
+          if (!existing.debtor_profile && c.debtor_profile) {
+            existing.debtor_profile = c.debtor_profile;
+          }
+        }
+      }
+    }
+
+    const uniqueCpfs = targetCpfs;
+
     const allScores: ScoreResult[] = [];
-    const BATCH = 100;
+    const BATCH = 25;
 
     for (let i = 0; i < uniqueCpfs.length; i += BATCH) {
       const batch = uniqueCpfs.slice(i, i + BATCH);
@@ -348,7 +374,7 @@ Deno.serve(async (req) => {
         return [c, formatted];
       });
 
-      const { data: events } = await supabase
+      const { data: events, error: evError } = await supabase
         .from("client_events")
         .select("client_cpf, event_type, event_source, event_channel, event_value, metadata, created_at")
         .eq("tenant_id", tenantId)
@@ -356,6 +382,10 @@ Deno.serve(async (req) => {
         .in("client_cpf", cpfPatterns)
         .order("created_at", { ascending: false })
         .limit(5000);
+
+      if (evError) {
+        console.error(`[calculate-propensity] Events query error batch ${i}:`, evError.message);
+      }
 
       const eventsByCpf: Record<string, ClientEvent[]> = {};
       for (const ev of (events || [])) {
