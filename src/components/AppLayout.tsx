@@ -69,9 +69,6 @@ const AppLayout = () => {
     ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
-    ...(permissions.canViewRelatorios ? [{ label: "Relatórios", icon: FileBarChart, path: "/relatorios" }] : []),
-    ...(permissions.canViewOwnAnalytics ? [{ label: "Analytics", icon: BarChart3, path: "/analytics" }] : []),
-    ...(permissions.canViewAuditoria ? [{ label: "Auditoria", icon: ShieldCheck, path: "/auditoria" }] : []),
   ];
 
   const contactCenterEnabled = isModuleEnabled("contact_center");
