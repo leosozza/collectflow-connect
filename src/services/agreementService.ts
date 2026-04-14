@@ -345,6 +345,9 @@ export const approveAgreement = async (
     } catch (e) {
       logger.error(MODULE, "auto_generate_boletos_after_approval", e);
     }
+
+    // Recalc score after approval
+    recalcScoreForCpf(agreement.client_cpf).catch(() => {});
   } catch (error) {
     handleServiceError(error, MODULE);
   }
