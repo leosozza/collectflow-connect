@@ -458,6 +458,11 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+
+    // Recalc score after cancellation
+    if (agreement?.client_cpf) {
+      recalcScoreForCpf(agreement.client_cpf).catch(() => {});
+    }
   } catch (error) {
     handleServiceError(error, MODULE);
   }
