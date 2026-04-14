@@ -25,7 +25,7 @@ function cleanPhone(phone: string | null): string {
 function getVal(obj: any, key: string): any {
   if (!obj || typeof obj !== "object") return undefined;
   if (key in obj) return obj[key];
-  
+
   const lowerKey = key.toLowerCase();
   for (const k of Object.keys(obj)) {
     if (k.toLowerCase() === lowerKey) return obj[k];
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
       const PAGE_SIZE = 5000;
       let skip = 0;
       const SELECT_FIELDS = "Id,IdRecord,ResponsibleName,ResponsibleCPF,ContractNumber,Number,PaymentDateQuery,PaymentDateEffected,Value,NetValue,IsCancelled,CellPhone1,CellPhone2,HomePhone,ModelName,Email,Observations,Discount,Producer,PaymentType,CheckReturnDateQuery,CheckReturnReason";
-      
+
       while (true) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
 
           const json = await resp.json();
           const items = json.Items || [];
-          
+
           if (items.length > 0 && allItems.length === 0) {
             console.log("[maxlist-import] Sample item received from MaxSystem:", JSON.stringify(items[0], null, 2));
           }
@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
       .eq("tenant_id", tenant_id)
       .eq("razao_social", credor)
       .maybeSingle();
-    
+
     const credorId = credorData?.id;
     const paymentMappings = new Map<string, string>();
     if (credorId) {
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
         .from("meio_pagamento_mappings")
         .select("external_code, internal_id")
         .eq("credor_id", credorId);
-      
+
       if (mappings) {
         for (const m of mappings) paymentMappings.set(String(m.external_code), m.internal_id);
       }
@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
       const rawPaymentEffected = getVal(rawItem, "PaymentDateEffected");
       const rawPaymentType = getVal(rawItem, "PaymentType");
       const rawReturnDate = getVal(rawItem, "CheckReturnDateQuery");
-      
+
       const hasPagamento = !!record.data_pagamento || !!rawPaymentEffected;
       const meioPagamentoId = rawPaymentType ? paymentMappings.get(String(rawPaymentType)) : null;
 
@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
         }
 
         const toUpsert: any[] = [];
-        
+
         for (const rec of chunk) {
           const existing = existingMap.get(rec.external_id);
 
@@ -378,7 +378,7 @@ Deno.serve(async (req) => {
           // Compare fields to see if update is actually needed
           let needsUpdate = false;
           const changes: Record<string, { old: any; new: any }> = {};
-          
+
           for (const field of SYNC_FIELDS) {
             const oldVal = existing[field] ?? null;
             const newVal = rec[field] ?? null;
@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
               if (PROTECTED_FIELDS.has(field)) {
                 // Exceptional case: status_cobranca_id and data_devolucao can be updated even if protected if status is vencido
                 if (!((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido")) {
-                  continue; 
+                  continue;
                 }
               }
               needsUpdate = true;
@@ -411,10 +411,10 @@ Deno.serve(async (req) => {
             };
             toUpsert.push(updatedRec);
             updated++;
-            
+
             if (changes.status && rec.status === "pago") paid++;
             if (changes.status && rec.status === "cancelado_maxlist") cancelledMaxlist++;
-            
+
             if (updatedRecords.length < 100) {
               updatedRecords.push({
                 nome: existing.nome_completo || rec.nome_completo,
@@ -437,9 +437,9 @@ Deno.serve(async (req) => {
             console.error(`[maxlist-import] Chunk upsert error:`, upsertErr.message);
             errors += toUpsert.length;
           }
-          
+
           if (processingLogs.length < 50) {
-            processingLogs.push(`Processed chunk ${i/CHUNK_SIZE + 1}: upserted ${toUpsert.length}`);
+            processingLogs.push(`Processed chunk ${i / CHUNK_SIZE + 1}: upserted ${toUpsert.length}`);
           }
         }
       }
