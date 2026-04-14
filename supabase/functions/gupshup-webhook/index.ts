@@ -43,9 +43,33 @@ Deno.serve(async (req) => {
     );
   }
 
+  // ========== Extract filename from Gupshup payload ==========
+  function extractFilename(msgPayload: any): string {
+    return (
+      msgPayload?.payload?.name ||
+      msgPayload?.payload?.filename ||
+      msgPayload?.payload?.payload?.name ||
+      ""
+    );
+  }
+
+  // ========== Extract MIME from Gupshup payload ==========
+  function extractMimeType(msgPayload: any, canonicalType: string): string {
+    const ct = msgPayload?.payload?.contentType || msgPayload?.payload?.mime_type || "";
+    if (ct) return ct;
+    // Fallback defaults per type
+    const defaults: Record<string, string> = {
+      image: "image/jpeg",
+      audio: "audio/ogg",
+      video: "video/mp4",
+      document: "application/octet-stream",
+    };
+    return defaults[canonicalType] || "";
+  }
+
   try {
     const payload = await req.json();
-    console.log("Gupshup webhook payload (full):", JSON.stringify(payload));
+    console.log("[provider=gupshup] Webhook payload:", JSON.stringify(payload).slice(0, 500));
 
     await writeLog(null, "inbound", `Webhook recebido: type=${payload.type || payload.eventType}`, payload, 200);
 
@@ -58,16 +82,33 @@ Deno.serve(async (req) => {
       const phone = msgPayload.source || msgPayload.sender?.phone || payload.sender?.phone;
       const senderName = msgPayload.sender?.name || payload.sender?.name || phone || "";
       const msgType = msgPayload.type || "text";
-      const content = msgPayload.payload?.text || msgPayload.payload?.caption || (msgType === "file" ? msgPayload.payload?.name : null) || payload.payload?.text || "";
+      const filename = extractFilename(msgPayload);
       const mediaUrl = extractMediaUrl(msgPayload);
       const externalId = msgPayload.id || payload.messageId || payload.payload?.id || "";
       const destination = msgPayload.destination || payload.destination || "";
 
-      console.log(`Processing GupShup inbound: from=${phone}, to=${destination}, type=${msgType}, externalId=${externalId}`);
+      // Map Gupshup types to canonical
+      const rawType = msgType === "file" ? "document" : msgType;
+      const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
+
+      // Content: caption for image/video, filename for document, text for text
+      let content = "";
+      if (canonicalType === "text") {
+        content = msgPayload.payload?.text || payload.payload?.text || "";
+      } else if (canonicalType === "image" || canonicalType === "video") {
+        content = msgPayload.payload?.caption || "";
+      } else if (canonicalType === "document") {
+        content = filename || msgPayload.payload?.caption || "";
+      }
+      // audio: no content field
+
+      const providerMimeType = extractMimeType(msgPayload, canonicalType);
+
+      console.log(`[provider=gupshup] Processing: from=${phone}, to=${destination}, type=${canonicalType}, mime=${providerMimeType}, hasMedia=${!!mediaUrl}, filename=${filename}`);
 
       if (phone) {
         let targetTenantId: string | null = null;
-        let targetInstanceName: string | null = null;
+        let targetEndpointId: string | null = null;
 
         // Resolve tenant by source number in settings — O(1) direct query
         const cleanDest = destination.replace(/\D/g, "");
@@ -80,7 +121,22 @@ Deno.serve(async (req) => {
             .maybeSingle();
           if (matched) {
             targetTenantId = matched.id;
-            console.log(`Matched tenant ${matched.id} via direct source number query`);
+            console.log(`[provider=gupshup] Matched tenant ${matched.id} via source number`);
+          }
+        }
+
+        // Resolve Gupshup instance for endpoint_id
+        if (targetTenantId) {
+          const { data: gupInst } = await supabase
+            .from("whatsapp_instances")
+            .select("id, instance_name")
+            .eq("tenant_id", targetTenantId)
+            .eq("provider", "gupshup")
+            .limit(1)
+            .maybeSingle();
+          if (gupInst) {
+            targetEndpointId = gupInst.id;
+            console.log(`[provider=gupshup] Resolved endpoint_id=${targetEndpointId}`);
           }
         }
 
@@ -88,33 +144,32 @@ Deno.serve(async (req) => {
         if (!targetTenantId) {
           const { data: instance } = await supabase
             .from("whatsapp_instances")
-            .select("instance_name, tenant_id")
+            .select("id, instance_name, tenant_id")
             .eq("provider", "gupshup")
             .limit(1)
             .maybeSingle();
           if (instance) {
             targetTenantId = instance.tenant_id;
-            targetInstanceName = instance.instance_name;
-            console.log(`Matched tenant ${targetTenantId} via whatsapp_instances fallback`);
+            targetEndpointId = instance.id;
+            console.log(`[provider=gupshup] Matched tenant ${targetTenantId} via whatsapp_instances fallback`);
           }
         }
 
         if (targetTenantId) {
-          const rawType = msgType === "file" ? "document" : msgType;
-          const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
-
-          // Persist media if present — using shared module
+          // Persist media if present
           let finalMediaUrl = mediaUrl;
-          let finalMimeType: string | null = msgPayload.payload?.contentType || null;
+          let finalMimeType: string | null = providerMimeType || null;
 
           if (mediaUrl && canonicalType !== "text") {
-            const mediaResult = await downloadAndUploadMedia(supabase, mediaUrl, targetTenantId, "pending", canonicalType);
+            const mediaResult = await downloadAndUploadMedia(
+              supabase, mediaUrl, targetTenantId, "inbound", canonicalType, providerMimeType,
+            );
             if (mediaResult) {
               finalMediaUrl = mediaResult.storedUrl;
-              finalMimeType = mediaResult.mimeType;
-              console.log(`[gupshup-webhook] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
+              finalMimeType = providerMimeType || mediaResult.mimeType;
+              console.log(`[provider=gupshup] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
             } else {
-              console.warn("[gupshup-webhook] Media persistence failed, using raw URL as fallback");
+              console.warn("[provider=gupshup] Media persistence failed, using raw URL as fallback");
             }
           }
 
@@ -147,36 +202,35 @@ Deno.serve(async (req) => {
                 }
               }
             } catch (e: any) {
-              console.error("Button simulation lookup error:", e.message);
+              console.error("[provider=gupshup] Button simulation lookup error:", e.message);
             }
           }
 
-          const { data: result, error: rpcErr } = await supabase.rpc(
-            targetInstanceName ? "ingest_channel_event_v2" : "ingest_channel_event",
-            {
-              ...(targetInstanceName ? { _instance_name: targetInstanceName } : { _tenant_id: targetTenantId }),
-              _channel_type: "whatsapp",
-              _provider: "gupshup",
-              _remote_phone: phone,
-              _remote_name: senderName,
-              _direction: "inbound",
-              _message_type: canonicalType,
-              _content: content || null,
-              _media_url: finalMediaUrl || null,
-              _media_mime_type: finalMimeType,
-              _external_id: externalId || null,
-              _provider_message_id: externalId || null,
-              _actor_type: "human",
-              _status: "delivered",
-            }
-          );
+          // Use ingest_channel_event with explicit tenant_id + endpoint_id
+          const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
+            _tenant_id: targetTenantId,
+            _endpoint_id: targetEndpointId,
+            _channel_type: "whatsapp",
+            _provider: "gupshup",
+            _remote_phone: phone,
+            _remote_name: senderName,
+            _direction: "inbound",
+            _message_type: canonicalType,
+            _content: content || null,
+            _media_url: finalMediaUrl || null,
+            _media_mime_type: finalMimeType,
+            _external_id: externalId || null,
+            _provider_message_id: externalId || null,
+            _actor_type: "human",
+            _status: "delivered",
+          });
 
           if (rpcErr) {
-            console.error("Ingest error:", rpcErr);
+            console.error("[provider=gupshup] Ingest error:", rpcErr);
             await writeLog(targetTenantId, "error", `Erro ao ingerir mensagem: ${rpcErr.message}`, { phone, externalId }, 500);
           } else {
-            console.log("Gupshup inbound ingested:", JSON.stringify(result));
-            await writeLog(targetTenantId, "success", `Mensagem ingerida: from=${phone}, type=${msgType}`, result, 200);
+            console.log("[provider=gupshup] Ingested:", JSON.stringify(result));
+            await writeLog(targetTenantId, "success", `Mensagem ingerida: from=${phone}, type=${canonicalType}`, result, 200);
 
             // Update metadata on the inserted message if we have button context
             if (Object.keys(metadata).length > 0 && result?.message_id) {
@@ -186,10 +240,10 @@ Deno.serve(async (req) => {
                 .eq("id", result.message_id);
             }
 
-            // ===== Trigger async transcription for inbound audio =====
+            // ===== Trigger async transcription for audio =====
             if (canonicalType === "audio" && finalMediaUrl && result?.message_id) {
               try {
-                console.log(`[gupshup-webhook] Triggering transcription for message ${result.message_id}`);
+                console.log(`[provider=gupshup] Triggering transcription for message ${result.message_id}`);
                 fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
                   method: "POST",
                   headers: {
@@ -200,14 +254,14 @@ Deno.serve(async (req) => {
                     messageId: result.message_id,
                     audioUrl: finalMediaUrl,
                   }),
-                }).catch((e) => console.error("[gupshup-webhook] Transcription trigger failed:", e.message));
+                }).catch((e) => console.error("[provider=gupshup] Transcription trigger failed:", e.message));
               } catch (e: any) {
-                console.error("[gupshup-webhook] Transcription trigger error:", e.message);
+                console.error("[provider=gupshup] Transcription trigger error:", e.message);
               }
             }
           }
         } else {
-          console.warn("Could not resolve tenant for destination:", destination);
+          console.warn("[provider=gupshup] Could not resolve tenant for destination:", destination);
           await writeLog(null, "warning", `Tenant não encontrado para destino: ${destination}`, { phone, destination }, 404);
         }
       }
@@ -235,7 +289,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error("gupshup-webhook error:", err);
+    console.error("[provider=gupshup] gupshup-webhook error:", err);
     await writeLog(null, "error", `Erro geral: ${err.message}`, null, 500);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,

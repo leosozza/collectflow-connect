@@ -1,5 +1,5 @@
 import { ChatMessage as ChatMessageType } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download } from "lucide-react";
 import { format } from "date-fns";
 
 interface ChatMessageProps {
@@ -30,6 +30,24 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
   const metadata = (message as any).metadata as Record<string, any> | null;
   const transcription = metadata?.transcription as string | undefined;
   const transcriptionError = metadata?.transcription_error as string | undefined;
+
+  const handleDocumentDownload = async (url: string, filename: string) => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+    } catch {
+      window.open(url, "_blank");
+    }
+  };
 
   const renderContent = () => {
     switch (message.message_type) {
@@ -87,48 +105,34 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
             {message.content && <p className="text-[14.2px] leading-[19px]">{message.content}</p>}
           </div>
         );
-      case "document":
+      case "document": {
+        const docFilename = message.content || "Documento";
+        const mimeLabel = message.media_mime_type === "application/pdf" ? "PDF"
+          : message.media_mime_type?.split("/").pop()?.toUpperCase() || "Arquivo";
         return (
-          <button
-            type="button"
-            onClick={async () => {
-              const url = message.media_url;
-              if (!url) return;
-              try {
-                const resp = await fetch(url);
-                const blob = await resp.blob();
-                const objectUrl = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = objectUrl;
-                a.download = message.content || "documento";
-                a.target = "_blank";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-              } catch {
-                // Fallback: direct open
-                window.open(url, "_blank");
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left w-full ${
-              isOutbound
-                ? "bg-[#c8efc3] dark:bg-[#004a3f] hover:bg-[#bae6b4] dark:hover:bg-[#003a34]"
-                : "bg-muted/60 hover:bg-muted"
-            }`}
-          >
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+            isOutbound
+              ? "bg-[#c8efc3] dark:bg-[#004a3f]"
+              : "bg-muted/60"
+          }`}>
             <FileText className="w-8 h-8 text-primary flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium truncate">
-                {message.content || "Documento"}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {message.media_mime_type === "application/pdf" ? "PDF" : 
-                 message.media_mime_type?.split("/").pop()?.toUpperCase() || "Arquivo"}
-              </p>
+              <p className="text-[13px] font-medium truncate">{docFilename}</p>
+              <p className="text-[11px] text-muted-foreground">{mimeLabel}</p>
             </div>
-          </button>
+            {message.media_url && (
+              <button
+                type="button"
+                onClick={() => handleDocumentDownload(message.media_url!, docFilename)}
+                className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+                title="Baixar documento"
+              >
+                <Download className="w-4 h-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
         );
+      }
       case "sticker":
         return message.media_url ? (
           <img src={message.media_url} alt="Sticker" className="w-24 h-24" loading="lazy" />

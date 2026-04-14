@@ -14,8 +14,12 @@ export function getExtFromMime(mime: string, fallbackType: string): string {
     "audio/mpeg": ".mp3",
     "audio/mp4": ".m4a",
     "audio/aac": ".aac",
+    "audio/webm": ".webm",
+    "audio/amr": ".amr",
+    "audio/3gpp": ".3gp",
     "video/mp4": ".mp4",
     "video/3gpp": ".3gp",
+    "video/webm": ".webm",
     "application/pdf": ".pdf",
     "application/msword": ".doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
@@ -36,8 +40,10 @@ export async function downloadAndUploadMedia(
   tenantId: string,
   conversationId: string,
   mediaType: string,
+  providerMimeType?: string,
 ): Promise<{ storedUrl: string; mimeType: string } | null> {
   if (!mediaUrl) return null;
+  const startTime = Date.now();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
@@ -51,8 +57,14 @@ export async function downloadAndUploadMedia(
       return null;
     }
 
-    const contentType = resp.headers.get("content-type") || "application/octet-stream";
+    const downloadedContentType = resp.headers.get("content-type") || "application/octet-stream";
+    // Use provider-reported MIME if available and the download returned a generic type
+    const contentType = (providerMimeType && downloadedContentType === "application/octet-stream")
+      ? providerMimeType
+      : downloadedContentType;
+
     const blob = await resp.blob();
+    const elapsed = Date.now() - startTime;
     
     if (blob.size === 0) {
       console.error("[media-persistence] Downloaded file is empty, skipping upload");
@@ -62,7 +74,7 @@ export async function downloadAndUploadMedia(
     const ext = getExtFromMime(contentType, mediaType);
     const fileName = `${tenantId}/${conversationId}/${crypto.randomUUID()}${ext}`;
 
-    console.log(`[media-persistence] Uploading to chat-media/${fileName} (${blob.size} bytes, ${contentType})`);
+    console.log(`[media-persistence] Uploading to chat-media/${fileName} (${blob.size} bytes, ${contentType}, ${elapsed}ms download)`);
 
     const { error: uploadErr } = await supabase.storage
       .from("chat-media")
@@ -74,7 +86,7 @@ export async function downloadAndUploadMedia(
     }
 
     const { data: publicData } = supabase.storage.from("chat-media").getPublicUrl(fileName);
-    console.log(`[media-persistence] Persisted: ${publicData.publicUrl.substring(0, 80)}...`);
+    console.log(`[media-persistence] Persisted: ${publicData.publicUrl.substring(0, 80)}... (total ${Date.now() - startTime}ms)`);
     return { storedUrl: publicData.publicUrl, mimeType: contentType };
   } catch (e: any) {
     if (e.name === "AbortError") {
