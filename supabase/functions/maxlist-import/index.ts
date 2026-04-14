@@ -37,7 +37,7 @@ function getVal(obj: any, key: string): any {
 const SYNC_FIELDS = [
   "data_pagamento", "valor_pago", "valor_parcela", "valor_saldo",
   "data_vencimento", "status", "cod_contrato", "numero_parcela", "model_name", "external_id",
-  "meio_pagamento_id", "status_cobranca_id", "data_devolucao",
+  "meio_pagamento_id", "status_cobranca_id", "data_devolucao", "motivo_devolucao", "tipo_divida_id",
 ];
 
 // Fields that must NEVER be overwritten by sync
@@ -109,6 +109,17 @@ Deno.serve(async (req) => {
       vencidoStatusId = statusInadimplente?.id || null;
     }
     console.log(`[maxlist-import] vencidoStatusId resolved: ${vencidoStatusId}`);
+
+    // Fetch "Cheque" debt type ID
+    let chequeTipoDividaId: string | null = null;
+    const { data: tipoCheque } = await supabase
+      .from("tipos_divida")
+      .select("id")
+      .eq("tenant_id", tenant_id)
+      .ilike("nome", "cheque")
+      .maybeSingle();
+    chequeTipoDividaId = tipoCheque?.id || null;
+    console.log(`[maxlist-import] chequeTipoDividaId resolved: ${chequeTipoDividaId}`);
 
     // Verify user belongs to tenant
     const { data: tenantUser } = await supabase
@@ -301,6 +312,8 @@ Deno.serve(async (req) => {
           ? vencidoStatusId
           : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
         data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
+        motivo_devolucao: getVal(rawItem, "CheckReturnReason") ? String(getVal(rawItem, "CheckReturnReason")) : null,
+        tipo_divida_id: record.tipo_divida_id || ((rawPaymentType === 2 || rawPaymentType === 6) ? chequeTipoDividaId : null),
       };
 
       if (!mapped.cpf || !mapped.nome_completo) {
@@ -392,9 +405,14 @@ Deno.serve(async (req) => {
 
             if (String(oldVal ?? "") !== String(newVal ?? "")) {
               if (PROTECTED_FIELDS.has(field)) {
-                // Exceptional case: status_cobranca_id and data_devolucao can be updated even if protected if status is vencido
-                if (!((field === "status_cobranca_id" || field === "data_devolucao") && rec.status === "vencido")) {
-                  continue;
+                // Exceptional cases for protected fields:
+                // 1. If existing value is null/empty, we ALWAYS allow update
+                // 2. status_cobranca_id, data_devolucao, motivo_devolucao can be updated if status is vencido (check return)
+                const isExistingEmpty = !oldVal || String(oldVal).trim() === "";
+                const isCheckReturnUpdate = (field === "status_cobranca_id" || field === "data_devolucao" || field === "motivo_devolucao") && rec.status === "vencido";
+                
+                if (!isExistingEmpty && !isCheckReturnUpdate) {
+                  continue; 
                 }
               }
               needsUpdate = true;
