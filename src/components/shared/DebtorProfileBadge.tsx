@@ -6,10 +6,10 @@ import { toast } from "sonner";
 import { Loader2, UserCircle } from "lucide-react";
 
 const PROFILES = [
-  { value: "occasional", label: "Ocasional", color: "hsl(142, 71%, 45%)", desc: "Atrasou, mas paga" },
-  { value: "recurrent", label: "Recorrente", color: "hsl(45, 93%, 47%)", desc: "Sempre atrasa" },
-  { value: "unsatisfied", label: "Insatisfeito", color: "hsl(25, 95%, 53%)", desc: "Reclamações/contestação" },
-  { value: "resistant", label: "Resistente", color: "hsl(0, 84%, 60%)", desc: "Não quer pagar" },
+  { value: "ocasional", label: "Ocasional", color: "hsl(142, 71%, 45%)", desc: "Atrasou, mas paga" },
+  { value: "recorrente", label: "Recorrente", color: "hsl(45, 93%, 47%)", desc: "Sempre atrasa" },
+  { value: "insatisfeito", label: "Insatisfeito", color: "hsl(25, 95%, 53%)", desc: "Reclamações/contestação" },
+  { value: "resistente", label: "Resistente", color: "hsl(0, 84%, 60%)", desc: "Não quer pagar" },
 ] as const;
 
 interface DebtorProfileBadgeProps {
