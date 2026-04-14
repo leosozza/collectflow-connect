@@ -1,42 +1,82 @@
 
+# Corrigir desconto faltando 1 centavo
 
-# Correções na Página de Perfil do Cliente
+## Diagnóstico
+O erro está em `src/components/client-detail/AgreementCalculator.tsx`.
 
-## Problemas Identificados
+Hoje o fluxo faz isso:
+- o usuário digita um valor em `R$ Desc.` (ex.: `11,00`)
+- o componente converte esse valor para `% Desc.` e já arredonda o percentual para 2 casas
+- depois o total é recalculado a partir desse percentual arredondado
 
-### 1. Re-renders contínuos (ainda ocorrendo)
-A correção anterior estabilizou `user`, mas `profile` e o próprio objeto `value` do Context continuam instáveis:
-- `fetchProfile` é chamado 2x no mount (via `getSession` + `onAuthStateChange`), cada vez criando um novo objeto `profile` → o `AuthContext.Provider` value muda → todos os consumers re-renderizam
-- O objeto `value={{ user, session, profile, ... }}` do Provider é recriado a cada render, propagando re-renders desnecessários
+No caso do print:
+```text
+Total bruto:      R$ 998,66
+R$ digitado:      R$ 11,00
+% salvo na UI:    1,10%
+Recalculo:        998,66 × 1,10% = R$ 10,99
+```
 
-**Correção**: Estabilizar `setProfile` (comparar `id`) e usar `useMemo` no `value` de ambos os Providers.
+Por isso o campo mostra `11`, mas a linha de desconto e o valor atualizado usam `10,99`.
 
-### 2. Erros de centavos nos cálculos de desconto
-- `totals.descontoVal` não é arredondado: `totalBruto * (descontoPercent / 100)` resulta em floating point como `99.9666...`
-- `installmentValue` também não é arredondado: `remainingAfterEntrada / numParcelas` pode dar `332.8866...`
-- Resultado: valores com centavos quebrados na simulação e divergência entre "Valor Atualizado" e soma das parcelas
+## Correção proposta
 
-**Correção**: Aplicar `Math.round(... * 100) / 100` nos cálculos de `descontoVal`, `totalAtualizado` e `installmentValue`.
+### 1. Definir a origem real do desconto
+Adicionar um estado para saber qual campo foi editado por último:
+- `"percent"` quando o usuário altera `% Desc.`
+- `"amount"` quando o usuário altera `R$ Desc.`
 
-### 3. UX ruim nos campos de desconto (% e R$)
-Os campos `descontoPercent` e `descontoReais` usam `Number(e.target.value) || 0`, que impede o usuário de apagar o valor (volta para 0 imediatamente ao limpar). O campo de entrada já usa o padrão correto com `number | ""`.
+### 2. Centralizar o cálculo do desconto
+Criar um cálculo único para:
+- `descontoVal`
+- `totalAtualizado`
+- `remainingAfterEntrada`
+- `installmentValue`
+- `proposed_total`
 
-**Correção**: Mudar os states para `number | ""`, usar `e.target.value === "" ? "" : Number(e.target.value)` no onChange, e converter para 0 apenas nos cálculos.
+Esse cálculo deve usar:
+- o percentual quando a origem for `%`
+- o valor em reais quando a origem for `R$`
 
-## Arquivos a alterar
+Assim, se o usuário digitar `R$ 11,00`, o desconto final usado pelo sistema será exatamente `R$ 11,00`.
 
-### `src/hooks/useAuth.tsx`
-- Adicionar `setProfileStable` que só atualiza se `profile.id` mudou
-- Memoizar o `value` do `AuthContext.Provider` com `useMemo`
+### 3. Manter os dois campos sincronizados só para exibição
+Os campos continuam se atualizando entre si visualmente, mas:
+- o campo editado define o valor real do cálculo
+- o outro campo vira apenas reflexo calculado
 
-### `src/hooks/useTenant.tsx`
-- Memoizar o `value` do `TenantContext.Provider` com `useMemo`
+Exemplo:
+- editou `% Desc.` → `R$ Desc.` é derivado
+- editou `R$ Desc.` → `% Desc.` é derivado
 
-### `src/components/client-detail/AgreementCalculator.tsx`
-- Mudar `descontoPercent` e `descontoReais` para tipo `number | ""`
-- Atualizar os onChange para permitir campo vazio
-- Arredondar `descontoVal` e `totalAtualizado` no `useMemo` de totals
-- Arredondar `installmentValue` na linha 180
+### 4. Padronizar arredondamento em helper
+Usar um helper único, por exemplo:
+- `roundMoney(value)` para 2 casas
 
-## Sem migrations necessárias
+Aplicar esse helper em todos os pontos financeiros do componente para evitar novas divergências de 1 centavo.
 
+### 5. Garantir consistência ao gravar
+Na gravação do acordo:
+- `proposed_total` deve sair do desconto efetivo final
+- `new_installment_value` deve sair do mesmo total final
+- `discount_percent` deve refletir o desconto efetivo, sem afetar o valor em reais digitado
+
+## Arquivo a alterar
+- `src/components/client-detail/AgreementCalculator.tsx`
+
+## Resultado esperado
+- digitando `R$ 11,00`, a linha “Desconto” mostrará `R$ 11,00`
+- o “Valor Atualizado” ficará exatamente `R$ 987,66`
+- a simulação e a gravação do acordo usarão esse mesmo valor final
+- não haverá mais divergência de 1 centavo entre campo, resumo e cálculo final
+
+## Validação
+Após implementar, validar:
+1. o caso do print (`R$ Desc. = 11`)
+2. edição por `% Desc.`
+3. troca de títulos selecionados
+4. simulação das parcelas
+5. gravação do acordo e valor salvo
+
+## Detalhe técnico
+Sem migration. É uma correção de lógica frontend.
