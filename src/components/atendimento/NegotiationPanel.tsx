@@ -66,8 +66,8 @@ const NegotiationPanel = ({
 
   const numDiscount = typeof discountPercent === "number" ? discountPercent : 0;
   const numInstallments = typeof installments === "number" && installments > 0 ? installments : 1;
-  const proposedTotal = totalAberto * (1 - numDiscount / 100);
-  const installmentValue = proposedTotal / numInstallments;
+  const proposedTotal = Math.round(totalAberto * (1 - numDiscount / 100) * 100) / 100;
+  const installmentValue = Math.round((proposedTotal / numInstallments) * 100) / 100;
 
   const applyTemplate = (t: NegotiationTemplate) => {
     setDiscountPercent(t.discountPercent);
