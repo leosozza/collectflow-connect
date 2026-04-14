@@ -1518,6 +1518,7 @@ export type Database = {
           external_id: string | null
           id: string
           model_name: string | null
+          motivo_devolucao: string | null
           nome_completo: string
           numero_parcela: number
           observacoes: string | null
@@ -1574,6 +1575,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           model_name?: string | null
+          motivo_devolucao?: string | null
           nome_completo: string
           numero_parcela?: number
           observacoes?: string | null
@@ -1630,6 +1632,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           model_name?: string | null
+          motivo_devolucao?: string | null
           nome_completo?: string
           numero_parcela?: number
           observacoes?: string | null
