@@ -68,33 +68,65 @@ function getTodayIso(): string {
 
 interface InstallmentInfo {
   number: number;
+  key: string;
   value: number;
   dueDate: string;
+  isEntrada: boolean;
 }
 
 function buildInstallments(agreement: any): InstallmentInfo[] {
   const installments: InstallmentInfo[] = [];
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
-  const hasEntrada = (agreement.entrada_value || 0) > 0;
 
-  if (hasEntrada) {
+  // Collect all entrada keys (entrada, entrada_2, entrada_3, ...)
+  const entradaKeys: string[] = [];
+  if ((agreement.entrada_value || 0) > 0) {
+    entradaKeys.push("entrada");
+  }
+  for (const k of Object.keys(customValues)) {
+    if (k.startsWith("entrada_") && !k.endsWith("_method")) {
+      if (!entradaKeys.includes(k)) entradaKeys.push(k);
+    }
+  }
+  // Sort: "entrada" first, then "entrada_2", "entrada_3", etc.
+  entradaKeys.sort((a, b) => {
+    if (a === "entrada") return -1;
+    if (b === "entrada") return 1;
+    const na = parseInt(a.split("_")[1] || "0");
+    const nb = parseInt(b.split("_")[1] || "0");
+    return na - nb;
+  });
+
+  for (const eKey of entradaKeys) {
     const defaultDate = agreement.entrada_date || agreement.first_due_date;
-    const date = customDates["entrada"] || defaultDate;
-    const value = customValues["entrada"] ?? agreement.entrada_value;
-    installments.push({ number: 0, value, dueDate: String(date).slice(0, 10) });
+    const date = customDates[eKey] || defaultDate;
+    const value = customValues[eKey] ?? agreement.entrada_value;
+    installments.push({
+      number: installments.length,
+      key: eKey,
+      value,
+      dueDate: String(date).slice(0, 10),
+      isEntrada: true,
+    });
   }
 
   const baseDate = new Date(agreement.first_due_date + "T00:00:00");
   for (let i = 0; i < agreement.new_installments; i++) {
-    const instNum = (hasEntrada ? 1 : 0) + i + 1;
+    const instNum = i + 1;
     const customKey = String(instNum);
     const d = new Date(baseDate);
     d.setMonth(d.getMonth() + i);
     const defaultDateStr = d.toISOString().split("T")[0];
     const date = customDates[customKey] || defaultDateStr;
     const value = customValues[customKey] ?? agreement.new_installment_value;
-    installments.push({ number: instNum, value, dueDate: String(date).slice(0, 10) });
+    installments.push({
+      number: entradaKeys.length + instNum,
+      key: customKey,
+      value,
+      dueDate: String(date).slice(0, 10),
+      isEntrada: false,
+    });
   }
 
   return installments;
@@ -211,15 +243,15 @@ Deno.serve(async (req) => {
       try {
         // Skip past-due installments
         if (inst.dueDate < today) {
-          console.log(`[generate-agreement-boletos] Skipping installment ${inst.number} — past due (${inst.dueDate})`);
+          console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — past due (${inst.dueDate})`);
           continue;
         }
 
-        const installmentKey = `${agreement_id}:${inst.number}`;
+        const installmentKey = `${agreement_id}:${inst.key}`;
         const shortId = agreement_id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6);
-        const idParcela = inst.number === 0
+        const idParcela = inst.isEntrada
           ? String(Date.now()).slice(-8)
-          : `${shortId}-${inst.number}-${Date.now().toString(36)}`;
+          : `${shortId}-${inst.key}-${Date.now().toString(36)}`;
 
         let endereco = (clientData.endereco || "").trim();
         let numero = "";
@@ -231,7 +263,8 @@ Deno.serve(async (req) => {
         if (!numero) numero = "SN";
 
         const celular = normalizePhone(clientData.phone || "");
-        const instLabel = `Acordo ${agreement_id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
+        const entradaLabel = inst.key === "entrada" ? "Entrada" : `Entrada ${inst.key.split("_")[1] || ""}`;
+        const instLabel = `Acordo ${agreement_id.substring(0, 8)} - ${inst.isEntrada ? entradaLabel : `Parcela ${inst.key}`}`;
         const idGeral = `RIVO-${shortId}-${Date.now()}`;
 
         const payload = {
@@ -261,7 +294,7 @@ Deno.serve(async (req) => {
           }],
         };
 
-        console.log(`[generate-agreement-boletos] Generating boleto for installment ${inst.number}`);
+        console.log(`[generate-agreement-boletos] Generating boleto for installment ${inst.key}`);
         const apiResult = await negociarieRequest("POST", "/cobranca/nova", payload);
 
         const parcelaResult = Array.isArray(apiResult?.parcelas) && apiResult.parcelas.length > 0
@@ -297,12 +330,13 @@ Deno.serve(async (req) => {
           } as any);
 
         result.success++;
-        console.log(`[generate-agreement-boletos] Boleto ${inst.number} generated successfully`);
+        console.log(`[generate-agreement-boletos] Boleto ${inst.key} generated successfully`);
       } catch (err: any) {
         result.failed++;
-        const msg = `Parcela ${inst.number === 0 ? "Entrada" : inst.number}: ${err.message || "Erro desconhecido"}`;
+        const label = inst.isEntrada ? (inst.key === "entrada" ? "Entrada" : `Entrada ${inst.key.split("_")[1]}`) : `Parcela ${inst.key}`;
+        const msg = `${label}: ${err.message || "Erro desconhecido"}`;
         result.errors.push(msg);
-        console.error(`[generate-agreement-boletos] Error for installment ${inst.number}:`, err.message);
+        console.error(`[generate-agreement-boletos] Error for installment ${inst.key}:`, err.message);
       }
     }
 
