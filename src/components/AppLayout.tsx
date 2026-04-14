@@ -282,7 +282,7 @@ const AppLayout = () => {
             </Button>
             {(() => {
               const pageTitles: Record<string, string> = {
-                "/": "Dashboard",
+                "/dashboard": "Dashboard",
                 "/carteira": "Carteira",
                 "/contact-center/telefonia": "Telefonia",
                 "/contact-center/whatsapp": "WhatsApp",
