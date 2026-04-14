@@ -69,20 +69,18 @@ Deno.serve(async (req) => {
         let targetTenantId: string | null = null;
         let targetInstanceName: string | null = null;
 
-        // Resolve tenant by source number in settings
-        const { data: tenants } = await supabase
-          .from("tenants")
-          .select("id, settings")
-          .not("settings->gupshup_source_number", "is", null);
-
-        for (const t of tenants || []) {
-          const s = t.settings as any;
-          const cleanSource = s.gupshup_source_number?.replace(/\D/g, "");
-          const cleanDest = destination.replace(/\D/g, "");
-          if (cleanSource && cleanDest && cleanDest.endsWith(cleanSource)) {
-            targetTenantId = t.id;
-            console.log(`Matched tenant ${t.id} via source number: ${cleanSource}`);
-            break;
+        // Resolve tenant by source number in settings — O(1) direct query
+        const cleanDest = destination.replace(/\D/g, "");
+        if (cleanDest) {
+          const { data: matched } = await supabase
+            .from("tenants")
+            .select("id")
+            .like("settings->>gupshup_source_number", `%${cleanDest.slice(-10)}`)
+            .limit(1)
+            .maybeSingle();
+          if (matched) {
+            targetTenantId = matched.id;
+            console.log(`Matched tenant ${matched.id} via direct source number query`);
           }
         }
 

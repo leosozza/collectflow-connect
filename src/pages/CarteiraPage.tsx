@@ -308,18 +308,6 @@ const CarteiraPage = () => {
     return map;
   }, [tiposStatus]);
 
-  // Call auto-status-sync once on mount to fix stale status_cobranca_id in DB
-  const syncCalledRef = useRef(false);
-  useEffect(() => {
-    if (!syncCalledRef.current && tenant?.id) {
-      syncCalledRef.current = true;
-      supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenant.id } }).then(({ error }) => {
-        if (!error) {
-          queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
-        }
-      });
-    }
-  }, [tenant?.id, queryClient]);
 
   // Helper: should we show full data for this client?
   const canSeeFullData = (client: any) => {
