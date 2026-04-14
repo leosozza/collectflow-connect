@@ -243,7 +243,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const outOfStandard = useMemo(() => {
     if (!credorRules) return { isOut: false, reasons: [] as string[] };
     const reasons: string[] = [];
-    if (credorRules.desconto_maximo > 0 && descontoPercent > credorRules.desconto_maximo) {
+    const pctVal = typeof descontoPercent === "number" ? descontoPercent : 0;
+    if (credorRules.desconto_maximo > 0 && pctVal > credorRules.desconto_maximo) {
       reasons.push(`Desconto ${descontoPercent}% excede máx ${credorRules.desconto_maximo}%`);
     }
     if (credorRules.parcelas_max > 0 && numParcelas > credorRules.parcelas_max) {
@@ -396,7 +397,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         credor,
         original_total: totals.totalOriginal,
         proposed_total: totals.totalAtualizado,
-        discount_percent: descontoPercent,
+        discount_percent: typeof descontoPercent === "number" ? descontoPercent : 0,
         new_installments: numParcelas,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
@@ -602,7 +603,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
                     <TableCell className="px-2 text-right">{formatCurrency(totals.totalBruto)}</TableCell>
                   </TableRow>
-                  {descontoPercent > 0 && (
+                  {(typeof descontoPercent === "number" ? descontoPercent : 0) > 0 && (
                     <TableRow className="text-xs">
                       <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
                       <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
