@@ -1,55 +1,66 @@
 
 
-# Otimização da Navegação — Layout Persistente + Skeleton Loaders
+# Correção: Geração de boletos com múltiplas entradas
 
-## Problema
-Cada rota renderiza uma nova instância de `<AppLayout>`, causando remontagem do sidebar e header a cada navegação. Páginas como `ClientDetailPage` substituem todo o conteúdo por "Carregando..." durante o fetch.
+## Problema identificado
 
-## Alterações
+A edge function `generate-agreement-boletos` tem a função `buildInstallments` (linhas 75-101) que **só reconhece uma única entrada** (`customValues["entrada"]`). Quando o operador configura múltiplas entradas (ex: `entrada`, `entrada_2`, `entrada_3`), apenas a primeira é incluída na geração de boletos. As demais são ignoradas.
 
-### 1. `src/components/AppLayout.tsx`
-- Remover a prop `children` e a interface `AppLayoutProps`
-- Importar `Outlet` do `react-router-dom`
-- Substituir `{children}` por `<Outlet />` no `<main>`
+Além disso, todas as entradas recebem `number: 0`, o que gera `installment_key` duplicado (`agreement_id:0`) para todas elas, causando conflitos na tabela `negociarie_cobrancas`.
 
-### 2. `src/App.tsx`
-- Criar uma rota pai com `element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}`
-- Mover todas as rotas que hoje usam `<ProtectedRoute requireTenant><AppLayout>...</AppLayout></ProtectedRoute>` para dentro dessa rota pai como rotas filhas com apenas o componente de página
-- A rota raiz `/` (RootPage) permanece separada pois tem lógica condicional própria
-- Rotas sem AppLayout (auth, onboarding, portal, admin, etc.) permanecem inalteradas
+O frontend (classifier) já trata múltiplas entradas corretamente. O problema é exclusivamente na edge function.
 
-Exemplo da estrutura:
+## Comparação
+
 ```text
-<Route element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}>
-  <Route index element={<Index />} />
-  <Route path="carteira" element={<CarteiraPage />} />
-  <Route path="carteira/:cpf" element={<ClientDetailPage />} />
-  <Route path="cadastros/:tab?" element={<CadastrosPage />} />
-  ...todas as rotas protegidas com AppLayout...
-</Route>
+Frontend (agreementInstallmentClassifier.ts)     Edge Function (buildInstallments)
+──────────────────────────────────────────────    ─────────────────────────────────
+Busca todas as keys "entrada*" no customValues   Só busca customValues["entrada"]
+Cria uma entrada por key                         Cria no máximo 1 entrada
+Usa key como identificador ("entrada_2")         Usa number: 0 para todas
 ```
 
-A rota `/` precisará de tratamento especial: o `RootPage` decide entre LandingPage (sem layout) e redirecionar para o layout. Vou ajustar para que usuários logados não-superadmin caiam na rota index dentro do layout group.
+## Alteração
 
-### 3. `src/pages/ClientDetailPage.tsx`
-- Substituir o bloco `if (isLoading) return <div>Carregando...</div>` por skeleton loaders que mantêm a estrutura da página visível (header com botão voltar, tabs, cards esqueleto)
+### Arquivo: `supabase/functions/generate-agreement-boletos/index.ts`
 
-### 4. Outras páginas com loading genérico
-- Aplicar o mesmo padrão de skeleton em páginas que usam loading full-replacement (buscar e corrigir os principais: `PerfilPage`, `ConfiguracoesPage`, etc.)
+Reescrever a função `buildInstallments` para:
 
-## O que NÃO muda
-- Lógica de autenticação e proteção de rotas
-- Rotas do SuperAdmin (já usam `SuperAdminLayout` com Outlet)
-- ModuleGuard continua envolvendo as rotas que precisam
+1. Coletar todas as chaves `entrada*` do `custom_installment_values` (mesma lógica do classifier)
+2. Gerar uma `InstallmentInfo` para cada entrada, usando a **key** como identificador (não `number: 0`)
+3. Ajustar o campo `number` para diferenciar entradas (ex: `number: -1` para entrada_2, ou usar string key)
 
-## Resultado
-- Sidebar e header nunca remontam durante navegação entre páginas protegidas
-- Estado do sidebar (collapsed, scroll) é preservado
-- Carregamento de dados acontece de forma fluida com skeletons dentro do layout já montado
+Como `InstallmentInfo.number` é usado para gerar o `installment_key`, preciso mudar a interface para incluir uma `key` string:
 
-## Arquivos alterados
-- `src/components/AppLayout.tsx`
-- `src/App.tsx`
-- `src/pages/ClientDetailPage.tsx`
-- `src/pages/PerfilPage.tsx`
+```typescript
+interface InstallmentInfo {
+  number: number;
+  key: string;      // "entrada", "entrada_2", "1", "2", etc.
+  value: number;
+  dueDate: string;
+  isEntrada: boolean;
+}
+```
+
+E no loop de geração (linha 218), usar `inst.key` em vez de `inst.number` para o `installment_key`:
+
+```typescript
+// Antes
+const installmentKey = `${agreement_id}:${inst.number}`;
+
+// Depois  
+const installmentKey = `${agreement_id}:${inst.key}`;
+```
+
+E ajustar o label da mensagem do boleto para distinguir "Entrada 1", "Entrada 2", etc.
+
+## Resultado esperado
+
+- Acordos com 2+ entradas geram boletos para **todas** as entradas
+- Cada entrada tem seu próprio `installment_key` único
+- Compatível com a classificação existente no frontend
+- Acordos com entrada única continuam funcionando igual
+
+## Arquivo alterado
+- `supabase/functions/generate-agreement-boletos/index.ts` (redeploy)
 
