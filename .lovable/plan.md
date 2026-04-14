@@ -1,68 +1,54 @@
 
 
-# Score Operacional não está sendo atualizado — Diagnóstico e Correção
+# Estabilização e Escalabilidade Multi-Tenant — Status e Plano
 
-## Diagnóstico
+## Diagnóstico por Item
 
-**Dados encontrados:**
-- **419.737 clientes** no sistema — **ZERO** com score calculado
-- **2.700+ eventos** registrados em `client_events` para **355 CPFs** (WhatsApp, acordos, ligações, pagamentos)
-- Os triggers SQL que populam `client_events` estão funcionando corretamente
-- A Edge Function `calculate-propensity` existe e a lógica de cálculo está correta
+### 1. Layout Routes (AppLayout + Outlet) — JÁ IMPLEMENTADO ✓
+O `App.tsx` já usa layout routes com `<Outlet />`. O `AppLayout` é montado uma única vez como wrapper das rotas autenticadas (linha 106 do App.tsx). Nenhuma ação necessária.
 
-**Causa raiz:** O cálculo do score **só é disparado manualmente** — existe um botão na CarteiraPage que chama `calculate-propensity`, mas nunca há chamada automática. Nenhum fluxo do sistema (pagamento, acordo, ligação, WhatsApp) recalcula o score do cliente afetado.
+### 2. Webhook Gupshup — PRECISA CORREÇÃO
+O loop `for` nas linhas 78-87 de `gupshup-webhook/index.ts` itera sobre **todos os tenants** para encontrar o número de origem. Com muitos tenants, isso degrada performance.
 
-## Solução
-
-### 1. Criar um Database Trigger para recalcular score automaticamente
-
-Criar uma função SQL + trigger em `client_events` que, ao inserir um novo evento, chama a Edge Function `calculate-propensity` via `pg_net` (HTTP assíncrono) apenas para o CPF do cliente afetado.
-
-Isso garante que **qualquer evento** (ligação, WhatsApp, acordo, pagamento) dispare o recálculo automaticamente, sem depender do frontend.
-
-```text
-client_events INSERT
-      ↓
-pg_net.http_post → calculate-propensity({ cpf: client_cpf })
-      ↓
-clients.propensity_score atualizado
+**Correção:** Substituir o loop por uma query direta usando filtro JSONB:
+```sql
+SELECT id FROM tenants
+WHERE settings->>'gupshup_source_number' LIKE '%' || cleaned_destination
+LIMIT 1
 ```
+Isso resolve o tenant em O(1) em vez de O(n).
 
-### 2. Alternativa mais leve: Trigger no frontend após eventos-chave
+### 3. Gamificação (Métricas + Filtros + Persistência) — JÁ IMPLEMENTADO ✓
+Todas as correções solicitadas já foram aplicadas em iterações anteriores:
+- `maior_valor_promessas` → soma de `proposed_total` de acordos pending/approved
+- `menor_valor_quebra` → valor financeiro de `proposed_total` de acordos cancelled (invertido para ranking)
+- `menor_taxa_quebra` → retorna 100 (performance perfeita) quando não há acordos
+- Filtro por credores via `campaign_credores` → `getCampaignCredorNames()` implementado
+- Persistência via `upsertOperatorPoints` → chamado em cada trigger
 
-Nos hooks/serviços que já existem, adicionar chamada ao `calculate-propensity` com o CPF específico após:
-- Criar/aprovar/cancelar acordo
-- Registrar pagamento
-- Receber mensagem WhatsApp (já via webhook)
+### 4. Consistência Multi-Tenant — PARCIALMENTE IMPLEMENTADO
 
-Isso é complementar ao trigger SQL.
+**4a. `useTenant` multi-tenant** — O hook atual assume um tenant por usuário (via `get_my_tenant_id()`). Para suportar múltiplos tenants, precisaríamos de um seletor de tenant — mas isso é uma mudança de produto significativa. Por ora, o sistema funciona corretamente para o modelo atual (1 tenant por usuário).
 
-### 3. Rodar backfill inicial para os 355 CPFs com eventos
+**4b. `auto-status-sync` na CarteiraPage** — PRECISA CORREÇÃO. O `auto-status-sync` é chamado no mount da CarteiraPage (linha 314), causando uma chamada HTTP pesada toda vez que o usuário abre a carteira. O `maxlist-import` já chama `auto-status-sync` automaticamente ao final da importação (linha 629). A chamada no mount é redundante e deve ser removida.
 
-Chamar `calculate-propensity` sem filtro de CPF (como o botão da CarteiraPage já faz) para calcular o score de todos os clientes que já têm eventos. Isso preenche os scores existentes imediatamente.
+---
 
-## Plano de implementação
+## Plano de Implementação
 
-### Arquivo 1: Migration SQL — Trigger automático via `pg_net`
+### Arquivo 1: `supabase/functions/gupshup-webhook/index.ts`
+- Remover o loop `for` (linhas 73-87)
+- Substituir por query direta: buscar tenant onde `settings->>'gupshup_source_number'` corresponde ao `destination` da mensagem
+- Manter o fallback por `whatsapp_instances` (já existe)
 
-- Habilitar extensão `pg_net` (se não estiver ativa)
-- Criar função `trigger_score_recalc()` que faz `SELECT net.http_post(...)` para a Edge Function com o CPF do evento
-- Criar trigger `trg_recalc_score_on_event` em `client_events` AFTER INSERT
-- Usar debounce: só disparar se não houver `score_updated_at` recente (< 5 min) para o mesmo CPF
+### Arquivo 2: `src/pages/CarteiraPage.tsx`
+- Remover o `useEffect` que chama `auto-status-sync` no mount (linhas 311-325)
+- Remover o `syncCalledRef`
+- A sincronização continua ocorrendo automaticamente após importações (MaxList e ClientsPage)
 
-### Arquivo 2: `src/hooks/useScoreRecalc.ts` — Hook para recálculo pontual no frontend
-
-- Exportar função `recalcScoreForCpf(cpf: string)` que chama `supabase.functions.invoke("calculate-propensity", { body: { cpf } })`
-- Usar nos fluxos de acordo e pagamento como complemento
-
-### Arquivo 3: Integração nos fluxos existentes
-
-- Após criar/aprovar acordo: chamar `recalcScoreForCpf`
-- Após registrar pagamento: chamar `recalcScoreForCpf`
-
-## Resultado esperado
-
-- Scores calculados automaticamente para qualquer cliente com atividade
-- Backfill imediato dos 355 CPFs que já têm eventos
-- Score visível na Carteira sem necessidade de clicar botão manual
+### Resultado
+- **Webhook**: Resolução de tenant em tempo constante, pronto para centenas de tenants
+- **Carteira**: Carregamento mais rápido sem chamada HTTP desnecessária no mount
+- **Gamificação**: Já estável (confirmado)
+- **Layout**: Já otimizado (confirmado)
 
