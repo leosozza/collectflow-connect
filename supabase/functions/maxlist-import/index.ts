@@ -110,16 +110,60 @@ Deno.serve(async (req) => {
     }
     console.log(`[maxlist-import] vencidoStatusId resolved: ${vencidoStatusId}`);
 
-    // Fetch "Cheque" debt type ID
-    let chequeTipoDividaId: string | null = null;
-    const { data: tipoCheque } = await supabase
+    // Fetch ALL debt types for this tenant and build PaymentType → tipo_divida_id map
+    const paymentTypeToDividaMap = new Map<string, string>();
+    const { data: allTiposDivida } = await supabase
       .from("tipos_divida")
-      .select("id")
-      .eq("tenant_id", tenant_id)
-      .ilike("nome", "cheque")
-      .maybeSingle();
-    chequeTipoDividaId = tipoCheque?.id || null;
+      .select("id, nome, credor_id")
+      .eq("tenant_id", tenant_id);
+
+    if (allTiposDivida && allTiposDivida.length > 0) {
+      // Build name → id maps, prioritizing credor-specific over generic
+      const nameToIdGeneric = new Map<string, string>();
+      const nameToIdCredor = new Map<string, string>();
+      for (const td of allTiposDivida) {
+        const normalizedName = (td.nome || "").trim().toLowerCase();
+        if (td.credor_id === credor) {
+          nameToIdCredor.set(normalizedName, td.id);
+        } else if (!td.credor_id) {
+          nameToIdGeneric.set(normalizedName, td.id);
+        }
+      }
+
+      // Resolve: prefer credor-specific, fallback to generic
+      const resolve = (name: string): string | undefined =>
+        nameToIdCredor.get(name) || nameToIdGeneric.get(name);
+
+      // Map PaymentType codes to tipo_divida names
+      const paymentTypeNameMap: Record<string, string> = {
+        "1": "dinheiro",
+        "2": "cheque",
+        "3": "cartão de crédito",  // Débito → Cartão de Crédito
+        "4": "cartão de crédito",  // Crédito → Cartão de Crédito
+        "5": "boleto",
+        "6": "cheque caução",
+        "7": "transferência bancária",
+      };
+
+      for (const [ptCode, tdName] of Object.entries(paymentTypeNameMap)) {
+        const id = resolve(tdName);
+        // For cheque caução, fallback to cheque if not found
+        if (!id && tdName === "cheque caução") {
+          const fallback = resolve("cheque");
+          if (fallback) paymentTypeToDividaMap.set(ptCode, fallback);
+        } else if (!id && tdName === "transferência bancária") {
+          // Try alternate names
+          const fallback = resolve("transf. bancária") || resolve("transferencia bancaria") || resolve("transf bancaria");
+          if (fallback) paymentTypeToDividaMap.set(ptCode, fallback);
+        } else if (id) {
+          paymentTypeToDividaMap.set(ptCode, id);
+        }
+      }
+    }
+    // Keep backward compat variable for logging
+    const chequeTipoDividaId = paymentTypeToDividaMap.get("2") || null;
     console.log(`[maxlist-import] chequeTipoDividaId resolved: ${chequeTipoDividaId}`);
+    console.log(`[maxlist-import] paymentTypeToDividaMap entries: ${JSON.stringify(Object.fromEntries(paymentTypeToDividaMap))}`);
 
     // Verify user belongs to tenant
     const { data: tenantUser } = await supabase
@@ -313,7 +357,7 @@ Deno.serve(async (req) => {
           : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
         data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
         motivo_devolucao: getVal(rawItem, "CheckReturnReason") ? String(getVal(rawItem, "CheckReturnReason")) : null,
-        tipo_divida_id: record.tipo_divida_id || ((rawPaymentType === 2 || rawPaymentType === 6) ? chequeTipoDividaId : null),
+        tipo_divida_id: record.tipo_divida_id || paymentTypeToDividaMap.get(String(rawPaymentType)) || null,
       };
 
       if (!mapped.cpf || !mapped.nome_completo) {
