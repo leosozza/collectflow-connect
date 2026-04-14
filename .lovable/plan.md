@@ -1,58 +1,55 @@
 
 
-# Preencher tipo_divida_id via sincronização MaxList
+# Otimização da Navegação — Layout Persistente + Skeleton Loaders
 
-## Garantia de segurança
+## Problema
+Cada rota renderiza uma nova instância de `<AppLayout>`, causando remontagem do sidebar e header a cada navegação. Páginas como `ClientDetailPage` substituem todo o conteúdo por "Carregando..." durante o fetch.
 
-A alteração **não afeta registros que já têm tipo_divida_id preenchido**. O campo está na lista `PROTECTED_FIELDS`, e o código de reconciliação (modo update) só atualiza campos protegidos quando o valor existente é NULL. Isso significa:
+## Alterações
 
-- Cheques que já receberam tipo_divida_id → **não serão tocados**
-- Registros com NULL → **receberão o tipo correto**
-- A atualização mensal continua funcionando normalmente
+### 1. `src/components/AppLayout.tsx`
+- Remover a prop `children` e a interface `AppLayoutProps`
+- Importar `Outlet` do `react-router-dom`
+- Substituir `{children}` por `<Outlet />` no `<main>`
 
-## O que muda
+### 2. `src/App.tsx`
+- Criar uma rota pai com `element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}`
+- Mover todas as rotas que hoje usam `<ProtectedRoute requireTenant><AppLayout>...</AppLayout></ProtectedRoute>` para dentro dessa rota pai como rotas filhas com apenas o componente de página
+- A rota raiz `/` (RootPage) permanece separada pois tem lógica condicional própria
+- Rotas sem AppLayout (auth, onboarding, portal, admin, etc.) permanecem inalteradas
 
-### Arquivo: `supabase/functions/maxlist-import/index.ts`
-
-**Antes** (linhas 113-122): busca apenas "Cheque" em `tipos_divida`.
-
-**Depois**: busca **todos** os `tipos_divida` do tenant e cria um mapa `PaymentType → tipo_divida_id`:
-
+Exemplo da estrutura:
 ```text
-PaymentType → tipo_divida_id
-1 (Dinheiro)        → fdda7e09...
-2 (Cheque)          → f750a86e... (TESS)
-3 (Débito)          → 49ea87a9... (Cartão de Crédito TESS)
-4 (Crédito)         → 49ea87a9... (Cartão de Crédito TESS)
-5 (Boleto)          → 2cd925fd... (TESS)
-6 (Cheque Caução)   → 5654b6a2...
-7 (Transf. Bancária)→ 51c16e0b...
-10, 11              → NULL (sem equivalente)
+<Route element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}>
+  <Route index element={<Index />} />
+  <Route path="carteira" element={<CarteiraPage />} />
+  <Route path="carteira/:cpf" element={<ClientDetailPage />} />
+  <Route path="cadastros/:tab?" element={<CadastrosPage />} />
+  ...todas as rotas protegidas com AppLayout...
+</Route>
 ```
 
-**Linha 316**: substituir a condicional de cheque por lookup no mapa completo:
-```typescript
-// Antes
-tipo_divida_id: record.tipo_divida_id || ((rawPaymentType === 2 || rawPaymentType === 6) ? chequeTipoDividaId : null)
+A rota `/` precisará de tratamento especial: o `RootPage` decide entre LandingPage (sem layout) e redirecionar para o layout. Vou ajustar para que usuários logados não-superadmin caiam na rota index dentro do layout group.
 
-// Depois
-tipo_divida_id: record.tipo_divida_id || paymentTypeToDividaMap.get(String(rawPaymentType)) || null
-```
+### 3. `src/pages/ClientDetailPage.tsx`
+- Substituir o bloco `if (isLoading) return <div>Carregando...</div>` por skeleton loaders que mantêm a estrutura da página visível (header com botão voltar, tabs, cards esqueleto)
 
-## Lógica de resolução do mapa
+### 4. Outras páginas com loading genérico
+- Aplicar o mesmo padrão de skeleton em páginas que usam loading full-replacement (buscar e corrigir os principais: `PerfilPage`, `ConfiguracoesPage`, etc.)
 
-1. Buscar todos `tipos_divida` do tenant
-2. Criar mapa por nome (case-insensitive): `"boleto" → id`, `"cheque" → id`, etc.
-3. Mapear cada PaymentType para o nome correspondente
-4. Priorizar tipo_divida com `credor_id` do credor atual; senão, usar genérico
+## O que NÃO muda
+- Lógica de autenticação e proteção de rotas
+- Rotas do SuperAdmin (já usam `SuperAdminLayout` com Outlet)
+- ModuleGuard continua envolvendo as rotas que precisam
 
-## Nenhuma outra alteração
+## Resultado
+- Sidebar e header nunca remontam durante navegação entre páginas protegidas
+- Estado do sidebar (collapsed, scroll) é preservado
+- Carregamento de dados acontece de forma fluida com skeletons dentro do layout já montado
 
-- Sem mudança no frontend
-- Sem migration
-- Sem alteração na lógica de PROTECTED_FIELDS ou reconciliação
-
-## Como usar
-
-Após deploy, usar "Atualizar Parcelas" ou "Sincronizar por Período" no MaxList. Os 419k registros com NULL receberão o tipo_divida_id correto progressivamente.
+## Arquivos alterados
+- `src/components/AppLayout.tsx`
+- `src/App.tsx`
+- `src/pages/ClientDetailPage.tsx`
+- `src/pages/PerfilPage.tsx`
 
