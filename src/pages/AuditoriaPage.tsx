@@ -47,6 +47,8 @@ const actionLabels: Record<string, string> = {
   observation_added: "Observação",
   atendimento_takeover: "Takeover",
   operator_assigned: "Atribuição Operador",
+  maxlist_import: "Importação MaxList",
+  maxlist_update: "Atualização MaxList",
 };
 
 const entityLabels: Record<string, string> = {
