@@ -59,7 +59,7 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
   };
 
   return (
-    <Popover>
+    <Popover modal>
       <PopoverTrigger asChild>
         <div className="relative w-full">
           <Input
@@ -72,7 +72,14 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
           <CalendarIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        avoidCollisions={false}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Calendar
           mode="single"
           selected={selected}
