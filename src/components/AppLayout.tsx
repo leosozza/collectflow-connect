@@ -19,13 +19,10 @@ import {
   Phone,
   MessageCircle,
   Trophy,
-  BarChart3,
   Building2,
   BookUser,
   Zap,
   Handshake,
-  FileBarChart,
-  ShieldCheck,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
