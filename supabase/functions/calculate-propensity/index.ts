@@ -304,20 +304,21 @@ Deno.serve(async (req) => {
     if (cpf) {
       targetCpfs = [cpf.replace(/\D/g, "")];
     } else {
-      // Get distinct CPFs from recent events for this tenant
-      const { data: eventCpfs } = await supabase
-        .from("client_events")
-        .select("client_cpf")
-        .eq("tenant_id", tenantId)
-        .gte("created_at", ninetyDaysAgo.toISOString());
+      // Get distinct CPFs from recent events using RPC (efficient)
+      const { data: eventCpfs, error: rpcErr } = await supabase
+        .rpc("get_distinct_event_cpfs", {
+          p_tenant_id: tenantId,
+          p_since: ninetyDaysAgo.toISOString(),
+        });
+
+      if (rpcErr) {
+        console.error("[calculate-propensity] RPC error:", rpcErr.message);
+      }
 
       if (eventCpfs && eventCpfs.length > 0) {
-        const cpfSet = new Set<string>();
         for (const e of eventCpfs) {
-          const clean = e.client_cpf.replace(/\D/g, "");
-          if (clean.length >= 11) cpfSet.add(clean);
+          if (e.cpf && e.cpf.length >= 11) targetCpfs.push(e.cpf);
         }
-        targetCpfs = Array.from(cpfSet);
       }
     }
 
