@@ -63,6 +63,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
   const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
   const [descontoReais, setDescontoReais] = useState<number | "">(0);
+  const [discountSource, setDiscountSource] = useState<"percent" | "amount">("percent");
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
