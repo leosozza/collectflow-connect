@@ -1,66 +1,26 @@
 
 
-# Correção: Geração de boletos com múltiplas entradas
+# Correção: Coluna `motivo_devolucao` ausente na tabela `clients`
 
-## Problema identificado
+## Problema
 
-A edge function `generate-agreement-boletos` tem a função `buildInstallments` (linhas 75-101) que **só reconhece uma única entrada** (`customValues["entrada"]`). Quando o operador configura múltiplas entradas (ex: `entrada`, `entrada_2`, `entrada_3`), apenas a primeira é incluída na geração de boletos. As demais são ignoradas.
+A edge function `maxlist-import` (linha 359) mapeia o campo `CheckReturnReason` da API MaxSystem para `motivo_devolucao`, mas essa coluna não existe na tabela `clients`. Isso causa falha em **todos os batches** de upsert, resultando em 0 inseridos/atualizados.
 
-Além disso, todas as entradas recebem `number: 0`, o que gera `installment_key` duplicado (`agreement_id:0`) para todas elas, causando conflitos na tabela `negociarie_cobrancas`.
+## Solução
 
-O frontend (classifier) já trata múltiplas entradas corretamente. O problema é exclusivamente na edge function.
+### 1. Migration: adicionar coluna `motivo_devolucao`
 
-## Comparação
-
-```text
-Frontend (agreementInstallmentClassifier.ts)     Edge Function (buildInstallments)
-──────────────────────────────────────────────    ─────────────────────────────────
-Busca todas as keys "entrada*" no customValues   Só busca customValues["entrada"]
-Cria uma entrada por key                         Cria no máximo 1 entrada
-Usa key como identificador ("entrada_2")         Usa number: 0 para todas
+```sql
+ALTER TABLE public.clients ADD COLUMN motivo_devolucao text;
 ```
 
-## Alteração
+Apenas isso. Uma coluna `text` nullable, sem constraints.
 
-### Arquivo: `supabase/functions/generate-agreement-boletos/index.ts`
+### 2. Nenhuma alteração na edge function
 
-Reescrever a função `buildInstallments` para:
+O código já está correto — só faltava a coluna no banco.
 
-1. Coletar todas as chaves `entrada*` do `custom_installment_values` (mesma lógica do classifier)
-2. Gerar uma `InstallmentInfo` para cada entrada, usando a **key** como identificador (não `number: 0`)
-3. Ajustar o campo `number` para diferenciar entradas (ex: `number: -1` para entrada_2, ou usar string key)
+## Resultado
 
-Como `InstallmentInfo.number` é usado para gerar o `installment_key`, preciso mudar a interface para incluir uma `key` string:
-
-```typescript
-interface InstallmentInfo {
-  number: number;
-  key: string;      // "entrada", "entrada_2", "1", "2", etc.
-  value: number;
-  dueDate: string;
-  isEntrada: boolean;
-}
-```
-
-E no loop de geração (linha 218), usar `inst.key` em vez de `inst.number` para o `installment_key`:
-
-```typescript
-// Antes
-const installmentKey = `${agreement_id}:${inst.number}`;
-
-// Depois  
-const installmentKey = `${agreement_id}:${inst.key}`;
-```
-
-E ajustar o label da mensagem do boleto para distinguir "Entrada 1", "Entrada 2", etc.
-
-## Resultado esperado
-
-- Acordos com 2+ entradas geram boletos para **todas** as entradas
-- Cada entrada tem seu próprio `installment_key` único
-- Compatível com a classificação existente no frontend
-- Acordos com entrada única continuam funcionando igual
-
-## Arquivo alterado
-- `supabase/functions/generate-agreement-boletos/index.ts` (redeploy)
+Após a migration, a importação/atualização MaxList voltará a funcionar normalmente. Os registros com cheque devolvido receberão o código do motivo de devolução.
 
