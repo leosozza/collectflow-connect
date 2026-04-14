@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useTenant } from "@/hooks/useTenant";
 import DispositionSelector from "./DispositionSelector";
 import AISummaryPanel from "./AISummaryPanel";
+import DebtorProfileBadge from "@/components/shared/DebtorProfileBadge";
 
 interface ContactSidebarProps {
   conversation: Conversation | null;
@@ -30,6 +31,7 @@ interface SimpleClient {
   numero_parcela: number;
   total_parcelas: number;
   status_cobranca_id: string | null;
+  debtor_profile: string | null;
 }
 
 
@@ -54,7 +56,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
     }
     supabase
       .from("clients")
-      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id")
+      .select("id, nome_completo, cpf, phone, status, credor, valor_parcela, numero_parcela, total_parcelas, status_cobranca_id, debtor_profile")
       .eq("id", conversation.client_id)
       .maybeSingle()
       .then(({ data }) => {
@@ -266,6 +268,19 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
             conversationId={conversation.id}
             tenantId={conversation.tenant_id || ""}
           />
+        )}
+
+        {/* Perfil do Devedor */}
+        {linkedClient && conversation && (
+          <div className="mb-3">
+            <DebtorProfileBadge
+              clientId={linkedClient.id}
+              clientCpf={linkedClient.cpf}
+              tenantId={conversation.tenant_id || ""}
+              currentProfile={linkedClient.debtor_profile}
+              onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
+            />
+          </div>
         )}
 
         {/* Linked client */}
