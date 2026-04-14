@@ -5,6 +5,7 @@ import { autoCancelProtestsForCpf } from "@/services/protestoService";
 import { autoCancelSerasaForCpf } from "@/services/serasaService";
 import { logger } from "@/lib/logger";
 import { handleServiceError } from "@/lib/errorHandler";
+import { recalcScoreForCpf } from "@/hooks/useScoreRecalc";
 
 
 export interface Agreement {
@@ -290,6 +291,9 @@ export const createAgreement = async (
       }
     }
 
+    // Recalc score after agreement creation
+    recalcScoreForCpf(data.client_cpf).catch(() => {});
+
     return agreement;
   } catch (error) {
     handleServiceError(error, MODULE);
@@ -341,6 +345,9 @@ export const approveAgreement = async (
     } catch (e) {
       logger.error(MODULE, "auto_generate_boletos_after_approval", e);
     }
+
+    // Recalc score after approval
+    recalcScoreForCpf(agreement.client_cpf).catch(() => {});
   } catch (error) {
     handleServiceError(error, MODULE);
   }
@@ -451,6 +458,11 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+
+    // Recalc score after cancellation
+    if (agreement?.client_cpf) {
+      recalcScoreForCpf(agreement.client_cpf).catch(() => {});
+    }
   } catch (error) {
     handleServiceError(error, MODULE);
   }
