@@ -24,6 +24,8 @@ import {
   BookUser,
   Zap,
   Handshake,
+  FileBarChart,
+  ShieldCheck,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
