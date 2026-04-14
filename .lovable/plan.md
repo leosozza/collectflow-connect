@@ -1,49 +1,75 @@
 
 
-# Excluir e reimportar registros de cheque (escopo expandido por CPF)
+# Análise: Sistema fica atualizando ao entrar no perfil do cliente
 
-## Descoberta
+## Causa Raiz
 
-Os 12.974 registros com `data_devolucao` pertencem a CPFs que também possuem **12.544 registros adicionais sem data de devolução** -- provavelmente parcelas do mesmo cheque que não foram devolvidas. Para que a reimportação cubra o cliente completo, precisamos excluir **todos os 25.518 registros** desses CPFs.
+O problema está na cascata de re-renders causada pela interação entre `useAuth` e `useTenant`:
+
+### Fluxo atual (problemático)
 
 ```text
-Registros com data_devolucao:    12.974
-Registros sem data_devolucao:    12.544  (mesmo CPF)
-─────────────────────────────────────────
-Total a excluir:                 25.518
-Acordos vinculados:              0
-Tabulações vinculadas:           0
+1. Página monta → useAuth inicia
+2. getSession() resolve → setUser(userObj_A), setLoading(false)
+   → useTenant useEffect dispara (user mudou)
+   → fetchTenantData() → 4 RPCs + 2 queries → setTenant, setTenantUser, setPlan
+   → Todos os componentes filhos re-renderizam
+   → Todas as queries (client-detail, agreements, tipos_devedor, etc.) re-executam
+
+3. onAuthStateChange(INITIAL_SESSION) dispara → setUser(userObj_B)  ← NOVO objeto, mesmo usuário
+   → useTenant useEffect dispara NOVAMENTE (referência de user mudou)
+   → fetchTenantData() executa TUDO de novo
+   → setTenant(novo obj), setTenantUser(novo obj), setPlan(novo obj)
+   → TODOS os componentes re-renderizam DE NOVO
+   → TODAS as queries re-executam DE NOVO
+
+4. TOKEN_REFRESHED (a cada ~1h) → mesmo ciclo se repete
 ```
 
-Zero risco de perda de dados operacionais.
+O `user` no `useAuth` é substituído por um novo objeto a cada evento do Supabase Auth, mesmo que seja o mesmo usuário. Como o `useEffect` em `useTenant` depende de `[user, authLoading]`, ele re-executa `fetchTenantData` toda vez que a referência de `user` muda — recriando objetos de `tenant`, `tenantUser` e `plan`, que por sua vez invalidam todas as queries dependentes.
 
-## Plano
+### Impacto na página do cliente
 
-### Passo 1 -- Excluir todos os registros dos CPFs de cheque
+A `ClientDetailPage` tem ~6 queries (`client-detail`, `client-agreements`, `tipos_devedor`, `tipos_divida`, `tipos_status`, `client_phones`). Cada ciclo de re-render dispara todas elas novamente, causando o efeito visual de "ficar atualizando".
 
-```sql
-DELETE FROM clients 
-WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7'
-  AND cpf IN (
-    SELECT DISTINCT cpf FROM clients
-    WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7'
-      AND data_devolucao IS NOT NULL
-  );
+## Solução
+
+### 1. Estabilizar referência do `user` em `useAuth`
+Só atualizar o state `user` se o `user.id` realmente mudou:
+
+```typescript
+// useAuth.tsx
+const setUserStable = (newUser: User | null) => {
+  setUser(prev => {
+    if (prev?.id === newUser?.id) return prev; // mesma referência
+    return newUser;
+  });
+};
 ```
 
-Isso remove os 25.518 registros (com e sem data de devolução) dos CPFs que possuem cheques.
+### 2. Estabilizar `useTenant` — depender de `user?.id` em vez de `user`
+Usar `user?.id` como dependência do useEffect (string primitiva, não muda de referência):
 
-### Passo 2 -- Reimportar via MaxList
+```typescript
+// useTenant.tsx
+useEffect(() => {
+  fetchTenantData();
+}, [user?.id, authLoading]);  // ← string primitiva, não objeto
+```
 
-Reimportar usando o filtro "Data Dev. Cheque" na interface. A lógica do `maxlist-import` já preenche `tipo_divida_id` com o ID de "Cheque" quando `rawPaymentType` é 2 ou 6.
+### 3. Evitar recriar objetos desnecessariamente em `useTenant`
+Só atualizar `tenant`/`tenantUser` se os dados realmente mudaram (comparar IDs).
 
 ## Resultado esperado
+- Ao entrar no perfil do cliente, os dados carregam **uma única vez**
+- Sem flickering ou re-renders em cascata
+- Token refresh (a cada ~1h) não causa reload visível
 
-Após reimportar, todos os registros de cheque terão `tipo_divida_id` preenchido e o filtro na Carteira funcionará corretamente.
+## Arquivos a alterar
+- `src/hooks/useAuth.tsx` — estabilizar `setUser`
+- `src/hooks/useTenant.tsx` — dependência por `user?.id` e comparação antes de `setState`
 
 ## Detalhes técnicos
 
-- Será usado o tool de delete para executar o SQL
-- Nenhuma alteração de código necessária
-- A reimportação é feita pelo usuário na interface MaxList
+Nenhuma migration necessária. A correção é puramente frontend, focada em evitar re-renders desnecessários pela estabilização de referências de objetos no React.
 
