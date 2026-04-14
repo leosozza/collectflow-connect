@@ -63,7 +63,7 @@ const AppLayout = () => {
   };
 
   const preContactItems = [
-    { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+    { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
     ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
