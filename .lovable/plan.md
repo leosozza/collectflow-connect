@@ -1,58 +1,117 @@
 
 
-# Documento PDF de Funcionalidades + Atualização do Roadmap
+# Correção Completa de Mídia e Transcrição — WhatsApp
 
-## Resumo
+## Diagnóstico do Estado Atual
 
-Gerar um PDF profissional listando todas as funcionalidades do RiVO Connect, categorizadas em: **Prontas**, **Em Desenvolvimento** e **Futuras**. Simultaneamente, atualizar o arquivo `docs/SCORE_V1_ROADMAP.md` para um roadmap geral do produto.
+Após análise detalhada de todos os arquivos envolvidos, o sistema já tem uma base sólida. Os problemas reais são pontuais:
 
-## PDF — Estrutura do Documento
+### O que já funciona:
+- `media-persistence.ts` — download + upload para bucket `chat-media` ✅
+- `whatsapp-webhook` — parse de image/audio/video/document + persistência + transcrição ✅
+- `gupshup-webhook` — parse + persistência + transcrição + mapeamento `file→document` ✅
+- `whatsapp-sender.ts` — envio separado por provider (Evolution, WuzAPI, Gupshup) ✅
+- `send-chat-message` — conversão WebM→OGG para Gupshup ✅
+- `transcribe-audio` — pipeline com Gemini + metadata ✅
+- `ChatMessage.tsx` — renderização de image/audio/video/document/sticker + transcrição ✅
+- `ChatInput.tsx` — upload de arquivos + gravação de áudio ✅
 
-**Título**: "RiVO Connect — Mapa de Funcionalidades"
-**Formato**: PDF A4, cores da marca, gerado via ReportLab
+### Problemas identificados:
 
-### Seções do PDF:
+1. **Webhook não-oficial**: `conversationId` é passado como `"pending"` na persistência de mídia, não como o ID real da conversa (cosmético no path do storage, mas inconsistente)
+2. **Gupshup webhook**: mesmo problema — `"pending"` no path
+3. **Gupshup webhook**: `_endpoint_id` não é passado quando usa `ingest_channel_event` (sem instanceName), pode falhar a associação
+4. **send-chat-message**: persiste `mediaUrl` original do frontend (URL do bucket) mas se houve conversão WebM→OGG, o `media_url` salvo no RPC ainda aponta para a URL original WebM, não a OGG convertida
+5. **Gupshup media sender**: campo `audio.url` pode estar incorreto — Gupshup espera `url` para áudio mas com filename obrigatório
+6. **Gupshup media sender**: imagem usa `originalUrl` mas não `caption` de forma consistente
+7. **Transcrição**: não há tratamento para áudios outbound gravados pelo operador
+8. **Frontend**: `handleSendMedia` determina mediaType pelo MIME do browser, mas não valida se o tipo é compatível antes de enviar
+9. **Logs de erro**: falhas de envio de mídia não são logadas na tabela `webhook_logs`
 
-**1. Funcionalidades Prontas (✅)**
-- **CRM de Cobrança**: Carteira de clientes (tabela + kanban), detalhe do devedor, histórico, filtros avançados, importação de planilhas
-- **Contact Center WhatsApp**: Chat em tempo real, múltiplas instâncias (Evolution/WuzAPI/Gupshup/Baylers), vinculação de cliente, tabulação na conversa, perfil do devedor (hover selector), disparo em lote com Anti-Ban
-- **Contact Center Telefonia**: Integração 3CPlus, discador, tabulação de chamadas
-- **Gestão de Acordos**: Calculadora de acordos, parcelas, assinatura digital (facial + digital), portal do devedor
-- **Portal do Devedor**: Consulta por CPF, lista de dívidas, negociação, checkout com Asaas, assinatura biométrica
-- **Documentos**: Geração de 5 tipos (acordo, recibo, quitação, descrição de dívida, notificação extrajudicial), templates por credor/tenant/default, preview A4, download PDF
-- **Automação**: Réguas de cobrança, workflows visuais (ReactFlow), triggers automáticos (vencimento, sem contato), templates WhatsApp
-- **Score Operacional V1**: Motor heurístico de 4 dimensões, timeline de eventos, recálculo automático, metadados (canal preferido, fila sugerida)
-- **Gamificação**: Ranking, conquistas, metas, loja de recompensas, campanhas, carteira de pontos
-- **Integrações**: Serasa, Protesto, TargetData (enriquecimento), Asaas (pagamentos), MaxSystem, CobCloud, Negociarie
-- **Relatórios**: Aging, evolução, comparativos, exportação CSV/XLSX
-- **Financeiro**: Despesas, checkout de pagamentos, comissões por faixa
-- **Administração**: Multi-tenant, controle de módulos, gestão de usuários e roles, auditoria, sistema de tokens
-- **IA**: Sugestão de respostas no WhatsApp, suporte via IA
-- **API Pública**: REST API de clientes com documentação
-- **Notificações**: Sistema em tempo real, celebração de acordos
+---
 
-**2. Em Desenvolvimento (🔧)**
-- **Anti-Ban Backend Lock**: Throttling inteligente para disparos WhatsApp (8-15s + pausas de lote) — recém-implementado, em validação
-- **Perfil do Devedor no Discador**: Seletor hover no atendimento telefônico
-- **Score V1 — Calibração**: Ajuste fino dos pesos do motor heurístico com dados reais
+## Plano de Execução (5 Fases)
 
-**3. Funcionalidades Futuras (🔮)**
-- **Score V2 — Vinculação automática WhatsApp↔cliente** por telefone
-- **Score V3 — IA por Voz e Texto**: Speech-to-text, análise semântica de chamadas e WhatsApp
-- **Score V4 — Avançado**: IA complementar, dashboards operacionais, A/B testing
-- **IA Negociação WhatsApp**: Agente autônomo de negociação
-- **IA Negociação Telefonia**: Agente de voz para negociação
-- **Dashboard de eventos por cliente**
-- **Machine Learning supervisionado** para predição
+### Fase 1 — Recebimento de Mídia por Provider
 
-## Roadmap — Atualização
+**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
+- Usar o `conversation_id` retornado pelo RPC para atualizar o path no storage (ou aceitar "pending" como path válido — é funcional)
+- Adicionar log estruturado com `[provider=unofficial]` em cada mídia recebida
+- Garantir que `media_mime_type` do provider não seja perdido quando `contentType` do download difere
 
-Criar/atualizar `docs/ROADMAP.md` com visão geral do produto (não apenas score), incluindo as fases acima.
+**Arquivo: `supabase/functions/gupshup-webhook/index.ts`**
+- Adicionar extração de `filename` do payload Gupshup (`msgPayload.payload?.name` ou `msgPayload.payload?.filename`)
+- Salvar `filename` no `_content` quando for documento (já faz parcialmente)
+- Adicionar log com `[provider=gupshup]` em cada mídia
+- Resolver `_endpoint_id`: buscar instância Gupshup do tenant para passar ao RPC
 
-## Arquivos
+**Arquivo: `supabase/functions/_shared/media-persistence.ts`**
+- Adicionar suporte a `audio/webm` no mapa de extensões
+- Adicionar `audio/amr` (formato comum em WhatsApp oficial antigo)
+- Logging melhorado com tamanho do arquivo e tempo de download
+
+### Fase 2 — Envio de Mídia por Provider
+
+**Arquivo: `supabase/functions/send-chat-message/index.ts`**
+- Corrigir: após conversão WebM→OGG, usar `media.mediaUrl` (convertido) no RPC de persistência, não a URL original
+- Adicionar validação de MIME real para áudio oficial: se o MIME não for `audio/ogg`, `audio/mpeg` ou `audio/mp4`, converter
+- Adicionar log estruturado: provider, mediaType, mimeType, resultado do envio
+- Persistir `provider_message_id` consistentemente para mídia
+
+**Arquivo: `supabase/functions/_shared/whatsapp-sender.ts`**
+- **Gupshup audio**: garantir que `filename` seja sempre enviado (ex: `audio.ogg`)
+- **Gupshup document**: adicionar `caption` como campo separado se houver
+- **Evolution**: validar que `sendMedia` aceita o campo `mimetype` para todos os tipos (não só document/audio)
+- Adicionar log de request/response por provider para debug
+
+### Fase 3 — Transcrição de Áudio
+
+**Arquivo: `supabase/functions/transcribe-audio/index.ts`**
+- Já funcional — apenas melhorar o mapeamento de formato: `ogg` → `wav` fallback (Gemini aceita)
+- Adicionar log de duração da transcrição
+
+**Arquivos: `whatsapp-webhook` e `gupshup-webhook`**
+- Já disparam transcrição para áudio inbound ✅
+- Adicionar disparo para áudio outbound (gravado pelo operador) — fire-and-forget também
+
+### Fase 4 — Frontend de Mídia
+
+**Arquivo: `src/components/contact-center/whatsapp/ChatMessage.tsx`**
+- Já renderiza todos os tipos corretamente ✅
+- Melhorar: mostrar caption separado do filename para documentos
+- Melhorar: adicionar ícone de download explícito no card de documento
+
+**Arquivo: `src/components/contact-center/whatsapp/ChatInput.tsx`**
+- Já funcional ✅ — sem alterações necessárias
+
+**Arquivo: `src/services/conversationService.ts`**
+- Já funcional ✅ — sem alterações necessárias
+
+### Fase 5 — Logs, Status e Robustez
+
+**Arquivo: `supabase/functions/send-chat-message/index.ts`**
+- Adicionar log estruturado de falhas no `webhook_logs`
+- Quando envio falha, persistir mensagem com `status: "failed"` em vez de retornar erro 502 sem registro
+
+**Arquivo: `supabase/functions/_shared/whatsapp-sender.ts`**
+- Retornar informações de erro mais detalhadas (HTTP status, body do provider)
+
+---
+
+## Arquivos Afetados
 
 | Ação | Arquivo |
 |---|---|
-| Gerar | `/mnt/documents/RiVO_Connect_Funcionalidades.pdf` |
-| Criar/Atualizar | `docs/ROADMAP.md` (roadmap geral do produto) |
+| Editar | `supabase/functions/_shared/media-persistence.ts` |
+| Editar | `supabase/functions/_shared/whatsapp-sender.ts` |
+| Editar | `supabase/functions/whatsapp-webhook/index.ts` |
+| Editar | `supabase/functions/gupshup-webhook/index.ts` |
+| Editar | `supabase/functions/send-chat-message/index.ts` |
+| Editar | `supabase/functions/transcribe-audio/index.ts` |
+| Editar | `src/components/contact-center/whatsapp/ChatMessage.tsx` |
+
+## O que NÃO será alterado
+- Campanhas, automação, fila waiting/open, reply, filtros, /atendimento
+- ChatInput, ConversationService, WhatsAppChatLayout (já funcionais)
+- Nenhuma migração de banco necessária (metadata JSONB já suporta tudo)
 
