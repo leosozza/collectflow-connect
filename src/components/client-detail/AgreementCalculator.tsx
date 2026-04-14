@@ -61,8 +61,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [jurosPercent, setJurosPercent] = useState<number>(0);
   const [multaPercent, setMultaPercent] = useState<number>(0);
   const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
-  const [descontoPercent, setDescontoPercent] = useState<number>(0);
-  const [descontoReais, setDescontoReais] = useState<number>(0);
+  const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
+  const [descontoReais, setDescontoReais] = useState<number | "">(0);
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
@@ -171,13 +171,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     const totalMulta = selected.reduce((s, r) => s + r.multaVal, 0);
     const totalHonorarios = selected.reduce((s, r) => s + r.honorariosVal, 0);
     const totalBruto = selected.reduce((s, r) => s + r.total, 0);
-    const descontoVal = totalBruto * (descontoPercent / 100);
-    const totalAtualizado = Math.max(0, totalBruto - descontoVal);
+    const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
+    const descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
+    const totalAtualizado = Math.round(Math.max(0, totalBruto - descontoVal) * 100) / 100;
     return { totalOriginal, totalBase, totalJuros, totalMulta, totalHonorarios, totalBruto, descontoVal, totalAtualizado };
   }, [rowCalcs, selectedIds, descontoPercent]);
 
   const remainingAfterEntrada = Math.max(0, totals.totalAtualizado - numEntrada);
-  const installmentValue = numParcelas > 0 ? remainingAfterEntrada / numParcelas : 0;
+  const installmentValue = numParcelas > 0 ? Math.round((remainingAfterEntrada / numParcelas) * 100) / 100 : 0;
 
   const toggleId = (id: string) => {
     setSelectedIds((prev) => {

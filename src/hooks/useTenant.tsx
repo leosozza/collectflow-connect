@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, useMemo, createContext, useContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -186,20 +186,23 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
     return currentCount < max;
   };
 
+  const value = useMemo(
+    () => ({
+      tenant,
+      tenantUser,
+      plan,
+      loading,
+      isSuperAdmin,
+      isTenantAdmin,
+      canAccess,
+      checkLimit,
+      refetch: fetchTenantData,
+    }),
+    [tenant, tenantUser, plan, loading, isSuperAdmin, isTenantAdmin]
+  );
+
   return (
-    <TenantContext.Provider
-      value={{
-        tenant,
-        tenantUser,
-        plan,
-        loading,
-        isSuperAdmin,
-        isTenantAdmin,
-        canAccess,
-        checkLimit,
-        refetch: fetchTenantData,
-      }}
-    >
+    <TenantContext.Provider value={value}>
       {children}
     </TenantContext.Provider>
   );

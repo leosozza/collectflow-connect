@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, useMemo, createContext, useContext } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       .eq("user_id", userId)
       .maybeSingle();
     if (data) {
-      setProfile(data as Profile);
+      setProfileStable(data as Profile);
     }
   };
 
@@ -54,6 +54,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(prev => {
       if (prev?.id === newUser?.id) return prev;
       return newUser;
+    });
+  };
+
+  // Stable setter: only update profile state when the profile ID actually changes
+  const setProfileStable = (newProfile: Profile | null) => {
+    setProfile(prev => {
+      if (prev?.id === newProfile?.id) return prev;
+      return newProfile;
     });
   };
 
@@ -108,8 +116,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setProfile(null);
   };
 
+  const value = useMemo(
+    () => ({ user, session, profile, loading, signIn, signUp, signOut }),
+    [user, session, profile, loading]
+  );
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
