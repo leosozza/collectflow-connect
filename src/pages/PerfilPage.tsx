@@ -3,6 +3,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import PersonalDataTab from "@/components/perfil/PersonalDataTab";
 import SecurityTab from "@/components/perfil/SecurityTab";
 
