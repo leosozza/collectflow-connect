@@ -24,6 +24,8 @@ import {
   BookUser,
   Zap,
   Handshake,
+  FileBarChart,
+  ShieldCheck,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -67,6 +69,9 @@ const AppLayout = () => {
     ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
+    ...(permissions.canViewRelatorios ? [{ label: "Relatórios", icon: FileBarChart, path: "/relatorios" }] : []),
+    ...(permissions.canViewOwnAnalytics ? [{ label: "Analytics", icon: BarChart3, path: "/analytics" }] : []),
+    ...(permissions.canViewAuditoria ? [{ label: "Auditoria", icon: ShieldCheck, path: "/auditoria" }] : []),
   ];
 
   const contactCenterEnabled = isModuleEnabled("contact_center");
@@ -290,6 +295,7 @@ const AppLayout = () => {
                 "/relatorios": "Relatórios",
                 "/analytics": "Analytics",
                 "/cadastros": "Cadastros",
+                "/auditoria": "Auditoria",
                 "/configuracoes": "Configurações",
                 "/central-empresa": "Central Empresa",
                 "/signs": "Assinatura Digital",
