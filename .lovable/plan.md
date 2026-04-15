@@ -1,57 +1,69 @@
 
 
-# Correção: Áudio chegando como documento não-reproduzível no WhatsApp
+# Correção: Áudio reproduzível no WhatsApp via Gupshup
 
 ## Problema
 
-O áudio gravado no browser é WebM/Opus. Ao enviar via Gupshup como `file`, chega como documento `.webm` — o destinatário não consegue ouvir inline. A API do Gupshup aceita `audio` apenas nos formatos OGG, MP3, AAC, AMR.
+O remuxer WebM→OGG produz um arquivo OGG tecnicamente aceito pelo Gupshup, mas o WhatsApp não consegue reproduzir — mostra "Este áudio não está mais disponível". O arquivo OGG gerado tem problemas estruturais (pre-skip=0, cálculo de duração de frame possivelmente incorreto).
 
-## Causa raiz
+## Diagnóstico
 
-WebM e OGG são apenas containers diferentes para o mesmo codec Opus. O browser (Chrome) grava em WebM, mas o Gupshup precisa de OGG para entregar como áudio reproduzível.
+O codec dentro do WebM e do OGG é o mesmo (Opus). Porém o remuxer customizado em TypeScript puro tem limitações:
+- Pre-skip definido como 0 (deveria ser ≥312 para inicialização correta do decoder Opus)
+- Assume frame de 960 samples (20ms) sem parsear o TOC byte real do Opus
+- Qualquer erro no parsing EBML ou na construção das páginas OGG resulta em arquivo não-reproduzível
 
-## Solução: Remux WebM→OGG no servidor
+## Solução: Corrigir o remuxer com pre-skip correto e parsing do TOC byte
 
-Como ambos os formatos usam o codec Opus, a conversão é apenas troca de container (sem re-encoding). Isso é feito com parsing leve em TypeScript puro, sem dependências externas.
+### 1. `supabase/functions/_shared/webm-to-ogg.ts`
 
-### Mudanças
+Duas correções críticas:
 
-#### 1. `supabase/functions/_shared/webm-to-ogg.ts` (novo)
-Remuxer puro TypeScript:
-- Parseia o container WebM/Matroska para extrair pacotes Opus brutos
-- Empacota os pacotes em container OGG com headers Opus corretos (OpusHead + OpusTags)
-- Retorna `Uint8Array` do arquivo OGG
-- ~150 linhas, zero dependências externas
-
-#### 2. `supabase/functions/send-chat-message/index.ts`
-No bloco `6b` (após detectar audio WebM + provider Gupshup):
-- Fetch do arquivo WebM do storage
-- Chamar `remuxWebmToOgg()` para converter
-- Upload do OGG convertido ao mesmo bucket `chat-media` com extensão `.ogg`
-- Atualizar `media.mediaUrl`, `media.mimeType`, `media.fileName`, `persistMediaUrl` e `persistMimeType` para apontar ao OGG
-- Log da conversão
-
-#### 3. `supabase/functions/_shared/whatsapp-sender.ts`
-Reverter mapeamento de `audio` de `file` para `audio`:
+**a) Pre-skip = 312** (valor padrão para encoder Opus, equivalente a 6.5ms de delay):
 ```typescript
-const typeMap: Record<string, string> = {
-  image: "image",
-  video: "video",
-  audio: "audio",    // ← volta para audio (agora será OGG válido)
-  document: "file",
-};
+headView.setUint16(10, 312, true); // pre-skip = 312 samples (standard Opus encoder delay)
 ```
-E adicionar branch para `audio` no payload Gupshup:
+
+**b) Parsear duração real do frame a partir do TOC byte de cada pacote Opus** ao invés de assumir 960 fixo:
 ```typescript
-} else if (gupType === "audio") {
-  msgPayload.url = media.mediaUrl;
+function getOpusFrameDuration(packet: Uint8Array): number {
+  if (packet.length === 0) return 960;
+  const toc = packet[0];
+  const config = (toc >> 3) & 0x1F;
+  // Mapping config → frame size in samples at 48kHz
+  const frameSizes = [480,960,1920,2880, 480,960,1920,2880,
+                      480,960,1920,2880, 480,960,
+                      480,960, 120,240,480,960,
+                      120,240,480,960, 120,240,480,960,
+                      120,240,480,960];
+  const baseSize = frameSizes[config] || 960;
+  const c = toc & 0x03;
+  if (c === 0) return baseSize;
+  if (c === 1 || c === 2) return baseSize * 2;
+  // c === 3: variable — read frame count from byte 1
+  if (packet.length < 2) return baseSize;
+  const frameCount = packet[1] & 0x3F;
+  return baseSize * frameCount;
 }
 ```
 
+E no loop de construção de páginas, usar a duração real:
+```typescript
+for (let i = 0; i < opusPackets.length; i++) {
+  granulePos += BigInt(getOpusFrameDuration(opusPackets[i]));
+  // ...build page...
+}
+```
+
+### 2. Sem outras alterações
+
+- O `send-chat-message/index.ts` já chama o remuxer corretamente
+- O `whatsapp-sender.ts` já envia como tipo `audio` com a URL do OGG
+- O frontend já grava e faz upload normalmente
+
 ### Resultado esperado
-- Áudio gravado em WebM → convertido para OGG no servidor → enviado como `audio` no Gupshup
-- Destinatário recebe áudio reproduzível inline no WhatsApp
-- Frontend continua exibindo o player normalmente (OGG é compatível com `<audio>`)
-- Providers não-oficiais (Evolution/WuzAPI) não são afetados
-- Transcrição continua funcionando (Opus codec é o mesmo)
+
+- OGG com pre-skip correto e granule positions precisas → WhatsApp consegue reproduzir inline
+- Sem re-encoding, apenas troca de container (operação rápida e leve)
+- Se o remuxer falhar, o fallback existente envia como `document` (arquivo baixável)
 
