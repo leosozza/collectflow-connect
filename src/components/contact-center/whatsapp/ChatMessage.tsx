@@ -69,9 +69,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
       case "audio":
         return (
           <div className="space-y-1.5">
-            <audio controls className="max-w-[250px]">
-              <source src={message.media_url || ""} type={message.media_mime_type || "audio/ogg"} />
-            </audio>
+            <audio src={message.media_url || ""} controls className="max-w-[250px]" />
             {/* Transcription block */}
             {transcription && (
               <div className={`flex items-start gap-1.5 px-2 py-1.5 rounded text-[12px] leading-[16px] ${
