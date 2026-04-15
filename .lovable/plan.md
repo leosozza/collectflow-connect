@@ -1,43 +1,54 @@
 
 
-# Download de Áudio no Chat WhatsApp
+# Correção: Áudio Gupshup conforme documentação oficial
 
-## O que será feito
+## Diagnóstico
 
-Adicionar um botão de download ao lado do player de áudio nas mensagens do chat, permitindo que o operador baixe o arquivo de áudio localmente. O comportamento será idêntico ao já existente para documentos (`handleDocumentDownload`).
-
-## Mudança
-
-### `src/components/contact-center/whatsapp/ChatMessage.tsx`
-
-No bloco `case "audio"` (linha 73-97), adicionar um botão `Download` ao lado do `<audio>`:
-
-- Envolver o `<audio>` e o botão em um `flex` horizontal
-- Reutilizar a função `handleDocumentDownload` já existente no componente
-- Usar o ícone `Download` (já importado) com estilo compacto
-- O filename será `audio.mp3` (ou extraído da URL se possível)
-
-```tsx
-case "audio":
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <audio src={message.media_url || ""} controls className="max-w-[250px]" />
-        {message.media_url && (
-          <button
-            type="button"
-            onClick={() => handleDocumentDownload(message.media_url!, "audio")}
-            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
-            title="Baixar áudio"
-          >
-            <Download className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
-      </div>
-      {/* transcrição permanece igual */}
-    </div>
-  );
+A documentação Gupshup confirma que o payload de áudio é apenas:
+```json
+{"type":"audio","url":"https://example.com/audio.mp3"}
 ```
 
-Nenhum outro arquivo será alterado.
+O problema é duplo:
+1. O browser grava em WebM/OGG, e o Gupshup rejeita esse formato no tipo `audio`
+2. A conversão client-side para MP3 via `lamejs` é frágil e falha silenciosamente em alguns browsers
+
+Você confirmou que enviar como **documento** (tipo `file`) funciona perfeitamente. A solução pragmática: no backend, mapear `audio` para `file` no Gupshup, eliminando a dependência de formato.
+
+## Mudanças
+
+### 1. `supabase/functions/_shared/whatsapp-sender.ts`
+
+Na função `sendGupshupMedia`, alterar o mapeamento de `audio` para `file`:
+
+```typescript
+const typeMap: Record<string, string> = {
+  image: "image",
+  video: "video",
+  audio: "file",      // audio como file — Gupshup aceita qualquer formato
+  document: "file",
+};
+```
+
+E no branch de `audio` (que agora cairá em `file`), garantir que `filename` seja incluído:
+- Remover o bloco `else if (gupType === "audio")` separado
+- O áudio passará pelo branch de `file` que já envia `url` + `filename`
+
+### 2. `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`
+
+Remover a conversão MP3 do `handleSendAudio` — não é mais necessária:
+- Remover o bloco `if (isOfficial)` com `convertBlobToMp3`
+- Manter apenas o upload do blob nativo do browser
+
+### 3. Cleanup
+
+- Remover `src/utils/audioConverter.ts` (não mais necessário)
+- Remover dependência `lamejs` do `package.json`
+
+### Resultado
+
+- Áudio gravado sobe no formato nativo do browser (WebM/OGG)
+- Gupshup recebe como `file` com `filename: "audio.ogg"` — entrega normalmente
+- Fluxo não oficial (Evolution/WuzAPI) permanece inalterado
+- Sem conversão client-side frágil
 
