@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, XCircle, Loader2, HandCoins, Pencil } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 interface PaymentConfirmationTabProps {
@@ -26,6 +27,7 @@ const RECEIVERS = ["CREDOR", "ASSESSORIA"];
 
 const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -154,7 +156,17 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
           <TableBody>
             {payments.map((p) => (
               <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.agreement?.client_name || "—"}</TableCell>
+                <TableCell>
+                  <span
+                    className="font-medium cursor-pointer text-primary hover:underline"
+                    onClick={() => {
+                      const cpf = p.agreement?.client_cpf?.replace(/\D/g, "");
+                      if (cpf) navigate(`/carteira/${cpf}?tab=acordo`);
+                    }}
+                  >
+                    {p.agreement?.client_name || "—"}
+                  </span>
+                </TableCell>
                 <TableCell className="text-sm">{p.agreement?.client_cpf || "—"}</TableCell>
                 <TableCell className="text-sm">{p.agreement?.credor || "—"}</TableCell>
                 <TableCell className="text-center text-sm">{getInstallmentLabel(p)}</TableCell>
