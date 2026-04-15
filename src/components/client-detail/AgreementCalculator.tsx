@@ -541,7 +541,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 setDiscountSource("amount");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoPercent(bruto > 0 ? Math.round((val / bruto) * 100 * 100) / 100 : 0);
-              }} className="h-7 text-xs px-2" />
+              }} onBlur={() => setDescontoReais(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             {credorRules?.indice_correcao_monetaria && (
               <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
@@ -656,9 +656,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 </div>
                 <div className="space-y-0.5">
                   <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
-                  <Input type="number" min={0} value={ent.value} onChange={(e) => {
+                  <Input type="text" inputMode="decimal" value={ent.value} onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
                     const next = [...entradas];
-                    next[idx] = { ...next[idx], value: e.target.value === "" ? "" : Number(e.target.value) };
+                    next[idx] = { ...next[idx], value: v === "" ? "" : Number(v) };
+                    setEntradas(next);
+                  }} onBlur={() => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], value: typeof next[idx].value === "number" ? next[idx].value : 0 };
                     setEntradas(next);
                   }} className="h-7 text-xs px-2" placeholder="0,00" />
                 </div>
@@ -694,7 +699,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-0.5">
                 <Label className="text-[10px]">Parcelas</Label>
-                <Input type="number" min={1} value={numParcelas} onChange={(e) => setNumParcelas(Number(e.target.value) || 1)} className="h-7 text-xs px-2" />
+                <Input type="text" inputMode="numeric" value={numParcelas} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setNumParcelas(v === "" ? "" : Number(v)); }} onBlur={() => setNumParcelas(prev => prev === "" || prev === 0 ? 1 : prev)} className="h-7 text-xs px-2" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
