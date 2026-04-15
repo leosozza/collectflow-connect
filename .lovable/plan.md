@@ -1,39 +1,15 @@
 
 
-# Tornar nome do cliente clicável em /acordos — todas as views
+# Transformar "Ir para Atendimento" em "Abrir Perfil do Cliente"
 
-## Situação atual
+## Alteração
 
-- `AgreementsList.tsx` — **já tem** nome clicável (navega para `/carteira/:cpf?tab=acordo`)
-- `PaymentConfirmationTab.tsx` — nome do cliente é **texto simples** (linha 157), sem link
+### Arquivo: `src/components/contact-center/whatsapp/ContactSidebar.tsx`
 
-## Solução
+Na linha 320-328, trocar:
+- **Texto**: "Ir para Atendimento" → "Abrir Perfil do Cliente"
+- **Ícone**: `Headphones` → `User` (ou `UserCircle`)
+- **Navegação**: `navigate(`/atendimento/${linkedClient.id}?channel=whatsapp`)` → `navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`)` — abre o perfil completo do cliente
 
-### Arquivo: `src/components/acordos/PaymentConfirmationTab.tsx`
-
-Adicionar `useNavigate` e tornar o nome do cliente clicável na tabela de baixas manuais, com a mesma lógica já usada em `AgreementsList`:
-
-```tsx
-// Linha 157 — de:
-<TableCell className="font-medium">{p.agreement?.client_name || "—"}</TableCell>
-
-// Para:
-<TableCell>
-  <span
-    className="font-medium cursor-pointer text-primary hover:underline"
-    onClick={() => {
-      const cpf = p.agreement?.client_cpf?.replace(/\D/g, "");
-      if (cpf) navigate(`/carteira/${cpf}?tab=acordo`);
-    }}
-  >
-    {p.agreement?.client_name || "—"}
-  </span>
-</TableCell>
-```
-
-Importar `useNavigate` de `react-router-dom` e instanciar no componente.
-
-### Resultado
-- Nome clicável em **todas** as abas de `/acordos` (lista principal + baixas manuais)
-- Ao clicar, abre o perfil do devedor direto na aba de acordo
+O botão "Atendimento" no header do chat já cumpre a função de abrir a tela de atendimento, então esse botão passa a dar acesso rápido ao perfil/carteira do cliente.
 
