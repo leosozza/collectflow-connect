@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { downloadAndUploadMedia } from "../_shared/media-persistence.ts";
+import { downloadAndUploadMedia, getExtFromMime } from "../_shared/media-persistence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
