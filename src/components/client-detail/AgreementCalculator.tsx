@@ -594,7 +594,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                       <TableHead className="px-2 text-right">Juros</TableHead>
                       <TableHead className="px-2 text-right">Multa</TableHead>
                       <TableHead className="px-2 text-right">Honorários</TableHead>
-                      <TableHead className="px-2 text-right font-semibold">Total</TableHead>
+                      <TableHead className="px-2 text-right font-semibold">
+                        <CollapsibleTrigger asChild>
+                          <button className="inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
+                            Total
+                            <ChevronDown className={`h-3.5 w-3.5 text-orange-500 transition-transform ${titlesOpen ? "rotate-180" : ""}`} />
+                          </button>
+                        </CollapsibleTrigger>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                 </Table>
@@ -633,36 +640,29 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 </div>
               </CollapsibleContent>
 
-              {/* Totals row - always visible, acts as collapse trigger */}
-              <CollapsibleTrigger asChild>
-                <div className="overflow-x-auto cursor-pointer hover:bg-accent/50 transition-colors">
-                  <Table>
-                    <TableBody>
-                      <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
-                        <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
-                        <TableCell className="px-2 text-right">—</TableCell>
-                        <TableCell className="px-2 text-right">—</TableCell>
-                        <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
-                        <TableCell className="px-2 text-right">
-                          <span className="inline-flex items-center gap-1">
-                            {formatCurrency(totals.totalBruto)}
-                            <ChevronDown className={`h-3 w-3 transition-transform ${titlesOpen ? "rotate-180" : ""}`} />
-                          </span>
-                        </TableCell>
+              {/* Totals row - always visible */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableBody>
+                    <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
+                      <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
+                      <TableCell className="px-2 text-right">—</TableCell>
+                      <TableCell className="px-2 text-right">—</TableCell>
+                      <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
+                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
+                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
+                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
+                      <TableCell className="px-2 text-right font-semibold">{formatCurrency(totals.totalBruto)}</TableCell>
+                    </TableRow>
+                    {parseDecimal(descontoPercent) > 0 && (
+                      <TableRow className="text-xs">
+                        <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
+                        <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
                       </TableRow>
-                      {parseDecimal(descontoPercent) > 0 && (
-                        <TableRow className="text-xs">
-                          <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
-                          <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CollapsibleTrigger>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </Collapsible>
           )}
         </CardContent>
