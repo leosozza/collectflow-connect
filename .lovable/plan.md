@@ -1,57 +1,38 @@
 
 
-# Adicionar botão para cancelar/reverter baixa pendente e verificar $ azul
+# Liberar casas decimais em % Desc e R$ Desconto
 
-## Diagnóstico
-
-Analisei os dados do cliente no screenshot (CPF 41582350817): a parcela 1 tem um pagamento manual com status `pending_confirmation` (Aguardando), **não** `confirmed`. O ícone $ azul só aparece para parcelas já **confirmadas** (status "pago").
-
-O que falta:
-1. **Parcelas "Aguardando"** — não há botão para cancelar a solicitação de baixa pendente (voltar ao status original)
-2. **Parcelas "Pago" (confirmadas)** — o $ azul para desconfirmar já existe no código, mas só aparece em parcelas com manual_payment confirmado
+## Problema
+Os campos `% Desc.` e `R$ Desc.` usam `replace(/[^0-9.]/g, "")` que remove vírgulas. No Brasil, o separador decimal é vírgula (`0,15`), então o usuário não consegue digitar valores como `0,15%` ou `R$ 0,50`. Além disso, `Number("0,15")` retorna `NaN`.
 
 ## Solução
 
-### Arquivo: `src/components/client-detail/AgreementInstallments.tsx`
+### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
 
-**1. Adicionar botão para cancelar baixa pendente (status "Aguardando")**
+Nos dois campos (linhas ~524-544), alterar a lógica de sanitização para:
 
-Para parcelas com `status === "pending_confirmation"`, exibir um ícone $ em **vermelho/laranja** (ou X) que permite ao operador cancelar a solicitação de baixa, deletando o registro `manual_payments` pendente e voltando a parcela ao status anterior ("Em Aberto" ou "Vencido").
+1. Aceitar vírgula como separador decimal: `replace(/[^0-9.,]/g, "")` no filtro visual
+2. Converter vírgula para ponto antes de fazer `Number()`: `.replace(",", ".")`
+3. Manter o valor bruto digitado (string com vírgula) no campo para exibição natural
 
+Mesma correção nos campos `% Juros`, `% Multa` e `% Honorários` (linha ~520) para consistência.
+
+**Lógica por campo:**
 ```tsx
-// Após a seção do $ verde (baixar manualmente), adicionar:
-{inst.status === "pending_confirmation" && inst.pendingManual && (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button variant="ghost" size="sm"
-        className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
-        onClick={() => handleCancelPendingPayment(inst)}
-      >
-        <DollarSign className="w-4 h-4" /> {/* com X ou estilo diferenciado */}
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent><p>Cancelar Solicitação de Baixa</p></TooltipContent>
-  </Tooltip>
-)}
+// Antes:
+const raw = e.target.value.replace(/[^0-9.]/g, "");
+const pct = Number(raw);
+
+// Depois:
+const raw = e.target.value.replace(/[^0-9.,]/g, "");
+const pct = Number(raw.replace(",", "."));
+if (raw !== "" && isNaN(pct)) return;
 ```
 
-**2. Função `handleCancelPendingPayment`**
+Isso permite digitar `0,15` ou `0.15` e ambos convertem para `0.15` internamente.
 
-Deleta o registro `manual_payments` com `status = "pending_confirmation"` para aquela parcela:
-```tsx
-const handleCancelPendingPayment = async (inst) => {
-  await supabase.from("manual_payments")
-    .delete()
-    .eq("id", inst.pendingManual.id);
-  // invalidar queries e toast
-};
-```
+### Resultado
+- `0,15%` → aceito, calcula corretamente
+- `R$ 0,50` → aceito, calcula corretamente
+- Mantém compatibilidade com ponto como separador
 
-**3. Manter $ azul para parcelas confirmadas (já implementado)**
-
-O $ azul para desconfirmar já funciona — aparece apenas quando a parcela tem um `manual_payment` com status `confirmed`. Sem alteração necessária.
-
-## Resultado
-- **Aguardando** → botão laranja $ para cancelar a solicitação pendente
-- **Pago (manual confirmado)** → botão azul $ para desconfirmar (já existe)
-- **Em Aberto / Vencido** → botão verde $ para solicitar baixa (já existe)
