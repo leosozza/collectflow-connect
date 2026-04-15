@@ -143,11 +143,11 @@ Deno.serve(async (req) => {
         persistMimeType = baseMime;
       }
 
-      // Gupshup requires OGG/MP3/AAC/AMR — WebM won't play inline
+      // WhatsApp requires OGG/Opus for inline audio — WebM won't play on any provider
       const isWebm = baseMime === "audio/webm" || baseMime.startsWith("audio/webm;");
-      if (isWebm && providerName === "gupshup") {
+      if (isWebm) {
         try {
-          console.log(`[send-chat-message] Remuxing WebM→OGG for Gupshup...`);
+          console.log(`[send-chat-message] Remuxing WebM→OGG for ${providerName}...`);
           const { remuxWebmToOgg } = await import("../_shared/webm-to-ogg.ts");
 
           // Fetch WebM from storage
