@@ -285,21 +285,26 @@ const UsersPage = () => {
       instanceIds: string[];
       permission_profile_id: string | null;
     }) => {
-      // Update profile
+      // Update profile (including role sync)
       const { error } = await supabase
         .from("profiles")
-        .update({ commission_grade_id, full_name, threecplus_agent_id, permission_profile_id } as any)
+        .update({ commission_grade_id, full_name, threecplus_agent_id, permission_profile_id, role } as any)
         .eq("id", id);
       if (error) throw error;
 
-      // Update tenant_users role
+      // Update tenant_users role and verify it worked
       const profileRecord = users.find((u) => u.id === id);
       if (profileRecord && tenant?.id) {
-        await supabase
+        const { error: tuError, count } = await supabase
           .from("tenant_users")
           .update({ role } as any)
           .eq("user_id", profileRecord.user_id)
           .eq("tenant_id", tenant.id);
+        if (tuError) throw tuError;
+        if (count === 0) {
+          console.warn("[UsersPage] tenant_users update affected 0 rows for user", profileRecord.user_id);
+          throw new Error("Não foi possível atualizar o role do usuário. Verifique suas permissões.");
+        }
       }
 
       // Sync operator_instances
