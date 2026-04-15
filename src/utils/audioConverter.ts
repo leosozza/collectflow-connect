@@ -25,7 +25,7 @@ export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
 
   // Encode to MP3
   const mp3Encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
-  const mp3Data: Int8Array[] = [];
+  const mp3Data: Uint8Array[] = [];
 
   // Process in chunks of 1152 samples
   const chunkSize = 1152;
@@ -33,14 +33,14 @@ export async function convertBlobToMp3(blob: Blob): Promise<Blob> {
     const chunk = int16Samples.subarray(i, i + chunkSize);
     const mp3buf = mp3Encoder.encodeBuffer(chunk);
     if (mp3buf.length > 0) {
-      mp3Data.push(new Int8Array(mp3buf));
+      mp3Data.push(new Uint8Array(mp3buf));
     }
   }
 
   // Flush remaining
   const mp3End = mp3Encoder.flush();
   if (mp3End.length > 0) {
-    mp3Data.push(new Int8Array(mp3End));
+    mp3Data.push(new Uint8Array(mp3End));
   }
 
   await audioContext.close();
