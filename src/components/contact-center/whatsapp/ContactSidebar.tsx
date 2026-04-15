@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Link2, Unlink, Search, FileText, Bot, Loader2, Headphones } from "lucide-react";
+import { User, Link2, Unlink, Search, FileText, Bot, Loader2 } from "lucide-react";
 import { Conversation, ChatMessage, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
