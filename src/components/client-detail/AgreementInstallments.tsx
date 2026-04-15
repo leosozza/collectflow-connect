@@ -681,7 +681,29 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </Tooltip>
                       )}
 
-                      {isPaid && tenantId && profile && (() => {
+                      {/* Cancelar baixa pendente */}
+                      {inst.status === "pending_confirmation" && inst.pendingManual && tenantId && profile && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
+                              disabled={cancellingIdx === idx}
+                              onClick={() => handleCancelPendingPayment(inst, idx)}
+                            >
+                              {cancellingIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <DollarSign className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Cancelar Solicitação de Baixa</p></TooltipContent>
+                        </Tooltip>
+                      )}
+
+
                         const hasConfirmedManual = manualPayments.some(
                           (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
                         );
