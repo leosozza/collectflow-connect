@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { downloadAndUploadMedia } from "../_shared/media-persistence.ts";
+import { downloadAndUploadMedia, getExtFromMime } from "../_shared/media-persistence.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -108,28 +108,105 @@ Deno.serve(async (req) => {
       let finalMediaUrl = rawMediaUrl;
       let finalMimeType = mediaMimeType;
 
+      // Lookup instance (needed for tenant_id and Evolution API credentials)
+      const { data: instRow } = await supabase
+        .from("whatsapp_instances")
+        .select("tenant_id, instance_url, api_key")
+        .eq("instance_name", instanceName)
+        .maybeSingle();
+
+      const tenantId = instRow?.tenant_id || "unknown";
+
+      // If no direct media URL but message has media, fetch via Evolution getBase64 API
+      if (!rawMediaUrl && messageType !== "text" && instRow?.instance_url && instRow?.api_key) {
+        try {
+          console.log(`[provider=unofficial] No mediaUrl, fetching via Evolution getBase64 for ${messageType}`);
+          const b64Controller = new AbortController();
+          const b64Timeout = setTimeout(() => b64Controller.abort(), 25000);
+
+          const b64Resp = await fetch(
+            `${instRow.instance_url}/chat/getBase64FromMediaMessage/${instanceName}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", apikey: instRow.api_key },
+              body: JSON.stringify({ message: { key: msgData.key } }),
+              signal: b64Controller.signal,
+            }
+          );
+          clearTimeout(b64Timeout);
+
+          if (b64Resp.ok) {
+            const b64Data = await b64Resp.json();
+            const b64String = b64Data?.base64 || "";
+            
+            if (b64String) {
+              // base64 may come as "data:audio/ogg;base64,XXXX" or plain base64
+              let actualBase64 = b64String;
+              let detectedMime = mediaMimeType;
+              
+              if (b64String.startsWith("data:")) {
+                const dataUrlMatch = b64String.match(/^data:([^;]+);base64,(.+)$/);
+                if (dataUrlMatch) {
+                  detectedMime = dataUrlMatch[1];
+                  actualBase64 = dataUrlMatch[2];
+                }
+              }
+
+              // Decode base64 to binary
+              const binaryString = atob(actualBase64);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+
+              if (bytes.length > 0) {
+                const ext = getExtFromMime(detectedMime || mediaMimeType, messageType);
+                const fileName = `${tenantId}/inbound/${crypto.randomUUID()}${ext}`;
+                const contentType = detectedMime || mediaMimeType || "application/octet-stream";
+
+                console.log(`[provider=unofficial] Uploading base64 media: ${fileName} (${bytes.length} bytes, ${contentType})`);
+
+                const { error: uploadErr } = await supabase.storage
+                  .from("chat-media")
+                  .upload(fileName, bytes, { contentType, upsert: false });
+
+                if (!uploadErr) {
+                  const { data: publicData } = supabase.storage.from("chat-media").getPublicUrl(fileName);
+                  finalMediaUrl = publicData.publicUrl;
+                  finalMimeType = contentType;
+                  console.log(`[provider=unofficial] Base64 media persisted: ${finalMediaUrl.substring(0, 80)}`);
+                } else {
+                  console.error("[provider=unofficial] Storage upload from base64 failed:", uploadErr.message);
+                }
+              }
+            } else {
+              console.warn("[provider=unofficial] Evolution getBase64 returned empty base64");
+            }
+          } else {
+            console.error(`[provider=unofficial] Evolution getBase64 HTTP ${b64Resp.status}`);
+          }
+        } catch (e: any) {
+          if (e.name === "AbortError") {
+            console.error("[provider=unofficial] Evolution getBase64 timed out after 25s");
+          } else {
+            console.error("[provider=unofficial] Evolution getBase64 error:", e.message);
+          }
+        }
+      }
+
+      // If we have a direct URL (from webhook or other provider), download and persist
       if (rawMediaUrl && messageType !== "text") {
-        // Lookup instance to get tenant_id for storage path
-        const { data: instRow } = await supabase
-          .from("whatsapp_instances")
-          .select("tenant_id")
-          .eq("instance_name", instanceName)
-          .maybeSingle();
-
-        const tenantId = instRow?.tenant_id || "unknown";
-
         const mediaResult = await downloadAndUploadMedia(
           supabase,
           rawMediaUrl,
           tenantId,
           "inbound",
           messageType,
-          mediaMimeType, // pass provider MIME as fallback
+          mediaMimeType,
         );
 
         if (mediaResult) {
           finalMediaUrl = mediaResult.storedUrl;
-          // Prefer provider-reported MIME over download content-type for consistency
           finalMimeType = mediaMimeType || mediaResult.mimeType;
           console.log(`[provider=unofficial] Media persisted: ${finalMediaUrl.substring(0, 80)}`);
         } else {
