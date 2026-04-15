@@ -1,117 +1,50 @@
 
 
-# Correção Completa de Mídia e Transcrição — WhatsApp
+# Correção: Áudio na API Oficial + Playback na Não-Oficial
 
-## Diagnóstico do Estado Atual
+## Problema 1 — Áudio não chega no destinatário (Oficial/Gupshup)
 
-Após análise detalhada de todos os arquivos envolvidos, o sistema já tem uma base sólida. Os problemas reais são pontuais:
+A "conversão" WebM→OGG no `send-chat-message` é falsa — apenas re-uploada os mesmos bytes WebM com extensão `.ogg` e content-type `audio/ogg`. O Gupshup valida o conteúdo real do arquivo e rejeita/descarta silenciosamente porque os bytes são WebM, não OGG.
 
-### O que já funciona:
-- `media-persistence.ts` — download + upload para bucket `chat-media` ✅
-- `whatsapp-webhook` — parse de image/audio/video/document + persistência + transcrição ✅
-- `gupshup-webhook` — parse + persistência + transcrição + mapeamento `file→document` ✅
-- `whatsapp-sender.ts` — envio separado por provider (Evolution, WuzAPI, Gupshup) ✅
-- `send-chat-message` — conversão WebM→OGG para Gupshup ✅
-- `transcribe-audio` — pipeline com Gemini + metadata ✅
-- `ChatMessage.tsx` — renderização de image/audio/video/document/sticker + transcrição ✅
-- `ChatInput.tsx` — upload de arquivos + gravação de áudio ✅
+**Solução**: O `AudioRecorder.tsx` (linha 56) já tenta gravar em `audio/ogg;codecs=opus` primeiro. Se o Chrome suportar (e ele suporta), o arquivo já sai como OGG real. O problema é que o backend tenta "converter" de qualquer forma quando o MIME contém "webm". A correção:
 
-### Problemas identificados:
+1. **Frontend (`AudioRecorder.tsx`)**: Já está correto — prioriza OGG
+2. **Backend (`send-chat-message`)**: Expandir a lógica de conversão para detectar se o arquivo já é OGG (não precisa converter) e, quando for realmente WebM, usar a Gupshup com o MIME correto `audio/webm` em vez de fingir que é OGG. Alternativamente, enviar como `document` (file) quando não for possível converter.
+3. **Gupshup sender**: Ajustar para enviar áudio WebM como `file` (documento) com nome `audio.webm` quando o formato não for aceito nativamente, OU aceitar que Gupshup suporta `audio/ogg` (que é o que o Chrome grava quando suportado).
 
-1. **Webhook não-oficial**: `conversationId` é passado como `"pending"` na persistência de mídia, não como o ID real da conversa (cosmético no path do storage, mas inconsistente)
-2. **Gupshup webhook**: mesmo problema — `"pending"` no path
-3. **Gupshup webhook**: `_endpoint_id` não é passado quando usa `ingest_channel_event` (sem instanceName), pode falhar a associação
-4. **send-chat-message**: persiste `mediaUrl` original do frontend (URL do bucket) mas se houve conversão WebM→OGG, o `media_url` salvo no RPC ainda aponta para a URL original WebM, não a OGG convertida
-5. **Gupshup media sender**: campo `audio.url` pode estar incorreto — Gupshup espera `url` para áudio mas com filename obrigatório
-6. **Gupshup media sender**: imagem usa `originalUrl` mas não `caption` de forma consistente
-7. **Transcrição**: não há tratamento para áudios outbound gravados pelo operador
-8. **Frontend**: `handleSendMedia` determina mediaType pelo MIME do browser, mas não valida se o tipo é compatível antes de enviar
-9. **Logs de erro**: falhas de envio de mídia não são logadas na tabela `webhook_logs`
+**Correção principal**: Remover a conversão falsa. Se o MIME já é `audio/ogg`, enviar direto. Se for `audio/webm`, NÃO fingir que é OGG — em vez disso, converter no frontend garantindo que o MediaRecorder use OGG, ou enviar como documento.
 
----
+## Problema 2 — Áudio não toca (Não-Oficial)
 
-## Plano de Execução (5 Fases)
+O `<audio>` usa `<source type="...">` que faz o browser pular a source se não reconhecer o tipo. Alguns MIMEs salvos (como `audio/ogg; codecs=opus`) podem causar problemas.
 
-### Fase 1 — Recebimento de Mídia por Provider
+**Correção**: Usar `src` diretamente no `<audio>` sem `<source type>`, que é mais tolerante.
 
-**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
-- Usar o `conversation_id` retornado pelo RPC para atualizar o path no storage (ou aceitar "pending" como path válido — é funcional)
-- Adicionar log estruturado com `[provider=unofficial]` em cada mídia recebida
-- Garantir que `media_mime_type` do provider não seja perdido quando `contentType` do download difere
+## Mudanças
 
-**Arquivo: `supabase/functions/gupshup-webhook/index.ts`**
-- Adicionar extração de `filename` do payload Gupshup (`msgPayload.payload?.name` ou `msgPayload.payload?.filename`)
-- Salvar `filename` no `_content` quando for documento (já faz parcialmente)
-- Adicionar log com `[provider=gupshup]` em cada mídia
-- Resolver `_endpoint_id`: buscar instância Gupshup do tenant para passar ao RPC
+### 1. `ChatMessage.tsx` — Playback de áudio
+- Trocar `<source src="..." type="...">` por `<audio src="..." controls>` direto
+- Remove a dependência do MIME type para playback
 
-**Arquivo: `supabase/functions/_shared/media-persistence.ts`**
-- Adicionar suporte a `audio/webm` no mapa de extensões
-- Adicionar `audio/amr` (formato comum em WhatsApp oficial antigo)
-- Logging melhorado com tamanho do arquivo e tempo de download
+### 2. `send-chat-message/index.ts` — Remover conversão falsa
+- Se o MIME do áudio já é `audio/ogg` (ou variantes com codecs=opus), enviar direto sem "converter"
+- Se for `audio/webm` e provider é Gupshup: tentar baixar e re-upload como OGG apenas se o conteúdo for realmente convertível, ou melhor — forçar o frontend a gravar em OGG
+- Log claro do MIME real antes de enviar
 
-### Fase 2 — Envio de Mídia por Provider
+### 3. `AudioRecorder.tsx` — Garantir OGG no Chrome
+- Já prioriza OGG, mas adicionar fallback logging para saber qual formato foi escolhido
+- Forçar `audio/ogg;codecs=opus` como única opção antes de WebM
 
-**Arquivo: `supabase/functions/send-chat-message/index.ts`**
-- Corrigir: após conversão WebM→OGG, usar `media.mediaUrl` (convertido) no RPC de persistência, não a URL original
-- Adicionar validação de MIME real para áudio oficial: se o MIME não for `audio/ogg`, `audio/mpeg` ou `audio/mp4`, converter
-- Adicionar log estruturado: provider, mediaType, mimeType, resultado do envio
-- Persistir `provider_message_id` consistentemente para mídia
+### 4. `whatsapp-sender.ts` (Gupshup)
+- Quando MIME for `audio/ogg;codecs=opus`, enviar sem `codecs=opus` no campo mimetype (Gupshup pode não aceitar o sufixo)
+- Normalizar para `audio/ogg` no payload
 
-**Arquivo: `supabase/functions/_shared/whatsapp-sender.ts`**
-- **Gupshup audio**: garantir que `filename` seja sempre enviado (ex: `audio.ogg`)
-- **Gupshup document**: adicionar `caption` como campo separado se houver
-- **Evolution**: validar que `sendMedia` aceita o campo `mimetype` para todos os tipos (não só document/audio)
-- Adicionar log de request/response por provider para debug
+## Arquivos afetados
 
-### Fase 3 — Transcrição de Áudio
-
-**Arquivo: `supabase/functions/transcribe-audio/index.ts`**
-- Já funcional — apenas melhorar o mapeamento de formato: `ogg` → `wav` fallback (Gemini aceita)
-- Adicionar log de duração da transcrição
-
-**Arquivos: `whatsapp-webhook` e `gupshup-webhook`**
-- Já disparam transcrição para áudio inbound ✅
-- Adicionar disparo para áudio outbound (gravado pelo operador) — fire-and-forget também
-
-### Fase 4 — Frontend de Mídia
-
-**Arquivo: `src/components/contact-center/whatsapp/ChatMessage.tsx`**
-- Já renderiza todos os tipos corretamente ✅
-- Melhorar: mostrar caption separado do filename para documentos
-- Melhorar: adicionar ícone de download explícito no card de documento
-
-**Arquivo: `src/components/contact-center/whatsapp/ChatInput.tsx`**
-- Já funcional ✅ — sem alterações necessárias
-
-**Arquivo: `src/services/conversationService.ts`**
-- Já funcional ✅ — sem alterações necessárias
-
-### Fase 5 — Logs, Status e Robustez
-
-**Arquivo: `supabase/functions/send-chat-message/index.ts`**
-- Adicionar log estruturado de falhas no `webhook_logs`
-- Quando envio falha, persistir mensagem com `status: "failed"` em vez de retornar erro 502 sem registro
-
-**Arquivo: `supabase/functions/_shared/whatsapp-sender.ts`**
-- Retornar informações de erro mais detalhadas (HTTP status, body do provider)
-
----
-
-## Arquivos Afetados
-
-| Ação | Arquivo |
+| Arquivo | Mudança |
 |---|---|
-| Editar | `supabase/functions/_shared/media-persistence.ts` |
-| Editar | `supabase/functions/_shared/whatsapp-sender.ts` |
-| Editar | `supabase/functions/whatsapp-webhook/index.ts` |
-| Editar | `supabase/functions/gupshup-webhook/index.ts` |
-| Editar | `supabase/functions/send-chat-message/index.ts` |
-| Editar | `supabase/functions/transcribe-audio/index.ts` |
-| Editar | `src/components/contact-center/whatsapp/ChatMessage.tsx` |
-
-## O que NÃO será alterado
-- Campanhas, automação, fila waiting/open, reply, filtros, /atendimento
-- ChatInput, ConversationService, WhatsAppChatLayout (já funcionais)
-- Nenhuma migração de banco necessária (metadata JSONB já suporta tudo)
+| `src/components/contact-center/whatsapp/ChatMessage.tsx` | `<audio src>` direto |
+| `supabase/functions/send-chat-message/index.ts` | Remover conversão falsa WebM→OGG |
+| `supabase/functions/_shared/whatsapp-sender.ts` | Normalizar MIME `audio/ogg;codecs=opus` → `audio/ogg` |
+| `src/components/contact-center/whatsapp/AudioRecorder.tsx` | Log do formato escolhido |
 
