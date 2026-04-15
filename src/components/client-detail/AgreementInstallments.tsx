@@ -446,9 +446,11 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         <button className="w-full flex items-center justify-between hover:bg-muted/30 rounded-md px-1 py-1 transition-colors cursor-pointer">
           <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
             <FileText className="w-3 h-3" /> Parcelas do Acordo
-            <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${open ? "rotate-180" : ""}`} />
           </p>
-          <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+          </div>
         </button>
       </CollapsibleTrigger>
 
@@ -484,6 +486,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
       <CollapsibleContent>
 
+      <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
@@ -753,6 +756,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           })}
         </TableBody>
       </Table>
+      </div>
 
       {manualPaymentInst && tenantId && profile && (
         <ManualPaymentDialog
