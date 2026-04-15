@@ -509,32 +509,32 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Juros</Label>
-              <Input type="number" min={0} step={0.01} value={jurosPercent} onChange={(e) => setJurosPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setJurosPercent(v === "" ? "" : Number(v)); }} onBlur={() => setJurosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Multa</Label>
-              <Input type="number" min={0} step={0.01} value={multaPercent} onChange={(e) => setMultaPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setMultaPercent(v === "" ? "" : Number(v)); }} onBlur={() => setMultaPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Honor.</Label>
-              <Input type="number" min={0} step={0.01} value={honorariosPercent} onChange={(e) => setHonorariosPercent(Number(e.target.value) || 0)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setHonorariosPercent(v === "" ? "" : Number(v)); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Desc.</Label>
-              <Input type="number" min={0} max={100} step={0.01} value={descontoPercent} onChange={(e) => {
-                const raw = e.target.value;
+              <Input type="text" inputMode="decimal" value={descontoPercent} onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.]/g, "");
                 if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
                 const pct = Number(raw);
                 setDescontoPercent(pct);
                 setDiscountSource("percent");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
                 setDescontoReais(bruto > 0 ? Math.round(bruto * (pct / 100) * 100) / 100 : 0);
-              }} className="h-7 text-xs px-2" />
+              }} onBlur={() => setDescontoPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[100px]">
               <Label className="text-[10px]">R$ Desc.</Label>
-              <Input type="number" min={0} step={0.01} value={descontoReais} onChange={(e) => {
-                const raw = e.target.value;
+              <Input type="text" inputMode="decimal" value={descontoReais} onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.]/g, "");
                 if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
                 const val = Number(raw);
                 setDescontoReais(val);
