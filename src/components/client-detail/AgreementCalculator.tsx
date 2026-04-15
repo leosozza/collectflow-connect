@@ -758,7 +758,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           <CardHeader className="pb-1 pt-3">
             <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 pb-3">
+          <CardContent className="space-y-2 pb-3 overflow-y-auto max-h-[35vh] flex-1 min-h-0">
             {/* Dynamic entradas */}
             {entradas.map((ent, idx) => (
               <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
