@@ -133,19 +133,57 @@ Deno.serve(async (req) => {
       };
     }
 
-    // 6b. Normalize audio MIME for sending
-    // Chrome records as audio/ogg;codecs=opus which IS real OGG — no conversion needed.
-    // Only log the real MIME so we can debug. Do NOT fake-convert WebM→OGG (bytes stay WebM).
+    // 6b. Audio format validation for official providers
     if (media && media.mediaType === "audio") {
       const rawMime = media.mimeType || "";
-      // Normalize codec suffixes: "audio/ogg;codecs=opus" → "audio/ogg"
       const baseMime = rawMime.split(";")[0].trim();
       console.log(`[send-chat-message] [provider=${providerName}] Audio MIME: raw="${rawMime}" base="${baseMime}"`);
 
       if (providerName === "gupshup") {
-        // Gupshup accepts audio/ogg natively. If browser recorded as OGG, send directly.
-        // If browser recorded as WebM (Safari fallback), send as-is — Gupshup also accepts WebM.
-        media.mimeType = baseMime || "audio/ogg";
+        // Gupshup requires MP3 format for audio
+        const allowedAudioMimes = ["audio/mpeg", "audio/mp3", "audio/ogg", "audio/aac", "audio/amr"];
+        if (baseMime && !allowedAudioMimes.includes(baseMime)) {
+          console.error(`[send-chat-message] [provider=gupshup] Rejected audio format: ${baseMime}`);
+
+          // Persist as failed with clear error
+          const errorMsg = `Formato de áudio incompatível: ${baseMime}. Gupshup aceita: MP3, OGG, AAC, AMR.`;
+          await supabase.rpc("ingest_channel_event", {
+            _tenant_id: tenantId,
+            _endpoint_id: instanceId,
+            _channel_type: conv.channel_type || "whatsapp",
+            _provider: providerName,
+            _remote_phone: conv.remote_phone,
+            _remote_name: conv.remote_phone,
+            _direction: "outbound",
+            _message_type: "audio",
+            _content: null,
+            _media_url: persistMediaUrl,
+            _media_mime_type: persistMimeType,
+            _external_id: null,
+            _provider_message_id: null,
+            _actor_type: "human",
+            _status: "failed",
+          });
+
+          // Update metadata with error on the just-inserted message
+          const { data: failedMsgs } = await supabase
+            .from("chat_messages")
+            .select("id")
+            .eq("conversation_id", conversationId)
+            .eq("status", "failed")
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          if (failedMsgs?.[0]?.id) {
+            await supabase.from("chat_messages").update({
+              metadata: { send_error: errorMsg },
+            }).eq("id", failedMsgs[0].id);
+          }
+
+          return jsonResp({ error: errorMsg }, 400);
+        }
+
+        media.mimeType = baseMime || "audio/mpeg";
         persistMimeType = media.mimeType;
       }
     }
