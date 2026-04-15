@@ -502,7 +502,7 @@ const ClientDetailPage = () => {
       </Tabs>
 
       <Dialog open={showAcordoDialog} onOpenChange={(open) => { setShowAcordoDialog(open); if (!open) setReactivateAgreement(null); }}>
-        <DialogContent className="max-w-[95vw] xl:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-[95vw] xl:max-w-7xl max-h-[90vh] overflow-y-auto flex flex-col">
           <DialogHeader>
             <DialogTitle>{reactivateAgreement ? "Reativar Acordo" : "Formalizar Acordo"}</DialogTitle>
           </DialogHeader>

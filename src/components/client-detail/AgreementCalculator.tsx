@@ -679,7 +679,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     <tbody>
                       <tr>
                         <td colSpan={11} className="p-0">
-                          <div className="max-h-[300px] overflow-y-auto">
+                          <div className="max-h-[25vh] overflow-y-auto">
                             <table className="w-full table-fixed">
                               <colgroup>
                                 <col className="w-8" />
@@ -752,13 +752,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       </Card>
 
       {/* ── Section 3: Two-column — Form + Simulation ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
         {/* Left: Agreement Form */}
-        <Card>
+        <Card className="flex flex-col overflow-hidden">
           <CardHeader className="pb-1 pt-3">
             <CardTitle className="text-sm">Condições do Acordo</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 pb-3">
+          <CardContent className="space-y-2 pb-3 overflow-y-auto max-h-[35vh] flex-1 min-h-0">
             {/* Dynamic entradas */}
             {entradas.map((ent, idx) => (
               <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
@@ -866,7 +866,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto max-h-[40vh]">
+          <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto max-h-[30vh]">
             {simulated && simulatedInstallments.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
