@@ -9,12 +9,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle2, XCircle, Loader2, HandCoins } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { CheckCircle2, XCircle, Loader2, HandCoins, Pencil } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PaymentConfirmationTabProps {
   tenantId: string;
 }
+
+const PAYMENT_METHODS = ["PIX", "Boleto", "Cartão", "Dinheiro", "Transferência", "Outro"];
+const RECEIVERS = ["CREDOR", "ASSESSORIA"];
 
 const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
   const { profile } = useAuth();
@@ -23,6 +31,8 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejectDialog, setRejectDialog] = useState<ManualPaymentWithDetails | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
+  const [editDialog, setEditDialog] = useState<ManualPaymentWithDetails | null>(null);
+  const [editForm, setEditForm] = useState({ amount_paid: 0, payment_date: "", payment_method: "", receiver: "", notes: "" });
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["manual-payments-pending", tenantId],
@@ -32,6 +42,43 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["manual-payments-pending", tenantId] });
+  };
+
+  const openEditDialog = (p: ManualPaymentWithDetails) => {
+    setEditForm({
+      amount_paid: p.amount_paid,
+      payment_date: p.payment_date,
+      payment_method: p.payment_method,
+      receiver: p.receiver,
+      notes: p.notes || "",
+    });
+    setEditDialog(p);
+  };
+
+  const handleEdit = async () => {
+    if (!editDialog) return;
+    setProcessingId(editDialog.id);
+    try {
+      const { error } = await supabase
+        .from("manual_payments" as any)
+        .update({
+          amount_paid: editForm.amount_paid,
+          payment_date: editForm.payment_date,
+          payment_method: editForm.payment_method,
+          receiver: editForm.receiver,
+          notes: editForm.notes || null,
+        })
+        .eq("id", editDialog.id);
+
+      if (error) throw error;
+      toast({ title: "Dados da parcela atualizados!" });
+      setEditDialog(null);
+      refresh();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   const handleConfirm = async (payment: ManualPaymentWithDetails) => {
@@ -130,6 +177,15 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => openEditDialog(p)}
+                      disabled={processingId === p.id}
+                      title="Editar informações da parcela"
+                    >
+                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => handleConfirm(p)}
                       disabled={processingId === p.id}
                       title="Confirmar pagamento"
@@ -157,6 +213,87 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
         </Table>
       </div>
 
+      {/* Edit Dialog */}
+      <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Informações da Parcela</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {editDialog?.agreement?.client_name} — Parcela {editDialog ? getInstallmentLabel(editDialog) : ""}
+            </p>
+
+            <div className="space-y-2">
+              <Label>Valor Pago</Label>
+              <CurrencyInput
+                value={editForm.amount_paid}
+                onValueChange={(v) => setEditForm(f => ({ ...f, amount_paid: v }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Data do Pagamento</Label>
+              <Input
+                type="date"
+                value={editForm.payment_date}
+                onChange={(e) => setEditForm(f => ({ ...f, payment_date: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Meio de Pagamento</Label>
+              <Select value={editForm.payment_method} onValueChange={(v) => setEditForm(f => ({ ...f, payment_method: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHODS.map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Recebedor</Label>
+              <Select value={editForm.receiver} onValueChange={(v) => setEditForm(f => ({ ...f, receiver: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECEIVERS.map(r => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Observações</Label>
+              <Textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Observações opcionais..."
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditDialog(null)}>Cancelar</Button>
+              <Button
+                onClick={handleEdit}
+                disabled={!editForm.amount_paid || !editForm.payment_date || processingId === editDialog?.id}
+              >
+                {processingId === editDialog?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
       <Dialog open={!!rejectDialog} onOpenChange={(open) => !open && setRejectDialog(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
