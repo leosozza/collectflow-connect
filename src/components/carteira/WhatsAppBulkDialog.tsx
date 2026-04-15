@@ -185,13 +185,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     );
   };
 
+  const isMixed = useMemo(
+    () => isMixedProviderSelection(selectedInstanceIds, instances),
+    [selectedInstanceIds, instances]
+  );
+
+  const providerCategory = useMemo(
+    () => deriveProviderCategory(selectedInstanceIds, instances),
+    [selectedInstanceIds, instances]
+  );
+
   const canProceedStep1 = useCustom ? customMessage.trim().length > 0 : !!selectedTemplate;
-  const canProceedStep2 = selectedInstanceIds.length > 0;
+  const canProceedStep2 = selectedInstanceIds.length > 0 && !isMixed;
 
   // Pre-send validation
   const getValidationErrors = (): string[] => {
     const errors: string[] = [];
     if (selectedInstanceIds.length === 0) errors.push("Selecione pelo menos uma instância");
+    if (isMixed) errors.push("Não é permitido misturar instâncias oficiais e não-oficiais. Crie campanhas separadas.");
     if (!getMessageTemplate().trim()) errors.push("Defina uma mensagem antes de enviar");
     if (dedup.recipients.length === 0) errors.push("Nenhum destinatário válido encontrado");
     return errors;
