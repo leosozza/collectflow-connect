@@ -509,22 +509,23 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Juros</Label>
-              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setJurosPercent(v === "" ? "" : Number(v)); }} onBlur={() => setJurosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setJurosPercent(raw === "" ? "" : v); }} onBlur={() => setJurosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Multa</Label>
-              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setMultaPercent(v === "" ? "" : Number(v)); }} onBlur={() => setMultaPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setMultaPercent(raw === "" ? "" : v); }} onBlur={() => setMultaPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Honor.</Label>
-              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ""); setHonorariosPercent(v === "" ? "" : Number(v)); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setHonorariosPercent(raw === "" ? "" : v); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Desc.</Label>
               <Input type="text" inputMode="decimal" value={descontoPercent} onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                const raw = e.target.value.replace(/[^0-9.,]/g, "");
                 if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
-                const pct = Number(raw);
+                const pct = Number(raw.replace(",", "."));
+                if (isNaN(pct)) return;
                 setDescontoPercent(pct);
                 setDiscountSource("percent");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
@@ -534,9 +535,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <div className="space-y-0.5 w-[100px]">
               <Label className="text-[10px]">R$ Desc.</Label>
               <Input type="text" inputMode="decimal" value={descontoReais} onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                const raw = e.target.value.replace(/[^0-9.,]/g, "");
                 if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
-                const val = Number(raw);
+                const val = Number(raw.replace(",", "."));
+                if (isNaN(val)) return;
                 setDescontoReais(val);
                 setDiscountSource("amount");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
@@ -657,9 +659,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 <div className="space-y-0.5">
                   <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
                   <Input type="text" inputMode="decimal" value={ent.value} onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    const raw = e.target.value.replace(/[^0-9.,]/g, "");
+                    const v = Number(raw.replace(",", "."));
+                    if (raw !== "" && isNaN(v)) return;
                     const next = [...entradas];
-                    next[idx] = { ...next[idx], value: v === "" ? "" : Number(v) };
+                    next[idx] = { ...next[idx], value: raw === "" ? "" : v };
                     setEntradas(next);
                   }} onBlur={() => {
                     const next = [...entradas];
