@@ -48,9 +48,15 @@ interface SimulatedInstallment {
 
 interface EntradaItem {
   date: string;
-  value: number | "";
+  value: string;
   method: string;
 }
+
+const parseDecimal = (s: string): number => {
+  if (!s) return 0;
+  const n = Number(s.replace(",", "."));
+  return isNaN(n) ? 0 : n;
+};
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
