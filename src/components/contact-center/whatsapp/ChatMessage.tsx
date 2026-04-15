@@ -73,7 +73,19 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
       case "audio":
         return (
           <div className="space-y-1.5">
-            <audio src={message.media_url || ""} controls className="max-w-[250px]" />
+            <div className="flex items-center gap-1.5">
+              <audio src={message.media_url || ""} controls className="max-w-[250px]" />
+              {message.media_url && (
+                <button
+                  type="button"
+                  onClick={() => handleDocumentDownload(message.media_url!, "audio.mp3")}
+                  className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+                  title="Baixar áudio"
+                >
+                  <Download className="w-4 h-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
             {/* Transcription block */}
             {transcription && (
               <div className={`flex items-start gap-1.5 px-2 py-1.5 rounded text-[12px] leading-[16px] ${
