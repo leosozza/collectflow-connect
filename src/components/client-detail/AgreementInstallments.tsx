@@ -49,6 +49,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [editingValueIdx, setEditingValueIdx] = useState<number | null>(null);
   const [editValueInput, setEditValueInput] = useState("");
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
+  const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
 
   // Boleto pendente states
   const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
@@ -273,6 +274,37 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: `${label} copiado!` });
+  };
+
+  const handleUnconfirmPayment = async (inst: any, idx: number) => {
+    const confirmedPayment = manualPayments.find(
+      (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
+    );
+    if (!confirmedPayment) {
+      toast({ title: "Nenhuma baixa manual confirmada encontrada para esta parcela.", variant: "destructive" });
+      return;
+    }
+    setUnconfirmingIdx(idx);
+    try {
+      const { error } = await supabase
+        .from("manual_payments" as any)
+        .update({
+          status: "pending_confirmation",
+          reviewed_by: null,
+          reviewed_at: null,
+          review_notes: null,
+        })
+        .eq("id", confirmedPayment.id);
+      if (error) throw error;
+      toast({ title: "Baixa revertida para pendente de confirmação." });
+      queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
+    } finally {
+      setUnconfirmingIdx(null);
+    }
   };
 
   const statusIcon = (status: string) => {
@@ -611,7 +643,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </Tooltip>
                       )}
 
-                      {/* Baixar manualmente */}
+                      {/* Baixar manualmente (pendente) ou Desconfirmar (pago) */}
                       {canEdit && tenantId && profile && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -627,6 +659,32 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                           <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
                         </Tooltip>
                       )}
+
+                      {isPaid && tenantId && profile && (() => {
+                        const hasConfirmedManual = manualPayments.some(
+                          (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
+                        );
+                        return hasConfirmedManual ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                                disabled={unconfirmingIdx === idx}
+                                onClick={() => handleUnconfirmPayment(inst, idx)}
+                              >
+                                {unconfirmingIdx === idx ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <DollarSign className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top"><p>Desconfirmar Pagamento</p></TooltipContent>
+                          </Tooltip>
+                        ) : null;
+                      })()}
 
                       {/* Baixar recibo */}
                       {isPaid && (
