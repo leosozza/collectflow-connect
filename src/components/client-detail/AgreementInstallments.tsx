@@ -50,6 +50,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [editValueInput, setEditValueInput] = useState("");
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
   const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
+  const [cancellingIdx, setCancellingIdx] = useState<number | null>(null);
 
   // Boleto pendente states
   const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
@@ -304,6 +305,26 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
       toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
     } finally {
       setUnconfirmingIdx(null);
+    }
+  };
+
+  const handleCancelPendingPayment = async (inst: any, idx: number) => {
+    if (!inst.pendingManual) return;
+    setCancellingIdx(idx);
+    try {
+      const { error } = await supabase
+        .from("manual_payments" as any)
+        .delete()
+        .eq("id", inst.pendingManual.id);
+      if (error) throw error;
+      toast({ title: "Solicitação de baixa cancelada." });
+      queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingIdx(null);
     }
   };
 
@@ -657,6 +678,28 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Cancelar baixa pendente */}
+                      {inst.status === "pending_confirmation" && inst.pendingManual && tenantId && profile && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
+                              disabled={cancellingIdx === idx}
+                              onClick={() => handleCancelPendingPayment(inst, idx)}
+                            >
+                              {cancellingIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <DollarSign className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Cancelar Solicitação de Baixa</p></TooltipContent>
                         </Tooltip>
                       )}
 
