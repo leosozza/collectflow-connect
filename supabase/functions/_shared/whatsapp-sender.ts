@@ -196,17 +196,8 @@ async function sendGupshupMedia(
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
   } else if (gupType === "audio") {
-    // No caption for audio — Gupshup requires url + filename
+    // Gupshup audio: only type + url (per official docs)
     msgPayload.url = media.mediaUrl;
-    // Normalize MIME: strip codec params (e.g. "audio/ogg;codecs=opus" → "audio/ogg")
-    const cleanMime = (media.mimeType || "audio/ogg").split(";")[0].trim();
-    msgPayload.mimetype = cleanMime;
-    // Extension based on clean MIME
-    const audioExt = cleanMime.includes("mp3") ? ".mp3"
-      : cleanMime.includes("mp4") || cleanMime.includes("m4a") ? ".m4a"
-        : cleanMime.includes("webm") ? ".webm"
-          : ".ogg";
-    msgPayload.filename = media.fileName || `audio${audioExt}`;
   } else {
     // file/document — requires url + filename
     msgPayload.url = media.mediaUrl;
