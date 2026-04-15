@@ -1,52 +1,57 @@
 
 
-# Correção da busca na Carteira — CPF, telefone, e-mail e nome com acentos
+# Adicionar botão para cancelar/reverter baixa pendente e verificar $ azul
 
-## Problemas encontrados na RPC `get_carteira_grouped`
+## Diagnóstico
 
-| Campo | Problema |
-|-------|----------|
-| **CPF** | Só remove pontos (`replace(_search, '.', '')`), não remove traços. CPF com formato `123.456.789-00` não encontra. |
-| **Telefone** | Compara `_search` direto contra `phone/phone2/phone3` sem normalizar. Se o usuário digita `(11) 99999-1234`, o ILIKE falha contra `11999991234`. |
-| **E-mail** | Funciona tecnicamente (ILIKE), mas a busca multi-word quebra: se o e-mail é tratado como palavra separada, o filtro `nome_completo ILIKE ALL(words)` pode consumir antes. |
-| **Nome** | Case-insensitive (ILIKE ok), mas **não é accent-insensitive**. "Stefani" não encontra "Stéfani". |
+Analisei os dados do cliente no screenshot (CPF 41582350817): a parcela 1 tem um pagamento manual com status `pending_confirmation` (Aguardando), **não** `confirmed`. O ícone $ azul só aparece para parcelas já **confirmadas** (status "pago").
+
+O que falta:
+1. **Parcelas "Aguardando"** — não há botão para cancelar a solicitação de baixa pendente (voltar ao status original)
+2. **Parcelas "Pago" (confirmadas)** — o $ azul para desconfirmar já existe no código, mas só aparece em parcelas com manual_payment confirmado
 
 ## Solução
 
-### 1. Habilitar extensão `unaccent` (migration)
-```sql
-CREATE EXTENSION IF NOT EXISTS unaccent;
+### Arquivo: `src/components/client-detail/AgreementInstallments.tsx`
+
+**1. Adicionar botão para cancelar baixa pendente (status "Aguardando")**
+
+Para parcelas com `status === "pending_confirmation"`, exibir um ícone $ em **vermelho/laranja** (ou X) que permite ao operador cancelar a solicitação de baixa, deletando o registro `manual_payments` pendente e voltando a parcela ao status anterior ("Em Aberto" ou "Vencido").
+
+```tsx
+// Após a seção do $ verde (baixar manualmente), adicionar:
+{inst.status === "pending_confirmation" && inst.pendingManual && (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button variant="ghost" size="sm"
+        className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
+        onClick={() => handleCancelPendingPayment(inst)}
+      >
+        <DollarSign className="w-4 h-4" /> {/* com X ou estilo diferenciado */}
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent><p>Cancelar Solicitação de Baixa</p></TooltipContent>
+  </Tooltip>
+)}
 ```
 
-### 2. Atualizar a RPC `get_carteira_grouped` — bloco de busca
+**2. Função `handleCancelPendingPayment`**
 
-**CPF**: Remover todos os não-dígitos de `_search` e de `c.cpf` para comparação:
-```sql
-regexp_replace(c.cpf, '\D', '', 'g') ILIKE '%' || regexp_replace(_search, '\D', '', 'g') || '%'
+Deleta o registro `manual_payments` com `status = "pending_confirmation"` para aquela parcela:
+```tsx
+const handleCancelPendingPayment = async (inst) => {
+  await supabase.from("manual_payments")
+    .delete()
+    .eq("id", inst.pendingManual.id);
+  // invalidar queries e toast
+};
 ```
 
-**Telefone**: Normalizar removendo não-dígitos do input e dos campos:
-```sql
-regexp_replace(c.phone, '\D', '', 'g') ILIKE '%' || regexp_replace(_search, '\D', '', 'g') || '%'
--- Mesma lógica para phone2 e phone3
-```
+**3. Manter $ azul para parcelas confirmadas (já implementado)**
 
-**Nome**: Usar `unaccent()` em ambos os lados para busca sem acento:
-```sql
-unaccent(c.nome_completo) ILIKE ALL (SELECT '%' || unaccent(unnest(_search_words)) || '%')
-```
+O $ azul para desconfirmar já funciona — aparece apenas quando a parcela tem um `manual_payment` com status `confirmed`. Sem alteração necessária.
 
-**E-mail**: Manter ILIKE mas garantir que funciona com a busca raw (sem split por palavras):
-```sql
-c.email ILIKE '%' || _search || '%'
-```
-
-### Arquivo
-- Migration SQL: `CREATE EXTENSION unaccent` + `CREATE OR REPLACE FUNCTION get_carteira_grouped` com busca corrigida
-
-### Resultado
-- CPF: busca funciona com `123.456.789-00`, `12345678900`, ou qualquer formato
-- Telefone: busca funciona com `(11) 99999-1234`, `11999991234`, etc.
-- E-mail: busca funciona normalmente
-- Nome: busca funciona sem acentos e case-insensitive ("stefani" encontra "Stéfani")
-
+## Resultado
+- **Aguardando** → botão laranja $ para cancelar a solicitação pendente
+- **Pago (manual confirmado)** → botão azul $ para desconfirmar (já existe)
+- **Em Aberto / Vencido** → botão verde $ para solicitar baixa (já existe)
