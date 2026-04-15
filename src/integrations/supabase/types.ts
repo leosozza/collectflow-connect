@@ -5753,6 +5753,8 @@ export type Database = {
         Row: {
           assigned_instance_id: string | null
           campaign_id: string
+          claimed_at: string | null
+          claimed_by: string | null
           created_at: string
           delivered_at: string | null
           error_message: string | null
@@ -5771,6 +5773,8 @@ export type Database = {
         Insert: {
           assigned_instance_id?: string | null
           campaign_id: string
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           delivered_at?: string | null
           error_message?: string | null
@@ -5789,6 +5793,8 @@ export type Database = {
         Update: {
           assigned_instance_id?: string | null
           campaign_id?: string
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           delivered_at?: string | null
           error_message?: string | null
@@ -5845,6 +5851,8 @@ export type Database = {
           name: string | null
           origin_id: string | null
           origin_type: string | null
+          processing_locked_at: string | null
+          processing_locked_by: string | null
           progress_metadata: Json | null
           provider_category: string
           read_count: number
@@ -5880,6 +5888,8 @@ export type Database = {
           name?: string | null
           origin_id?: string | null
           origin_type?: string | null
+          processing_locked_at?: string | null
+          processing_locked_by?: string | null
           progress_metadata?: Json | null
           provider_category?: string
           read_count?: number
@@ -5915,6 +5925,8 @@ export type Database = {
           name?: string | null
           origin_id?: string | null
           origin_type?: string | null
+          processing_locked_at?: string | null
+          processing_locked_by?: string | null
           progress_metadata?: Json | null
           provider_category?: string
           read_count?: number
@@ -6201,6 +6213,40 @@ export type Database = {
           has_sufficient_balance: boolean
           shortfall: number
         }[]
+      }
+      claim_campaign_recipients: {
+        Args: {
+          _campaign_id: string
+          _instance_id: string
+          _limit?: number
+          _worker_id: string
+        }
+        Returns: {
+          assigned_instance_id: string | null
+          campaign_id: string
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          delivered_at: string | null
+          error_message: string | null
+          id: string
+          message_body_snapshot: string | null
+          phone: string
+          provider_message_id: string | null
+          read_at: string | null
+          recipient_name: string
+          representative_client_id: string
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "whatsapp_campaign_recipients"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       cleanup_expired_locks: { Args: never; Returns: undefined }
       consume_tokens: {
@@ -6540,6 +6586,10 @@ export type Database = {
           read_ct: number
         }[]
       }
+      release_campaign_lock: {
+        Args: { _campaign_id: string; _worker_id: string }
+        Returns: undefined
+      }
       resolve_client_by_phone: {
         Args: { _phone: string; _tenant_id: string }
         Returns: {
@@ -6555,6 +6605,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      try_lock_campaign: {
+        Args: { _campaign_id: string; _worker_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "operador"

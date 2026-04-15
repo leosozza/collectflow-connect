@@ -209,6 +209,17 @@ export function deriveProviderCategory(
   return "mixed";
 }
 
+/**
+ * Check if the selected instances mix official and unofficial providers.
+ * Mixed campaigns are not allowed — they must be separate.
+ */
+export function isMixedProviderSelection(
+  selectedInstanceIds: string[],
+  allInstances: EligibleInstance[]
+): boolean {
+  return deriveProviderCategory(selectedInstanceIds, allInstances) === "mixed";
+}
+
 // ---- Campaign CRUD ----
 
 export interface CreateCampaignInput {
