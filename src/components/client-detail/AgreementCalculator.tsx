@@ -58,16 +58,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
   const [calcDate, setCalcDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [jurosPercent, setJurosPercent] = useState<number>(0);
-  const [multaPercent, setMultaPercent] = useState<number>(0);
-  const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
+  const [jurosPercent, setJurosPercent] = useState<number | "">(0);
+  const [multaPercent, setMultaPercent] = useState<number | "">(0);
+  const [honorariosPercent, setHonorariosPercent] = useState<number | "">(0);
   const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
   const [descontoReais, setDescontoReais] = useState<number | "">(0);
   const [discountSource, setDiscountSource] = useState<"percent" | "amount">("percent");
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
-  const [numParcelas, setNumParcelas] = useState<number>(1);
+  const [numParcelas, setNumParcelas] = useState<number | "">(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
   const [firstDueDate, setFirstDueDate] = useState("");
@@ -155,9 +155,12 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       const valorPago = Number(c.valor_pago) || 0;
       const valorOriginal = Math.max(0, valorBruto - valorPago);
       const valorBase = valorOriginal;
-      const jurosVal = valorBase * (jurosPercent / 100) * mesesAtraso;
-      const multaVal = atraso > 0 ? valorBase * (multaPercent / 100) : 0;
-      const honorariosVal = valorBase * (honorariosPercent / 100);
+      const jP = typeof jurosPercent === "number" ? jurosPercent : 0;
+      const mP = typeof multaPercent === "number" ? multaPercent : 0;
+      const hP = typeof honorariosPercent === "number" ? honorariosPercent : 0;
+      const jurosVal = valorBase * (jP / 100) * mesesAtraso;
+      const multaVal = atraso > 0 ? valorBase * (mP / 100) : 0;
+      const honorariosVal = valorBase * (hP / 100);
       const total = valorBase + jurosVal + multaVal + honorariosVal;
       return { id: c.id, atraso, valorOriginal, valorPago, valorBase, jurosVal, multaVal, honorariosVal, total };
     });
@@ -185,7 +188,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   }, [rowCalcs, selectedIds, descontoPercent, descontoReais, discountSource]);
 
   const remainingAfterEntrada = Math.max(0, totals.totalAtualizado - numEntrada);
-  const installmentValue = numParcelas > 0 ? Math.round((remainingAfterEntrada / numParcelas) * 100) / 100 : 0;
+  const nP = typeof numParcelas === "number" ? numParcelas : 1;
+  const installmentValue = nP > 0 ? Math.round((remainingAfterEntrada / nP) * 100) / 100 : 0;
 
   const toggleId = (id: string) => {
     setSelectedIds((prev) => {
@@ -225,7 +229,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       });
     });
     const baseDate = new Date(firstDueDate + "T00:00:00");
-    for (let i = 0; i < numParcelas; i++) {
+    const nPSim = typeof numParcelas === "number" ? numParcelas : 1;
+    for (let i = 0; i < nPSim; i++) {
       const d = new Date(baseDate);
       if (intervalo === "mensal") {
         d.setMonth(d.getMonth() + i);
@@ -254,8 +259,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     if (credorRules.desconto_maximo > 0 && pctVal > credorRules.desconto_maximo) {
       reasons.push(`Desconto ${descontoPercent}% excede máx ${credorRules.desconto_maximo}%`);
     }
-    if (credorRules.parcelas_max > 0 && numParcelas > credorRules.parcelas_max) {
-      reasons.push(`Parcelas ${numParcelas}x excede máx ${credorRules.parcelas_max}x`);
+    const nPCheck = typeof numParcelas === "number" ? numParcelas : 1;
+    if (credorRules.parcelas_max > 0 && nPCheck > credorRules.parcelas_max) {
+      reasons.push(`Parcelas ${nPCheck}x excede máx ${credorRules.parcelas_max}x`);
     }
     return { isOut: reasons.length > 0, reasons };
   }, [credorRules, descontoPercent, numParcelas]);
@@ -405,7 +411,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         original_total: totals.totalOriginal,
         proposed_total: totals.totalAtualizado,
         discount_percent: totals.totalBruto > 0 ? Math.round((totals.descontoVal / totals.totalBruto) * 100 * 100) / 100 : 0,
-        new_installments: numParcelas,
+        new_installments: typeof numParcelas === "number" ? numParcelas : 1,
         new_installment_value: installmentValue,
         first_due_date: firstDueDate,
         entrada_value: numEntrada > 0 ? numEntrada : undefined,
