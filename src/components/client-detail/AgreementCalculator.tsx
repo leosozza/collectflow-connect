@@ -37,6 +37,7 @@ interface AgreementCalculatorProps {
   credor: string;
   onAgreementCreated: () => void;
   hasActiveAgreement?: boolean;
+  reactivateFrom?: any | null;
 }
 
 interface SimulatedInstallment {
@@ -59,7 +60,7 @@ const parseDecimal = (s: string): number => {
   return isNaN(n) ? 0 : n;
 };
 
-const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
+const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement, reactivateFrom }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
   const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
 
@@ -143,6 +144,60 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       }
     });
   }, [profile?.tenant_id, credor]);
+
+  // Pre-fill from reactivated agreement
+  useEffect(() => {
+    if (!reactivateFrom) return;
+
+    // Discount
+    if (reactivateFrom.discount_percent != null) {
+      setDescontoPercent(String(reactivateFrom.discount_percent));
+      setDiscountSource("percent");
+    }
+
+    // Installments
+    if (reactivateFrom.new_installments) {
+      setNumParcelas(reactivateFrom.new_installments);
+    }
+
+    // Notes
+    const originalDate = new Date(reactivateFrom.created_at).toLocaleDateString("pt-BR");
+    setNotes(`Reativação do acordo de ${originalDate}`);
+
+    // Reconstruct entradas from custom_installment_values
+    const civ = reactivateFrom.custom_installment_values as Record<string, any> | null;
+    if (civ) {
+      const newEntradas: EntradaItem[] = [];
+      // First entrada
+      if (civ.entrada && Number(civ.entrada) > 0) {
+        newEntradas.push({
+          date: "",
+          value: String(civ.entrada),
+          method: civ.entrada_method || "BOLETO",
+        });
+      }
+      // Additional entradas (entrada_2, entrada_3, ...)
+      let idx = 2;
+      while (civ[`entrada_${idx}`] !== undefined) {
+        if (Number(civ[`entrada_${idx}`]) > 0) {
+          newEntradas.push({
+            date: "",
+            value: String(civ[`entrada_${idx}`]),
+            method: civ[`entrada_${idx}_method`] || "BOLETO",
+          });
+        }
+        idx++;
+      }
+      if (newEntradas.length > 0) {
+        setEntradas(newEntradas);
+      }
+
+      // Payment method from installments
+      if (civ["1_method"]) {
+        setFormaPagto(civ["1_method"]);
+      }
+    }
+  }, [reactivateFrom]);
 
   // Reset simulation when params change
   useEffect(() => {
