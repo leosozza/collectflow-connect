@@ -3,32 +3,46 @@ import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { resolveTemplate } from "../_shared/template-resolver.ts";
 import { logMessage } from "../_shared/message-logger.ts";
 
-// ===== Anti-Ban Constants (HARDCODED — not configurable by frontend) =====
-const ANTI_BAN_MIN_DELAY_MS = 8000;   // 8 seconds minimum between messages
-const ANTI_BAN_MAX_DELAY_MS = 15000;  // 15 seconds maximum between messages
-const BATCH_REST_THRESHOLD = 15;       // pause after every 15 messages per instance
-const BATCH_REST_DURATION_MS = 120000; // 2-minute rest between batches
-const MAX_EXECUTION_MS = 380000;       // 380s safety margin (Edge Runtime limit ~400s)
-const CHUNK_SIZE = 100;
+// ===== Anti-Ban Constants — UNOFFICIAL (conservative) =====
+const UNOFFICIAL_MIN_DELAY_MS = 8000;
+const UNOFFICIAL_MAX_DELAY_MS = 15000;
+const UNOFFICIAL_BATCH_THRESHOLD = 15;
+const UNOFFICIAL_BATCH_REST_MS = 120000; // 2 min
 
-// AI agents can use faster delays (future use)
+// ===== Official Provider Constants (relaxed) =====
+const OFFICIAL_MIN_DELAY_MS = 1000;
+const OFFICIAL_MAX_DELAY_MS = 3000;
+const OFFICIAL_BATCH_THRESHOLD = 50;
+const OFFICIAL_BATCH_REST_MS = 30000; // 30s
+
+// ===== AI Agent Constants =====
 const AI_AGENT_MIN_DELAY_MS = 3000;
 const AI_AGENT_MAX_DELAY_MS = 6000;
-const AI_AGENT_BATCH_REST_THRESHOLD = 25;
-const AI_AGENT_BATCH_REST_DURATION_MS = 60000;
+const AI_AGENT_BATCH_THRESHOLD = 25;
+const AI_AGENT_BATCH_REST_MS = 60000;
 
-function getAntiBanDelay(originType: string): number {
-  if (originType === "AI_AGENT") {
-    return AI_AGENT_MIN_DELAY_MS + Math.random() * (AI_AGENT_MAX_DELAY_MS - AI_AGENT_MIN_DELAY_MS);
-  }
-  return ANTI_BAN_MIN_DELAY_MS + Math.random() * (ANTI_BAN_MAX_DELAY_MS - ANTI_BAN_MIN_DELAY_MS);
+const MAX_EXECUTION_MS = 380000;
+
+interface ThrottleConfig {
+  minDelay: number;
+  maxDelay: number;
+  batchThreshold: number;
+  batchRestMs: number;
 }
 
-function getBatchRestConfig(originType: string): { threshold: number; duration: number } {
+function getThrottleConfig(providerCategory: string, originType: string): ThrottleConfig {
   if (originType === "AI_AGENT") {
-    return { threshold: AI_AGENT_BATCH_REST_THRESHOLD, duration: AI_AGENT_BATCH_REST_DURATION_MS };
+    return { minDelay: AI_AGENT_MIN_DELAY_MS, maxDelay: AI_AGENT_MAX_DELAY_MS, batchThreshold: AI_AGENT_BATCH_THRESHOLD, batchRestMs: AI_AGENT_BATCH_REST_MS };
   }
-  return { threshold: BATCH_REST_THRESHOLD, duration: BATCH_REST_DURATION_MS };
+  if (providerCategory === "official_meta") {
+    return { minDelay: OFFICIAL_MIN_DELAY_MS, maxDelay: OFFICIAL_MAX_DELAY_MS, batchThreshold: OFFICIAL_BATCH_THRESHOLD, batchRestMs: OFFICIAL_BATCH_REST_MS };
+  }
+  // unofficial / mixed — conservative
+  return { minDelay: UNOFFICIAL_MIN_DELAY_MS, maxDelay: UNOFFICIAL_MAX_DELAY_MS, batchThreshold: UNOFFICIAL_BATCH_THRESHOLD, batchRestMs: UNOFFICIAL_BATCH_REST_MS };
+}
+
+function randomDelay(cfg: ThrottleConfig): number {
+  return cfg.minDelay + Math.random() * (cfg.maxDelay - cfg.minDelay);
 }
 
 // ===== Helper: persist conversation + outbound message via canonical RPC =====
@@ -44,7 +58,7 @@ async function ensureConversationAndMessage(
   provider?: string,
 ) {
   try {
-    const { data: result, error: rpcErr } = await supabase.rpc("ingest_channel_event", {
+    const { error: rpcErr } = await supabase.rpc("ingest_channel_event", {
       _tenant_id: tenantId,
       _endpoint_id: instanceId,
       _channel_type: "whatsapp",
@@ -61,10 +75,7 @@ async function ensureConversationAndMessage(
       _actor_type: "campaign",
       _status: "sent",
     });
-
-    if (rpcErr) {
-      console.error("ingest_channel_event error:", rpcErr);
-    }
+    if (rpcErr) console.error("ingest_channel_event error:", rpcErr);
   } catch (err) {
     console.error("ensureConversationAndMessage error:", err);
   }
@@ -86,12 +97,11 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // Validate auth via getUser (robust)
+    // Validate auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -103,14 +113,12 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const userId = userData.user.id;
 
-    // Get user's tenant
     const { data: tenantUser } = await supabase
       .from("tenant_users")
       .select("tenant_id, role")
@@ -119,12 +127,11 @@ Deno.serve(async (req) => {
 
     if (!tenantUser) {
       return new Response(JSON.stringify({ error: "Tenant not found" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check admin role OR granular RBAC permission
+    // Permission check
     const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
     let hasPermission = isAdmin;
 
@@ -145,9 +152,7 @@ Deno.serve(async (req) => {
 
           if (permProfile?.permissions) {
             const perms = permProfile.permissions as Record<string, string[]>;
-            if (perms.campanhas_whatsapp?.includes("create")) {
-              hasPermission = true;
-            }
+            if (perms.campanhas_whatsapp?.includes("create")) hasPermission = true;
           }
         }
 
@@ -169,19 +174,17 @@ Deno.serve(async (req) => {
 
     if (!hasPermission) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = await req.json();
 
-    // ===== CAMPAIGN-BASED FLOW =====
     if (body.campaign_id) {
       return await handleCampaignFlow(supabase, body.campaign_id, tenantUser.tenant_id);
     }
 
-    // ===== LEGACY FLOW =====
+    // Legacy flow — apply same anti-ban rules
     return await handleLegacyFlow(supabase, body, tenantUser);
   } catch (err: any) {
     console.error("send-bulk-whatsapp error:", err);
@@ -192,9 +195,10 @@ Deno.serve(async (req) => {
   }
 });
 
-// ===== Campaign-based flow with anti-ban throttling + checkpoint =====
+// ===== Campaign flow with campaign lock, atomic claims, per-instance queuing =====
 async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: string) {
   const startTime = Date.now();
+  const workerId = `worker_${crypto.randomUUID().slice(0, 8)}`;
 
   // Load campaign
   const { data: campaign, error: cErr } = await supabase
@@ -206,14 +210,33 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
   if (cErr || !campaign) {
     return new Response(JSON.stringify({ error: "Campaign not found" }), {
-      status: 404,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  // Determine origin type for anti-ban config
+  // ===== BLOCK MIXED CAMPAIGNS =====
+  if (campaign.provider_category === "mixed") {
+    return new Response(JSON.stringify({ error: "Campanhas mistas (oficial + não-oficial) não são permitidas. Crie campanhas separadas." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // ===== CAMPAIGN LOCK: prevent duplicate processing =====
+  const { data: lockAcquired } = await supabase.rpc("try_lock_campaign", {
+    _campaign_id: campaignId,
+    _worker_id: workerId,
+  });
+
+  if (!lockAcquired) {
+    console.log(`[Campaign] Lock not acquired for ${campaignId} — another worker is processing`);
+    return new Response(JSON.stringify({ error: "Campanha já está sendo processada por outro worker", status: "locked" }), {
+      status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const originType: string = campaign.origin_type || "OP_CARTEIRA";
-  const batchConfig = getBatchRestConfig(originType);
+  const providerCategory: string = campaign.provider_category || "unofficial";
+  const throttle = getThrottleConfig(providerCategory, originType);
 
   // Load tenant settings
   const { data: tenantData } = await supabase
@@ -223,7 +246,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     .single();
   const tenantSettings = (tenantData?.settings || {}) as Record<string, any>;
 
-  // Update campaign status to sending (only if not already sending — supports resume)
+  // Update campaign status to sending
   if (campaign.status !== "sending") {
     await supabase
       .from("whatsapp_campaigns")
@@ -231,83 +254,127 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       .eq("id", campaignId);
   }
 
-  // Global env vars
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
   const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
-
-  // Gupshup config
   const gupshupConfigured = !!(tenantSettings.gupshup_api_key && tenantSettings.gupshup_source_number);
 
-  let totalSent = (campaign.sent_count || 0);
-  let totalFailed = (campaign.failed_count || 0);
+  let totalSent = campaign.sent_count || 0;
+  let totalFailed = campaign.failed_count || 0;
   let chunkSent = 0;
   let chunkFailed = 0;
   const errors: string[] = [];
   let timedOut = false;
 
-  // Instance cache to avoid repeated lookups
   const instanceCache = new Map<string, any>();
 
-  // Per-instance send counter for batch resting (across all chunks in this invocation)
+  // ===== Get all unique instance IDs for this campaign =====
+  const { data: instanceRows } = await supabase
+    .from("whatsapp_campaign_recipients")
+    .select("assigned_instance_id")
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+
+  const uniqueInstanceIds = [...new Set((instanceRows || []).map((r: any) => r.assigned_instance_id).filter(Boolean))];
+  // Include null for gupshup recipients
+  const hasGupshupRecipients = (instanceRows || []).some((r: any) => !r.assigned_instance_id);
+  if (hasGupshupRecipients) uniqueInstanceIds.push(null as any);
+
+  // Pre-load all instances
+  const realInstanceIds = uniqueInstanceIds.filter(Boolean);
+  if (realInstanceIds.length > 0) {
+    const { data: instances } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_url, api_key, instance_name, provider")
+      .in("id", realInstanceIds);
+    for (const inst of instances || []) {
+      instanceCache.set(inst.id, inst);
+    }
+  }
+
+  // Per-instance send counters for batch resting
   const instanceSendCounts = new Map<string, number>();
 
-  // Process in chunks
+  // ===== INTERLEAVED PER-INSTANCE PROCESSING =====
+  // Instead of processing all recipients globally, we round-robin across instances
+  // so each instance gets proper cooldown time while others send
+
   while (true) {
-    // Check time budget
     if (Date.now() - startTime > MAX_EXECUTION_MS) {
       timedOut = true;
       break;
     }
 
-    // Load next chunk of pending recipients
-    const { data: recipients, error: rErr } = await supabase
-      .from("whatsapp_campaign_recipients")
-      .select("*")
-      .eq("campaign_id", campaignId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: true })
-      .limit(CHUNK_SIZE);
+    let anyProcessed = false;
 
-    if (rErr) throw rErr;
-    if (!recipients || recipients.length === 0) break;
-
-    // Pre-load instances for this chunk
-    const instanceIds = [...new Set(recipients.map((r: any) => r.assigned_instance_id).filter(Boolean))];
-    const missingInstanceIds = instanceIds.filter(id => !instanceCache.has(id));
-    if (missingInstanceIds.length > 0) {
-      const { data: instances } = await supabase
-        .from("whatsapp_instances")
-        .select("id, instance_url, api_key, instance_name, provider")
-        .in("id", missingInstanceIds);
-      for (const inst of instances || []) {
-        instanceCache.set(inst.id, inst);
-      }
-    }
-
-    // Batch load clients for this chunk
-    const clientIds = [...new Set(recipients.map((r: any) => r.representative_client_id).filter(Boolean))];
-    const clientMap = new Map<string, any>();
-    if (clientIds.length > 0) {
-      const { data: clients } = await supabase
-        .from("clients")
-        .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
-        .in("id", clientIds);
-      for (const c of clients || []) {
-        clientMap.set(c.id, c);
-      }
-    }
-
-    // Process chunk
-    for (const recipient of recipients) {
-      // Time check within chunk — leave margin for checkpoint save
+    // Process one recipient from each instance in round-robin
+    for (const instId of uniqueInstanceIds) {
       if (Date.now() - startTime > MAX_EXECUTION_MS) {
         timedOut = true;
         break;
       }
 
-      const instanceId = recipient.assigned_instance_id || "__gupshup__";
+      const instanceKey = instId || "__gupshup__";
+
+      // ===== BATCH RESTING per instance =====
+      const currentCount = instanceSendCounts.get(instanceKey) || 0;
+      if (currentCount > 0 && currentCount % throttle.batchThreshold === 0) {
+        console.log(`[Anti-Ban] Batch rest for instance ${instanceKey}: ${throttle.batchRestMs}ms after ${currentCount} messages`);
+        const timeRemaining = MAX_EXECUTION_MS - (Date.now() - startTime);
+        if (timeRemaining < throttle.batchRestMs + 20000) {
+          timedOut = true;
+          break;
+        }
+
+        await supabase.from("whatsapp_campaigns").update({
+          sent_count: totalSent, failed_count: totalFailed,
+          progress_metadata: {
+            processed: totalSent + totalFailed, batch_resting: true,
+            resting_instance: instanceKey, last_chunk_at: new Date().toISOString(),
+            anti_ban_active: true, provider_category: providerCategory,
+          },
+          updated_at: new Date().toISOString(),
+        }).eq("id", campaignId);
+
+        await new Promise((r) => setTimeout(r, throttle.batchRestMs));
+      }
+
+      // ===== ATOMIC CLAIM: get next recipient for this instance =====
+      let recipients: any[] = [];
+
+      if (instId) {
+        const { data } = await supabase.rpc("claim_campaign_recipients", {
+          _campaign_id: campaignId,
+          _instance_id: instId,
+          _worker_id: workerId,
+          _limit: 1,
+        });
+        recipients = data || [];
+      } else {
+        // Gupshup (null instance_id) — claim manually
+        const { data: pending } = await supabase
+          .from("whatsapp_campaign_recipients")
+          .select("*")
+          .eq("campaign_id", campaignId)
+          .is("assigned_instance_id", null)
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .limit(1);
+
+        if (pending && pending.length > 0) {
+          await supabase.from("whatsapp_campaign_recipients")
+            .update({ status: "processing", claimed_at: new Date().toISOString(), claimed_by: workerId })
+            .eq("id", pending[0].id)
+            .eq("status", "pending");
+          recipients = pending;
+        }
+      }
+
+      if (recipients.length === 0) continue;
+      anyProcessed = true;
+
+      const recipient = recipients[0];
       let inst = instanceCache.get(recipient.assigned_instance_id);
 
       if (!inst && !recipient.assigned_instance_id && gupshupConfigured) {
@@ -315,60 +382,25 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       }
 
       if (!inst) {
-        await supabase
-          .from("whatsapp_campaign_recipients")
-          .update({ status: "failed", error_message: "Instância não encontrada", updated_at: new Date().toISOString() })
-          .eq("id", recipient.id);
-        chunkFailed++;
-        totalFailed++;
-
-        // Update checkpoint after each message
-        await supabase
-          .from("whatsapp_campaigns")
-          .update({
-            sent_count: totalSent,
-            failed_count: totalFailed,
-            progress_metadata: { processed: totalSent + totalFailed, last_chunk_at: new Date().toISOString() },
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", campaignId);
-
+        await supabase.from("whatsapp_campaign_recipients").update({
+          status: "failed", error_message: "Instância não encontrada", updated_at: new Date().toISOString(),
+        }).eq("id", recipient.id);
+        chunkFailed++; totalFailed++;
+        await updateCheckpoint(supabase, campaignId, totalSent, totalFailed, providerCategory);
         continue;
       }
 
-      // ===== BATCH RESTING: Check if this instance needs a pause =====
-      const currentCount = instanceSendCounts.get(instanceId) || 0;
-      if (currentCount > 0 && currentCount % batchConfig.threshold === 0) {
-        console.log(`[Anti-Ban] Batch rest for instance ${instanceId}: ${batchConfig.duration}ms pause after ${currentCount} messages`);
-
-        // Check if we have enough time for the rest
-        const timeRemaining = MAX_EXECUTION_MS - (Date.now() - startTime);
-        if (timeRemaining < batchConfig.duration + 20000) {
-          // Not enough time for rest + at least one more message — checkpoint and exit
-          timedOut = true;
-          break;
-        }
-
-        // Save checkpoint before long pause
-        await supabase
-          .from("whatsapp_campaigns")
-          .update({
-            sent_count: totalSent,
-            failed_count: totalFailed,
-            progress_metadata: {
-              processed: totalSent + totalFailed,
-              batch_resting: true,
-              instance_id: instanceId,
-              last_chunk_at: new Date().toISOString(),
-            },
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", campaignId);
-
-        await new Promise((r) => setTimeout(r, batchConfig.duration));
+      // Load client data for template resolution
+      let client: any = null;
+      if (recipient.representative_client_id) {
+        const { data: clientData } = await supabase
+          .from("clients")
+          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
+          .eq("id", recipient.representative_client_id)
+          .single();
+        client = clientData;
       }
 
-      const client = clientMap.get(recipient.representative_client_id) || null;
       const rawMessage = recipient.message_body_snapshot || campaign.message_body || "";
       const message = client ? resolveTemplate(rawMessage, client) : rawMessage;
 
@@ -380,17 +412,14 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
         const status = sendResult.ok ? "sent" : "failed";
 
-        await supabase
-          .from("whatsapp_campaign_recipients")
-          .update({
-            status,
-            sent_at: status === "sent" ? new Date().toISOString() : null,
-            error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
-            provider_message_id: sendResult.providerMessageId,
-            message_body_snapshot: message,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", recipient.id);
+        await supabase.from("whatsapp_campaign_recipients").update({
+          status,
+          sent_at: status === "sent" ? new Date().toISOString() : null,
+          error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
+          provider_message_id: sendResult.providerMessageId,
+          message_body_snapshot: message,
+          updated_at: new Date().toISOString(),
+        }).eq("id", recipient.id);
 
         await logMessage(supabase, {
           tenant_id: tenantId,
@@ -402,8 +431,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
           error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
           sent_at: status === "sent" ? new Date().toISOString() : null,
           metadata: {
-            source_type: "campaign",
-            campaign_id: campaignId,
+            source_type: "campaign", campaign_id: campaignId,
             instance_id: recipient.assigned_instance_id,
             instance_name: inst.instance_name,
             provider: sendResult.provider,
@@ -412,9 +440,8 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         });
 
         if (status === "sent") {
-          chunkSent++;
-          totalSent++;
-          instanceSendCounts.set(instanceId, (instanceSendCounts.get(instanceId) || 0) + 1);
+          chunkSent++; totalSent++;
+          instanceSendCounts.set(instanceKey, (instanceSendCounts.get(instanceKey) || 0) + 1);
           await ensureConversationAndMessage(
             supabase, tenantId, recipient.assigned_instance_id,
             recipient.phone, recipient.recipient_name,
@@ -422,94 +449,67 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
             sendResult.providerMessageId, sendResult.provider
           );
         } else {
-          chunkFailed++;
-          totalFailed++;
+          chunkFailed++; totalFailed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
         }
       } catch (err: any) {
-        await supabase
-          .from("whatsapp_campaign_recipients")
-          .update({
-            status: "failed",
-            error_message: err.message,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", recipient.id);
+        await supabase.from("whatsapp_campaign_recipients").update({
+          status: "failed", error_message: err.message, updated_at: new Date().toISOString(),
+        }).eq("id", recipient.id);
 
         await logMessage(supabase, {
           tenant_id: tenantId,
           client_id: recipient.representative_client_id,
           client_cpf: client?.cpf || null,
-          phone: recipient.phone,
-          status: "failed",
-          message_body: message,
-          error_message: err.message,
-          metadata: {
-            source_type: "campaign",
-            campaign_id: campaignId,
-            instance_id: recipient.assigned_instance_id,
-            instance_name: inst.instance_name,
-            provider: inst.provider,
-          },
+          phone: recipient.phone, status: "failed",
+          message_body: message, error_message: err.message,
+          metadata: { source_type: "campaign", campaign_id: campaignId, instance_id: recipient.assigned_instance_id, instance_name: inst.instance_name, provider: inst.provider },
         });
 
-        chunkFailed++;
-        totalFailed++;
+        chunkFailed++; totalFailed++;
         errors.push(`${recipient.recipient_name}: ${err.message}`);
       }
 
-      // ===== ANTI-BAN THROTTLE: Random delay between messages =====
-      const delay = getAntiBanDelay(originType);
-      console.log(`[Anti-Ban] Waiting ${Math.round(delay)}ms before next message (origin: ${originType})`);
+      // ===== ANTI-BAN THROTTLE =====
+      const delay = randomDelay(throttle);
+      console.log(`[Anti-Ban] Instance ${instanceKey}: waiting ${Math.round(delay)}ms (${providerCategory})`);
       await new Promise((r) => setTimeout(r, delay));
 
-      // Update checkpoint after EACH message for real-time polling
-      await supabase
-        .from("whatsapp_campaigns")
-        .update({
-          sent_count: totalSent,
-          failed_count: totalFailed,
-          progress_metadata: {
-            processed: totalSent + totalFailed,
-            last_chunk_at: new Date().toISOString(),
-            anti_ban_active: true,
-            origin_type: originType,
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", campaignId);
+      await updateCheckpoint(supabase, campaignId, totalSent, totalFailed, providerCategory);
     }
 
     if (timedOut) break;
+    if (!anyProcessed) break; // All instances exhausted
   }
 
-  // Check if there are still pending recipients
+  // Check remaining
   const { count: remainingCount } = await supabase
     .from("whatsapp_campaign_recipients")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
-    .eq("status", "pending");
+    .in("status", ["pending", "processing"]);
 
   const remaining = remainingCount || 0;
 
+  // Release campaign lock
+  await supabase.rpc("release_campaign_lock", { _campaign_id: campaignId, _worker_id: workerId });
+
   if (timedOut && remaining > 0) {
-    // Partial completion — campaign stays in "sending" status for re-invocation
-    await supabase
-      .from("whatsapp_campaigns")
-      .update({
-        sent_count: totalSent,
-        failed_count: totalFailed,
-        progress_metadata: {
-          processed: totalSent + totalFailed,
-          remaining,
-          timed_out: true,
-          last_chunk_at: new Date().toISOString(),
-          anti_ban_active: true,
-          origin_type: originType,
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", campaignId);
+    // Reset any "processing" back to "pending" for retry
+    await supabase.from("whatsapp_campaign_recipients")
+      .update({ status: "pending", claimed_at: null, claimed_by: null })
+      .eq("campaign_id", campaignId)
+      .eq("status", "processing");
+
+    await supabase.from("whatsapp_campaigns").update({
+      sent_count: totalSent, failed_count: totalFailed,
+      progress_metadata: {
+        processed: totalSent + totalFailed, remaining,
+        timed_out: true, last_chunk_at: new Date().toISOString(),
+        anti_ban_active: true, provider_category: providerCategory,
+      },
+      updated_at: new Date().toISOString(),
+    }).eq("id", campaignId);
 
     return new Response(
       JSON.stringify({ status: "partial", sent: chunkSent, failed: chunkFailed, totalSent, totalFailed, remaining, errors }),
@@ -517,22 +517,16 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     );
   }
 
-  // Determine final status
   let finalStatus = "completed";
   if (totalSent === 0 && totalFailed > 0) finalStatus = "failed";
   else if (totalSent > 0 && totalFailed > 0) finalStatus = "completed_with_errors";
 
-  await supabase
-    .from("whatsapp_campaigns")
-    .update({
-      status: finalStatus,
-      sent_count: totalSent,
-      failed_count: totalFailed,
-      completed_at: new Date().toISOString(),
-      progress_metadata: { processed: totalSent + totalFailed, remaining: 0, anti_ban_active: true },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", campaignId);
+  await supabase.from("whatsapp_campaigns").update({
+    status: finalStatus, sent_count: totalSent, failed_count: totalFailed,
+    completed_at: new Date().toISOString(),
+    progress_metadata: { processed: totalSent + totalFailed, remaining: 0, anti_ban_active: true, provider_category: providerCategory },
+    updated_at: new Date().toISOString(),
+  }).eq("id", campaignId);
 
   return new Response(
     JSON.stringify({ success: true, sent: totalSent, failed: totalFailed, total: totalSent + totalFailed, errors, finalStatus }),
@@ -540,14 +534,32 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   );
 }
 
-// ===== Legacy flow (backward compatible) =====
+async function updateCheckpoint(supabase: any, campaignId: string, totalSent: number, totalFailed: number, providerCategory: string) {
+  await supabase.from("whatsapp_campaigns").update({
+    sent_count: totalSent, failed_count: totalFailed,
+    progress_metadata: {
+      processed: totalSent + totalFailed,
+      last_chunk_at: new Date().toISOString(),
+      anti_ban_active: true, provider_category: providerCategory,
+    },
+    updated_at: new Date().toISOString(),
+  }).eq("id", campaignId);
+}
+
+// ===== Legacy flow — now with proper anti-ban for unofficial =====
 async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const { client_ids, message_template } = body;
 
   if (!client_ids?.length || !message_template) {
     return new Response(JSON.stringify({ error: "client_ids and message_template required" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // If more than 5 recipients, block legacy flow — must use campaign
+  if (client_ids.length > 5) {
+    return new Response(JSON.stringify({ error: "Para mais de 5 destinatários, use o módulo de campanhas" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -566,6 +578,7 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
   let inst: any = null;
+  let isOfficial = false;
 
   if (provider === "baylers") {
     const { data: instances } = await supabase
@@ -578,22 +591,13 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
       .single();
 
     if (instances) {
-      inst = {
-        provider: "baylers",
-        instance_url: instances.instance_url || evolutionUrl,
-        api_key: instances.api_key || evolutionKey,
-        instance_name: instances.instance_name,
-      };
+      inst = { provider: "baylers", instance_url: instances.instance_url || evolutionUrl, api_key: instances.api_key || evolutionKey, instance_name: instances.instance_name };
     } else if (settings.baylers_api_key && settings.baylers_instance_url) {
-      inst = {
-        provider: "baylers",
-        instance_url: settings.baylers_instance_url,
-        api_key: settings.baylers_api_key,
-        instance_name: settings.baylers_instance_name || "default",
-      };
+      inst = { provider: "baylers", instance_url: settings.baylers_instance_url, api_key: settings.baylers_api_key, instance_name: settings.baylers_instance_name || "default" };
     }
   } else if (provider === "gupshup") {
     inst = { provider: "gupshup", instance_name: settings.gupshup_app_name || "gupshup" };
+    isOfficial = true;
   }
 
   if (provider === "gupshup" && (!settings.gupshup_api_key || !settings.gupshup_source_number)) {
@@ -612,6 +616,9 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
     });
   }
 
+  // Apply appropriate delay even for legacy
+  const throttle = getThrottleConfig(isOfficial ? "official_meta" : "unofficial", "OP_CARTEIRA");
+
   const { data: clients, error: cErr } = await supabase
     .from("clients")
     .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone")
@@ -629,12 +636,8 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
 
     if (!client.phone) {
       await logMessage(supabase, {
-        tenant_id: tenantUser.tenant_id,
-        client_id: client.id,
-        client_cpf: client.cpf,
-        status: "failed",
-        message_body: message,
-        error_message: "Cliente sem telefone",
+        tenant_id: tenantUser.tenant_id, client_id: client.id, client_cpf: client.cpf,
+        status: "failed", message_body: message, error_message: "Cliente sem telefone",
         metadata: { source_type: "legacy", provider },
       });
       failed++;
@@ -645,49 +648,30 @@ async function handleLegacyFlow(supabase: any, body: any, tenantUser: any) {
     const phone = client.phone.replace(/\D/g, "");
 
     try {
-      const sendResult = await sendByProvider(
-        inst!, phone, message, settings,
-        evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken
-      );
-
+      const sendResult = await sendByProvider(inst!, phone, message, settings, evolutionUrl, evolutionKey, wuzapiUrl, wuzapiAdminToken);
       const status = sendResult.ok ? "sent" : "failed";
 
       await logMessage(supabase, {
-        tenant_id: tenantUser.tenant_id,
-        client_id: client.id,
-        client_cpf: client.cpf,
-        phone,
-        status,
-        message_body: message,
+        tenant_id: tenantUser.tenant_id, client_id: client.id, client_cpf: client.cpf,
+        phone, status, message_body: message,
         error_message: status === "failed" ? JSON.stringify(sendResult.result) : null,
         sent_at: status === "sent" ? new Date().toISOString() : null,
-        metadata: {
-          source_type: "legacy",
-          provider: sendResult.provider,
-          provider_message_id: sendResult.providerMessageId,
-          instance_name: inst?.instance_name,
-        },
+        metadata: { source_type: "legacy", provider: sendResult.provider, provider_message_id: sendResult.providerMessageId, instance_name: inst?.instance_name },
       });
 
       if (status === "sent") {
         sent++;
-        await ensureConversationAndMessage(
-          supabase, tenantUser.tenant_id, inst?.id || null,
-          phone, client.nome_completo, client.id, message,
-          sendResult.providerMessageId, sendResult.provider
-        );
+        await ensureConversationAndMessage(supabase, tenantUser.tenant_id, inst?.id || null, phone, client.nome_completo, client.id, message, sendResult.providerMessageId, sendResult.provider);
       } else { failed++; errors.push(`${client.nome_completo}: envio falhou`); }
 
-      await new Promise((r) => setTimeout(r, 100));
+      // Apply anti-ban delay
+      const delay = randomDelay(throttle);
+      console.log(`[Legacy Anti-Ban] Waiting ${Math.round(delay)}ms`);
+      await new Promise((r) => setTimeout(r, delay));
     } catch (err: any) {
       await logMessage(supabase, {
-        tenant_id: tenantUser.tenant_id,
-        client_id: client.id,
-        client_cpf: client.cpf,
-        phone,
-        status: "failed",
-        message_body: message,
-        error_message: err.message,
+        tenant_id: tenantUser.tenant_id, client_id: client.id, client_cpf: client.cpf,
+        phone, status: "failed", message_body: message, error_message: err.message,
         metadata: { source_type: "legacy", provider },
       });
       failed++;
