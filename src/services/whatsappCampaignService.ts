@@ -290,33 +290,15 @@ export async function createRecipients(
 
 // ---- Start campaign with auto-resume for partial completions ----
 
-export async function startCampaign(campaignId: string): Promise<any> {
-  const MAX_RETRIES = 50; // safety limit for re-invocations
-  let attempt = 0;
-  let lastResult: any = null;
-
-  while (attempt < MAX_RETRIES) {
-    attempt++;
-    const { data, error } = await supabase.functions.invoke("send-bulk-whatsapp", {
-      body: { campaign_id: campaignId },
-    });
-
-    if (error) throw error;
-    lastResult = data;
-
-    // If partial, re-invoke automatically
-    if (data?.status === "partial" && (data?.remaining || 0) > 0) {
-      console.log(`[Campaign] Partial completion, ${data.remaining} remaining. Re-invoking (attempt ${attempt})...`);
-      // Small delay before re-invocation
-      await new Promise((r) => setTimeout(r, 2000));
-      continue;
-    }
-
-    // Completed or failed — stop
-    break;
-  }
-
-  return lastResult;
+export async function startCampaign(campaignId: string): Promise<void> {
+  // Fire-and-forget: invoke but don't await the full response.
+  // The edge function may take minutes (anti-ban delays), causing client-side timeouts.
+  // The function continues running server-side regardless.
+  supabase.functions.invoke("send-bulk-whatsapp", {
+    body: { campaign_id: campaignId },
+  }).catch((err) => {
+    console.warn("[startCampaign] invoke returned error (expected for long campaigns):", err?.message);
+  });
 }
 
 // ---- Poll campaign progress (for real-time UI updates) ----
