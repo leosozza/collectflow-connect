@@ -1,53 +1,34 @@
 
-# Botão "Reativar Acordo" na aba Acordos
 
-## Resumo
-Adicionar um botão "Reativar Acordo" nos acordos com status `cancelled` (Quebra de Acordo), que abre o modal "Formalizar Acordo" com todos os campos pré-preenchidos do acordo quebrado (descontos, parcelas, meios de pagamento, datas). O botão só aparece se o cliente não tem outro acordo vigente.
+# Adaptar modal "Formalizar Acordo" a diferentes tamanhos de tela
 
-## Alterações
+## Problema
+O modal usa alturas fixas (`max-h-[300px]` para parcelas, `max-h-[40vh]` para simulação) e o container externo usa `max-h-[90vh]` com `overflow-hidden`. Em monitores menores (720p, 768p), o conteúdo é cortado porque as seções fixas consomem mais espaço relativo e o `overflow-hidden` impede qualquer escape.
 
-### 1. `src/pages/ClientDetailPage.tsx`
+## Solução
 
-**Novo estado para reativação:**
-- Adicionar estado `reactivateAgreement` para armazenar o acordo a ser reativado
-- Quando o botão "Reativar Acordo" é clicado, salvar o acordo no estado e abrir o modal de Formalizar Acordo (`setShowCalculator(true)`)
+### 1. `AgreementCalculator.tsx` — tornar alturas responsivas
 
-**Botão na aba Acordos:**
-- Nos acordos com `status === "cancelled"`, exibir botão "Reativar Acordo" (ícone `RotateCcw`) ao lado do badge de status
-- O botão só aparece se `!hasActiveAgreement` (mesmo check usado no AgreementCalculator)
+**Parcelas (Section 2):**
+- Trocar `max-h-[300px]` por `max-h-[25vh]` — adapta proporcionalmente ao monitor
 
-**Passar dados para AgreementCalculator:**
-- Adicionar prop `reactivateFrom` ao `AgreementCalculator` contendo os dados do acordo quebrado
-- Limpar o estado ao fechar o modal
+**Simulação (Section 3 — CardContent):**
+- Trocar `max-h-[40vh]` por `max-h-[30vh]`
 
-### 2. `src/components/client-detail/AgreementCalculator.tsx`
+**Grid Condições + Simulação (Section 3):**
+- Adicionar `overflow-hidden` ao grid container para evitar que ele empurre o botão para fora
+- O card "Condições do Acordo" recebe `overflow-y-auto max-h-[35vh]` no CardContent para monitores pequenos
 
-**Nova prop opcional:**
-```typescript
-interface AgreementCalculatorProps {
-  // ... existing props
-  reactivateFrom?: Agreement | null;
-}
-```
+**Container principal:**
+- Manter `flex flex-col overflow-hidden flex-1 min-h-0` mas adicionar `overflow-y-auto` para que, em telas muito pequenas, o modal inteiro tenha fallback de scroll
 
-**Pré-preenchimento no `useEffect`:**
-Quando `reactivateFrom` é fornecido, preencher automaticamente:
-- `descontoPercent` ← `reactivateFrom.discount_percent`
-- `numParcelas` ← `reactivateFrom.new_installments`
-- `firstDueDate` ← data de hoje (novo acordo, nova data)
-- `notes` ← `"Reativação do acordo de " + data_original`
-- `entradas` ← reconstruir a partir de `custom_installment_values` (entradas com método)
-- `formaPagto` ← extrair do `custom_installment_values` (campo `entrada_method` ou default BOLETO)
+### 2. `ClientDetailPage.tsx` e `AtendimentoPage.tsx` — DialogContent
 
-Os valores de juros, multa e honorários continuarão sendo carregados pelas regras do credor (já existente). O desconto será sobrescrito pelo valor do acordo original.
+- Trocar `max-h-[90vh] overflow-hidden` por `max-h-[90vh] overflow-y-auto` no DialogContent
+- Isso garante que, se o conteúdo exceder 90vh em monitores pequenos, o operador consegue rolar ao invés de ver cortado
 
-### 3. `src/pages/AtendimentoPage.tsx`
-Mesma lógica — passar `reactivateFrom` ao AgreementCalculator se a tela de atendimento também permite formalizar acordos.
+### Resultado
+- Em monitores grandes (1080p+): layout idêntico ao atual, sem scroll externo
+- Em monitores médios (768p-900p): parcelas e simulação diminuem proporcionalmente
+- Em monitores pequenos: fallback de scroll no modal inteiro, nada fica cortado
 
-## Regra de negócio
-- Só mostrar "Reativar" em acordos `cancelled`
-- Só permitir se não houver acordo vigente (`pending`, `approved`, `pending_approval`) para o mesmo CPF/credor
-- O operador ainda precisa clicar "Simular" e "Gravar" — a reativação apenas pré-preenche os campos
-
-## Resultado
-O operador clica em "Reativar Acordo" → modal abre com todos os campos do acordo anterior preenchidos → ajusta se necessário → simula → grava. Reduz o retrabalho de 5+ minutos para segundos.
