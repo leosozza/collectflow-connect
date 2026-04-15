@@ -64,15 +64,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
   const [calcDate, setCalcDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [jurosPercent, setJurosPercent] = useState<number | "">(0);
-  const [multaPercent, setMultaPercent] = useState<number | "">(0);
-  const [honorariosPercent, setHonorariosPercent] = useState<number | "">(0);
-  const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
-  const [descontoReais, setDescontoReais] = useState<number | "">(0);
+  const [jurosPercent, setJurosPercent] = useState("0");
+  const [multaPercent, setMultaPercent] = useState("0");
+  const [honorariosPercent, setHonorariosPercent] = useState("0");
+  const [descontoPercent, setDescontoPercent] = useState("0");
+  const [descontoReais, setDescontoReais] = useState("0");
   const [discountSource, setDiscountSource] = useState<"percent" | "amount">("percent");
 
   // Agreement form
-  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
+  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: "0", method: "BOLETO" }]);
   const [numParcelas, setNumParcelas] = useState<number | "">(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
@@ -102,8 +102,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     fetchCredorRules(profile.tenant_id, credor).then((rules) => {
       if (rules) {
         setCredorRules(rules);
-        setJurosPercent(rules.juros_mes || 0);
-        setMultaPercent(rules.multa || 0);
+        setJurosPercent(String(rules.juros_mes || 0));
+        setMultaPercent(String(rules.multa || 0));
 
         // Auto-calculate honorários from grade based on effective balance (after payments)
         const totalOriginal = pendentes.reduce((s, c) => {
@@ -118,7 +118,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             return totalOriginal >= parts[0] && totalOriginal <= parts[1];
           });
           if (matchedTier) {
-            setHonorariosPercent(Number(matchedTier.honorario) || 0);
+            setHonorariosPercent(String(Number(matchedTier.honorario) || 0));
           }
         }
 
@@ -134,9 +134,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           const matchedAging = rules.aging_discount_tiers.find((tier: any) =>
             maxAtraso >= (tier.min_days || 0) && maxAtraso <= (tier.max_days || Infinity)
           );
-          setDescontoPercent(matchedAging ? Number(matchedAging.discount_percent) || 0 : 0);
+          setDescontoPercent(matchedAging ? String(Number(matchedAging.discount_percent) || 0) : "0");
         } else {
-          setDescontoPercent(0);
+          setDescontoPercent("0");
         }
       }
     });
@@ -148,7 +148,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setSimulatedInstallments([]);
   }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradas, numParcelas, firstDueDate, formaPagto, intervalo]);
 
-  const numEntrada = entradas.reduce((sum, e) => sum + (typeof e.value === "number" ? e.value : 0), 0);
+  const numEntrada = entradas.reduce((sum, e) => sum + parseDecimal(e.value), 0);
 
   // Per-row calculations
   const rowCalcs = useMemo(() => {
@@ -161,9 +161,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       const valorPago = Number(c.valor_pago) || 0;
       const valorOriginal = Math.max(0, valorBruto - valorPago);
       const valorBase = valorOriginal;
-      const jP = typeof jurosPercent === "number" ? jurosPercent : 0;
-      const mP = typeof multaPercent === "number" ? multaPercent : 0;
-      const hP = typeof honorariosPercent === "number" ? honorariosPercent : 0;
+      const jP = parseDecimal(jurosPercent);
+      const mP = parseDecimal(multaPercent);
+      const hP = parseDecimal(honorariosPercent);
       const jurosVal = valorBase * (jP / 100) * mesesAtraso;
       const multaVal = atraso > 0 ? valorBase * (mP / 100) : 0;
       const honorariosVal = valorBase * (hP / 100);
