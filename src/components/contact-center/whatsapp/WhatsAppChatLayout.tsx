@@ -369,8 +369,27 @@ const WhatsAppChatLayout = () => {
   };
 
   const handleSendAudio = async (blob: Blob) => {
-    // Preserve the real MIME type from the recorder (ogg/opus preferred for official API)
-    const realMime = blob.type || "audio/ogg;codecs=opus";
+    const instance = getInstanceForConv();
+    const isOfficial = instance?.provider_category?.startsWith("official") || false;
+
+    let finalBlob = blob;
+    let finalMime = blob.type || "audio/ogg;codecs=opus";
+
+    // Convert to MP3 for official instances (Gupshup requires MP3)
+    if (isOfficial) {
+      try {
+        const { convertBlobToMp3 } = await import("@/utils/audioConverter");
+        toast.info("Convertendo áudio para MP3...");
+        finalBlob = await convertBlobToMp3(blob);
+        finalMime = "audio/mpeg";
+        console.log(`[AudioSend] Converted to MP3: ${finalBlob.size} bytes`);
+      } catch (err: any) {
+        console.error("[AudioSend] MP3 conversion failed:", err);
+        toast.error("Erro ao converter áudio para MP3");
+        return;
+      }
+    }
+
     const extMap: Record<string, string> = {
       "audio/ogg": ".ogg",
       "audio/ogg;codecs=opus": ".ogg",
@@ -379,8 +398,8 @@ const WhatsAppChatLayout = () => {
       "audio/webm": ".webm",
       "audio/webm;codecs=opus": ".webm",
     };
-    const ext = extMap[realMime] || ".ogg";
-    const file = new File([blob], `audio_${Date.now()}${ext}`, { type: realMime });
+    const ext = extMap[finalMime] || ".ogg";
+    const file = new File([finalBlob], `audio_${Date.now()}${ext}`, { type: finalMime });
     await handleSendMedia(file);
   };
 

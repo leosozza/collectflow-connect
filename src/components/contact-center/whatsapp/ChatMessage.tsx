@@ -1,6 +1,7 @@
 import { ChatMessage as ChatMessageType } from "@/services/conversationService";
 import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download } from "lucide-react";
 import { format } from "date-fns";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -28,6 +29,9 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
 
   // Extract metadata
   const metadata = (message as any).metadata as Record<string, any> | null;
+  const sendError = metadata?.send_error as string | undefined;
+  const providerError = metadata?.provider_error as string | undefined;
+  const errorTooltip = sendError || providerError || null;
   const transcription = metadata?.transcription as string | undefined;
   const transcriptionError = metadata?.transcription_error as string | undefined;
 
@@ -210,7 +214,21 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
           <span className="text-[11px] leading-none">
             {format(new Date(message.created_at), "HH:mm")}
           </span>
-          {isOutbound && statusIcons[message.status]}
+          {isOutbound && (
+            message.status === "failed" && errorTooltip ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help">{statusIcons[message.status]}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    <p className="font-medium text-destructive">Falha no envio</p>
+                    <p className="text-muted-foreground mt-0.5 break-words">{errorTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : statusIcons[message.status]
+          )}
         </div>
       </div>
     </div>
