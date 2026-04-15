@@ -1,29 +1,40 @@
 
 
-# Remover scroll principal do modal e organizar layout
+# Análise: "Valor Atualizado" não exibe total ao selecionar parcelas
 
-## Problema
-O `DialogContent` do modal "Formalizar Acordo" tem `overflow-y-auto` no container inteiro, causando scroll no modal todo. O scroll deve existir **apenas** nas parcelas.
+## Diagnóstico
+
+Após revisão detalhada do código em `AgreementCalculator.tsx`, a lógica de cálculo está correta:
+- `rowCalcs` calcula valores para todas as parcelas
+- `totals` filtra `rowCalcs` pelos `selectedIds` e soma corretamente
+- `totals.totalAtualizado` = `totalBruto - descontoVal`
+- O badge "Valor Atualizado" (linha 562-564) renderiza `totals.totalAtualizado`
+
+**Causa provável**: O badge "Valor Atualizado" está dentro de um container `flex-wrap` com `ml-auto`. Com todos os inputs (Data Cálculo, % Juros, % Multa, % Honor., % Desc., R$ Desc.) na mesma linha, o badge pode estar sendo empurrado para uma segunda linha que fica **cortada** pelo `overflow-hidden` adicionado ao `DialogContent`. O card Section 1 tem `flex-shrink-0`, mas o conteúdo interno pode ultrapassar a altura visível do card.
 
 ## Solução
 
-### 1. `src/pages/ClientDetailPage.tsx` (linha 484)
-Trocar:
+### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
+
+**1. Separar o badge "Valor Atualizado" dos inputs**, colocando-o em sua própria linha abaixo dos campos de cálculo, fora do `flex-wrap`:
+
+Antes (tudo em um único `flex-wrap`):
 ```
-max-h-[90vh] overflow-y-auto
-```
-Por:
-```
-max-h-[90vh] overflow-hidden flex flex-col
+[Data Cálculo] [% Juros] [% Multa] [% Honor.] [% Desc.] [R$ Desc.] [Valor Atualizado R$ X]
 ```
 
-### 2. `src/pages/AtendimentoPage.tsx` (linha 722)
-Mesma alteração — remover `overflow-y-auto`, adicionar `overflow-hidden flex flex-col`.
+Depois (badge em linha separada, alinhado à direita):
+```
+[Data Cálculo] [% Juros] [% Multa] [% Honor.] [% Desc.] [R$ Desc.]
+                                                    Valor Atualizado: R$ X,XX
+```
 
-### 3. `src/components/client-detail/AgreementCalculator.tsx`
-- Envolver o conteúdo retornado pelo componente em um `div` com `flex flex-col overflow-hidden flex-1 min-h-0 gap-3`
-- A Section 1 (dados do cliente) e Section 2 (parcelas com collapse) ficam com `flex-shrink-0` — ocupam só o espaço necessário
-- A Section 3 (grid Condições + Simulação) fica com `flex-1 min-h-0 overflow-y-auto` apenas se necessário, mas como o scroll das parcelas já limita a 300px, o conteúdo todo caberá na tela sem scroll externo
+O badge será movido para fora do `div flex-wrap` e colocado em um `div` separado com `flex justify-end`, garantindo visibilidade em qualquer resolução.
 
-Isso garante que o modal ocupe no máximo 90vh, sem scroll no container principal, e apenas as parcelas tenham rolagem interna.
+**2. Confirmar que a barra inferior (tfoot) reflete o total corretamente** — a estrutura atual do `tfoot` está com colunas alinhadas (11 colunas = colgroup), mas verificar se o `colSpan={3}` na célula "Totais" não está deslocando os valores. Se necessário, ajustar.
+
+### Resultado esperado
+- "Valor Atualizado" sempre visível, sem risco de corte por overflow
+- Totais no rodapé da tabela alinhados com as colunas do header
+- Valor atualiza dinamicamente ao marcar/desmarcar parcelas
 
