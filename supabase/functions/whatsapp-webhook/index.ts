@@ -117,10 +117,24 @@ Deno.serve(async (req) => {
 
       const tenantId = instRow?.tenant_id || "unknown";
 
+      // Resolve Evolution API credentials: DB first, webhook payload as fallback
+      const evoUrl = instRow?.instance_url || body.server_url || "";
+      const evoKey = instRow?.api_key || body.apikey || "";
+
+      // Persist credentials to DB if missing (for future calls)
+      if (evoUrl && evoKey && instRow && (!instRow.instance_url || !instRow.api_key)) {
+        supabase
+          .from("whatsapp_instances")
+          .update({ instance_url: evoUrl, api_key: evoKey })
+          .eq("instance_name", instanceName)
+          .then(() => console.log("[provider=unofficial] Persisted Evolution credentials from webhook payload"))
+          .catch((e: any) => console.warn("[provider=unofficial] Failed to persist credentials:", e.message));
+      }
+
       // If no direct media URL but message has media, fetch via Evolution getBase64 API
-      if (!rawMediaUrl && messageType !== "text" && instRow?.instance_url && instRow?.api_key) {
+      if (!rawMediaUrl && messageType !== "text" && evoUrl && evoKey) {
         try {
-          console.log(`[provider=unofficial] No mediaUrl, fetching via Evolution getBase64 for ${messageType}`);
+          console.log(`[provider=unofficial] No mediaUrl, fetching via Evolution getBase64 for ${messageType} (url=${evoUrl.substring(0, 40)})`);
           const b64Controller = new AbortController();
           const b64Timeout = setTimeout(() => b64Controller.abort(), 25000);
 
