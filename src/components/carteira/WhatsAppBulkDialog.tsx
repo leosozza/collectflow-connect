@@ -11,6 +11,7 @@ import {
   createRecipients,
   startCampaign,
   deriveProviderCategory,
+  isMixedProviderSelection,
   pollCampaignProgress,
   EligibleInstance,
   CampaignProgress,
