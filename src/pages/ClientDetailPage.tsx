@@ -4,7 +4,7 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2, User } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User, RotateCcw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +73,7 @@ const ClientDetailPage = () => {
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
+  const [reactivateAgreement, setReactivateAgreement] = useState<any | null>(null);
 
   const backTo = (location.state as any)?.from || "/carteira";
 
@@ -198,8 +199,16 @@ const ClientDetailPage = () => {
 
   const handleAgreementCreated = () => {
     setShowAcordoDialog(false);
+    setReactivateAgreement(null);
     refetch();
     refetchAgreements();
+  };
+
+  const hasActiveAgreement = agreements.some((a: any) => ["pending", "approved", "pending_approval"].includes(a.status));
+
+  const handleReactivateAgreement = (agreement: any) => {
+    setReactivateAgreement(agreement);
+    setShowAcordoDialog(true);
   };
 
   const handleCancelAgreement = async (id: string) => {
@@ -373,6 +382,18 @@ const ClientDetailPage = () => {
                               </Button>
                             </>
                           )}
+                          {agreement.status === "cancelled" && !hasActiveAgreement && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs gap-1"
+                              onClick={() => handleReactivateAgreement(agreement)}
+                              title="Reativar Acordo"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Reativar
+                            </Button>
+                          )}
                         </div>
                       </div>
 
@@ -480,10 +501,10 @@ const ClientDetailPage = () => {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showAcordoDialog} onOpenChange={setShowAcordoDialog}>
+      <Dialog open={showAcordoDialog} onOpenChange={(open) => { setShowAcordoDialog(open); if (!open) setReactivateAgreement(null); }}>
         <DialogContent className="max-w-[95vw] xl:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Formalizar Acordo</DialogTitle>
+            <DialogTitle>{reactivateAgreement ? "Reativar Acordo" : "Formalizar Acordo"}</DialogTitle>
           </DialogHeader>
           <AgreementCalculator
             clients={clients}
@@ -491,7 +512,8 @@ const ClientDetailPage = () => {
             clientName={first.nome_completo}
             credor={first.credor}
             onAgreementCreated={handleAgreementCreated}
-            hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
+            hasActiveAgreement={hasActiveAgreement}
+            reactivateFrom={reactivateAgreement}
           />
         </DialogContent>
       </Dialog>
