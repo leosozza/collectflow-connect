@@ -133,39 +133,20 @@ Deno.serve(async (req) => {
       };
     }
 
-    // 6b. Convert WebM audio to OGG for official API (Gupshup) compatibility
-    if (media && media.mediaType === "audio" && mediaMimeType?.includes("webm")) {
+    // 6b. Normalize audio MIME for sending
+    // Chrome records as audio/ogg;codecs=opus which IS real OGG — no conversion needed.
+    // Only log the real MIME so we can debug. Do NOT fake-convert WebM→OGG (bytes stay WebM).
+    if (media && media.mediaType === "audio") {
+      const rawMime = media.mimeType || "";
+      // Normalize codec suffixes: "audio/ogg;codecs=opus" → "audio/ogg"
+      const baseMime = rawMime.split(";")[0].trim();
+      console.log(`[send-chat-message] [provider=${providerName}] Audio MIME: raw="${rawMime}" base="${baseMime}"`);
+
       if (providerName === "gupshup") {
-        try {
-          const dlResp = await fetch(mediaUrl);
-          if (dlResp.ok) {
-            const audioBytes = await dlResp.arrayBuffer();
-            const storagePath = mediaUrl.includes("/chat-media/")
-              ? mediaUrl.split("/chat-media/")[1].replace(/\.webm(\?.*)?$/, ".ogg")
-              : `${tenantId}/${conversationId}/audio_${Date.now()}.ogg`;
-
-            const { error: upErr } = await supabase.storage
-              .from("chat-media")
-              .upload(storagePath, audioBytes, {
-                contentType: "audio/ogg;codecs=opus",
-                upsert: true,
-              });
-
-            if (!upErr) {
-              const { data: oggUrlData } = supabase.storage.from("chat-media").getPublicUrl(storagePath);
-              media.mediaUrl = oggUrlData.publicUrl;
-              media.mimeType = "audio/ogg;codecs=opus";
-              // Update persist values to the converted file
-              persistMediaUrl = oggUrlData.publicUrl;
-              persistMimeType = "audio/ogg;codecs=opus";
-              console.log(`[send-chat-message] [provider=${providerName}] Converted WebM → OGG for Gupshup`);
-            } else {
-              console.error(`[send-chat-message] [provider=${providerName}] OGG re-upload failed:`, upErr.message);
-            }
-          }
-        } catch (convErr) {
-          console.error(`[send-chat-message] [provider=${providerName}] WebM→OGG conversion error:`, convErr);
-        }
+        // Gupshup accepts audio/ogg natively. If browser recorded as OGG, send directly.
+        // If browser recorded as WebM (Safari fallback), send as-is — Gupshup also accepts WebM.
+        media.mimeType = baseMime || "audio/ogg";
+        persistMimeType = media.mimeType;
       }
     }
 

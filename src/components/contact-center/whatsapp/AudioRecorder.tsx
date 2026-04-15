@@ -53,12 +53,15 @@ const AudioRecorder = ({ onRecorded, disabled }: AudioRecorderProps) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
+      // Prioritize OGG (real Opus container) — Chrome supports it natively.
+      // This avoids any need for backend conversion.
       const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
         ? "audio/ogg;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
           : "audio/webm";
 
+      console.log(`[AudioRecorder] Recording format: ${mimeType}`);
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
