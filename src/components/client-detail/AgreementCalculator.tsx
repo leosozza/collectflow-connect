@@ -632,7 +632,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                   </TableRow>
                   {parseDecimal(descontoPercent) > 0 && (
                     <TableRow className="text-xs">
-                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
+                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
                       <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
                     </TableRow>
                   )}
