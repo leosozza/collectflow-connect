@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import PersonalDataTab from "@/components/perfil/PersonalDataTab";
+import ProfileStatsCards from "@/components/perfil/ProfileStatsCards";
 import SecurityTab from "@/components/perfil/SecurityTab";
 
 const PerfilPage = () => {
@@ -70,7 +71,8 @@ const PerfilPage = () => {
         isOwnProfile={isOwnProfile}
         canEdit={canEdit}
       />
-      {isOwnProfile && <SecurityTab />}
+      <ProfileStatsCards profileData={profileData} />
+      {(isOwnProfile || isTenantAdmin) && <SecurityTab />}
     </div>
   );
 };
