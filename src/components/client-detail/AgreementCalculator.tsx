@@ -866,41 +866,48 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto max-h-[30vh]">
+          <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
             {simulated && simulatedInstallments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 text-[11px]">
-                      <TableHead className="px-3">Parcela</TableHead>
-                      <TableHead className="px-3">Forma Pagto</TableHead>
-                      <TableHead className="px-3">Vencimento</TableHead>
-                      <TableHead className="px-3 text-right">Valor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {simulatedInstallments.map((inst, idx) => (
-                      <TableRow key={`${inst.number}-${idx}`} className="text-xs">
-                        <TableCell className="px-3 font-medium">
-                          {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
-                        </TableCell>
-                        <TableCell className="px-3">
-                          <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
-                        </TableCell>
-                        <TableCell className="px-3">{formatDate(inst.dueDate)}</TableCell>
-                        <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
+              <>
+                <div className="overflow-y-auto overflow-x-auto max-h-[30vh] flex-1 min-h-0">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-background">
+                      <TableRow className="bg-muted/50 text-[11px]">
+                        <TableHead className="px-3">Parcela</TableHead>
+                        <TableHead className="px-3">Forma Pagto</TableHead>
+                        <TableHead className="px-3">Vencimento</TableHead>
+                        <TableHead className="px-3 text-right">Valor</TableHead>
                       </TableRow>
-                    ))}
-
-                    <TableRow className="bg-emerald-50 dark:bg-emerald-950/30 border-t-2 text-xs font-bold">
-                      <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
-                      <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
-                        {formatCurrency(simulatedTotal)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {simulatedInstallments.map((inst, idx) => (
+                        <TableRow key={`${inst.number}-${idx}`} className="text-xs">
+                          <TableCell className="px-3 font-medium">
+                            {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
+                          </TableCell>
+                          <TableCell className="px-3">
+                            <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
+                          </TableCell>
+                          <TableCell className="px-3">{formatDate(inst.dueDate)}</TableCell>
+                          <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="border-t-2 bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+                  <Table>
+                    <TableBody>
+                      <TableRow className="text-xs font-bold hover:bg-transparent">
+                        <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
+                        <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
+                          {formatCurrency(simulatedTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <div className="p-8 text-center text-muted-foreground text-xs">
                 Preencha as condições e clique em <strong>SIMULAR</strong> para visualizar as parcelas.
