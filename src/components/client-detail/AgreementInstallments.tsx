@@ -703,7 +703,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </Tooltip>
                       )}
 
-
+                      {isPaid && tenantId && profile && (() => {
                         const hasConfirmedManual = manualPayments.some(
                           (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
                         );
