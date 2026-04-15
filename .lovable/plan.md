@@ -1,64 +1,52 @@
 
 
-# Melhoria de UX nos inputs numéricos do AgreementCalculator
+# Correção da busca na Carteira — CPF, telefone, e-mail e nome com acentos
 
-## Problema
-Na tela de Formalizar Acordo (`AgreementCalculator.tsx`), os campos numéricos usam `type="number"` com `step={0.01}`, causando:
-1. **% Honorários / Juros / Multa / Desconto**: não permite apagar o zero para digitar novo valor; setas incrementam 0.01 em vez de 1.0
-2. **Parcelas**: não permite apagar o "1" para digitar quantidade diretamente
-3. **Valor Entrada**: mesmo problema de não poder limpar e redigitar
+## Problemas encontrados na RPC `get_carteira_grouped`
+
+| Campo | Problema |
+|-------|----------|
+| **CPF** | Só remove pontos (`replace(_search, '.', '')`), não remove traços. CPF com formato `123.456.789-00` não encontra. |
+| **Telefone** | Compara `_search` direto contra `phone/phone2/phone3` sem normalizar. Se o usuário digita `(11) 99999-1234`, o ILIKE falha contra `11999991234`. |
+| **E-mail** | Funciona tecnicamente (ILIKE), mas a busca multi-word quebra: se o e-mail é tratado como palavra separada, o filtro `nome_completo ILIKE ALL(words)` pode consumir antes. |
+| **Nome** | Case-insensitive (ILIKE ok), mas **não é accent-insensitive**. "Stefani" não encontra "Stéfani". |
 
 ## Solução
 
-Converter todos os inputs percentuais e de quantidade para `type="text"` com `inputMode="decimal"` (ou `numeric` para inteiros), permitindo campo vazio durante edição e restaurando valor padrão no `onBlur`.
-
-### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
-
-**Campos a alterar (linhas 504-539, 653, 691):**
-
-| Campo | De | Para |
-|-------|-----|------|
-| % Juros (L506) | `type="number" step={0.01}` | `type="text" inputMode="decimal"`, state aceita `""`, onBlur → 0 |
-| % Multa (L510) | idem | idem |
-| % Honor. (L514) | idem | idem |
-| % Desc. (L518) | idem | idem (já aceita `""` no state) |
-| R$ Desc. (L530) | idem | idem (já aceita `""` no state) |
-| Parcelas (L691) | `type="number" min={1}` | `type="text" inputMode="numeric"`, onBlur → 1 |
-| Valor Entrada (L653) | `type="number"` | `type="text" inputMode="decimal"`, onBlur → 0 |
-
-**Mudança nos states (linhas 61-63):**
-```typescript
-// De:
-const [jurosPercent, setJurosPercent] = useState<number>(0);
-const [multaPercent, setMultaPercent] = useState<number>(0);
-const [honorariosPercent, setHonorariosPercent] = useState<number>(0);
-
-// Para:
-const [jurosPercent, setJurosPercent] = useState<number | "">(0);
-const [multaPercent, setMultaPercent] = useState<number | "">(0);
-const [honorariosPercent, setHonorariosPercent] = useState<number | "">(0);
-const [numParcelas, setNumParcelas] = useState<number | "">(1);
+### 1. Habilitar extensão `unaccent` (migration)
+```sql
+CREATE EXTENSION IF NOT EXISTS unaccent;
 ```
 
-**Padrão de cada input:**
-```tsx
-<Input
-  type="text"
-  inputMode="decimal"
-  value={honorariosPercent}
-  onChange={(e) => {
-    const v = e.target.value.replace(/[^0-9.]/g, "");
-    setHonorariosPercent(v === "" ? "" : Number(v));
-  }}
-  onBlur={() => setHonorariosPercent(prev => prev === "" ? 0 : prev)}
-  className="h-7 text-xs px-2"
-/>
+### 2. Atualizar a RPC `get_carteira_grouped` — bloco de busca
+
+**CPF**: Remover todos os não-dígitos de `_search` e de `c.cpf` para comparação:
+```sql
+regexp_replace(c.cpf, '\D', '', 'g') ILIKE '%' || regexp_replace(_search, '\D', '', 'g') || '%'
 ```
 
-**Ajustes derivados**: onde o código faz cálculos com esses valores, usar fallback `typeof x === "number" ? x : 0` (padrão já usado para `descontoPercent`).
+**Telefone**: Normalizar removendo não-dígitos do input e dos campos:
+```sql
+regexp_replace(c.phone, '\D', '', 'g') ILIKE '%' || regexp_replace(_search, '\D', '', 'g') || '%'
+-- Mesma lógica para phone2 e phone3
+```
+
+**Nome**: Usar `unaccent()` em ambos os lados para busca sem acento:
+```sql
+unaccent(c.nome_completo) ILIKE ALL (SELECT '%' || unaccent(unnest(_search_words)) || '%')
+```
+
+**E-mail**: Manter ILIKE mas garantir que funciona com a busca raw (sem split por palavras):
+```sql
+c.email ILIKE '%' || _search || '%'
+```
+
+### Arquivo
+- Migration SQL: `CREATE EXTENSION unaccent` + `CREATE OR REPLACE FUNCTION get_carteira_grouped` com busca corrigida
 
 ### Resultado
-- Usuário pode clicar, apagar tudo e digitar o valor desejado
-- Sem setas que incrementam 0.01 — campo livre para digitação
-- Ao sair do campo vazio, valor volta ao padrão (0 ou 1 para parcelas)
+- CPF: busca funciona com `123.456.789-00`, `12345678900`, ou qualquer formato
+- Telefone: busca funciona com `(11) 99999-1234`, `11999991234`, etc.
+- E-mail: busca funciona normalmente
+- Nome: busca funciona sem acentos e case-insensitive ("stefani" encontra "Stéfani")
 
