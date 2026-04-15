@@ -276,6 +276,37 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     toast({ title: `${label} copiado!` });
   };
 
+  const handleUnconfirmPayment = async (inst: any, idx: number) => {
+    const confirmedPayment = manualPayments.find(
+      (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
+    );
+    if (!confirmedPayment) {
+      toast({ title: "Nenhuma baixa manual confirmada encontrada para esta parcela.", variant: "destructive" });
+      return;
+    }
+    setUnconfirmingIdx(idx);
+    try {
+      const { error } = await supabase
+        .from("manual_payments" as any)
+        .update({
+          status: "pending_confirmation",
+          reviewed_by: null,
+          reviewed_at: null,
+          review_notes: null,
+        })
+        .eq("id", confirmedPayment.id);
+      if (error) throw error;
+      toast({ title: "Baixa revertida para pendente de confirmação." });
+      queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
+    } finally {
+      setUnconfirmingIdx(null);
+    }
+  };
+
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
