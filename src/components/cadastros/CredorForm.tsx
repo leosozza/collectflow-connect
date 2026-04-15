@@ -362,8 +362,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Parcelas Mínimas</Label><Input type="number" value={form.parcelas_min ?? ""} onChange={e => set("parcelas_min", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_min", parseInt(form.parcelas_min) || 1)} /></div>
-                <div><Label>Parcelas Máximas</Label><Input type="number" value={form.parcelas_max ?? ""} onChange={e => set("parcelas_max", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("parcelas_max", parseInt(form.parcelas_max) || 12)} /></div>
+                <div><Label>Parcelas Mínimas</Label><Input type="text" inputMode="numeric" value={form.parcelas_min ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); set("parcelas_min", v === "" ? "" : parseInt(v)); }} onBlur={() => set("parcelas_min", parseInt(form.parcelas_min) || 1)} /></div>
+                <div><Label>Parcelas Máximas</Label><Input type="text" inputMode="numeric" value={form.parcelas_max ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); set("parcelas_max", v === "" ? "" : parseInt(v)); }} onBlur={() => set("parcelas_max", parseInt(form.parcelas_max) || 12)} /></div>
                 {/* Item 3: Replaced Switch with Select for entrada minima */}
                 <div className="col-span-2">
                   <Label>Entrada Mínima</Label>
@@ -376,9 +376,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                       />
                     ) : (
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={form.entrada_minima_valor ?? ""}
-                        onChange={e => set("entrada_minima_valor", e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("entrada_minima_valor", v === "" ? "" : parseFloat(v) || v); }}
                         onBlur={() => set("entrada_minima_valor", parseFloat(form.entrada_minima_valor) || 0)}
                         className="flex-1"
                       />
@@ -392,10 +393,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     </Select>
                   </div>
                 </div>
-                <div><Label>Desconto Máximo (%)</Label><Input type="number" min={0} max={100} step={0.01} value={form.desconto_maximo ?? ""} onChange={e => set("desconto_maximo", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(form.desconto_maximo) || 0)))} /></div>
-                <div><Label>Juros ao Mês (%)</Label><Input type="number" min={0} step={0.01} value={form.juros_mes ?? ""} onChange={e => set("juros_mes", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("juros_mes", Math.max(0, parseFloat(form.juros_mes) || 0))} /></div>
-                <div><Label>Multa (%)</Label><Input type="number" min={0} step={0.01} value={form.multa ?? ""} onChange={e => set("multa", e.target.value === "" ? "" : parseFloat(e.target.value))} onBlur={() => set("multa", Math.max(0, parseFloat(form.multa) || 0))} /></div>
-                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="number" min={1} value={form.prazo_dias_acordo ?? ""} onChange={e => set("prazo_dias_acordo", e.target.value === "" ? "" : parseInt(e.target.value))} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || 30))} /></div>
+                <div><Label>Desconto Máximo (%)</Label><Input type="text" inputMode="decimal" value={form.desconto_maximo ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("desconto_maximo", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(form.desconto_maximo) || 0)))} /></div>
+                <div><Label>Juros ao Mês (%)</Label><Input type="text" inputMode="decimal" value={form.juros_mes ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("juros_mes", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("juros_mes", Math.max(0, parseFloat(form.juros_mes) || 0))} /></div>
+                <div><Label>Multa (%)</Label><Input type="text" inputMode="decimal" value={form.multa ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("multa", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("multa", Math.max(0, parseFloat(form.multa) || 0))} /></div>
+                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="text" inputMode="numeric" value={form.prazo_dias_acordo ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); set("prazo_dias_acordo", v === "" ? "" : parseInt(v)); }} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || 30))} /></div>
               </div>
 
               {/* Índice de Correção Monetária */}
