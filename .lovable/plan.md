@@ -1,38 +1,69 @@
 
 
-# Liberar casas decimais em % Desc e R$ Desconto
+# Fix: campos decimais não aceitam vírgula no frontend
 
-## Problema
-Os campos `% Desc.` e `R$ Desc.` usam `replace(/[^0-9.]/g, "")` que remove vírgulas. No Brasil, o separador decimal é vírgula (`0,15`), então o usuário não consegue digitar valores como `0,15%` ou `R$ 0,50`. Além disso, `Number("0,15")` retorna `NaN`.
+## Problema raiz
+
+Os estados (`jurosPercent`, `multaPercent`, etc.) são `number | ""`. Quando o usuário digita "0,":
+1. `raw = "0,"` → `Number("0.") = 0` → estado vira `0`
+2. O input mostra `0` — a vírgula desaparece
+3. Impossível digitar valores decimais incrementalmente
 
 ## Solução
 
+Mudar os estados de `number | ""` para `string` para manter o texto bruto digitado. Os cálculos usam uma função helper para parsear.
+
 ### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
 
-Nos dois campos (linhas ~524-544), alterar a lógica de sanitização para:
-
-1. Aceitar vírgula como separador decimal: `replace(/[^0-9.,]/g, "")` no filtro visual
-2. Converter vírgula para ponto antes de fazer `Number()`: `.replace(",", ".")`
-3. Manter o valor bruto digitado (string com vírgula) no campo para exibição natural
-
-Mesma correção nos campos `% Juros`, `% Multa` e `% Honorários` (linha ~520) para consistência.
-
-**Lógica por campo:**
+**1. Alterar tipos dos estados:**
 ```tsx
-// Antes:
-const raw = e.target.value.replace(/[^0-9.]/g, "");
-const pct = Number(raw);
+// De:
+const [jurosPercent, setJurosPercent] = useState<number | "">(0);
+const [multaPercent, setMultaPercent] = useState<number | "">(0);
+const [honorariosPercent, setHonorariosPercent] = useState<number | "">(0);
+const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
+const [descontoReais, setDescontoReais] = useState<number | "">(0);
 
-// Depois:
-const raw = e.target.value.replace(/[^0-9.,]/g, "");
-const pct = Number(raw.replace(",", "."));
-if (raw !== "" && isNaN(pct)) return;
+// Para:
+const [jurosPercent, setJurosPercent] = useState("0");
+const [multaPercent, setMultaPercent] = useState("0");
+const [honorariosPercent, setHonorariosPercent] = useState("0");
+const [descontoPercent, setDescontoPercent] = useState("0");
+const [descontoReais, setDescontoReais] = useState("0");
 ```
 
-Isso permite digitar `0,15` ou `0.15` e ambos convertem para `0.15` internamente.
+**2. Helper de parse:**
+```tsx
+const parseDecimal = (s: string): number => {
+  if (!s) return 0;
+  return Number(s.replace(",", ".")) || 0;
+};
+```
+
+**3. Simplificar onChange — manter raw string no estado:**
+```tsx
+onChange={(e) => {
+  const raw = e.target.value.replace(/[^0-9.,]/g, "");
+  // Validar que parseia (rejeitar "1.2.3")
+  const parsed = Number(raw.replace(",", "."));
+  if (raw !== "" && isNaN(parsed)) return;
+  setJurosPercent(raw);
+}}
+onBlur={() => setJurosPercent(prev => prev === "" ? "0" : prev)}
+```
+
+**4. Nos cálculos**, substituir referências diretas por `parseDecimal()`:
+```tsx
+// De: typeof jurosPercent === "number" ? jurosPercent : 0
+// Para: parseDecimal(jurosPercent)
+```
+
+**5. Mesma lógica para `entradas[].value`** — mudar de `number | ""` para `string` na interface `EntradaItem`.
+
+**6. `numParcelas`** — manter `number | ""` pois não precisa de decimais.
 
 ### Resultado
-- `0,15%` → aceito, calcula corretamente
-- `R$ 0,50` → aceito, calcula corretamente
-- Mantém compatibilidade com ponto como separador
+- "0," fica visível no campo → usuário continua digitando "0,15"
+- "0,15" exibe corretamente e calcula como 0.15
+- Compatível com ponto: "0.15" também funciona
 
