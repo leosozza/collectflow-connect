@@ -1,52 +1,52 @@
 
 
-# Diagnóstico: Por que Barbara não vê o mesmo que Raul
+# Correção: Dashboard ignora datas customizadas de parcelas
 
-## O que encontrei no banco
+## Causa raiz
 
-| Usuário | `tenant_users.role` | `profiles.role` | `permission_profile_id` |
-|---------|---------------------|-----------------|------------------------|
-| Raul Jose Seixas Junior | **super_admin** | admin | NULL |
-| Raul Seixas | **admin** | admin | NULL |
-| Barbara Sampaio | **operador** | operador | "Admin Padrão" |
+A RPC `get_dashboard_vencimentos` calcula as datas das parcelas usando fórmula fixa:
+- Entrada: `COALESCE(entrada_date, first_due_date)`
+- Regulares: `first_due_date + (i * '1 month')`
 
-Barbara tem o perfil de permissões "Admin Padrão" vinculado, mas o campo `role` tanto em `tenant_users` quanto em `profiles` continua **operador**. Isso aconteceu porque:
-
-1. A política SELECT de `tenant_users` só permite ver o próprio registro ou ser super_admin:
-   ```
-   user_id = auth.uid() OR is_super_admin(auth.uid())
-   ```
-2. Quando alguém tentou salvar Barbara como "admin", o UPDATE silenciosamente não afetou nenhuma linha — o admin que editou não consegue "ver" a linha da Barbara via SELECT, e o PostgREST exige visibilidade para UPDATE funcionar.
-
-O sistema inteiro verifica `is_tenant_admin()` que olha `tenant_users.role IN ('admin', 'super_admin')`. Como Barbara é "operador" nessa tabela, ela não tem acesso de admin a nada.
+Quando o operador altera a data de uma parcela, o valor é salvo em `agreements.custom_installment_dates` (JSONB, ex: `{"2": "2026-05-15"}`), mas a RPC **nunca consulta essa coluna**. O dashboard continua mostrando a data calculada original.
 
 ## Solução
 
-### 1. Corrigir a RLS de `tenant_users` (SELECT)
-Permitir que admins do tenant vejam todos os membros do mesmo tenant:
+Atualizar a RPC `get_dashboard_vencimentos` para usar `custom_installment_dates` quando disponível, com fallback para a fórmula original.
 
+### Lógica da mudança
+
+Para a **entrada** (parcela 1 / key "entrada"):
 ```sql
-DROP POLICY "Users can view own tenant memberships" ON tenant_users;
-CREATE POLICY "Users can view tenant memberships" ON tenant_users
-  FOR SELECT USING (
-    user_id = auth.uid()
-    OR is_tenant_admin(auth.uid(), tenant_id)
-    OR is_super_admin(auth.uid())
-  );
+-- De:
+COALESCE(a.entrada_date, a.first_due_date)::date = _target_date
+-- Para:
+COALESCE(
+  (a.custom_installment_dates->>'entrada')::date,
+  a.entrada_date,
+  a.first_due_date
+)::date = _target_date
 ```
 
-### 2. Corrigir os dados da Barbara agora
-Atualizar `tenant_users.role` para `'admin'` e `profiles.role` para `'admin'` via migração de dados.
+Para **parcelas regulares** (key = numero_parcela):
+```sql
+-- De:
+(a.first_due_date::date + (i * interval '1 month'))::date = _target_date
+-- Para:
+COALESCE(
+  (a.custom_installment_dates->>cast(
+    CASE WHEN a.entrada_value > 0 THEN i + 2 ELSE i + 1 END as text
+  ))::date,
+  (a.first_due_date::date + (i * interval '1 month'))::date
+) = _target_date
+```
 
-### 3. Sincronizar role ao salvar usuário
-No `UsersPage.tsx`, garantir que ao mudar o role de um usuário, o `tenant_users.role` também seja atualizado (e não apenas o `profiles.role` e o `permission_profile_id`). Adicionar verificação de linhas afetadas para não falhar silenciosamente.
+A mesma substituição se aplica nas linhas que comparam a data com `CURRENT_DATE` para determinar o `effective_status` (overdue check).
 
-### Arquivos
-- Migration SQL: corrigir RLS + dados da Barbara
-- `src/pages/UsersPage.tsx`: garantir que update de role atualize `tenant_users` também e verifique resultado
+### Arquivo
+- Migration SQL: `CREATE OR REPLACE FUNCTION get_dashboard_vencimentos` com suporte a `custom_installment_dates`
 
 ### Resultado
-- Admins do tenant poderão ver e editar todos os membros
-- O role salvo no formulário vai refletir corretamente no banco
-- Barbara terá o mesmo acesso que Raul Seixas (admin)
+- Parcelas com data alterada aparecem no dia correto no dashboard
+- Parcelas sem alteração continuam usando a fórmula original (zero impacto)
 
