@@ -308,6 +308,26 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     }
   };
 
+  const handleCancelPendingPayment = async (inst: any, idx: number) => {
+    if (!inst.pendingManual) return;
+    setCancellingIdx(idx);
+    try {
+      const { error } = await supabase
+        .from("manual_payments" as any)
+        .delete()
+        .eq("id", inst.pendingManual.id);
+      if (error) throw error;
+      toast({ title: "Solicitação de baixa cancelada." });
+      queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingIdx(null);
+    }
+  };
+
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
