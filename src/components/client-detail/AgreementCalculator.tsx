@@ -860,13 +860,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Card>
 
         {/* Right: Simulation Results */}
-        <Card className={`transition-opacity ${simulated ? "opacity-100" : "opacity-40"}`}>
+        <Card className={`transition-opacity ${simulated ? "opacity-100" : "opacity-40"} flex flex-col overflow-hidden`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
               {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto max-h-[40vh]">
             {simulated && simulatedInstallments.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
