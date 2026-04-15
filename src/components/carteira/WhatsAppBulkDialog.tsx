@@ -356,6 +356,12 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           ))}
         </div>
       )}
+      {isMixed && (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          Você selecionou instâncias oficiais e não-oficiais. Crie campanhas separadas para cada tipo.
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         {selectedInstanceIds.length} instância(s) selecionada(s) — distribuição round-robin automática
       </p>
@@ -386,14 +392,22 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           </div>
         )}
 
-        {/* Anti-Ban notice */}
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-700 text-sm">
+        {/* Anti-Ban notice — provider-specific */}
+        <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${
+          providerCategory === "official_meta"
+            ? "bg-blue-500/10 border-blue-500/20 text-blue-700"
+            : "bg-green-500/10 border-green-500/20 text-green-700"
+        }`}>
           <ShieldCheck className="w-5 h-5 shrink-0" />
           <div>
-            <p className="font-medium">Modo Anti-Ban Ativo</p>
+            <p className="font-medium">
+              {providerCategory === "official_meta" ? "Modo Oficial" : "Modo Anti-Ban Ativo (Não-Oficial)"}
+            </p>
             <p className="text-xs mt-0.5">
-              Intervalos de 8-15s entre mensagens + pausa de 2min a cada 15 envios por instância.
-              Tempo estimado: <strong>~{estimatedMin} minutos</strong>
+              {providerCategory === "official_meta"
+                ? `Intervalos de 1-3s entre mensagens + pausa de 30s a cada 50 envios. Tempo estimado: ~${Math.ceil(dedup.recipients.length * 2 / 60 + Math.floor(dedup.recipients.length / 50) * 0.5)} minutos`
+                : `Intervalos de 8-15s entre mensagens + pausa de 2min a cada 15 envios por instância. Tempo estimado: ~${estimatedMin} minutos`
+              }
             </p>
           </div>
         </div>
