@@ -227,22 +227,40 @@ async function sendEvolutionMedia(
     return { ok: false, result: { error: "URL da instância Evolution não configurada" }, providerMessageId: null, provider };
   }
 
+  // Audio uses dedicated endpoint sendWhatsAppAudio (PTT voice note)
+  if (media.mediaType === "audio") {
+    const audioPayload = {
+      number: phone,
+      audio: media.mediaUrl,
+    };
+
+    console.log(`[evolution-sender] Sending audio via sendWhatsAppAudio: url=${media.mediaUrl.substring(0, 80)}`);
+
+    const resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
+      method: "POST",
+      headers: { apikey: instanceKey, "Content-Type": "application/json" },
+      body: JSON.stringify(audioPayload),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      console.error(`[evolution-sender] Audio error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+    }
+    return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+  }
+
+  // Image, video, document use generic sendMedia
   const payload: any = {
     number: phone,
     mediatype: media.mediaType,
     media: media.mediaUrl,
   };
 
-  // WhatsApp does NOT support caption on audio
-  if (media.mediaType !== "audio") {
-    payload.caption = media.caption || "";
-  }
+  payload.caption = media.caption || "";
 
   if (media.fileName) {
     payload.fileName = media.fileName;
   }
 
-  // Evolution accepts mimetype for all media types
   if (media.mimeType) {
     payload.mimetype = media.mimeType;
   }
