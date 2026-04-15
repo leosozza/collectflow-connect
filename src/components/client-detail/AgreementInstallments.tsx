@@ -755,6 +755,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           })}
         </TableBody>
       </Table>
+      </div>
 
       {manualPaymentInst && tenantId && profile && (
         <ManualPaymentDialog
