@@ -115,6 +115,36 @@ function buildOggPage(
   return page;
 }
 
+// ── Opus TOC byte parser ──
+
+function getOpusFrameDuration(packet: Uint8Array): number {
+  if (packet.length === 0) return 960;
+  const toc = packet[0];
+  const config = (toc >> 3) & 0x1F;
+  // Mapping config → frame size in samples at 48kHz
+  // configs 0-3: SILK NB, 4-7: SILK MB, 8-11: SILK WB, 12-13: Hybrid SWB/FB
+  // 14-15: Hybrid SWB/FB, 16-19: CELT NB, 20-23: CELT WB, 24-27: CELT SWB, 28-31: CELT FB
+  const frameSizes = [
+    480, 960, 1920, 2880,   // 0-3: SILK NB
+    480, 960, 1920, 2880,   // 4-7: SILK MB
+    480, 960, 1920, 2880,   // 8-11: SILK WB
+    480, 960,               // 12-13: Hybrid SWB
+    480, 960,               // 14-15: Hybrid FB
+    120, 240, 480, 960,     // 16-19: CELT NB
+    120, 240, 480, 960,     // 20-23: CELT WB
+    120, 240, 480, 960,     // 24-27: CELT SWB
+    120, 240, 480, 960,     // 28-31: CELT FB
+  ];
+  const baseSize = frameSizes[config] ?? 960;
+  const c = toc & 0x03;
+  if (c === 0) return baseSize;          // 1 frame
+  if (c === 1 || c === 2) return baseSize * 2; // 2 frames
+  // c === 3: arbitrary number of frames
+  if (packet.length < 2) return baseSize;
+  const frameCount = packet[1] & 0x3F;
+  return baseSize * frameCount;
+}
+
 // ── Main remuxer ──
 
 export function remuxWebmToOgg(webmData: Uint8Array): Uint8Array {
@@ -234,7 +264,7 @@ export function remuxWebmToOgg(webmData: Uint8Array): Uint8Array {
   opusHead.set(magic, 0);
   opusHead[8] = 1; // version
   opusHead[9] = channels;
-  headView.setUint16(10, 0, true); // pre-skip (samples)
+  headView.setUint16(10, 312, true); // pre-skip = 312 samples (standard Opus encoder delay)
   headView.setUint32(12, Math.round(sampleRate), true); // input sample rate
   headView.setUint16(16, 0, true); // output gain
   opusHead[18] = 0; // channel mapping family
@@ -253,11 +283,10 @@ export function remuxWebmToOgg(webmData: Uint8Array): Uint8Array {
 
   pages.push(buildOggPage(0n, serialNo, pageSeq++, 0x00, [opusTags]));
 
-  // Audio pages: one packet per page (simple approach)
+  // Audio pages: one packet per page with accurate granule positions
   let granulePos = 0n;
-  const SAMPLES_PER_FRAME = 960n; // 20ms at 48kHz (Opus default)
   for (let i = 0; i < opusPackets.length; i++) {
-    granulePos += SAMPLES_PER_FRAME;
+    granulePos += BigInt(getOpusFrameDuration(opusPackets[i]));
     const isLast = i === opusPackets.length - 1;
     pages.push(buildOggPage(
       granulePos, serialNo, pageSeq++,
