@@ -181,7 +181,7 @@ async function sendGupshupMedia(
   const typeMap: Record<string, string> = {
     image: "image",
     video: "video",
-    audio: "file",      // audio como file — Gupshup aceita qualquer formato via file
+    audio: "audio",
     document: "file",
   };
   const gupType = typeMap[media.mediaType] || "file";
@@ -195,10 +195,12 @@ async function sendGupshupMedia(
   } else if (gupType === "video") {
     msgPayload.url = media.mediaUrl;
     msgPayload.caption = media.caption || "";
-  } else {
-    // file/document/audio — requires url + filename
+  } else if (gupType === "audio") {
     msgPayload.url = media.mediaUrl;
-    msgPayload.filename = media.fileName || (media.mediaType === "audio" ? "audio.ogg" : "documento");
+  } else {
+    // file/document — requires url + filename
+    msgPayload.url = media.mediaUrl;
+    msgPayload.filename = media.fileName || "documento";
     if (media.caption) {
       msgPayload.caption = media.caption;
     }

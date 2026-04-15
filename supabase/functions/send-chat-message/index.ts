@@ -133,15 +133,67 @@ Deno.serve(async (req) => {
       };
     }
 
-    // 6b. Audio format logging
+    // 6b. Audio: remux WebM→OGG for Gupshup (WhatsApp requires OGG for inline playback)
     if (media && media.mediaType === "audio") {
       const rawMime = media.mimeType || "";
       const baseMime = rawMime.split(";")[0].trim();
       console.log(`[send-chat-message] [provider=${providerName}] Audio MIME: raw="${rawMime}" base="${baseMime}"`);
-      // Gupshup: audio is sent as "file" type in whatsapp-sender, no format restriction
       if (baseMime) {
         media.mimeType = baseMime;
         persistMimeType = baseMime;
+      }
+
+      // Gupshup requires OGG/MP3/AAC/AMR — WebM won't play inline
+      const isWebm = baseMime === "audio/webm" || baseMime.startsWith("audio/webm;");
+      if (isWebm && providerName === "gupshup") {
+        try {
+          console.log(`[send-chat-message] Remuxing WebM→OGG for Gupshup...`);
+          const { remuxWebmToOgg } = await import("../_shared/webm-to-ogg.ts");
+
+          // Fetch WebM from storage
+          const webmResp = await fetch(media.mediaUrl);
+          if (!webmResp.ok) throw new Error(`Failed to fetch WebM: ${webmResp.status}`);
+          const webmBytes = new Uint8Array(await webmResp.arrayBuffer());
+
+          // Remux
+          const oggBytes = remuxWebmToOgg(webmBytes);
+          console.log(`[send-chat-message] Remuxed: ${webmBytes.length} bytes WebM → ${oggBytes.length} bytes OGG`);
+
+          // Upload OGG to same bucket
+          const oggPath = media.mediaUrl.replace(/\.webm$/i, ".ogg").replace(/\/([^/]+)$/, (_, name) => {
+            return "/" + name.replace(/\.webm$/i, "") + ".ogg";
+          });
+          // Derive storage path from URL
+          const urlObj = new URL(media.mediaUrl);
+          const storagePath = urlObj.pathname.split("/chat-media/")[1];
+          if (storagePath) {
+            const oggStoragePath = storagePath.replace(/\.webm$/i, ".ogg");
+            const { error: uploadErr } = await supabase.storage
+              .from("chat-media")
+              .upload(oggStoragePath, oggBytes, {
+                contentType: "audio/ogg",
+                upsert: true,
+              });
+            if (uploadErr) throw new Error(`Upload OGG failed: ${uploadErr.message}`);
+
+            const { data: urlData } = supabase.storage.from("chat-media").getPublicUrl(oggStoragePath);
+            const newUrl = urlData.publicUrl;
+
+            media.mediaUrl = newUrl;
+            media.mimeType = "audio/ogg";
+            media.fileName = "audio.ogg";
+            persistMediaUrl = newUrl;
+            persistMimeType = "audio/ogg";
+            console.log(`[send-chat-message] OGG uploaded: ${newUrl}`);
+          } else {
+            console.warn(`[send-chat-message] Could not parse storage path from URL, sending WebM as-is`);
+          }
+        } catch (convErr: any) {
+          console.error(`[send-chat-message] WebM→OGG remux failed, falling back to file type:`, convErr.message);
+          // Fallback: send as file so it at least arrives as attachment
+          media.mediaType = "document" as any;
+          media.fileName = media.fileName || "audio.webm";
+        }
       }
     }
 
