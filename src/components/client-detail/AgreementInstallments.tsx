@@ -486,8 +486,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
       <CollapsibleContent>
 
+      <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
       <Table>
-        <TableHeader>
           <TableRow className="bg-muted/50">
             <TableHead className="w-[80px]">Parcela</TableHead>
             <TableHead>Vencimento</TableHead>
