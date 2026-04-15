@@ -1,40 +1,53 @@
 
+# Botão "Reativar Acordo" na aba Acordos
 
-# Análise: "Valor Atualizado" não exibe total ao selecionar parcelas
+## Resumo
+Adicionar um botão "Reativar Acordo" nos acordos com status `cancelled` (Quebra de Acordo), que abre o modal "Formalizar Acordo" com todos os campos pré-preenchidos do acordo quebrado (descontos, parcelas, meios de pagamento, datas). O botão só aparece se o cliente não tem outro acordo vigente.
 
-## Diagnóstico
+## Alterações
 
-Após revisão detalhada do código em `AgreementCalculator.tsx`, a lógica de cálculo está correta:
-- `rowCalcs` calcula valores para todas as parcelas
-- `totals` filtra `rowCalcs` pelos `selectedIds` e soma corretamente
-- `totals.totalAtualizado` = `totalBruto - descontoVal`
-- O badge "Valor Atualizado" (linha 562-564) renderiza `totals.totalAtualizado`
+### 1. `src/pages/ClientDetailPage.tsx`
 
-**Causa provável**: O badge "Valor Atualizado" está dentro de um container `flex-wrap` com `ml-auto`. Com todos os inputs (Data Cálculo, % Juros, % Multa, % Honor., % Desc., R$ Desc.) na mesma linha, o badge pode estar sendo empurrado para uma segunda linha que fica **cortada** pelo `overflow-hidden` adicionado ao `DialogContent`. O card Section 1 tem `flex-shrink-0`, mas o conteúdo interno pode ultrapassar a altura visível do card.
+**Novo estado para reativação:**
+- Adicionar estado `reactivateAgreement` para armazenar o acordo a ser reativado
+- Quando o botão "Reativar Acordo" é clicado, salvar o acordo no estado e abrir o modal de Formalizar Acordo (`setShowCalculator(true)`)
 
-## Solução
+**Botão na aba Acordos:**
+- Nos acordos com `status === "cancelled"`, exibir botão "Reativar Acordo" (ícone `RotateCcw`) ao lado do badge de status
+- O botão só aparece se `!hasActiveAgreement` (mesmo check usado no AgreementCalculator)
 
-### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
+**Passar dados para AgreementCalculator:**
+- Adicionar prop `reactivateFrom` ao `AgreementCalculator` contendo os dados do acordo quebrado
+- Limpar o estado ao fechar o modal
 
-**1. Separar o badge "Valor Atualizado" dos inputs**, colocando-o em sua própria linha abaixo dos campos de cálculo, fora do `flex-wrap`:
+### 2. `src/components/client-detail/AgreementCalculator.tsx`
 
-Antes (tudo em um único `flex-wrap`):
+**Nova prop opcional:**
+```typescript
+interface AgreementCalculatorProps {
+  // ... existing props
+  reactivateFrom?: Agreement | null;
+}
 ```
-[Data Cálculo] [% Juros] [% Multa] [% Honor.] [% Desc.] [R$ Desc.] [Valor Atualizado R$ X]
-```
 
-Depois (badge em linha separada, alinhado à direita):
-```
-[Data Cálculo] [% Juros] [% Multa] [% Honor.] [% Desc.] [R$ Desc.]
-                                                    Valor Atualizado: R$ X,XX
-```
+**Pré-preenchimento no `useEffect`:**
+Quando `reactivateFrom` é fornecido, preencher automaticamente:
+- `descontoPercent` ← `reactivateFrom.discount_percent`
+- `numParcelas` ← `reactivateFrom.new_installments`
+- `firstDueDate` ← data de hoje (novo acordo, nova data)
+- `notes` ← `"Reativação do acordo de " + data_original`
+- `entradas` ← reconstruir a partir de `custom_installment_values` (entradas com método)
+- `formaPagto` ← extrair do `custom_installment_values` (campo `entrada_method` ou default BOLETO)
 
-O badge será movido para fora do `div flex-wrap` e colocado em um `div` separado com `flex justify-end`, garantindo visibilidade em qualquer resolução.
+Os valores de juros, multa e honorários continuarão sendo carregados pelas regras do credor (já existente). O desconto será sobrescrito pelo valor do acordo original.
 
-**2. Confirmar que a barra inferior (tfoot) reflete o total corretamente** — a estrutura atual do `tfoot` está com colunas alinhadas (11 colunas = colgroup), mas verificar se o `colSpan={3}` na célula "Totais" não está deslocando os valores. Se necessário, ajustar.
+### 3. `src/pages/AtendimentoPage.tsx`
+Mesma lógica — passar `reactivateFrom` ao AgreementCalculator se a tela de atendimento também permite formalizar acordos.
 
-### Resultado esperado
-- "Valor Atualizado" sempre visível, sem risco de corte por overflow
-- Totais no rodapé da tabela alinhados com as colunas do header
-- Valor atualiza dinamicamente ao marcar/desmarcar parcelas
+## Regra de negócio
+- Só mostrar "Reativar" em acordos `cancelled`
+- Só permitir se não houver acordo vigente (`pending`, `approved`, `pending_approval`) para o mesmo CPF/credor
+- O operador ainda precisa clicar "Simular" e "Gravar" — a reativação apenas pré-preenche os campos
 
+## Resultado
+O operador clica em "Reativar Acordo" → modal abre com todos os campos do acordo anterior preenchidos → ajusta se necessário → simula → grava. Reduz o retrabalho de 5+ minutos para segundos.
