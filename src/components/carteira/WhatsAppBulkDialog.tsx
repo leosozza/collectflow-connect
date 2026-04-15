@@ -121,16 +121,25 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     }
   }, [open, stopPolling]);
 
-  // Polling for campaign progress
+  // Polling for campaign progress — drives final result
   useEffect(() => {
     if (sending && campaignId) {
       pollingRef.current = setInterval(async () => {
         const p = await pollCampaignProgress(campaignId);
         if (p) {
           setProgress(p);
-          // If campaign finished, stop polling
+          // When campaign reaches a terminal status, finalize UI from real DB data
           if (["completed", "completed_with_errors", "failed"].includes(p.status)) {
             stopPolling();
+            setResult({
+              sent: p.sent_count,
+              failed: p.failed_count,
+              errors: [],
+              finalStatus: p.status,
+            });
+            setSending(false);
+            if (p.sent_count > 0) toast.success(`${p.sent_count} mensagens enviadas!`);
+            if (p.failed_count > 0) toast.warning(`${p.failed_count} falhas no envio`);
           }
         }
       }, 5000);
@@ -240,24 +249,13 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setCampaignId(campaign.id);
       await createRecipients(campaign.id, tenant.id, distributed, template);
 
-      // startCampaign now handles auto-resume internally
-      const data = await startCampaign(campaign.id);
-
-      setResult({
-        sent: data?.totalSent || data?.sent || 0,
-        failed: data?.totalFailed || data?.failed || 0,
-        errors: data?.errors || [],
-        finalStatus: data?.finalStatus || undefined,
-      });
-
-      if ((data?.totalSent || data?.sent || 0) > 0) toast.success(`${data?.totalSent || data?.sent} mensagens enviadas!`);
-      if ((data?.totalFailed || data?.failed || 0) > 0) toast.warning(`${data?.totalFailed || data?.failed} falhas no envio`);
+      // Fire-and-forget: triggers edge function, polling handles progress/result
+      await startCampaign(campaign.id);
+      // sending stays true — polling useEffect will set result + setSending(false) when done
     } catch (err: any) {
-      toast.error("Erro ao enviar: " + (err.message || ""));
+      toast.error("Erro ao criar campanha: " + (err.message || ""));
       setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
-    } finally {
       setSending(false);
-      stopPolling();
     }
   };
 
