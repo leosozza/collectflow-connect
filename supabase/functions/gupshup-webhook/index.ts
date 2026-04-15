@@ -271,6 +271,10 @@ Deno.serve(async (req) => {
       const status = payload.payload?.type || payload.status;
       const gsMessageId = payload.payload?.gsId || payload.payload?.id || payload.messageId;
 
+      // Extract error details for failed messages
+      const errorReason = payload.payload?.payload?.reason || payload.payload?.reason || "";
+      const errorCode = payload.payload?.payload?.code || payload.payload?.code || "";
+
       if (gsMessageId && status) {
         const mappedStatus =
           status === "delivered" ? "delivered" :
@@ -278,10 +282,39 @@ Deno.serve(async (req) => {
               status === "failed" || status === "error" ? "failed" :
                 status === "sent" ? "sent" : status;
 
-        await Promise.all([
-          supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
-          supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
-        ]);
+        // For failed status, persist the error reason in metadata
+        if (mappedStatus === "failed" && (errorReason || errorCode)) {
+          const providerError = errorReason ? `${errorCode ? `[${errorCode}] ` : ""}${errorReason}` : `Código: ${errorCode}`;
+
+          // Update by external_id
+          const { data: msgByExt } = await supabase
+            .from("chat_messages")
+            .select("id, metadata")
+            .eq("external_id", gsMessageId)
+            .limit(1);
+
+          const { data: msgByProv } = await supabase
+            .from("chat_messages")
+            .select("id, metadata")
+            .eq("provider_message_id", gsMessageId)
+            .limit(1);
+
+          const matchedMsg = msgByExt?.[0] || msgByProv?.[0];
+          if (matchedMsg) {
+            const existingMeta = (matchedMsg.metadata || {}) as Record<string, any>;
+            await supabase.from("chat_messages").update({
+              status: mappedStatus,
+              metadata: { ...existingMeta, provider_error: providerError },
+            }).eq("id", matchedMsg.id);
+          }
+
+          await writeLog(null, "status_failed", `Mensagem falhou: ${providerError}`, { gsMessageId, errorReason, errorCode }, 200);
+        } else {
+          await Promise.all([
+            supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
+            supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
+          ]);
+        }
       }
     }
 
