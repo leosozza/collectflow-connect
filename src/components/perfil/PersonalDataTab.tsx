@@ -177,16 +177,16 @@ const PersonalDataTab = ({ profileData, targetUserId, isOwnProfile, canEdit }: P
                     </Button>
                   )}
                 </div>
-                {(profileData as any)?.bio && (
-                  <p className="text-muted-foreground mt-1">{(profileData as any).bio}</p>
-                )}
+                <p className="text-muted-foreground mt-1">
+                  {(profileData as any)?.bio || <span className="italic text-muted-foreground/60">Não informado</span>}
+                </p>
                 <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground justify-center sm:justify-start">
-                  {(profileData as any)?.birthday && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      {format(new Date((profileData as any).birthday), "dd MMM", { locale: ptBR })}
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    {(profileData as any)?.birthday
+                      ? format(new Date((profileData as any).birthday), "dd MMM", { locale: ptBR })
+                      : <span className="italic text-muted-foreground/60">Não informado</span>}
+                  </span>
                   {email && (
                     <span className="flex items-center gap-1">
                       <Mail className="w-4 h-4" />
