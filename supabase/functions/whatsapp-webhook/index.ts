@@ -139,10 +139,10 @@ Deno.serve(async (req) => {
           const b64Timeout = setTimeout(() => b64Controller.abort(), 25000);
 
           const b64Resp = await fetch(
-            `${instRow.instance_url}/chat/getBase64FromMediaMessage/${instanceName}`,
+            `${evoUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json", apikey: instRow.api_key },
+              headers: { "Content-Type": "application/json", apikey: evoKey },
               body: JSON.stringify({ message: { key: msgData.key } }),
               signal: b64Controller.signal,
             }
