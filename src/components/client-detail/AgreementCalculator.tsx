@@ -494,7 +494,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       )}
 
       {/* ── Section 1: Parameters Bar ── */}
-      <Card>
+      <Card className="flex-shrink-0">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -568,7 +568,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       </Card>
 
       {/* ── Section 2: Expanded Titles Table ── */}
-      <Card>
+      <Card className="flex-shrink-0">
         <CardContent className="p-0">
           {pendentes.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground text-sm">
@@ -695,7 +695,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       </Card>
 
       {/* ── Section 3: Two-column — Form + Simulation ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
         {/* Left: Agreement Form */}
         <Card>
           <CardHeader className="pb-1 pt-3">
