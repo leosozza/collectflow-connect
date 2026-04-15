@@ -483,7 +483,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const simulatedTotal = simulatedInstallments.reduce((s, i) => s + i.value, 0);
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col overflow-hidden flex-1 min-h-0 gap-2">
       {hasActiveAgreement && (
         <Alert variant="destructive">
           <AlertTriangle className="w-4 h-4" />
