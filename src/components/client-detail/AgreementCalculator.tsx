@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -575,70 +576,93 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 : "Nenhum título pendente"}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50 text-[11px]">
-                    <TableHead className="w-8 px-2">
-                      <Checkbox checked={selectedIds.size === pendentes.length && pendentes.length > 0} onCheckedChange={toggleAll} />
-                    </TableHead>
-                    <TableHead className="px-2">Parc</TableHead>
-                    <TableHead className="px-2">Vencimento</TableHead>
-                    <TableHead className="px-2 text-right">Atraso</TableHead>
-                    <TableHead className="px-2 text-right">V. Bruto</TableHead>
-                    <TableHead className="px-2 text-right">V. Pago</TableHead>
-                    <TableHead className="px-2 text-right">Saldo</TableHead>
-                    <TableHead className="px-2 text-right">Juros</TableHead>
-                    <TableHead className="px-2 text-right">Multa</TableHead>
-                    <TableHead className="px-2 text-right">Honorários</TableHead>
-                    <TableHead className="px-2 text-right font-semibold">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendentes.map((c, idx) => {
-                    const row = rowCalcs[idx];
-                    const isSelected = selectedIds.has(c.id);
-                    const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-                    return (
-                      <TableRow key={c.id} className={`text-xs ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
-                        <TableCell className="px-2">
-                          <Checkbox checked={isSelected} onCheckedChange={() => toggleId(c.id)} />
-                        </TableCell>
-                        <TableCell className="px-2 font-medium">{c.numero_parcela}/{c.total_parcelas}</TableCell>
-                        <TableCell className="px-2">{formatDate(c.data_vencimento)}</TableCell>
-                        <TableCell className="px-2 text-center text-xs text-muted-foreground">
-                          {row.atraso}
-                        </TableCell>
-                        <TableCell className="px-2 text-right">{formatCurrency(valorBruto)}</TableCell>
-                        <TableCell className="px-2 text-right text-blue-600 dark:text-blue-400">{formatCurrency(row.valorPago)}</TableCell>
-                        <TableCell className="px-2 text-right font-medium">{formatCurrency(row.valorOriginal)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</TableCell>
-                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</TableCell>
-                        <TableCell className="px-2 text-right font-semibold">{formatCurrency(row.total)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {/* Totals row */}
-                  <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
-                    <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
-                    <TableCell className="px-2 text-right">—</TableCell>
-                    <TableCell className="px-2 text-right">—</TableCell>
-                    <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
-                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
-                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
-                    <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
-                    <TableCell className="px-2 text-right">{formatCurrency(totals.totalBruto)}</TableCell>
-                  </TableRow>
-                  {parseDecimal(descontoPercent) > 0 && (
-                    <TableRow className="text-xs">
-                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
-                      <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
+            <Collapsible open={titlesOpen} onOpenChange={setTitlesOpen}>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 text-[11px]">
+                      <TableHead className="w-8 px-2">
+                        <Checkbox checked={selectedIds.size === pendentes.length && pendentes.length > 0} onCheckedChange={toggleAll} />
+                      </TableHead>
+                      <TableHead className="px-2">Parc</TableHead>
+                      <TableHead className="px-2">Vencimento</TableHead>
+                      <TableHead className="px-2 text-right">Atraso</TableHead>
+                      <TableHead className="px-2 text-right">V. Bruto</TableHead>
+                      <TableHead className="px-2 text-right">V. Pago</TableHead>
+                      <TableHead className="px-2 text-right">Saldo</TableHead>
+                      <TableHead className="px-2 text-right">Juros</TableHead>
+                      <TableHead className="px-2 text-right">Multa</TableHead>
+                      <TableHead className="px-2 text-right">Honorários</TableHead>
+                      <TableHead className="px-2 text-right font-semibold">Total</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                </Table>
+              </div>
+
+              <CollapsibleContent>
+                <div className="max-h-[300px] overflow-y-auto overflow-x-auto">
+                  <Table>
+                    <TableBody>
+                      {pendentes.map((c, idx) => {
+                        const row = rowCalcs[idx];
+                        const isSelected = selectedIds.has(c.id);
+                        const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+                        return (
+                          <TableRow key={c.id} className={`text-xs ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
+                            <TableCell className="px-2 w-8">
+                              <Checkbox checked={isSelected} onCheckedChange={() => toggleId(c.id)} />
+                            </TableCell>
+                            <TableCell className="px-2 font-medium">{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                            <TableCell className="px-2">{formatDate(c.data_vencimento)}</TableCell>
+                            <TableCell className="px-2 text-center text-xs text-muted-foreground">
+                              {row.atraso}
+                            </TableCell>
+                            <TableCell className="px-2 text-right">{formatCurrency(valorBruto)}</TableCell>
+                            <TableCell className="px-2 text-right text-blue-600 dark:text-blue-400">{formatCurrency(row.valorPago)}</TableCell>
+                            <TableCell className="px-2 text-right font-medium">{formatCurrency(row.valorOriginal)}</TableCell>
+                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</TableCell>
+                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</TableCell>
+                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</TableCell>
+                            <TableCell className="px-2 text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CollapsibleContent>
+
+              {/* Totals row - always visible, acts as collapse trigger */}
+              <CollapsibleTrigger asChild>
+                <div className="overflow-x-auto cursor-pointer hover:bg-accent/50 transition-colors">
+                  <Table>
+                    <TableBody>
+                      <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
+                        <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
+                        <TableCell className="px-2 text-right">—</TableCell>
+                        <TableCell className="px-2 text-right">—</TableCell>
+                        <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
+                        <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
+                        <TableCell className="px-2 text-right">
+                          <span className="inline-flex items-center gap-1">
+                            {formatCurrency(totals.totalBruto)}
+                            <ChevronDown className={`h-3 w-3 transition-transform ${titlesOpen ? "rotate-180" : ""}`} />
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      {parseDecimal(descontoPercent) > 0 && (
+                        <TableRow className="text-xs">
+                          <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
+                          <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CollapsibleTrigger>
+            </Collapsible>
           )}
         </CardContent>
       </Card>
