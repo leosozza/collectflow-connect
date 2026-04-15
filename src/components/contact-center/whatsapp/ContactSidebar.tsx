@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Link2, Unlink, Search, FileText, Bot, Loader2, Headphones } from "lucide-react";
+import { User, Link2, Unlink, Search, FileText, Bot, Loader2 } from "lucide-react";
 import { Conversation, ChatMessage, linkClientToConversation } from "@/services/conversationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -321,10 +321,10 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                 variant="outline"
                 size="sm"
                 className="w-full text-xs mt-2"
-                onClick={() => navigate(`/atendimento/${linkedClient.id}?channel=whatsapp`)}
+                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`)}
               >
-                <Headphones className="w-3 h-3 mr-1" />
-                Ir para Atendimento
+                <User className="w-3 h-3 mr-1" />
+                Abrir Perfil do Cliente
               </Button>
               <Button
                 variant="outline"
