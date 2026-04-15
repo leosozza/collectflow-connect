@@ -48,9 +48,15 @@ interface SimulatedInstallment {
 
 interface EntradaItem {
   date: string;
-  value: number | "";
+  value: string;
   method: string;
 }
+
+const parseDecimal = (s: string): number => {
+  if (!s) return 0;
+  const n = Number(s.replace(",", "."));
+  return isNaN(n) ? 0 : n;
+};
 
 const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCreated, hasActiveAgreement }: AgreementCalculatorProps) => {
   const { user, profile } = useAuth();
@@ -58,15 +64,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
   const [calcDate, setCalcDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [jurosPercent, setJurosPercent] = useState<number | "">(0);
-  const [multaPercent, setMultaPercent] = useState<number | "">(0);
-  const [honorariosPercent, setHonorariosPercent] = useState<number | "">(0);
-  const [descontoPercent, setDescontoPercent] = useState<number | "">(0);
-  const [descontoReais, setDescontoReais] = useState<number | "">(0);
+  const [jurosPercent, setJurosPercent] = useState("0");
+  const [multaPercent, setMultaPercent] = useState("0");
+  const [honorariosPercent, setHonorariosPercent] = useState("0");
+  const [descontoPercent, setDescontoPercent] = useState("0");
+  const [descontoReais, setDescontoReais] = useState("0");
   const [discountSource, setDiscountSource] = useState<"percent" | "amount">("percent");
 
   // Agreement form
-  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: 0, method: "BOLETO" }]);
+  const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: "0", method: "BOLETO" }]);
   const [numParcelas, setNumParcelas] = useState<number | "">(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
@@ -96,8 +102,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     fetchCredorRules(profile.tenant_id, credor).then((rules) => {
       if (rules) {
         setCredorRules(rules);
-        setJurosPercent(rules.juros_mes || 0);
-        setMultaPercent(rules.multa || 0);
+        setJurosPercent(String(rules.juros_mes || 0));
+        setMultaPercent(String(rules.multa || 0));
 
         // Auto-calculate honorários from grade based on effective balance (after payments)
         const totalOriginal = pendentes.reduce((s, c) => {
@@ -112,7 +118,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             return totalOriginal >= parts[0] && totalOriginal <= parts[1];
           });
           if (matchedTier) {
-            setHonorariosPercent(Number(matchedTier.honorario) || 0);
+            setHonorariosPercent(String(Number(matchedTier.honorario) || 0));
           }
         }
 
@@ -128,9 +134,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           const matchedAging = rules.aging_discount_tiers.find((tier: any) =>
             maxAtraso >= (tier.min_days || 0) && maxAtraso <= (tier.max_days || Infinity)
           );
-          setDescontoPercent(matchedAging ? Number(matchedAging.discount_percent) || 0 : 0);
+          setDescontoPercent(matchedAging ? String(Number(matchedAging.discount_percent) || 0) : "0");
         } else {
-          setDescontoPercent(0);
+          setDescontoPercent("0");
         }
       }
     });
@@ -142,7 +148,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setSimulatedInstallments([]);
   }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradas, numParcelas, firstDueDate, formaPagto, intervalo]);
 
-  const numEntrada = entradas.reduce((sum, e) => sum + (typeof e.value === "number" ? e.value : 0), 0);
+  const numEntrada = entradas.reduce((sum, e) => sum + parseDecimal(e.value), 0);
 
   // Per-row calculations
   const rowCalcs = useMemo(() => {
@@ -155,9 +161,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       const valorPago = Number(c.valor_pago) || 0;
       const valorOriginal = Math.max(0, valorBruto - valorPago);
       const valorBase = valorOriginal;
-      const jP = typeof jurosPercent === "number" ? jurosPercent : 0;
-      const mP = typeof multaPercent === "number" ? multaPercent : 0;
-      const hP = typeof honorariosPercent === "number" ? honorariosPercent : 0;
+      const jP = parseDecimal(jurosPercent);
+      const mP = parseDecimal(multaPercent);
+      const hP = parseDecimal(honorariosPercent);
       const jurosVal = valorBase * (jP / 100) * mesesAtraso;
       const multaVal = atraso > 0 ? valorBase * (mP / 100) : 0;
       const honorariosVal = valorBase * (hP / 100);
@@ -178,9 +184,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     let descontoVal: number;
     if (discountSource === "amount") {
-      descontoVal = Math.round(Math.min(typeof descontoReais === "number" ? descontoReais : 0, totalBruto) * 100) / 100;
+      descontoVal = Math.round(Math.min(parseDecimal(descontoReais), totalBruto) * 100) / 100;
     } else {
-      const pct = typeof descontoPercent === "number" ? descontoPercent : 0;
+      const pct = parseDecimal(descontoPercent);
       descontoVal = Math.round(totalBruto * (pct / 100) * 100) / 100;
     }
     const totalAtualizado = Math.round(Math.max(0, totalBruto - descontoVal) * 100) / 100;
@@ -216,7 +222,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     const installments: SimulatedInstallment[] = [];
 
-    const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+    const validEntradas = entradas.filter(e => parseDecimal(e.value) > 0 && e.date);
 
     // Add each entrada as individual installment
     validEntradas.forEach((ent, idx) => {
@@ -224,7 +230,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         number: 0,
         method: ent.method,
         dueDate: ent.date,
-        value: typeof ent.value === "number" ? ent.value : 0,
+        value: parseDecimal(ent.value),
         label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
       });
     });
@@ -255,9 +261,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const outOfStandard = useMemo(() => {
     if (!credorRules) return { isOut: false, reasons: [] as string[] };
     const reasons: string[] = [];
-    const pctVal = typeof descontoPercent === "number" ? descontoPercent : 0;
+    const pctVal = parseDecimal(descontoPercent);
     if (credorRules.desconto_maximo > 0 && pctVal > credorRules.desconto_maximo) {
-      reasons.push(`Desconto ${descontoPercent}% excede máx ${credorRules.desconto_maximo}%`);
+      reasons.push(`Desconto ${pctVal}% excede máx ${credorRules.desconto_maximo}%`);
     }
     const nPCheck = typeof numParcelas === "number" ? numParcelas : 1;
     if (credorRules.parcelas_max > 0 && nPCheck > credorRules.parcelas_max) {
@@ -396,11 +402,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       // Build custom installment maps for multiple entradas
       const customDates: Record<string, string> = {};
       const customValues: Record<string, number> = {};
-      const validEntradas = entradas.filter(e => (typeof e.value === "number" ? e.value : 0) > 0 && e.date);
+      const validEntradas = entradas.filter(e => parseDecimal(e.value) > 0 && e.date);
       validEntradas.forEach((ent, idx) => {
         const key = idx === 0 ? "entrada" : `entrada_${idx + 1}`;
         customDates[key] = ent.date;
-        customValues[key] = typeof ent.value === "number" ? ent.value : 0;
+        customValues[key] = parseDecimal(ent.value);
         customValues[`${key}_method`] = ent.method as any;
       });
 
@@ -509,15 +515,15 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Juros</Label>
-              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setJurosPercent(raw === "" ? "" : v); }} onBlur={() => setJurosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setJurosPercent(raw); }} onBlur={() => setJurosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Multa</Label>
-              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setMultaPercent(raw === "" ? "" : v); }} onBlur={() => setMultaPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setMultaPercent(raw); }} onBlur={() => setMultaPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Honor.</Label>
-              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setHonorariosPercent(raw === "" ? "" : v); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setHonorariosPercent(raw); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[80px]">
               <Label className="text-[10px]">% Desc.</Label>
@@ -526,11 +532,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
                 const pct = Number(raw.replace(",", "."));
                 if (isNaN(pct)) return;
-                setDescontoPercent(pct);
+                setDescontoPercent(raw);
                 setDiscountSource("percent");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
-                setDescontoReais(bruto > 0 ? Math.round(bruto * (pct / 100) * 100) / 100 : 0);
-              }} onBlur={() => setDescontoPercent(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+                setDescontoReais(bruto > 0 ? String(Math.round(bruto * (pct / 100) * 100) / 100) : "0");
+              }} onBlur={() => setDescontoPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
             </div>
             <div className="space-y-0.5 w-[100px]">
               <Label className="text-[10px]">R$ Desc.</Label>
@@ -539,11 +545,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
                 const val = Number(raw.replace(",", "."));
                 if (isNaN(val)) return;
-                setDescontoReais(val);
+                setDescontoReais(raw);
                 setDiscountSource("amount");
                 const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
-                setDescontoPercent(bruto > 0 ? Math.round((val / bruto) * 100 * 100) / 100 : 0);
-              }} onBlur={() => setDescontoReais(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
+                setDescontoPercent(bruto > 0 ? String(Math.round((val / bruto) * 100 * 100) / 100) : "0");
+              }} onBlur={() => setDescontoReais(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
             </div>
             {credorRules?.indice_correcao_monetaria && (
               <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
@@ -624,9 +630,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
                     <TableCell className="px-2 text-right">{formatCurrency(totals.totalBruto)}</TableCell>
                   </TableRow>
-                  {(typeof descontoPercent === "number" ? descontoPercent : 0) > 0 && (
+                  {parseDecimal(descontoPercent) > 0 && (
                     <TableRow className="text-xs">
-                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({descontoPercent}%)</TableCell>
+                      <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
                       <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
                     </TableRow>
                   )}
@@ -663,11 +669,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     const v = Number(raw.replace(",", "."));
                     if (raw !== "" && isNaN(v)) return;
                     const next = [...entradas];
-                    next[idx] = { ...next[idx], value: raw === "" ? "" : v };
+                    next[idx] = { ...next[idx], value: raw };
                     setEntradas(next);
                   }} onBlur={() => {
                     const next = [...entradas];
-                    next[idx] = { ...next[idx], value: typeof next[idx].value === "number" ? next[idx].value : 0 };
+                    next[idx] = { ...next[idx], value: next[idx].value === "" ? "0" : next[idx].value };
                     setEntradas(next);
                   }} className="h-7 text-xs px-2" placeholder="0,00" />
                 </div>
@@ -693,7 +699,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                     </Button>
                   )}
                   {idx === entradas.length - 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: 0, method: "BOLETO" }])}>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: "0", method: "BOLETO" }])}>
                       <Plus className="w-3 h-3" />
                     </Button>
                   )}
