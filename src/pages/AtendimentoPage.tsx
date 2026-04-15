@@ -719,7 +719,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
           />
           {!isLocked && (
             <Dialog open={showNegotiation} onOpenChange={setShowNegotiation}>
-              <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col">
                 <DialogHeader>
                   <DialogTitle>Formalizar Acordo — {client.nome_completo}</DialogTitle>
                 </DialogHeader>
