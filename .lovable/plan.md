@@ -1,44 +1,28 @@
 
 
-# Correção: Áudio inbound Evolution não reproduz — credenciais do webhook
+# Correção: Áudio outbound via Evolution chega como WebM (não reproduzível)
 
 ## Causa raiz
 
-A tabela `whatsapp_instances` tem `instance_url` e `api_key` **vazios** para instâncias não-oficiais. O código de fetch via `getBase64` exige esses campos e é silenciosamente ignorado — o áudio é salvo sem media_url, resultando em player 0:00/0:00.
-
-Porém, o Evolution envia `server_url` e `apikey` diretamente no payload de cada webhook. Basta usar esses valores como fallback.
+A conversão WebM→OGG no `send-chat-message/index.ts` só é aplicada quando `providerName === "gupshup"` (linha 148). Para Evolution e WuzAPI, o áudio WebM é enviado diretamente — o WhatsApp não reproduz WebM inline, então o destinatário não recebe nada audível.
 
 ## Solução
 
-### 1. `supabase/functions/whatsapp-webhook/index.ts`
+Remover a restrição de provider no bloco de remux. A conversão WebM→OGG deve ocorrer para **todos os providers** (Gupshup, Evolution, WuzAPI), pois o WhatsApp universalmente exige OGG/Opus para áudio inline.
 
-No bloco que busca mídia via getBase64 (linha ~121), usar credenciais do payload do webhook como fallback:
+### Alteração: `supabase/functions/send-chat-message/index.ts`
 
+Linha 148, mudar de:
 ```typescript
-// Resolve Evolution API credentials: DB first, webhook payload as fallback
-const evoUrl = instRow?.instance_url || body.server_url || "";
-const evoKey = instRow?.api_key || body.apikey || "";
-
-if (!rawMediaUrl && messageType !== "text" && evoUrl && evoKey) {
-  // fetch via getBase64 using evoUrl and evoKey instead of instRow fields
-  const b64Resp = await fetch(
-    `${evoUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: evoKey },
-      body: JSON.stringify({ message: { key: msgData.key } }),
-    }
-  );
-  // ... rest unchanged
-}
+if (isWebm && providerName === "gupshup") {
+```
+Para:
+```typescript
+if (isWebm) {
 ```
 
-### 2. Opcionalmente, persistir credenciais no DB
+Isso faz o remux WebM→OGG rodar para qualquer provider quando o áudio é WebM. O fallback para `document` já existe caso o remux falhe.
 
-Se `instRow` não tem `instance_url`/`api_key` mas o webhook tem, atualizar a row para futuras chamadas. Isso é um bonus, não bloqueante.
-
-### Resultado esperado
-- Áudio inbound do Evolution será baixado via `getBase64` usando credenciais do próprio webhook
-- Player no RIVO mostrará duração real e permitirá reprodução/download
-- Sem alterações no frontend — o `<audio>` já funciona com URL válida
+### Arquivos
+- `supabase/functions/send-chat-message/index.ts` — uma linha alterada
 
