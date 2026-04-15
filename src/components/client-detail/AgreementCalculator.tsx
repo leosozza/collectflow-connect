@@ -579,89 +579,115 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           ) : (
             <Collapsible open={titlesOpen} onOpenChange={setTitlesOpen}>
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 text-[11px]">
-                      <TableHead className="w-8 px-2">
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col className="w-8" />
+                    <col className="w-[60px]" />
+                    <col className="w-[90px]" />
+                    <col className="w-[55px]" />
+                    <col className="w-[85px]" />
+                    <col className="w-[80px]" />
+                    <col className="w-[85px]" />
+                    <col className="w-[75px]" />
+                    <col className="w-[75px]" />
+                    <col className="w-[80px]" />
+                    <col className="w-[90px]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-muted/50 text-[11px] border-b">
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">
                         <Checkbox checked={selectedIds.size === pendentes.length && pendentes.length > 0} onCheckedChange={toggleAll} />
-                      </TableHead>
-                      <TableHead className="px-2">Parc</TableHead>
-                      <TableHead className="px-2">Vencimento</TableHead>
-                      <TableHead className="px-2 text-right">Atraso</TableHead>
-                      <TableHead className="px-2 text-right">V. Bruto</TableHead>
-                      <TableHead className="px-2 text-right">V. Pago</TableHead>
-                      <TableHead className="px-2 text-right">Saldo</TableHead>
-                      <TableHead className="px-2 text-right">Juros</TableHead>
-                      <TableHead className="px-2 text-right">Multa</TableHead>
-                      <TableHead className="px-2 text-right">Honorários</TableHead>
-                      <TableHead className="px-2 text-right font-semibold">
+                      </th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Parc</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Vencimento</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">Atraso</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">V. Bruto</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">V. Pago</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">Saldo</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">Juros</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">Multa</th>
+                      <th className="px-2 py-2 text-right font-medium text-muted-foreground">Honorários</th>
+                      <th className="px-2 py-2 text-right font-semibold text-muted-foreground">
                         <CollapsibleTrigger asChild>
-                          <button className="inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
+                          <button className="inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ml-auto">
                             Total
                             <ChevronDown className={`h-3.5 w-3.5 text-orange-500 transition-transform ${titlesOpen ? "rotate-180" : ""}`} />
                           </button>
                         </CollapsibleTrigger>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                </Table>
-              </div>
+                      </th>
+                    </tr>
+                  </thead>
 
-              <CollapsibleContent>
-                <div className="max-h-[300px] overflow-y-auto overflow-x-auto">
-                  <Table>
-                    <TableBody>
-                      {pendentes.map((c, idx) => {
-                        const row = rowCalcs[idx];
-                        const isSelected = selectedIds.has(c.id);
-                        const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-                        return (
-                          <TableRow key={c.id} className={`text-xs ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
-                            <TableCell className="px-2 w-8">
-                              <Checkbox checked={isSelected} onCheckedChange={() => toggleId(c.id)} />
-                            </TableCell>
-                            <TableCell className="px-2 font-medium">{c.numero_parcela}/{c.total_parcelas}</TableCell>
-                            <TableCell className="px-2">{formatDate(c.data_vencimento)}</TableCell>
-                            <TableCell className="px-2 text-center text-xs text-muted-foreground">
-                              {row.atraso}
-                            </TableCell>
-                            <TableCell className="px-2 text-right">{formatCurrency(valorBruto)}</TableCell>
-                            <TableCell className="px-2 text-right text-blue-600 dark:text-blue-400">{formatCurrency(row.valorPago)}</TableCell>
-                            <TableCell className="px-2 text-right font-medium">{formatCurrency(row.valorOriginal)}</TableCell>
-                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</TableCell>
-                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</TableCell>
-                            <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</TableCell>
-                            <TableCell className="px-2 text-right font-semibold">{formatCurrency(row.total)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CollapsibleContent>
+                  <CollapsibleContent asChild>
+                    <tbody>
+                      <tr>
+                        <td colSpan={11} className="p-0">
+                          <div className="max-h-[300px] overflow-y-auto">
+                            <table className="w-full table-fixed">
+                              <colgroup>
+                                <col className="w-8" />
+                                <col className="w-[60px]" />
+                                <col className="w-[90px]" />
+                                <col className="w-[55px]" />
+                                <col className="w-[85px]" />
+                                <col className="w-[80px]" />
+                                <col className="w-[85px]" />
+                                <col className="w-[75px]" />
+                                <col className="w-[75px]" />
+                                <col className="w-[80px]" />
+                                <col className="w-[90px]" />
+                              </colgroup>
+                              <tbody>
+                                {pendentes.map((c, idx) => {
+                                  const row = rowCalcs[idx];
+                                  const isSelected = selectedIds.has(c.id);
+                                  const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+                                  return (
+                                    <tr key={c.id} className={`text-xs border-b border-border ${isSelected ? "bg-primary/5" : "opacity-50"}`}>
+                                      <td className="px-2 py-1.5">
+                                        <Checkbox checked={isSelected} onCheckedChange={() => toggleId(c.id)} />
+                                      </td>
+                                      <td className="px-2 py-1.5 font-medium">{c.numero_parcela}/{c.total_parcelas}</td>
+                                      <td className="px-2 py-1.5">{formatDate(c.data_vencimento)}</td>
+                                      <td className="px-2 py-1.5 text-right text-muted-foreground">{row.atraso}</td>
+                                      <td className="px-2 py-1.5 text-right">{formatCurrency(valorBruto)}</td>
+                                      <td className="px-2 py-1.5 text-right text-blue-600 dark:text-blue-400">{formatCurrency(row.valorPago)}</td>
+                                      <td className="px-2 py-1.5 text-right font-medium">{formatCurrency(row.valorOriginal)}</td>
+                                      <td className="px-2 py-1.5 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.jurosVal)}</td>
+                                      <td className="px-2 py-1.5 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.multaVal)}</td>
+                                      <td className="px-2 py-1.5 text-right text-orange-600 dark:text-orange-400">{formatCurrency(row.honorariosVal)}</td>
+                                      <td className="px-2 py-1.5 text-right font-semibold">{formatCurrency(row.total)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </CollapsibleContent>
 
-              {/* Totals row - always visible */}
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableBody>
-                    <TableRow className="bg-muted/30 text-xs font-semibold border-t-2">
-                      <TableCell colSpan={4} className="px-2 text-right">Totais ({selectedIds.size} títulos)</TableCell>
-                      <TableCell className="px-2 text-right">—</TableCell>
-                      <TableCell className="px-2 text-right">—</TableCell>
-                      <TableCell className="px-2 text-right">{formatCurrency(totals.totalOriginal)}</TableCell>
-                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</TableCell>
-                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</TableCell>
-                      <TableCell className="px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</TableCell>
-                      <TableCell className="px-2 text-right font-semibold">{formatCurrency(totals.totalBruto)}</TableCell>
-                    </TableRow>
+                  <tfoot>
+                    <tr className="bg-muted/30 text-xs font-semibold border-t-2">
+                      <td className="px-2 py-2" />
+                      <td colSpan={3} className="px-2 py-2 text-right">Totais ({selectedIds.size} títulos)</td>
+                      <td className="px-2 py-2 text-right">—</td>
+                      <td className="px-2 py-2 text-right">—</td>
+                      <td className="px-2 py-2 text-right">{formatCurrency(totals.totalOriginal)}</td>
+                      <td className="px-2 py-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalJuros)}</td>
+                      <td className="px-2 py-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalMulta)}</td>
+                      <td className="px-2 py-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(totals.totalHonorarios)}</td>
+                      <td className="px-2 py-2 text-right font-semibold">{formatCurrency(totals.totalBruto)}</td>
+                    </tr>
                     {parseDecimal(descontoPercent) > 0 && (
-                      <TableRow className="text-xs">
-                        <TableCell colSpan={10} className="px-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</TableCell>
-                        <TableCell className="px-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</TableCell>
-                      </TableRow>
+                      <tr className="text-xs border-t">
+                        <td colSpan={10} className="px-2 py-2 text-right text-emerald-600 dark:text-emerald-400">Desconto ({parseDecimal(descontoPercent)}%)</td>
+                        <td className="px-2 py-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">- {formatCurrency(totals.descontoVal)}</td>
+                      </tr>
                     )}
-                  </TableBody>
-                </Table>
+                  </tfoot>
+                </table>
               </div>
             </Collapsible>
           )}
