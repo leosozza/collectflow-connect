@@ -1,42 +1,29 @@
 
 
-# Parcelas com rolagem e collapse no AgreementCalculator
+# Remover scroll principal do modal e organizar layout
 
 ## Problema
-A tabela de parcelas (títulos) no card "Formalizar Acordo" empurra o formulário "Condições do Acordo" para fora da tela quando há muitos títulos. O usuário precisa rolar toda a página.
+O `DialogContent` do modal "Formalizar Acordo" tem `overflow-y-auto` no container inteiro, causando scroll no modal todo. O scroll deve existir **apenas** nas parcelas.
 
 ## Solução
 
-### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
-
-**1. Adicionar estado de collapse e Collapsible:**
-- Importar `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent` de `@/components/ui/collapsible`
-- Importar `ChevronDown` de `lucide-react`
-- Adicionar `const [titlesOpen, setTitlesOpen] = useState(true)`
-
-**2. Transformar a row "Totais" em trigger clicável:**
-- Mover a row de totais (linha 623-632) para **fora** do `CollapsibleContent`, visível sempre
-- Adicionar `ChevronDown` ao lado direito da row de totais com `rotate-180` quando expandido
-- Tornar a row clicável (`cursor-pointer`) para abrir/fechar
-
-**3. Envolver as rows de parcelas em Collapsible com rolagem:**
-- Dentro do `CollapsibleContent`, colocar as linhas individuais das parcelas em um `div` com `max-h-[300px] overflow-y-auto`
-- A row de totais + desconto fica sempre visível (fora do collapsible)
-
-**Estrutura resultante:**
-```text
-┌─────────────────────────────────────────┐
-│ Header (Parc | Vencimento | ... | Total)│  ← sempre visível
-├─────────────────────────────────────────┤
-│ ▼ Parcelas com scroll (max 300px)       │  ← collapsible + scroll
-│   3/3  26/11/2020  ...                  │
-│   4/4  26/12/2020  ...                  │
-│   ...                                   │
-├─────────────────────────────────────────┤
-│ Totais (5 títulos) ... R$ 1.640,10   ▲  │  ← sempre visível, clicável
-│ Desconto (se houver)                    │
-└─────────────────────────────────────────┘
+### 1. `src/pages/ClientDetailPage.tsx` (linha 484)
+Trocar:
+```
+max-h-[90vh] overflow-y-auto
+```
+Por:
+```
+max-h-[90vh] overflow-hidden flex flex-col
 ```
 
-**Benefício:** O card "Condições do Acordo" e "Simular" ficam sempre visíveis na tela. As parcelas podem ser colapsadas ou roladas quando há muitos títulos.
+### 2. `src/pages/AtendimentoPage.tsx` (linha 722)
+Mesma alteração — remover `overflow-y-auto`, adicionar `overflow-hidden flex flex-col`.
+
+### 3. `src/components/client-detail/AgreementCalculator.tsx`
+- Envolver o conteúdo retornado pelo componente em um `div` com `flex flex-col overflow-hidden flex-1 min-h-0 gap-3`
+- A Section 1 (dados do cliente) e Section 2 (parcelas com collapse) ficam com `flex-shrink-0` — ocupam só o espaço necessário
+- A Section 3 (grid Condições + Simulação) fica com `flex-1 min-h-0 overflow-y-auto` apenas se necessário, mas como o scroll das parcelas já limita a 300px, o conteúdo todo caberá na tela sem scroll externo
+
+Isso garante que o modal ocupe no máximo 90vh, sem scroll no container principal, e apenas as parcelas tenham rolagem interna.
 
