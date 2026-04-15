@@ -470,7 +470,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                       {honorarios.map((h, i) => (
                         <TableRow key={i}>
                           <TableCell><Input value={h.faixa} onChange={e => updateHonorario(i, "faixa", e.target.value)} placeholder="Ex: Até 50%" className="h-8" /></TableCell>
-                          <TableCell><Input type="number" value={h.honorario} onChange={e => updateHonorario(i, "honorario", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                          <TableCell><Input type="text" inputMode="decimal" value={h.honorario ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); updateHonorario(i, "honorario", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => updateHonorario(i, "honorario", parseFloat(h.honorario) || 0)} className="h-8" placeholder="%" /></TableCell>
                           <TableCell><CurrencyInput value={h.valor_fixo || 0} onValueChange={v => updateHonorario(i, "valor_fixo", v)} className="h-8" /></TableCell>
                           <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeHonorario(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
                         </TableRow>
@@ -516,9 +516,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                     <TableBody>
                       {agingTiers.map((t, i) => (
                         <TableRow key={i}>
-                          <TableCell><Input type="number" value={t.min_days} onChange={e => updateAgingTier(i, "min_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
-                          <TableCell><Input type="number" value={t.max_days} onChange={e => updateAgingTier(i, "max_days", parseInt(e.target.value) || 0)} className="h-8" /></TableCell>
-                          <TableCell><Input type="number" value={t.discount_percent} onChange={e => updateAgingTier(i, "discount_percent", parseFloat(e.target.value) || 0)} className="h-8" placeholder="%" /></TableCell>
+                          <TableCell><Input type="text" inputMode="numeric" value={t.min_days ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); updateAgingTier(i, "min_days", v === "" ? "" : parseInt(v)); }} onBlur={() => updateAgingTier(i, "min_days", parseInt(t.min_days) || 0)} className="h-8" /></TableCell>
+                          <TableCell><Input type="text" inputMode="numeric" value={t.max_days ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); updateAgingTier(i, "max_days", v === "" ? "" : parseInt(v)); }} onBlur={() => updateAgingTier(i, "max_days", parseInt(t.max_days) || 0)} className="h-8" /></TableCell>
+                          <TableCell><Input type="text" inputMode="decimal" value={t.discount_percent ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); updateAgingTier(i, "discount_percent", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => updateAgingTier(i, "discount_percent", parseFloat(t.discount_percent) || 0)} className="h-8" placeholder="%" /></TableCell>
                           <TableCell><Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeAgingTier(i)}><Trash2 className="w-3 h-3" /></Button></TableCell>
                         </TableRow>
                       ))}
