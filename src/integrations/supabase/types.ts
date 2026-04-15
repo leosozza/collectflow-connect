@@ -6609,6 +6609,7 @@ export type Database = {
         Args: { _campaign_id: string; _worker_id: string }
         Returns: boolean
       }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "operador"
