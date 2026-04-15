@@ -614,9 +614,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{credorRules.indice_correcao_monetaria}</Badge>
               </div>
             )}
-          </div>
-          <div className="flex justify-end mt-2">
-            <div className="flex items-center gap-2 whitespace-nowrap border border-primary/30 rounded-md px-3 py-2 bg-primary/10">
+            <div className="flex items-center gap-2 whitespace-nowrap border border-primary/30 rounded-md px-3 py-1.5 bg-primary/10 ml-auto">
               <span className="text-xs font-medium text-muted-foreground">VALOR ATUALIZADO</span>
               <span className="text-lg font-bold text-primary">{formatCurrency(totals.totalAtualizado)}</span>
             </div>
