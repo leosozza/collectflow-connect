@@ -201,7 +201,9 @@ Deno.serve(async (req) => {
 
     // Fallback: try from clients table
     let clientData: any = clientProfile || {};
-    if (!clientData.email || !clientData.cep) {
+    const fallbackFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"];
+    const needsFallback = fallbackFields.some(f => !String(clientData[f] || "").trim());
+    if (needsFallback) {
       const { data: clientRow } = await supabaseAdmin
         .from("clients")
         .select("email, phone, cep, endereco, bairro, cidade, uf, nome_completo")
@@ -211,7 +213,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (clientRow) {
         for (const f of ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf", "nome_completo"]) {
-          if (!clientData[f] && (clientRow as any)[f]) clientData[f] = (clientRow as any)[f];
+          if (!String(clientData[f] || "").trim() && (clientRow as any)[f]) clientData[f] = (clientRow as any)[f];
         }
       }
     }
