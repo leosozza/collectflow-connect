@@ -262,14 +262,6 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
           </CardContent>
         </Card>
 
-        {/* Tabulação WhatsApp */}
-        {conversation && (
-          <DispositionSelector
-            conversationId={conversation.id}
-            tenantId={conversation.tenant_id || ""}
-          />
-        )}
-
         {/* Perfil do Devedor */}
         {linkedClient && conversation && (
           <div className="mb-3">
@@ -281,6 +273,14 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
             />
           </div>
+        )}
+
+        {/* Tabulação WhatsApp */}
+        {conversation && (
+          <DispositionSelector
+            conversationId={conversation.id}
+            tenantId={conversation.tenant_id || ""}
+          />
         )}
 
         {/* Linked client */}
