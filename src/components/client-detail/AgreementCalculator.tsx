@@ -75,7 +75,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: "0", method: "BOLETO" }]);
-  const [numParcelas, setNumParcelas] = useState<number | "">(1);
+  const [numParcelas, setNumParcelas] = useState<number | "">(0);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
   const [firstDueDate, setFirstDueDate] = useState("");
@@ -271,7 +271,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   };
 
   const handleSimulate = useCallback(() => {
-    if (!firstDueDate) {
+    const nPSim = typeof numParcelas === "number" ? numParcelas : 0;
+
+    if (nPSim > 0 && !firstDueDate) {
       toast.error("Informe a data do 1º vencimento");
       return;
     }
@@ -280,9 +282,14 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       return;
     }
 
-    const installments: SimulatedInstallment[] = [];
-
     const validEntradas = entradas.filter(e => parseDecimal(e.value) > 0 && e.date);
+
+    if (nPSim === 0 && validEntradas.length === 0) {
+      toast.error("Informe ao menos uma entrada com data e valor");
+      return;
+    }
+
+    const installments: SimulatedInstallment[] = [];
 
     // Add each entrada as individual installment
     validEntradas.forEach((ent, idx) => {
@@ -294,23 +301,25 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         label: validEntradas.length > 1 ? `Entrada ${idx + 1}` : "Entrada",
       });
     });
-    const baseDate = new Date(firstDueDate + "T00:00:00");
-    const nPSim = typeof numParcelas === "number" ? numParcelas : 1;
-    for (let i = 0; i < nPSim; i++) {
-      const d = new Date(baseDate);
-      if (intervalo === "mensal") {
-        d.setMonth(d.getMonth() + i);
-      } else if (intervalo === "quinzenal") {
-        d.setDate(d.getDate() + i * 15);
-      } else {
-        d.setDate(d.getDate() + i * 7);
+
+    if (nPSim > 0) {
+      const baseDate = new Date(firstDueDate + "T00:00:00");
+      for (let i = 0; i < nPSim; i++) {
+        const d = new Date(baseDate);
+        if (intervalo === "mensal") {
+          d.setMonth(d.getMonth() + i);
+        } else if (intervalo === "quinzenal") {
+          d.setDate(d.getDate() + i * 15);
+        } else {
+          d.setDate(d.getDate() + i * 7);
+        }
+        installments.push({
+          number: i + 1,
+          method: formaPagto,
+          dueDate: d.toISOString().split("T")[0],
+          value: installmentValue,
+        });
       }
-      installments.push({
-        number: i + 1,
-        method: formaPagto,
-        dueDate: d.toISOString().split("T")[0],
-        value: installmentValue,
-      });
     }
 
     setSimulatedInstallments(installments);
@@ -477,9 +486,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         original_total: totals.totalOriginal,
         proposed_total: totals.totalAtualizado,
         discount_percent: totals.totalBruto > 0 ? Math.round((totals.descontoVal / totals.totalBruto) * 100 * 100) / 100 : 0,
-        new_installments: typeof numParcelas === "number" ? numParcelas : 1,
-        new_installment_value: installmentValue,
-        first_due_date: firstDueDate,
+        new_installments: typeof numParcelas === "number" ? numParcelas : 0,
+        new_installment_value: (typeof numParcelas === "number" && numParcelas > 0) ? installmentValue : 0,
+        first_due_date: firstDueDate || (validEntradas.length > 0 ? validEntradas[0].date : new Date().toISOString().split("T")[0]),
         entrada_value: numEntrada > 0 ? numEntrada : undefined,
         entrada_date: validEntradas.length > 0 ? validEntradas[0].date : undefined,
         custom_installment_dates: Object.keys(customDates).length > 0 ? customDates : undefined,
@@ -691,9 +700,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-0.5">
                 <Label className="text-[10px]">Parcelas</Label>
-                <Input type="text" inputMode="numeric" value={numParcelas} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setNumParcelas(v === "" ? "" : Number(v)); }} onBlur={() => setNumParcelas(prev => prev === "" || prev === 0 ? 1 : prev)} className="h-7 text-xs px-2" />
+                <Input type="text" inputMode="numeric" value={numParcelas} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setNumParcelas(v === "" ? "" : Number(v)); }} onBlur={() => setNumParcelas(prev => prev === "" ? 0 : prev)} className="h-7 text-xs px-2" />
               </div>
             </div>
+            {(typeof numParcelas === "number" && numParcelas > 0) && (
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-0.5">
                 <Label className="text-[10px]">Pagto Parcelas</Label>
@@ -722,6 +732,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-7 text-xs px-2" />
               </div>
             </div>
+            )}
             <div className="space-y-0.5">
               <Label className="text-[10px]">Observações</Label>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." rows={1} className="text-xs min-h-[28px]" />
