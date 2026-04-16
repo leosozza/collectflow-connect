@@ -365,7 +365,7 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
-              {pagoClients.length > 0 && (
+              {canReopenParcelas && pagoClients.length > 0 && (
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox checked={allPagoSelected} onCheckedChange={handleToggleAllPago} />
@@ -385,7 +385,7 @@ const ClientDetailPage = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      {pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
+                      {canReopenParcelas && pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
@@ -393,7 +393,7 @@ const ClientDetailPage = () => {
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
                       <TableHead className="text-center">Status</TableHead>
-                      {pagoClients.length > 0 && <TableHead className="w-16 text-center">Ações</TableHead>}
+                      {canReopenParcelas && pagoClients.length > 0 && <TableHead className="w-16 text-center">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -418,7 +418,7 @@ const ClientDetailPage = () => {
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
-                          {pagoClients.length > 0 && (
+                          {canReopenParcelas && pagoClients.length > 0 && (
                             <TableCell className="w-10">
                               {isPago && (
                                 <Checkbox
@@ -439,7 +439,7 @@ const ClientDetailPage = () => {
                               {statusLabel}
                             </Badge>
                           </TableCell>
-                          {pagoClients.length > 0 && (
+                          {canReopenParcelas && pagoClients.length > 0 && (
                             <TableCell className="text-center">
                               {isPago && (
                                 <Button
