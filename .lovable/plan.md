@@ -1,51 +1,35 @@
 
 
-# Editar, Cancelar e Reabrir Acordos no Perfil do Cliente
+# Scroll lateral direita + Responsividade na tela Formalizar Acordo
 
-## Resumo
+## Problema atual
 
-Três alterações: (1) nova função `reopenAgreement` no service, (2) expandir visibilidade dos botões Editar/Cancelar, (3) trocar o botão "Reativar" para reabrir o acordo existente em vez de criar novo.
+O scroll está dentro do card "Condições do Acordo" (`overflow-y-auto max-h-[35vh]` na linha 562), não no container principal. O usuário quer que o scroll seja no card inteiro (lateral direita do dialog), rolando todo o conteúdo de uma vez.
+
+Além disso, o layout de 2 colunas (`md:grid-cols-2`) não se adapta bem em telas menores.
 
 ## Alterações
 
-### 1. `src/services/agreementService.ts` — nova função `reopenAgreement`
+### 1. `src/components/client-detail/AgreementCalculator.tsx`
 
-```typescript
-export const reopenAgreement = async (id: string, userId: string): Promise<void> => {
-  // Busca agreement (cpf, credor, tenant_id)
-  // Update status → "pending", limpa cancellation_type
-  // Re-marca títulos como "em_acordo" (mesma lógica do createAgreement)
-  // Audit log + recalcScoreForCpf
-};
-```
+- **Linha 544**: manter `overflow-y-scroll` no container raiz — este é o scroll principal do dialog inteiro
+- **Linha 556**: remover `overflow-hidden` do grid 2 colunas
+- **Linha 558**: remover `overflow-hidden` do Card esquerdo
+- **Linha 562**: remover `overflow-y-auto max-h-[35vh] flex-1 min-h-0` do CardContent — deixar o conteúdo fluir naturalmente, sem scroll interno
+- Fazer o mesmo para qualquer outro card/seção à direita que tenha scroll interno próprio
+- Resultado: um único scrollbar na lateral direita do dialog rolando tudo
 
-### 2. `src/pages/ClientDetailPage.tsx` — expandir botões + reabrir
+**Responsividade:**
+- Grid de 2 colunas (`md:grid-cols-2`) → trocar para `lg:grid-cols-2` para breakpoint mais alto
+- Inputs internos com grids de 4 colunas → usar `grid-cols-2 sm:grid-cols-4` para mobile
+- Botões e labels com tamanhos mínimos adequados
 
-**Linha 61**: Expandir `activeStatuses` para incluir `overdue` no cancelamento, e criar lista separada para edição:
-```typescript
-const editableStatuses = ["pending", "pending_approval", "approved", "overdue", "cancelled"];
-const cancellableStatuses = ["pending", "pending_approval", "approved", "overdue"];
-```
+### 2. `src/pages/ClientDetailPage.tsx` (linha 521)
+- Manter `overflow-hidden flex flex-col` no DialogContent (o scroll fica no filho AgreementCalculator)
 
-**Linhas 375-396**: Reorganizar condicionais dos botões:
-- **Editar**: visível se `editableStatuses.includes(status)` e status !== `completed`/`rejected`
-- **Cancelar**: visível se `cancellableStatuses.includes(status)`
-- **Reabrir**: botão existente para `cancelled` — trocar `handleReactivateAgreement` para chamar `reopenAgreement` com AlertDialog de confirmação, em vez de abrir o formulário de novo acordo
-
-**Novo estado**: `reopenId` para controlar o AlertDialog de reabertura (similar ao `cancelId`).
-
-**Nova função**:
-```typescript
-const handleReopenAgreement = async (id: string) => {
-  await reopenAgreement(id, user.id);
-  toast.success("Acordo reaberto com sucesso.");
-  refetch(); refetchAgreements();
-};
-```
-
-**Novo AlertDialog** para confirmação de reabertura (similar ao de cancelamento).
+### 3. `src/pages/AtendimentoPage.tsx` (linha 722)
+- Mesma lógica — manter `overflow-hidden flex flex-col` no DialogContent
 
 ### Arquivos alterados
-- `src/services/agreementService.ts`
-- `src/pages/ClientDetailPage.tsx`
+- `src/components/client-detail/AgreementCalculator.tsx` — remover scrolls internos dos cards, melhorar breakpoints responsivos
 
