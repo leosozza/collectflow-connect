@@ -290,7 +290,7 @@ const ChatPanel = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Select value={conversation.status} onValueChange={onStatusChange}>
+          <Select value={conversation.status} onValueChange={handleStatusChange}>
             <SelectTrigger className="h-8 w-[120px] text-xs">
               <SelectValue />
             </SelectTrigger>
