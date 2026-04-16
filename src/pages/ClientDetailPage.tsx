@@ -669,7 +669,25 @@ const ClientDetailPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Agreement Dialog */}
+      {/* Reopen Parcelas Dialog */}
+      <AlertDialog open={showReopenParcelasDialog} onOpenChange={(open) => !open && setShowReopenParcelasDialog(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir Parcelas Pagas</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja reabrir {selectedPagoIds.length} parcela(s)? O status será atualizado conforme a data de vencimento
+              (Vencido ou Pendente) e o valor pago será zerado. O status do cliente será recalculado automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reopeningParcelas}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReopenParcelas} disabled={reopeningParcelas}>
+              {reopeningParcelas ? "Reabrindo..." : "Confirmar Reabertura"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
