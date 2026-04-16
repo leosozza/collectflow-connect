@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
+import CloseConversationDialog from "./CloseConversationDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
@@ -63,6 +64,7 @@ const ChatPanel = ({
   const { profile } = useAuth();
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
   const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
@@ -143,6 +145,15 @@ const ChatPanel = ({
   const handleSend = (text: string) => {
     onSend(text, replyTo?.id || null);
     setReplyTo(null);
+  };
+
+  const handleStatusChange = (status: string) => {
+    // Fechamento manual exige tabulação
+    if (status === "closed" && conversation && conversation.status !== "closed") {
+      setCloseOpen(true);
+      return;
+    }
+    onStatusChange(status);
   };
 
   if (!conversation) {
