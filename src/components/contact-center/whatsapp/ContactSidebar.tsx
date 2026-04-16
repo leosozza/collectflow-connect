@@ -247,31 +247,8 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
         <h3 className="font-semibold text-sm">Contato</h3>
       </div>
       <ScrollArea className="flex-1 p-3 overflow-x-hidden">
-        {/* Contact info card removed */}
-
-        {/* Perfil do Devedor */}
-        {linkedClient && conversation && (
-          <div className="mb-3">
-            <DebtorProfileBadge
-              clientId={linkedClient.id}
-              clientCpf={linkedClient.cpf}
-              tenantId={conversation.tenant_id || ""}
-              currentProfile={linkedClient.debtor_profile}
-              onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
-            />
-          </div>
-        )}
-
-        {/* Tabulação WhatsApp */}
-        {conversation && (
-          <DispositionSelector
-            conversationId={conversation.id}
-            tenantId={conversation.tenant_id || ""}
-          />
-        )}
-
-        {/* Linked client */}
-        {linkedClient ? (
+        {/* Linked client (movido para o topo) */}
+        {linkedClient && (
           <Card className="mb-3">
             <CardHeader className="p-3 pb-1">
               <div className="flex items-center justify-between">
@@ -323,7 +300,31 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               </Button>
             </CardContent>
           </Card>
-        ) : (
+        )}
+
+        {/* Perfil do Devedor */}
+        {linkedClient && conversation && (
+          <div className="mb-3">
+            <DebtorProfileBadge
+              clientId={linkedClient.id}
+              clientCpf={linkedClient.cpf}
+              tenantId={conversation.tenant_id || ""}
+              currentProfile={linkedClient.debtor_profile}
+              onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
+            />
+          </div>
+        )}
+
+        {/* Tabulação WhatsApp */}
+        {conversation && (
+          <DispositionSelector
+            conversationId={conversation.id}
+            tenantId={conversation.tenant_id || ""}
+          />
+        )}
+
+        {/* Vincular cliente (somente quando não vinculado) */}
+        {!linkedClient && (
           <Card className="mb-3 border-dashed">
             <CardHeader className="p-3 pb-1">
               <CardTitle className="text-xs text-muted-foreground">Nenhum cliente vinculado</CardTitle>
