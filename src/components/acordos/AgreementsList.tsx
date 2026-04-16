@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -27,16 +27,9 @@ const statusLabels: Record<string, string> = {
 };
 
 const AgreementsList = ({ agreements }: AgreementsListProps) => {
-  const navigate = useNavigate();
-
   if (agreements.length === 0) {
     return <p className="text-muted-foreground text-center py-8">Nenhum acordo encontrado.</p>;
   }
-
-  const handleOpenProfile = (cpf: string) => {
-    const rawCpf = cpf.replace(/\D/g, "");
-    navigate(`/carteira/${rawCpf}?tab=acordo`);
-  };
 
   return (
     <div className="rounded-md border">
@@ -54,12 +47,12 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
           {agreements.map((a) => (
             <TableRow key={a.id}>
               <TableCell>
-                <span
-                  className="font-medium cursor-pointer text-primary hover:underline"
-                  onClick={() => handleOpenProfile(a.client_cpf)}
+                <Link
+                  to={`/carteira/${a.client_cpf.replace(/\D/g, "")}?tab=acordo`}
+                  className="font-medium text-primary hover:underline"
                 >
                   {a.client_name}
-                </span>
+                </Link>
               </TableCell>
               <TableCell>{formatCPF(a.client_cpf)}</TableCell>
               <TableCell>{a.credor}</TableCell>

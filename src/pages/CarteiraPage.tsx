@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useNavigateWithOrigin } from "@/hooks/useNavigateWithOrigin";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -800,12 +800,12 @@ const CarteiraPage = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <button
-                          className="font-medium text-primary hover:underline cursor-pointer text-left"
-                          onClick={() => navigateWithOrigin(`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`)}
+                        <Link
+                          to={`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`}
+                          className="font-medium text-primary hover:underline"
                         >
                           {client.nome_completo}
-                        </button>
+                        </Link>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
