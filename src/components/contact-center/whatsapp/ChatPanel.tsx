@@ -330,6 +330,12 @@ const ChatPanel = ({
         </div>
       )}
 
+      {/* Alerta multi-instância (não bloqueia, apenas contextualiza) */}
+      <MultiInstanceAlert
+        clientId={conversation.client_id}
+        conversationId={conversation.id}
+      />
+
       {/* Messages - WhatsApp wallpaper bg */}
       <div
         className="flex-1 overflow-hidden"
