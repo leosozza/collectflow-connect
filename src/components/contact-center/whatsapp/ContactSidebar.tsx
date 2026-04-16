@@ -247,7 +247,60 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
         <h3 className="font-semibold text-sm">Contato</h3>
       </div>
       <ScrollArea className="flex-1 p-3 overflow-x-hidden">
-        {/* Contact info card removed */}
+        {/* Linked client (movido para o topo) */}
+        {linkedClient && (
+          <Card className="mb-3">
+            <CardHeader className="p-3 pb-1">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs">Cliente Vinculado</CardTitle>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleUnlink}>
+                  <Unlink className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-3 pt-1 space-y-1.5">
+              <div className="text-sm font-medium break-words">{linkedClient.nome_completo}</div>
+              <div className="text-xs text-muted-foreground break-all">CPF: {linkedClient.cpf}</div>
+              <div className="text-xs text-muted-foreground break-words">Credor: {linkedClient.credor}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-[10px]">
+                  {statusLabels[linkedClient.status] || linkedClient.status}
+                </Badge>
+                {statusCobranca && (
+                  <Badge
+                    className="text-[10px]"
+                    style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
+                  >
+                    {statusCobranca.nome}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas}
+                </span>
+              </div>
+              <div className="text-xs break-words">
+                Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs mt-2"
+                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`)}
+              >
+                <User className="w-3 h-3 mr-1" />
+                Abrir Perfil do Cliente
+              </Button>
+              <Button
+                size="sm"
+                className="w-full text-xs mt-1 bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
+                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?action=formalizar`)}
+              >
+                <FileText className="w-3 h-3 mr-1" />
+                Formalizar Acordo
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Perfil do Devedor */}
         {linkedClient && conversation && (
