@@ -1,27 +1,27 @@
 
 
-# Restringir "Reabrir Parcelas" por Permissão
+# Corrigir Status após Reabrir Parcelas
 
 ## Problema
-A função de reabrir parcelas pagas está acessível a qualquer usuário. Deve ser exclusiva de admins ou quem o admin autorizar.
+
+Após reabrir parcelas, `recalcScoreForCpf` apenas recalcula o score de propensão (Edge Function `calculate-propensity`). Ela **não** aciona a `auto-status-sync`, que é a responsável por atualizar o `status_cobranca_id` (ex: de "Quitado" para "Inadimplente").
 
 ## Solução
 
-Adicionar uma nova action `reopen` ao módulo `carteira` no sistema de permissões existente (`usePermissions`), e condicionar a UI de reabertura a essa permissão.
+Em `src/pages/ClientDetailPage.tsx`, no `handleReopenParcelas`, após o update das parcelas e antes do `refetch()`, chamar a Edge Function `auto-status-sync` com o `tenant_id` do cliente para recalcular o status do CPF/Credor.
 
-### 1. `src/hooks/usePermissions.ts`
-- Adicionar `"reopen"` às actions de `carteira` para `super_admin` e `admin` nos `ROLE_DEFAULTS` (demais roles **não** recebem)
-- Expor `canReopenParcelas: has("carteira", "reopen")` no retorno do hook
-- Adicionar `"reopen": "Reabrir Parcelas"` em `ACTION_LABELS`
-- Adicionar `"reopen"` em `MODULE_AVAILABLE_ACTIONS.carteira`
+### Alteração em `handleReopenParcelas`
 
-### 2. `src/pages/ClientDetailPage.tsx`
-- Importar `usePermissions` e extrair `canReopenParcelas`
-- Condicionar toda a UI de reabertura (barra de seleção com checkboxes, botão "Reabrir", botão individual com ícone `RotateCcw`) a `canReopenParcelas === true`
-- Os diálogos de confirmação permanecem mas só são acionáveis se a permissão existir
+```typescript
+// Após os updates e recalcScoreForCpf:
+const tenantId = clients[0]?.tenant_id;
+if (tenantId) {
+  await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } });
+}
+```
 
-### Resultado
-- Apenas `super_admin` e `admin` veem a opção por padrão
-- O admin pode conceder `reopen` a qualquer outro papel via a tela de Permissões (perfis de permissão já existentes)
-- Nenhuma alteração de banco necessária — a permissão é gerida pelo sistema RBAC em memória/RPC já existente
+Isso garante que ao reabrir parcelas pagas, a hierarquia de status (QUITADO → INADIMPLENTE/EM DIA) seja recalculada automaticamente.
+
+## Arquivo alterado
+- `src/pages/ClientDetailPage.tsx` — adicionar chamada a `auto-status-sync` no handler de reabertura
 
