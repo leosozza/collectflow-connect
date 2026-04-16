@@ -33,7 +33,7 @@ import AgreementCalculator from "@/components/client-detail/AgreementCalculator"
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
-import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
+import { cancelAgreement, updateAgreement, reopenAgreement, AgreementFormData } from "@/services/agreementService";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
 
