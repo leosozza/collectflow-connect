@@ -221,23 +221,32 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     }
   };
 
-  // Total Pago: sum valor_pago from all records + proposed_total from approved agreements
-  const totalPagoRecords = clients.reduce((sum, c) => sum + Number(c.valor_pago), 0);
+  // Total Pago: somente parcelas efetivamente pagas (exclui cheque devolvido) + acordos aprovados
+  const totalPagoRecords = clients.reduce((sum, c) => {
+    const isDevolvido = !!(c as any).data_devolucao;
+    if (isDevolvido) return sum;
+    return sum + Number(c.valor_pago);
+  }, 0);
   const totalPagoAcordos = (agreements || [])
     .filter((a: any) => a.status === "approved")
     .reduce((sum: number, a: any) => sum + Number(a.proposed_total), 0);
   const totalPago = totalPagoRecords + totalPagoAcordos;
   
-  const pagas = clients.filter((c) => c.status === "pago").length;
+  const pagas = clients.filter((c) => c.status === "pago" && !(c as any).data_devolucao).length;
   const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
   // Aggregate multi-contract values
   const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ") || "—";
   const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ") || "—";
 
-  // Saldo Devedor: all non-paid records
-  const naoPageos = clients.filter(c => c.status !== "pago");
-  const totalSaldo = naoPageos.reduce((sum, c) => sum + (Number(c.valor_saldo) || Number(c.valor_parcela) || 0), 0);
+  // Saldo Devedor: parcelas não-pagas (inclui devolvidas com valor cheio)
+  const naoPageos = clients.filter(c => c.status !== "pago" || !!(c as any).data_devolucao);
+  const totalSaldo = naoPageos.reduce((sum, c) => {
+    const isDevolvido = !!(c as any).data_devolucao;
+    const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
+    const pago = isDevolvido ? 0 : Number(c.valor_pago) || 0;
+    return sum + Math.max(0, valorBase - pago);
+  }, 0);
 
   // Fetch credor rules for dynamic interest calculation
   const credorName = client.credor;
@@ -279,12 +288,40 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     }, 0);
   }, [naoPageos, credorData]);
 
-  // Em Aberto: saldo total - pagamentos realizados
-  const totalAberto = Math.max(0, totalSaldo - totalPagoRecords);
+  // Em Aberto: soma direta por parcela elegível (pendente, vencido, em_acordo, devolvido)
+  const totalAberto = clients.reduce((sum, c) => {
+    const isDevolvido = !!(c as any).data_devolucao;
+    const isPago = c.status === "pago" && !isDevolvido;
+    const isCancelado = c.status === "cancelado_maxlist" || c.status === "quebrado";
+    if (isPago || isCancelado) return sum;
+    const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
+    const pago = isDevolvido ? 0 : Number(c.valor_pago) || 0;
+    return sum + Math.max(0, valorBase - pago);
+  }, 0);
+
+  // Tipo de Dívida agregado: moda dos clients (evita usar só client[0] quando há múltiplos tipos)
+  const tipoDividaAgregadoId = (() => {
+    const counts = new Map<string, number>();
+    clients.forEach((c) => {
+      const id = (c as any).tipo_divida_id;
+      if (!id) return;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+    if (counts.size === 0) return client.tipo_divida_id;
+    let bestId: string | null = null;
+    let bestCount = -1;
+    counts.forEach((count, id) => {
+      if (count > bestCount) {
+        bestCount = count;
+        bestId = id;
+      }
+    });
+    return bestId || client.tipo_divida_id;
+  })();
 
   // Lookup names
   const statusCobrancaNome = (tiposStatus as any[]).find((t) => t.id === client.status_cobranca_id)?.nome;
-  const tipoDividaNome = (tiposDivida as any[]).find((t) => t.id === client.tipo_divida_id)?.nome;
+  const tipoDividaNome = (tiposDivida as any[]).find((t) => t.id === tipoDividaAgregadoId)?.nome;
   const tipoDevedorNome = (tiposDevedor as any[]).find((t) => t.id === client.tipo_devedor_id)?.nome;
 
   // Format phones for metadata line

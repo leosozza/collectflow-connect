@@ -419,7 +419,9 @@ const ClientDetailPage = () => {
                                 ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
                                 : "bg-warning/10 text-warning border-warning/30";
                       const valorEfetivo = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-                      const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
+                      // Cheque devolvido: ignora valor_pago (não houve liquidação financeira real)
+                      const pagoLinha = hasDevolucao ? 0 : Number(c.valor_pago);
+                      const saldoDevedor = Math.max(0, valorEfetivo - pagoLinha);
                       return (
                         <TableRow key={c.id}>
                           {canReopenParcelas && pagoClients.length > 0 && (
@@ -436,7 +438,7 @@ const ClientDetailPage = () => {
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(Number(c.valor_pago))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(pagoLinha)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className={statusClass}>

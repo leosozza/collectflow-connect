@@ -308,6 +308,7 @@ Deno.serve(async (req) => {
       const rawPaymentType = getVal(rawItem, "PaymentType");
       const rawReturnDate = getVal(rawItem, "CheckReturnDateQuery");
 
+      const isDevolvido = !!rawReturnDate;
       const hasPagamento = !!record.data_pagamento || !!rawPaymentEffected;
       const meioPagamentoId = rawPaymentType ? paymentMappings.get(String(rawPaymentType)) : null;
 
@@ -341,7 +342,8 @@ Deno.serve(async (req) => {
         numero_parcela: record.numero_parcela || 1,
         total_parcelas: record.numero_parcela || 1,
         valor_entrada: 0,
-        valor_pago: hasPagamento ? (record.valor_parcela || record.valor_saldo || 0) : 0,
+        // Cheque devolvido: jamais soma como pago, independente de PaymentDateEffected
+        valor_pago: (hasPagamento && !isDevolvido) ? (record.valor_parcela || record.valor_saldo || 0) : 0,
         status: derivedStatus,
         // meio_pagamento_id removed — column does not exist in clients table
         phone: record.phone || "",
@@ -357,7 +359,11 @@ Deno.serve(async (req) => {
           : (status_cobranca_id === "__auto__" ? null : (status_cobranca_id || null)),
         data_devolucao: rawReturnDate ? String(rawReturnDate).split("T")[0] : null,
         motivo_devolucao: getVal(rawItem, "CheckReturnReason") ? String(getVal(rawItem, "CheckReturnReason")) : null,
-        tipo_divida_id: record.tipo_divida_id || paymentTypeToDividaMap.get(String(rawPaymentType)) || null,
+        // Se há cheque devolvido, força tipo "cheque" — independente do PaymentType retornado pelo MaxSystem
+        tipo_divida_id: record.tipo_divida_id
+          || (isDevolvido ? (chequeTipoDividaId || paymentTypeToDividaMap.get("2") || null) : null)
+          || paymentTypeToDividaMap.get(String(rawPaymentType))
+          || null,
       };
 
       if (!mapped.cpf || !mapped.nome_completo) {
@@ -450,13 +456,18 @@ Deno.serve(async (req) => {
             if (String(oldVal ?? "") !== String(newVal ?? "")) {
               if (PROTECTED_FIELDS.has(field)) {
                 // Exceptional cases for protected fields:
-                // 1. If existing value is null/empty, we ALWAYS allow update
+                // 1. If existing value is null/empty, we allow update (EXCEPT tipo_divida_id — once set, never overwrite via PaymentType)
                 // 2. status_cobranca_id, data_devolucao, motivo_devolucao can be updated if status is vencido (check return)
                 const isExistingEmpty = !oldVal || String(oldVal).trim() === "";
                 const isCheckReturnUpdate = (field === "status_cobranca_id" || field === "data_devolucao" || field === "motivo_devolucao") && rec.status === "vencido";
-                
+                // tipo_divida_id is fully protected after first definition to avoid PaymentType-driven misclassification
+                const isTipoDividaProtected = field === "tipo_divida_id" && !isExistingEmpty;
+
+                if (isTipoDividaProtected) {
+                  continue;
+                }
                 if (!isExistingEmpty && !isCheckReturnUpdate) {
-                  continue; 
+                  continue;
                 }
               }
               needsUpdate = true;
