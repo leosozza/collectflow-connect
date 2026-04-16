@@ -1,34 +1,30 @@
 
 
-# Adaptar modal "Formalizar Acordo" a diferentes tamanhos de tela
+# Trocar "ASSESSORIA" por "COBRADORA" no campo Recebedor
 
-## Problema
-O modal usa alturas fixas (`max-h-[300px]` para parcelas, `max-h-[40vh]` para simulação) e o container externo usa `max-h-[90vh]` com `overflow-hidden`. Em monitores menores (720p, 768p), o conteúdo é cortado porque as seções fixas consomem mais espaço relativo e o `overflow-hidden` impede qualquer escape.
+## Análise
 
-## Solução
+O campo "Recebedor" aparece em dois componentes:
 
-### 1. `AgreementCalculator.tsx` — tornar alturas responsivas
+1. **`PaymentConfirmationTab.tsx`** (linha 26): Define a constante `RECEIVERS = ["CREDOR", "ASSESSORIA"]` usada no diálogo de edição de informações da parcela
+2. **`ManualPaymentDialog.tsx`**: Usa opções fixas `CREDOR` e `COBRADORA` (linhas 109-110)
 
-**Parcelas (Section 2):**
-- Trocar `max-h-[300px]` por `max-h-[25vh]` — adapta proporcionalmente ao monitor
+## Alterações necessárias
 
-**Simulação (Section 3 — CardContent):**
-- Trocar `max-h-[40vh]` por `max-h-[30vh]`
+### Arquivo: `src/components/acordos/PaymentConfirmationTab.tsx`
 
-**Grid Condições + Simulação (Section 3):**
-- Adicionar `overflow-hidden` ao grid container para evitar que ele empurre o botão para fora
-- O card "Condições do Acordo" recebe `overflow-y-auto max-h-[35vh]` no CardContent para monitores pequenos
+**Linha 26:**
+```typescript
+// De:
+const RECEIVERS = ["CREDOR", "ASSESSORIA"];
 
-**Container principal:**
-- Manter `flex flex-col overflow-hidden flex-1 min-h-0` mas adicionar `overflow-y-auto` para que, em telas muito pequenas, o modal inteiro tenha fallback de scroll
+// Para:
+const RECEIVERS = ["CREDOR", "COBRADORA"];
+```
 
-### 2. `ClientDetailPage.tsx` e `AtendimentoPage.tsx` — DialogContent
+## Verificação de impacto
 
-- Trocar `max-h-[90vh] overflow-hidden` por `max-h-[90vh] overflow-y-auto` no DialogContent
-- Isso garante que, se o conteúdo exceder 90vh em monitores pequenos, o operador consegue rolar ao invés de ver cortado
-
-### Resultado
-- Em monitores grandes (1080p+): layout idêntico ao atual, sem scroll externo
-- Em monitores médios (768p-900p): parcelas e simulação diminuem proporcionalmente
-- Em monitores pequenos: fallback de scroll no modal inteiro, nada fica cortado
+- A mudança é apenas visual/UI — o valor armazenado no banco (`receiver`) será "COBRADORA" ao invés de "ASSESSORIA"
+- O `ManualPaymentDialog.tsx` já usa "COBRADORA" corretamente
+- Esta alteração unifica a nomenclatura entre os dois componentes
 
