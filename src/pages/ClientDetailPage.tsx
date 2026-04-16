@@ -57,8 +57,10 @@ const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "de
 
 // Statuses that show installments
 const installmentStatuses = ["pending", "pending_approval", "approved", "overdue"];
-// Statuses that allow edit/cancel
-const activeStatuses = ["pending", "pending_approval", "approved"];
+// Statuses that allow edit
+const editableStatuses = ["pending", "pending_approval", "approved", "overdue", "cancelled"];
+// Statuses that allow cancel
+const cancellableStatuses = ["pending", "pending_approval", "approved", "overdue"];
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
@@ -70,6 +72,7 @@ const ClientDetailPage = () => {
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
