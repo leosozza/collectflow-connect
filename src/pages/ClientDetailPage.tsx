@@ -4,7 +4,10 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2, User, RotateCcw } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { logAction } from "@/services/auditService";
+import { recalcScoreForCpf } from "@/hooks/useScoreRecalc";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +80,53 @@ const ClientDetailPage = () => {
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [reactivateAgreement, setReactivateAgreement] = useState<any | null>(null);
+  const [selectedPagoIds, setSelectedPagoIds] = useState<string[]>([]);
+  const [showReopenParcelasDialog, setShowReopenParcelasDialog] = useState(false);
+  const [reopeningParcelas, setReopeningParcelas] = useState(false);
+
+  const pagoClients = useMemo(() => clients.filter(c => c.status === "pago"), [clients]);
+  const allPagoSelected = pagoClients.length > 0 && pagoClients.every(c => selectedPagoIds.includes(c.id));
+
+  const handleTogglePagoSelection = (id: string) => {
+    setSelectedPagoIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const handleToggleAllPago = () => {
+    setSelectedPagoIds(allPagoSelected ? [] : pagoClients.map(c => c.id));
+  };
+
+  const handleReopenParcelas = async () => {
+    if (selectedPagoIds.length === 0) return;
+    setReopeningParcelas(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (const id of selectedPagoIds) {
+        const client = clients.find(c => c.id === id);
+        if (!client) continue;
+        const dueDate = new Date(client.data_vencimento);
+        dueDate.setHours(0, 0, 0, 0);
+        const newStatus = dueDate < today ? "vencido" : "pendente";
+        await supabase.from("clients").update({ status: newStatus, valor_pago: 0 } as any).eq("id", id);
+      }
+      const rawCpf = (cpf || "").replace(/\D/g, "");
+      await recalcScoreForCpf(rawCpf);
+      await logAction({
+        action: "reabrir_parcelas",
+        entity_type: "client",
+        entity_id: rawCpf,
+        details: { parcelas_reabertas: selectedPagoIds, quantidade: selectedPagoIds.length },
+      });
+      toast.success(`${selectedPagoIds.length} parcela(s) reaberta(s) com sucesso.`);
+      setSelectedPagoIds([]);
+      setShowReopenParcelasDialog(false);
+      refetch();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao reabrir parcelas.");
+    } finally {
+      setReopeningParcelas(false);
+    }
+  };
 
   const backTo = (location.state as any)?.from || "/carteira";
 
