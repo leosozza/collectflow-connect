@@ -407,6 +407,17 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     if (error) throw error;
 
+    // Cancelar boletos pendentes na negociarie_cobrancas
+    try {
+      await supabase
+        .from("negociarie_cobrancas")
+        .update({ status: "cancelado" } as any)
+        .eq("agreement_id", id)
+        .in("status", ["pendente", "em_aberto"]);
+    } catch (e) {
+      logger.error(MODULE, "cancel_boletos", e);
+    }
+
     if (agreement) {
       try {
         const today = new Date().toISOString().split("T")[0];
