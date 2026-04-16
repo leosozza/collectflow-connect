@@ -1,11 +1,12 @@
 import { usePermissions } from "@/hooks/usePermissions";
-import { MessageSquare, Bot, Tag, Zap, Megaphone } from "lucide-react";
+import { MessageSquare, Bot, Tag, Zap, Megaphone, Settings } from "lucide-react";
 import ThreeCPlusPanel from "@/components/contact-center/threecplus/ThreeCPlusPanel";
 import WhatsAppChatLayout from "@/components/contact-center/whatsapp/WhatsAppChatLayout";
 import AIAgentTab from "@/components/contact-center/whatsapp/AIAgentTab";
 import TagsManagementTab from "@/components/contact-center/whatsapp/TagsManagementTab";
 import QuickRepliesTab from "@/components/contact-center/whatsapp/QuickRepliesTab";
 import CampaignManagementTab from "@/components/contact-center/whatsapp/CampaignManagementTab";
+import WhatsAppSettingsTab from "@/components/contact-center/whatsapp/WhatsAppSettingsTab";
 import { useUrlState } from "@/hooks/useUrlState";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
     { id: "agente", label: "Agente IA", icon: Bot, adminOnly: true, show: permissions.canManageContactCenterAdmin },
     { id: "etiquetas", label: "Etiquetas", icon: Tag, adminOnly: true, show: permissions.canManageContactCenterAdmin },
     { id: "respostas", label: "Respostas Rápidas", icon: Zap, adminOnly: true, show: permissions.canManageContactCenterAdmin },
+    { id: "personalizacao", label: "Personalização", icon: Settings, adminOnly: true, show: permissions.canManageContactCenterAdmin },
   ].filter((tab) => tab.show);
 
   return (
@@ -79,6 +81,11 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
         {activeTab === "respostas" && permissions.canManageContactCenterAdmin && (
           <div className="h-full overflow-auto">
             <QuickRepliesTab />
+          </div>
+        )}
+        {activeTab === "personalizacao" && permissions.canManageContactCenterAdmin && (
+          <div className="h-full overflow-auto">
+            <WhatsAppSettingsTab />
           </div>
         )}
       </div>

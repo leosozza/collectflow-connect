@@ -3,7 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft } from "lucide-react";
+import TransferConversationDialog from "./TransferConversationDialog";
+import CloseConversationDialog from "./CloseConversationDialog";
+import MultiInstanceAlert from "./MultiInstanceAlert";
+import AutoCloseIndicator from "./AutoCloseIndicator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
@@ -61,6 +65,8 @@ const ChatPanel = ({
   const { tenant } = useTenant();
   const { profile } = useAuth();
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
   const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
@@ -143,6 +149,15 @@ const ChatPanel = ({
     setReplyTo(null);
   };
 
+  const handleStatusChange = (status: string) => {
+    // Fechamento manual exige tabulação
+    if (status === "closed" && conversation && conversation.status !== "closed") {
+      setCloseOpen(true);
+      return;
+    }
+    onStatusChange(status);
+  };
+
   if (!conversation) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#f0f2f5] dark:bg-[#222e35]">
@@ -208,7 +223,11 @@ const ChatPanel = ({
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {/* SLA expired badge */}
+              {/* Auto-close interno (regra do tenant) — separado do SLA oficial */}
+              <AutoCloseIndicator
+                conversationStatus={conversation.status}
+                lastInteractionAt={conversation.last_interaction_at || conversation.last_message_at}
+              />
               {slaExpired && (
                 <TooltipProvider>
                   <Tooltip>
@@ -259,7 +278,25 @@ const ChatPanel = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Select value={conversation.status} onValueChange={onStatusChange}>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => setTransferOpen(true)}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  Transferir
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Transferir esta conversa para outro operador do tenant</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Select value={conversation.status} onValueChange={handleStatusChange}>
             <SelectTrigger className="h-8 w-[120px] text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -292,6 +329,12 @@ const ChatPanel = ({
           </Button>
         </div>
       )}
+
+      {/* Alerta multi-instância (não bloqueia, apenas contextualiza) */}
+      <MultiInstanceAlert
+        clientId={conversation.client_id}
+        conversationId={conversation.id}
+      />
 
       {/* Messages - WhatsApp wallpaper bg */}
       <div
@@ -336,6 +379,23 @@ const ChatPanel = ({
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
       />
+
+      {conversation && (
+        <>
+          <TransferConversationDialog
+            open={transferOpen}
+            onOpenChange={setTransferOpen}
+            conversationId={conversation.id}
+          />
+          <CloseConversationDialog
+            open={closeOpen}
+            onOpenChange={setCloseOpen}
+            conversationId={conversation.id}
+            tenantId={conversation.tenant_id || tenant?.id || ""}
+            onConfirm={async () => onStatusChange("closed")}
+          />
+        </>
+      )}
     </div>
   );
 };

@@ -9,6 +9,7 @@ export interface Conversation {
   status: "open" | "waiting" | "closed";
   assigned_to: string | null;
   last_message_at: string;
+  last_interaction_at?: string | null;
   unread_count: number;
   client_id: string | null;
   client_name?: string;
@@ -353,3 +354,57 @@ export async function linkClientToConversation(conversationId: string, clientId:
     .eq("id", conversationId);
   if (error) throw error;
 }
+
+export async function transferConversation(
+  conversationId: string,
+  toUserId: string,
+  reason?: string
+) {
+  const { data, error } = await supabase.functions.invoke("transfer-conversation", {
+    body: { conversationId, toUserId, reason: reason || null },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+export interface ConversationTransfer {
+  id: string;
+  conversation_id: string;
+  from_user_id: string | null;
+  to_user_id: string;
+  from_user_name?: string | null;
+  to_user_name?: string | null;
+  reason: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export async function fetchConversationTransfers(
+  conversationId: string
+): Promise<ConversationTransfer[]> {
+  const { data, error } = await supabase
+    .from("conversation_transfers" as any)
+    .select("id, conversation_id, from_user_id, to_user_id, reason, is_active, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data || []) as any[];
+  if (rows.length === 0) return [];
+
+  const ids = Array.from(
+    new Set(rows.flatMap((r) => [r.from_user_id, r.to_user_id]).filter(Boolean))
+  );
+  const { data: profs } = await supabase
+    .from("profiles" as any)
+    .select("id, full_name")
+    .in("id", ids);
+  const map = new Map<string, string>();
+  (profs || []).forEach((p: any) => map.set(p.id, p.full_name));
+  return rows.map((r) => ({
+    ...r,
+    from_user_name: r.from_user_id ? map.get(r.from_user_id) || null : null,
+    to_user_name: map.get(r.to_user_id) || null,
+  }));
+}
+

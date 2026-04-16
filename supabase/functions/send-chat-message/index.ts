@@ -88,6 +88,15 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "Conversa não encontrada" }, 404);
     }
 
+    // Bloqueia envio enquanto a conversa estiver em waiting (aceite manual obrigatório)
+    if (conv.status === "waiting") {
+      return jsonResp({
+        error: "Conversa aguardando aceite",
+        details: "Aceite a conversa antes de enviar mensagens.",
+        code: "CONVERSATION_WAITING",
+      }, 403);
+    }
+
     const instanceId = conv.endpoint_id || conv.instance_id;
 
     // 4. Fetch WhatsApp instance
