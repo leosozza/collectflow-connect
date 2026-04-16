@@ -593,11 +593,15 @@ export const reopenAgreement = async (
 
     // Re-mark titles as em_acordo
     try {
-      const { data: acordoStatus } = await supabase
+      const { data: acordoCandidates } = await supabase
         .from("tipos_status")
-        .select("id")
-        .eq("nome", "Acordo Vigente")
-        .single();
+        .select("id, regras")
+        .eq("tenant_id", agreement.tenant_id)
+        .or(`regras->>papel_sistema.eq.acordo_vigente,nome.eq.Acordo Vigente`)
+        .limit(5);
+      const acordoStatus =
+        (acordoCandidates || []).find((s: any) => s.regras?.papel_sistema === "acordo_vigente") ||
+        (acordoCandidates || [])[0] || null;
 
       const updatePayload: any = { status: "em_acordo" };
       if (acordoStatus?.id) {
