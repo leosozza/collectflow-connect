@@ -555,6 +555,26 @@ const ClientDetailPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Reopen Agreement Dialog */}
+      <AlertDialog open={!!reopenId} onOpenChange={(open) => !open && setReopenId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir Acordo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja reabrir este acordo? O acordo voltará ao status Vigente e os títulos serão marcados como "em acordo".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (reopenId) { handleReopenAgreement(reopenId); setReopenId(null); } }}
+            >
+              Sim, reabrir acordo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Edit Agreement Dialog */}
       <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
