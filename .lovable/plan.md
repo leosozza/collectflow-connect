@@ -1,52 +1,26 @@
 
 
-# Corrigir cálculo do VALOR ATUALIZADO no Formalizar Acordo
+# Reorganizar layout do modal "Formalizar Acordo"
 
-## Problema identificado
+## Layout atual
+1. Card **Cálculo** (parâmetros: data, juros, multa, honorários, desconto, valor atualizado)
+2. Card **Parcelas** (tabela de títulos com checkboxes)
+3. Grid 2 colunas: **Condições do Acordo** (esquerda) + **Simulação** (direita)
 
-No `AgreementCalculator.tsx` (linha 217-220), o cálculo faz:
+## Novo layout solicitado
+1. Grid 2 colunas: **Condições do Acordo** (esquerda) + **Simulação** (direita)
+2. Card **Cálculo** (parâmetros)
+3. Card **Parcelas** (tabela de títulos)
 
-```
-valorBruto = valor_parcela || valor_saldo  → 200
-valorPago  = valor_pago                    → 200
-valorOriginal = valorBruto - valorPago     → 0  ← base zerada!
-```
-
-O campo `valor_saldo` no banco (que é 200 e representa o saldo real da dívida) é ignorado porque `valor_parcela` já tem valor e o `||` nunca chega em `valor_saldo`. Depois, `valor_pago` (que coincide com `valor_parcela`) zera tudo.
-
-## Causa raiz
-
-A importação de dados preenche `valor_pago` = `valor_parcela` em muitos casos (títulos vencidos sem pagamento real), mas mantém `valor_saldo` com o valor correto do débito. O cálculo deveria usar `valor_saldo` como saldo efetivo quando disponível.
-
-## Correção
+## Alteração
 
 ### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
 
-**Linha 217-220** — Alterar a lógica de `valorOriginal`:
+Reordenar os 3 blocos JSX dentro do `return` (linhas ~544-final):
 
-```typescript
-// ANTES:
-const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-const valorPago = Number(c.valor_pago) || 0;
-const valorOriginal = Math.max(0, valorBruto - valorPago);
-const valorBase = valorOriginal;
+- Mover a **Section 3** (grid com Condições + Simulação, linhas 755-end) para **antes** da Section 1
+- Manter a **Section 1** (Cálculo, linhas 554-626) no meio
+- Manter a **Section 2** (Parcelas, linhas 628-753) no final
 
-// DEPOIS:
-const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
-const valorPago = Number(c.valor_pago) || 0;
-const saldoExplicito = Number(c.valor_saldo) || 0;
-// Priorizar valor_saldo quando existir; senão, calcular bruto - pago
-const valorOriginal = saldoExplicito > 0 ? saldoExplicito : Math.max(0, valorBruto - valorPago);
-const valorBase = valorOriginal;
-```
-
-**Mesma lógica nas linhas 112-114** (cálculo de honorários automáticos) — aplicar a mesma priorização de `valor_saldo`.
-
-**Linha 699** (exibição na tabela) — o V. Bruto já está correto, a coluna "Saldo" agora refletirá o `valorOriginal` correto.
-
-## Impacto
-
-- Títulos com `valor_saldo` preenchido: cálculo usa o saldo real como base para juros, multa e honorários
-- Títulos sem `valor_saldo`: comportamento inalterado (usa `bruto - pago`)
-- VALOR ATUALIZADO passará a somar corretamente os valores com juros/multa/honorários
+Nenhuma lógica ou estilo interno muda — apenas a ordem dos blocos no JSX.
 
