@@ -84,8 +84,7 @@ const ClientDetailPage = () => {
   const [showReopenParcelasDialog, setShowReopenParcelasDialog] = useState(false);
   const [reopeningParcelas, setReopeningParcelas] = useState(false);
 
-  const pagoClients = useMemo(() => clients.filter(c => c.status === "pago"), [clients]);
-  const allPagoSelected = pagoClients.length > 0 && pagoClients.every(c => selectedPagoIds.includes(c.id));
+
 
   const handleTogglePagoSelection = (id: string) => {
     setSelectedPagoIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
