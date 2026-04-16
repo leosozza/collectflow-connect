@@ -551,6 +551,79 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
+      {/* ── Section 1: Parameters Bar ── */}
+      <Card className="flex-shrink-0">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calculator className="w-4 h-4" />
+              Cálculo
+            </CardTitle>
+            <div className="flex items-center gap-1">
+              <SimpleCalculator />
+              <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
+                <Copy className="w-3 h-3" /> Copiar Títulos
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pb-3">
+          <div className="flex items-end gap-2 flex-wrap">
+            <div className="space-y-0.5 min-w-[120px]">
+              <Label className="text-[10px]">Data Cálculo</Label>
+              <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Juros</Label>
+              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setJurosPercent(raw); }} onBlur={() => setJurosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Multa</Label>
+              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setMultaPercent(raw); }} onBlur={() => setMultaPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Honor.</Label>
+              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setHonorariosPercent(raw); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[80px]">
+              <Label className="text-[10px]">% Desc.</Label>
+              <Input type="text" inputMode="decimal" value={descontoPercent} onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.,]/g, "");
+                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
+                const pct = Number(raw.replace(",", "."));
+                if (isNaN(pct)) return;
+                setDescontoPercent(raw);
+                setDiscountSource("percent");
+                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
+                setDescontoReais(bruto > 0 ? String(Math.round(bruto * (pct / 100) * 100) / 100) : "0");
+              }} onBlur={() => setDescontoPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
+            </div>
+            <div className="space-y-0.5 w-[100px]">
+              <Label className="text-[10px]">R$ Desc.</Label>
+              <Input type="text" inputMode="decimal" value={descontoReais} onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.,]/g, "");
+                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
+                const val = Number(raw.replace(",", "."));
+                if (isNaN(val)) return;
+                setDescontoReais(raw);
+                setDiscountSource("amount");
+                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
+                setDescontoPercent(bruto > 0 ? String(Math.round((val / bruto) * 100 * 100) / 100) : "0");
+              }} onBlur={() => setDescontoReais(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
+            </div>
+            {credorRules?.indice_correcao_monetaria && (
+              <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
+                <span className="text-[10px] text-muted-foreground">Índice</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{credorRules.indice_correcao_monetaria}</Badge>
+              </div>
+            )}
+            <div className="flex items-center gap-2 whitespace-nowrap border border-primary/30 rounded-md px-3 py-1.5 bg-primary/10 ml-auto">
+              <span className="text-xs font-medium text-muted-foreground">VALOR ATUALIZADO</span>
+              <span className="text-lg font-bold text-primary">{formatCurrency(totals.totalAtualizado)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── Section 3: Two-column — Form + Simulation ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -718,79 +791,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Card>
       </div>
 
-      {/* ── Section 1: Parameters Bar ── */}
-      <Card className="flex-shrink-0">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Calculator className="w-4 h-4" />
-              Cálculo
-            </CardTitle>
-            <div className="flex items-center gap-1">
-              <SimpleCalculator />
-              <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
-                <Copy className="w-3 h-3" /> Copiar Títulos
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pb-3">
-          <div className="flex items-end gap-2 flex-wrap">
-            <div className="space-y-0.5 min-w-[120px]">
-              <Label className="text-[10px]">Data Cálculo</Label>
-              <Input type="date" value={calcDate} onChange={(e) => setCalcDate(e.target.value)} className="h-7 text-xs px-2" />
-            </div>
-            <div className="space-y-0.5 w-[80px]">
-              <Label className="text-[10px]">% Juros</Label>
-              <Input type="text" inputMode="decimal" value={jurosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setJurosPercent(raw); }} onBlur={() => setJurosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
-            </div>
-            <div className="space-y-0.5 w-[80px]">
-              <Label className="text-[10px]">% Multa</Label>
-              <Input type="text" inputMode="decimal" value={multaPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setMultaPercent(raw); }} onBlur={() => setMultaPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
-            </div>
-            <div className="space-y-0.5 w-[80px]">
-              <Label className="text-[10px]">% Honor.</Label>
-              <Input type="text" inputMode="decimal" value={honorariosPercent} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.,]/g, ""); const v = Number(raw.replace(",", ".")); if (raw !== "" && isNaN(v)) return; setHonorariosPercent(raw); }} onBlur={() => setHonorariosPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
-            </div>
-            <div className="space-y-0.5 w-[80px]">
-              <Label className="text-[10px]">% Desc.</Label>
-              <Input type="text" inputMode="decimal" value={descontoPercent} onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9.,]/g, "");
-                if (raw === "") { setDescontoPercent(""); setDescontoReais(""); setDiscountSource("percent"); return; }
-                const pct = Number(raw.replace(",", "."));
-                if (isNaN(pct)) return;
-                setDescontoPercent(raw);
-                setDiscountSource("percent");
-                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
-                setDescontoReais(bruto > 0 ? String(Math.round(bruto * (pct / 100) * 100) / 100) : "0");
-              }} onBlur={() => setDescontoPercent(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
-            </div>
-            <div className="space-y-0.5 w-[100px]">
-              <Label className="text-[10px]">R$ Desc.</Label>
-              <Input type="text" inputMode="decimal" value={descontoReais} onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9.,]/g, "");
-                if (raw === "") { setDescontoReais(""); setDescontoPercent(""); setDiscountSource("amount"); return; }
-                const val = Number(raw.replace(",", "."));
-                if (isNaN(val)) return;
-                setDescontoReais(raw);
-                setDiscountSource("amount");
-                const bruto = rowCalcs.filter((r) => selectedIds.has(r.id)).reduce((s, r) => s + r.total, 0);
-                setDescontoPercent(bruto > 0 ? String(Math.round((val / bruto) * 100 * 100) / 100) : "0");
-              }} onBlur={() => setDescontoReais(prev => prev === "" ? "0" : prev)} className="h-7 text-xs px-2" />
-            </div>
-            {credorRules?.indice_correcao_monetaria && (
-              <div className="flex items-center gap-1.5 whitespace-nowrap border border-border rounded-md px-2 py-1.5 bg-muted/50">
-                <span className="text-[10px] text-muted-foreground">Índice</span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{credorRules.indice_correcao_monetaria}</Badge>
-              </div>
-            )}
-            <div className="flex items-center gap-2 whitespace-nowrap border border-primary/30 rounded-md px-3 py-1.5 bg-primary/10 ml-auto">
-              <span className="text-xs font-medium text-muted-foreground">VALOR ATUALIZADO</span>
-              <span className="text-lg font-bold text-primary">{formatCurrency(totals.totalAtualizado)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* ── Actions Bar ── */}
       {outOfStandard.isOut && (
