@@ -85,13 +85,18 @@ async function sendWuzapiText(
   if (!baseUrl || !token) {
     return { ok: false, result: { error: "WuzAPI URL ou token não configurado" }, providerMessageId: null, provider: "wuzapi" };
   }
-  const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
-    method: "POST",
-    headers: { "Token": token, "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
-  });
-  const result = await resp.json();
-  return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
+  try {
+    const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
+      method: "POST",
+      headers: { "Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
+    });
+    const result = await resp.json();
+    return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
+  } catch (err) {
+    console.error("[wuzapi-sender] Network error:", err);
+    return { ok: false, result: { error: `Falha de rede WuzAPI: ${(err as Error).message}` }, providerMessageId: null, provider: "wuzapi" };
+  }
 }
 
 function sendGupshupText(
@@ -110,13 +115,18 @@ async function sendEvolutionText(
   if (!instanceUrl) {
     return { ok: false, result: { error: "URL da instância Evolution não configurada" }, providerMessageId: null, provider };
   }
-  const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
-    method: "POST",
-    headers: { apikey: instanceKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ number: phone, text: message }),
-  });
-  const result = await resp.json();
-  return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+  try {
+    const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
+      method: "POST",
+      headers: { apikey: instanceKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+    const result = await resp.json();
+    return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+  } catch (err) {
+    console.error("[evolution-sender] Network error:", err);
+    return { ok: false, result: { error: `Falha de rede Evolution: ${(err as Error).message}` }, providerMessageId: null, provider };
+  }
 }
 
 // ========== MEDIA SENDERS ==========
@@ -167,16 +177,21 @@ async function sendWuzapiMedia(
 
   console.log(`[wuzapi-sender] Sending ${endpoint}: url=${media.mediaUrl.substring(0, 80)}, mime=${payload.Mimetype}`);
 
-  const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/${endpoint}`, {
-    method: "POST",
-    headers: { "Token": token, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const result = await resp.json();
-  if (!resp.ok) {
-    console.error(`[wuzapi-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+  try {
+    const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/${endpoint}`, {
+      method: "POST",
+      headers: { "Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      console.error(`[wuzapi-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+    }
+    return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
+  } catch (err) {
+    console.error("[wuzapi-sender] Network error:", err);
+    return { ok: false, result: { error: `Falha de rede WuzAPI: ${(err as Error).message}` }, providerMessageId: null, provider: "wuzapi" };
   }
-  return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
 }
 
 /**
@@ -247,6 +262,7 @@ async function sendEvolutionMedia(
 
     console.log(`[evolution-sender] Sending audio via sendWhatsAppAudio: url=${media.mediaUrl.substring(0, 80)}`);
 
+  try {
     const resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
       method: "POST",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
@@ -257,6 +273,10 @@ async function sendEvolutionMedia(
       console.error(`[evolution-sender] Audio error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
     }
     return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+  } catch (err) {
+    console.error("[evolution-sender] Audio network error:", err);
+    return { ok: false, result: { error: `Falha de rede Evolution audio: ${(err as Error).message}` }, providerMessageId: null, provider };
+  }
   }
 
   // Image, video, document use generic sendMedia
@@ -278,16 +298,21 @@ async function sendEvolutionMedia(
 
   console.log(`[evolution-sender] Sending ${media.mediaType}: url=${media.mediaUrl.substring(0, 80)}, mime=${media.mimeType}`);
 
-  const resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
-    method: "POST",
-    headers: { apikey: instanceKey, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const result = await resp.json();
-  if (!resp.ok) {
-    console.error(`[evolution-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+  try {
+    const resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
+      method: "POST",
+      headers: { apikey: instanceKey, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      console.error(`[evolution-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+    }
+    return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+  } catch (err) {
+    console.error("[evolution-sender] Media network error:", err);
+    return { ok: false, result: { error: `Falha de rede Evolution media: ${(err as Error).message}` }, providerMessageId: null, provider };
   }
-  return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
 }
 
 // ========== GUPSHUP HELPER ==========
@@ -313,27 +338,32 @@ async function sendGupshupMsg(
     message: messageJson,
   });
 
-  const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
-    method: "POST",
-    headers: {
-      "apikey": apiKey,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formBody.toString(),
-  });
-
-  const text = await resp.text();
-  let result: any;
   try {
-    result = JSON.parse(text);
-  } catch {
-    console.error("[gupshup-sender] Non-JSON response:", text.substring(0, 300));
-    return { ok: false, result: { error: `Resposta inválida da Gupshup: ${text.substring(0, 200)}` }, providerMessageId: null, provider: "gupshup" };
-  }
+    const resp = await fetch("https://api.gupshup.io/wa/api/v1/msg", {
+      method: "POST",
+      headers: {
+        "apikey": apiKey,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formBody.toString(),
+    });
 
-  if (!resp.ok) {
-    console.error(`[gupshup-sender] API error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
-  }
+    const text = await resp.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      console.error("[gupshup-sender] Non-JSON response:", text.substring(0, 300));
+      return { ok: false, result: { error: `Resposta inválida da Gupshup: ${text.substring(0, 200)}` }, providerMessageId: null, provider: "gupshup" };
+    }
 
-  return { ok: resp.ok, result, providerMessageId: result?.messageId || null, provider: "gupshup" };
+    if (!resp.ok) {
+      console.error(`[gupshup-sender] API error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+    }
+
+    return { ok: resp.ok, result, providerMessageId: result?.messageId || null, provider: "gupshup" };
+  } catch (err) {
+    console.error("[gupshup-sender] Network error:", err);
+    return { ok: false, result: { error: `Falha de rede Gupshup: ${(err as Error).message}` }, providerMessageId: null, provider: "gupshup" };
+  }
 }

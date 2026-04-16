@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
@@ -91,6 +92,111 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
     </Popover>
   );
 };
+
+const ROW_HEIGHT = 40;
+
+function VirtualizedMaxListTable({
+  data,
+  selectedIndexes,
+  allSelected,
+  toggleAll,
+  toggleOne,
+}: {
+  data: any[];
+  selectedIndexes: Set<number>;
+  allSelected: boolean;
+  toggleAll: () => void;
+  toggleOne: (i: number) => void;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: data.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
+  return (
+    <div ref={parentRef} className="h-[500px] overflow-auto">
+      <div className="overflow-x-auto min-w-full">
+        <Table className="min-w-[1100px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10 sticky left-0 bg-background z-10 sticky top-0">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={() => toggleAll()}
+                  aria-label="Selecionar todos"
+                />
+              </TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">CPF</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Nome</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Contrato</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Nº Parcela</TableHead>
+              <TableHead className="text-right whitespace-nowrap sticky top-0 bg-background">Valor</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Vencimento</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Pagamento</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Status</TableHead>
+              <TableHead className="whitespace-nowrap sticky top-0 bg-background">Fone 1</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <tr style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+              <td colSpan={10} style={{ padding: 0, border: 'none' }}>
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const i = virtualRow.index;
+                  const item = data[i];
+                  return (
+                    <div
+                      key={i}
+                      data-index={i}
+                      ref={rowVirtualizer.measureElement}
+                      className={cn(
+                        "flex items-center border-b text-sm",
+                        selectedIndexes.has(i) ? "bg-accent/30" : ""
+                      )}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                        minHeight: ROW_HEIGHT,
+                      }}
+                    >
+                      <div className="w-10 flex-shrink-0 px-2 sticky left-0 bg-background z-10">
+                        <Checkbox
+                          checked={selectedIndexes.has(i)}
+                          onCheckedChange={() => toggleOne(i)}
+                          aria-label={`Selecionar ${item.NOME_DEVEDOR}`}
+                        />
+                      </div>
+                      <div className="w-[120px] flex-shrink-0 px-2 font-mono text-xs whitespace-nowrap">{item.CNPJ_CPF}</div>
+                      <div className="w-[200px] flex-shrink-0 px-2 truncate">{item.NOME_DEVEDOR}</div>
+                      <div className="w-[100px] flex-shrink-0 px-2 whitespace-nowrap">{item.COD_CONTRATO}</div>
+                      <div className="w-[80px] flex-shrink-0 px-2">{item.NM_PARCELA}</div>
+                      <div className="w-[110px] flex-shrink-0 px-2 text-right whitespace-nowrap">
+                        {item.VL_TITULO.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </div>
+                      <div className="w-[100px] flex-shrink-0 px-2 whitespace-nowrap">{item.DT_VENCIMENTO}</div>
+                      <div className="w-[100px] flex-shrink-0 px-2 whitespace-nowrap">{item.DT_PAGAMENTO || "-"}</div>
+                      <div className="w-[100px] flex-shrink-0 px-2">
+                        <Badge variant={item.STATUS === "CANCELADO" ? "destructive" : "secondary"}>
+                          {item.STATUS}
+                        </Badge>
+                      </div>
+                      <div className="flex-1 px-2 text-xs whitespace-nowrap">{item.FONE_1}</div>
+                    </div>
+                  );
+                })}
+              </td>
+            </tr>
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
 
 const BATCH_SIZE = 1000;
 
@@ -1058,65 +1164,13 @@ const MaxListPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[500px]">
-              <div className="overflow-x-auto min-w-full">
-                <Table className="min-w-[1100px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10 sticky left-0 bg-background z-10">
-                        <Checkbox
-                          checked={allSelected}
-                          onCheckedChange={() => toggleAll()}
-                          aria-label="Selecionar todos"
-                        />
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap">CPF</TableHead>
-                      <TableHead className="whitespace-nowrap">Nome</TableHead>
-                      <TableHead className="whitespace-nowrap">Contrato</TableHead>
-                      <TableHead className="whitespace-nowrap">Nº Parcela</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">Valor</TableHead>
-                      <TableHead className="whitespace-nowrap">Vencimento</TableHead>
-                      <TableHead className="whitespace-nowrap">Pagamento</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Fone 1</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((item, i) => (
-                      <TableRow key={i} className={selectedIndexes.has(i) ? "bg-accent/30" : ""}>
-                        <TableCell className="sticky left-0 bg-background z-10">
-                          <Checkbox
-                            checked={selectedIndexes.has(i)}
-                            onCheckedChange={() => toggleOne(i)}
-                            aria-label={`Selecionar ${item.NOME_DEVEDOR}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs whitespace-nowrap">{item.CNPJ_CPF}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{item.NOME_DEVEDOR}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.COD_CONTRATO}</TableCell>
-                        <TableCell>{item.NM_PARCELA}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          {item.VL_TITULO.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{item.DT_VENCIMENTO}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.DT_PAGAMENTO || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={item.STATUS === "CANCELADO" ? "destructive" : "secondary"}>
-                            {item.STATUS}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{item.FONE_1}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {data.length > 1000 && (
-                <p className="text-center text-sm text-muted-foreground py-4">
-                  Mostrando 1000 de {data.length.toLocaleString("pt-BR")} registros. Use "Download Excel" para ver todos.
-                </p>
-              )}
-            </ScrollArea>
+            <VirtualizedMaxListTable
+              data={data}
+              selectedIndexes={selectedIndexes}
+              allSelected={allSelected}
+              toggleAll={toggleAll}
+              toggleOne={toggleOne}
+            />
           </CardContent>
         </Card>
       )}
