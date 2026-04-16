@@ -9,7 +9,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   super_admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
+    carteira: ["view", "create", "import", "delete", "view_full_data", "filter", "reopen"],
     acordos: ["view", "create", "approve", "break"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -29,7 +29,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
   admin: {
     dashboard: ["view_all"],
     gamificacao: ["view", "manage"],
-    carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
+    carteira: ["view", "create", "import", "delete", "view_full_data", "filter", "reopen"],
     acordos: ["view", "create", "approve", "break"],
     relatorios: ["view"],
     analytics: ["view_all"],
@@ -177,6 +177,7 @@ export function usePermissions() {
     canDeleteCarteira: has("carteira", "delete"),
     canViewFullData: has("carteira", "view_full_data"),
     canFilterCarteira: has("carteira", "filter"),
+    canReopenParcelas: has("carteira", "reopen"),
 
     // Acordos
     canViewAcordos: hasAny("acordos"),
@@ -280,6 +281,7 @@ export const ACTION_LABELS: Record<string, string> = {
   break: "Quebrar Acordo",
   manage: "Gerenciar",
   filter: "Filtros Avançados",
+  reopen: "Reabrir Parcelas",
   manage_admin: "Gerenciar (Administrativo)",
   start: "Iniciar/Disparar",
   pause: "Pausar/Cancelar",
@@ -290,7 +292,7 @@ export const ACTION_LABELS: Record<string, string> = {
 export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   dashboard: ["view_own", "view_all"],
   gamificacao: ["view", "manage"],
-  carteira: ["view", "create", "import", "delete", "view_full_data", "filter"],
+  carteira: ["view", "create", "import", "delete", "view_full_data", "filter", "reopen"],
   acordos: ["view", "create", "approve", "break"],
   relatorios: ["view"],
   analytics: ["view_own", "view_all"],
