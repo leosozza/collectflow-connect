@@ -185,16 +185,56 @@ const AISuggestion = ({ messages, clientInfo, onSend, disabled }: AISuggestionPr
 
   if (!showSuggestion) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 gap-1.5 text-xs"
-        onClick={handleSuggest}
-        disabled={disabled || messages.length === 0}
-      >
-        <Sparkles className="w-3.5 h-3.5" />
-        Sugestão IA
-      </Button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleSuggest}
+          disabled={disabled || messages.length === 0}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Sugestão IA
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleSummarize}
+          disabled={disabled || messages.length === 0 || loadingSummary}
+        >
+          {loadingSummary ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+          Resumo IA
+        </Button>
+        {showSummary && (
+          <Card className="w-full border-primary/30 bg-primary/5 mt-1">
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <FileText className="w-3.5 h-3.5" />
+                  Resumo da IA
+                  {loadingSummary && <Loader2 className="w-3 h-3 animate-spin" />}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={() => { setShowSummary(false); setSummary(""); }}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+              {summary ? (
+                <div className="text-xs prose prose-xs max-w-none text-foreground">
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                </div>
+              ) : !loadingSummary ? (
+                <p className="text-xs text-muted-foreground">Sem resumo gerado.</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
