@@ -89,24 +89,29 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch status ID: try "Vencido" first, fallback to "Inadimplente"
+    // Fetch status ID por papel_sistema (preferencial), com fallback por nome.
+    // Permite tenants renomearem livremente sem quebrar a importação.
     let vencidoStatusId: string | null = null;
-    const { data: statusVencido } = await supabase
+    const { data: allStatusForTenant } = await supabase
       .from("tipos_status")
-      .select("id")
-      .eq("tenant_id", tenant_id)
-      .ilike("nome", "vencido")
-      .maybeSingle();
-    if (statusVencido?.id) {
-      vencidoStatusId = statusVencido.id;
+      .select("id, nome, regras")
+      .eq("tenant_id", tenant_id);
+
+    const statusList = allStatusForTenant || [];
+    // 1º: papel_sistema = 'inadimplente'
+    const byPapel = statusList.find((s: any) => s.regras?.papel_sistema === "inadimplente");
+    if (byPapel) {
+      vencidoStatusId = byPapel.id;
     } else {
-      const { data: statusInadimplente } = await supabase
-        .from("tipos_status")
-        .select("id")
-        .eq("tenant_id", tenant_id)
-        .ilike("nome", "inadimplente")
-        .maybeSingle();
-      vencidoStatusId = statusInadimplente?.id || null;
+      // 2º fallback: nome 'vencido'
+      const byVencido = statusList.find((s: any) => (s.nome || "").toLowerCase() === "vencido");
+      if (byVencido) {
+        vencidoStatusId = byVencido.id;
+      } else {
+        // 3º fallback: nome 'inadimplente'
+        const byInadimplente = statusList.find((s: any) => (s.nome || "").toLowerCase() === "inadimplente");
+        vencidoStatusId = byInadimplente?.id || null;
+      }
     }
     console.log(`[maxlist-import] vencidoStatusId resolved: ${vencidoStatusId}`);
 

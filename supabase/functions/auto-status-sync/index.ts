@@ -40,20 +40,32 @@ Deno.serve(async (req) => {
       .select("id, nome, regras")
       .eq("tenant_id", tenant_id);
 
-    const statusMap = new Map<string, string>();
-    const statusRegras = new Map<string, any>();
+    // Lookup por papel_sistema (preferencial) com fallback por nome.
+    // Permite que o tenant renomeie status livremente sem quebrar a automação.
+    const statusByName = new Map<string, string>();
+    const statusByPapel = new Map<string, string>();
+    const regrasByPapel = new Map<string, any>();
+    const regrasByName = new Map<string, any>();
     (statusList || []).forEach((s: any) => {
-      statusMap.set(s.nome, s.id);
-      statusRegras.set(s.nome, s.regras || {});
+      statusByName.set(s.nome, s.id);
+      regrasByName.set(s.nome, s.regras || {});
+      const papel = s.regras?.papel_sistema;
+      if (papel) {
+        statusByPapel.set(papel, s.id);
+        regrasByPapel.set(papel, s.regras || {});
+      }
     });
 
-    const emDiaId = statusMap.get("Em dia");
-    const inadimplenteId = statusMap.get("Inadimplente");
-    const acordoVigenteId = statusMap.get("Acordo Vigente");
-    const acordoAtrasadoId = statusMap.get("Acordo Atrasado");
-    const quebraAcordoId = statusMap.get("Quebra de Acordo");
-    const quitadoId = statusMap.get("Quitado");
-    const emNegociacaoId = statusMap.get("Em negociação");
+    const resolveId = (papel: string, fallbackNome: string) =>
+      statusByPapel.get(papel) || statusByName.get(fallbackNome);
+
+    const emDiaId = resolveId("em_dia", "Em dia");
+    const inadimplenteId = resolveId("inadimplente", "Inadimplente");
+    const acordoVigenteId = resolveId("acordo_vigente", "Acordo Vigente");
+    const acordoAtrasadoId = resolveId("acordo_atrasado", "Acordo Atrasado");
+    const quebraAcordoId = resolveId("quebra_acordo", "Quebra de Acordo");
+    const quitadoId = resolveId("quitado", "Quitado");
+    const emNegociacaoId = resolveId("em_negociacao", "Em negociação");
 
     if (!emDiaId || !inadimplenteId) {
       return new Response(
@@ -194,10 +206,10 @@ Deno.serve(async (req) => {
 
     // 8. Expire "Em negociação"
     if (emNegociacaoId) {
-      const regras = statusRegras.get("Em negociação") || {};
+      const regras = regrasByPapel.get("em_negociacao") || regrasByName.get("Em negociação") || {};
       const expiracaoDias = regras.tempo_expiracao_dias || 10;
       const autoTransicaoNome = regras.auto_transicao || "Inadimplente";
-      const targetId = statusMap.get(autoTransicaoNome) || inadimplenteId;
+      const targetId = statusByName.get(autoTransicaoNome) || inadimplenteId;
 
       const { data: negociacaoClients } = await supabase
         .from("clients")

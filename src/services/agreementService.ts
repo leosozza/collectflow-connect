@@ -149,11 +149,15 @@ export const createAgreement = async (
 
     // Mark original titles as "em_acordo"
     try {
+      // Lookup por papel_sistema (preferencial) com fallback por nome
       const { data: acordoStatus } = await supabase
         .from("tipos_status")
         .select("id")
-        .eq("nome", "Acordo Vigente")
-        .single();
+        .eq("tenant_id", tenantId)
+        .or(`regras->>papel_sistema.eq.acordo_vigente,nome.eq.Acordo Vigente`)
+        .order("regras", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
 
       const updatePayload: any = { status: "em_acordo" };
       if (acordoStatus?.id) {
@@ -421,16 +425,29 @@ export const cancelAgreement = async (id: string): Promise<void> => {
     if (agreement) {
       try {
         const today = new Date().toISOString().split("T")[0];
-        const { data: emDiaStatus } = await supabase
-          .from("tipos_status")
-          .select("id")
-          .eq("nome", "Em dia")
-          .single();
-        const { data: aguardandoStatus } = await supabase
-          .from("tipos_status")
-          .select("id")
-          .eq("nome", "Inadimplente")
-          .single();
+        // Lookup do tenant_id via primeiro client encontrado
+        const { data: refClient } = await supabase
+          .from("clients")
+          .select("tenant_id")
+          .eq("credor", agreement.credor)
+          .limit(1)
+          .maybeSingle();
+        const tenantIdLookup = refClient?.tenant_id;
+
+        const fetchByPapel = async (papel: string, fallbackNome: string) => {
+          if (!tenantIdLookup) return null;
+          const { data } = await supabase
+            .from("tipos_status")
+            .select("id, regras")
+            .eq("tenant_id", tenantIdLookup)
+            .or(`regras->>papel_sistema.eq.${papel},nome.eq.${fallbackNome}`)
+            .limit(5);
+          // Preferir registro com papel_sistema correto
+          const withPapel = (data || []).find((s: any) => s.regras?.papel_sistema === papel);
+          return withPapel || (data || [])[0] || null;
+        };
+        const emDiaStatus = await fetchByPapel("em_dia", "Em dia");
+        const aguardandoStatus = await fetchByPapel("inadimplente", "Inadimplente");
 
         const rawCpf = agreement.client_cpf.replace(/\D/g, "");
         const fmtCpf = rawCpf.length === 11
@@ -576,11 +593,15 @@ export const reopenAgreement = async (
 
     // Re-mark titles as em_acordo
     try {
-      const { data: acordoStatus } = await supabase
+      const { data: acordoCandidates } = await supabase
         .from("tipos_status")
-        .select("id")
-        .eq("nome", "Acordo Vigente")
-        .single();
+        .select("id, regras")
+        .eq("tenant_id", agreement.tenant_id)
+        .or(`regras->>papel_sistema.eq.acordo_vigente,nome.eq.Acordo Vigente`)
+        .limit(5);
+      const acordoStatus =
+        (acordoCandidates || []).find((s: any) => s.regras?.papel_sistema === "acordo_vigente") ||
+        (acordoCandidates || [])[0] || null;
 
       const updatePayload: any = { status: "em_acordo" };
       if (acordoStatus?.id) {
