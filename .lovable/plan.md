@@ -1,35 +1,49 @@
 
 
-# Scroll lateral direita + Responsividade na tela Formalizar Acordo
+# Reabrir Parcelas Pagas para Formalização de Acordo
 
-## Problema atual
+## Problema
 
-O scroll está dentro do card "Condições do Acordo" (`overflow-y-auto max-h-[35vh]` na linha 562), não no container principal. O usuário quer que o scroll seja no card inteiro (lateral direita do dialog), rolando todo o conteúdo de uma vez.
+Clientes importados do MaxList chegam com todas as parcelas com status `pago`. Nesse estado, não é possível formalizar um acordo pois não há títulos em aberto. É necessário uma opção para "reabrir" parcelas pagas, mudando seu status para `pendente`/`vencido` conforme a data de vencimento.
 
-Além disso, o layout de 2 colunas (`md:grid-cols-2`) não se adapta bem em telas menores.
+## Solução
 
-## Alterações
+### 1. Botão "Reabrir Parcela" na aba Títulos (`ClientDetailPage.tsx`)
 
-### 1. `src/components/client-detail/AgreementCalculator.tsx`
+- Adicionar uma coluna "Ações" na tabela de títulos
+- Para parcelas com status `pago`, exibir botão com ícone `RotateCcw` ("Reabrir")
+- Suportar seleção múltipla: checkbox em cada linha `pago` + botão "Reabrir Selecionadas" no topo
+- AlertDialog de confirmação antes de executar
 
-- **Linha 544**: manter `overflow-y-scroll` no container raiz — este é o scroll principal do dialog inteiro
-- **Linha 556**: remover `overflow-hidden` do grid 2 colunas
-- **Linha 558**: remover `overflow-hidden` do Card esquerdo
-- **Linha 562**: remover `overflow-y-auto max-h-[35vh] flex-1 min-h-0` do CardContent — deixar o conteúdo fluir naturalmente, sem scroll interno
-- Fazer o mesmo para qualquer outro card/seção à direita que tenha scroll interno próprio
-- Resultado: um único scrollbar na lateral direita do dialog rolando tudo
+### 2. Lógica de reabertura
 
-**Responsividade:**
-- Grid de 2 colunas (`md:grid-cols-2`) → trocar para `lg:grid-cols-2` para breakpoint mais alto
-- Inputs internos com grids de 4 colunas → usar `grid-cols-2 sm:grid-cols-4` para mobile
-- Botões e labels com tamanhos mínimos adequados
+Ao reabrir uma parcela:
+- Se `data_vencimento < hoje` → status = `vencido`
+- Se `data_vencimento >= hoje` → status = `pendente`
+- Zerar `valor_pago` (já que está sendo reaberta para negociação)
 
-### 2. `src/pages/ClientDetailPage.tsx` (linha 521)
-- Manter `overflow-hidden flex flex-col` no DialogContent (o scroll fica no filho AgreementCalculator)
+```typescript
+const handleReopenParcelas = async (clientIds: string[]) => {
+  for (const id of clientIds) {
+    const client = clients.find(c => c.id === id);
+    const newStatus = new Date(client.data_vencimento) < new Date() ? "vencido" : "pendente";
+    await supabase.from("clients").update({ status: newStatus, valor_pago: 0 }).eq("id", id);
+  }
+  // Recalc score
+  recalcScoreForCpf(cpf);
+  refetch();
+};
+```
 
-### 3. `src/pages/AtendimentoPage.tsx` (linha 722)
-- Mesma lógica — manter `overflow-hidden flex flex-col` no DialogContent
+### 3. Recálculo automático de status do CPF
 
-### Arquivos alterados
-- `src/components/client-detail/AgreementCalculator.tsx` — remover scrolls internos dos cards, melhorar breakpoints responsivos
+Após reabrir parcelas, chamar `recalcScoreForCpf` que aciona a Edge Function `calculate-propensity`, e o trigger `auto-status-sync` recalcula o status global do CPF/Credor (de `QUITADO`/`EM DIA` para `INADIMPLENTE`).
+
+### 4. Registro de auditoria
+
+Registrar no `audit_logs` a ação de reabertura de parcelas com os IDs afetados.
+
+## Arquivos alterados
+
+- `src/pages/ClientDetailPage.tsx` — checkbox de seleção, botão "Reabrir Parcelas", AlertDialog de confirmação, handler de reabertura
 
