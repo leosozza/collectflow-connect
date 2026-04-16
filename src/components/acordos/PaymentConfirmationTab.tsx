@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, XCircle, Loader2, HandCoins, Pencil } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 interface PaymentConfirmationTabProps {
@@ -157,15 +157,16 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
             {payments.map((p) => (
               <TableRow key={p.id}>
                 <TableCell>
-                  <span
-                    className="font-medium cursor-pointer text-primary hover:underline"
-                    onClick={() => {
-                      const cpf = p.agreement?.client_cpf?.replace(/\D/g, "");
-                      if (cpf) navigate(`/carteira/${cpf}?tab=acordo`);
-                    }}
-                  >
-                    {p.agreement?.client_name || "—"}
-                  </span>
+                  {p.agreement?.client_cpf ? (
+                    <Link
+                      to={`/carteira/${p.agreement.client_cpf.replace(/\D/g, "")}?tab=acordo`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {p.agreement?.client_name || "—"}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm">{p.agreement?.client_cpf || "—"}</TableCell>
                 <TableCell className="text-sm">{p.agreement?.credor || "—"}</TableCell>

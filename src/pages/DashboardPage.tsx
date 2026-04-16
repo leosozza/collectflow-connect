@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
@@ -299,12 +299,12 @@ const DashboardPage = () => {
                 {vencimentos.map((v, idx) => (
                   <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="text-xs font-medium">
-                      <button
-                        onClick={() => navigate(`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`)}
-                        className="text-primary hover:underline cursor-pointer text-left"
+                      <Link
+                        to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
+                        className="text-primary hover:underline"
                       >
                         {v.client_name}
-                      </button>
+                      </Link>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{v.client_cpf}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{v.credor}</TableCell>
