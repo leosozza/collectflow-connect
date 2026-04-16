@@ -327,10 +327,9 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                 Abrir Perfil do Cliente
               </Button>
               <Button
-                variant="outline"
                 size="sm"
-                className="w-full text-xs mt-1"
-                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?tab=acordo`)}
+                className="w-full text-xs mt-1 bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
+                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?action=formalizar`)}
               >
                 <FileText className="w-3 h-3 mr-1" />
                 Formalizar Acordo

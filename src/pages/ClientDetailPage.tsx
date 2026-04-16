@@ -76,6 +76,13 @@ const ClientDetailPage = () => {
   const { canReopenParcelas } = usePermissions();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
+
+  // Auto-open "Formalizar Acordo" dialog when ?action=formalizar is present
+  useEffect(() => {
+    if (searchParams.get("action") === "formalizar") {
+      setShowAcordoDialog(true);
+    }
+  }, [searchParams]);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
