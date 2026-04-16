@@ -112,7 +112,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         const totalOriginal = pendentes.reduce((s, c) => {
           const bruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
           const pago = Number(c.valor_pago) || 0;
-          return s + Math.max(0, bruto - pago);
+          const saldoExplicito = Number(c.valor_saldo) || 0;
+          const valorEfetivo = saldoExplicito > 0 ? saldoExplicito : Math.max(0, bruto - pago);
+          return s + valorEfetivo;
         }, 0);
         if (rules.honorarios_grade && rules.honorarios_grade.length > 0) {
           const matchedTier = rules.honorarios_grade.find((tier: any) => {
@@ -216,7 +218,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       const mesesAtraso = Math.max(0, (refDate.getFullYear() - venc.getFullYear()) * 12 + (refDate.getMonth() - venc.getMonth()));
       const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
       const valorPago = Number(c.valor_pago) || 0;
-      const valorOriginal = Math.max(0, valorBruto - valorPago);
+      const saldoExplicito = Number(c.valor_saldo) || 0;
+      const valorOriginal = saldoExplicito > 0 ? saldoExplicito : Math.max(0, valorBruto - valorPago);
       const valorBase = valorOriginal;
       const jP = parseDecimal(jurosPercent);
       const mP = parseDecimal(multaPercent);
