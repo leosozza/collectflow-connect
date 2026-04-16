@@ -1,69 +1,51 @@
 
 
-# Correções: Cancelamento de boletos + Busca de endereço para geração
+# Editar, Cancelar e Reabrir Acordos no Perfil do Cliente
 
-## Problema 1: Boletos NÃO são cancelados ao quebrar/cancelar acordo
+## Resumo
 
-A função `cancelAgreement` em `agreementService.ts` (linha 395-468) apenas:
-- Atualiza o status do acordo para `cancelled`
-- Reverte os títulos (clients) para `pendente`
-- Recalcula o score
+Três alterações: (1) nova função `reopenAgreement` no service, (2) expandir visibilidade dos botões Editar/Cancelar, (3) trocar o botão "Reativar" para reabrir o acordo existente em vez de criar novo.
 
-**Não há nenhuma lógica para cancelar os boletos na `negociarie_cobrancas`**. Os boletos pendentes continuam ativos na Negociarie mesmo após quebra/cancelamento.
+## Alterações
 
-### Solução
-Adicionar na `cancelAgreement` uma chamada para marcar todos os boletos pendentes como `cancelado` na tabela `negociarie_cobrancas`, e opcionalmente chamar a API da Negociarie para cancelá-los lá também.
+### 1. `src/services/agreementService.ts` — nova função `reopenAgreement`
 
----
-
-## Problema 2: Endereço não encontrado ao gerar boleto
-
-A Edge Function `generate-agreement-boletos` faz:
-1. Busca em `client_profiles` por `tenant_id` + `cpf` (digits only)
-2. Se `email` ou `cep` estiver vazio, faz fallback na tabela `clients`
-
-**O problema real**: Os dados da query confirmam que `client_profiles` frequentemente tem `cep`, `endereco`, `bairro`, `cidade`, `uf` como `NULL` — mesmo quando a tabela `clients` tem esses dados preenchidos.
-
-A condição de fallback (linha 204) é:
-```
-if (!clientData.email || !clientData.cep)
-```
-
-Isso faz fallback **apenas se email OU cep estiver vazio**. Se o profile tiver email preenchido mas sem endereço, o fallback não é acionado — resultando em dados incompletos.
-
-### Solução
-Alterar a lógica de fallback para verificar **todos os campos obrigatórios** individualmente, não apenas `email` e `cep`. Se qualquer campo obrigatório estiver vazio no profile, deve buscar o fallback nos `clients`.
-
----
-
-## Alterações técnicas
-
-### 1. `src/services/agreementService.ts` — `cancelAgreement`
-Após atualizar o status do acordo, adicionar:
 ```typescript
-// Cancelar boletos pendentes na negociarie_cobrancas
-await supabase
-  .from("negociarie_cobrancas")
-  .update({ status: "cancelado" })
-  .eq("agreement_id", id)
-  .in("status", ["pendente", "em_aberto"]);
+export const reopenAgreement = async (id: string, userId: string): Promise<void> => {
+  // Busca agreement (cpf, credor, tenant_id)
+  // Update status → "pending", limpa cancellation_type
+  // Re-marca títulos como "em_acordo" (mesma lógica do createAgreement)
+  // Audit log + recalcScoreForCpf
+};
 ```
 
-### 2. `supabase/functions/generate-agreement-boletos/index.ts` — Lógica de fallback
-Alterar a condição de fallback (linha 204) de:
+### 2. `src/pages/ClientDetailPage.tsx` — expandir botões + reabrir
+
+**Linha 61**: Expandir `activeStatuses` para incluir `overdue` no cancelamento, e criar lista separada para edição:
 ```typescript
-if (!clientData.email || !clientData.cep)
-```
-Para:
-```typescript
-const needsFallback = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"]
-  .some(f => !String(clientData[f] || "").trim());
-if (needsFallback)
+const editableStatuses = ["pending", "pending_approval", "approved", "overdue", "cancelled"];
+const cancellableStatuses = ["pending", "pending_approval", "approved", "overdue"];
 ```
 
-E alterar a lógica de merge para preencher **todos** os campos faltantes do `clients`, não apenas os que estão vazios no profile.
+**Linhas 375-396**: Reorganizar condicionais dos botões:
+- **Editar**: visível se `editableStatuses.includes(status)` e status !== `completed`/`rejected`
+- **Cancelar**: visível se `cancellableStatuses.includes(status)`
+- **Reabrir**: botão existente para `cancelled` — trocar `handleReactivateAgreement` para chamar `reopenAgreement` com AlertDialog de confirmação, em vez de abrir o formulário de novo acordo
+
+**Novo estado**: `reopenId` para controlar o AlertDialog de reabertura (similar ao `cancelId`).
+
+**Nova função**:
+```typescript
+const handleReopenAgreement = async (id: string) => {
+  await reopenAgreement(id, user.id);
+  toast.success("Acordo reaberto com sucesso.");
+  refetch(); refetchAgreements();
+};
+```
+
+**Novo AlertDialog** para confirmação de reabertura (similar ao de cancelamento).
 
 ### Arquivos alterados
-- `src/services/agreementService.ts` — cancelar boletos ao quebrar/cancelar acordo
-- `supabase/functions/generate-agreement-boletos/index.ts` — corrigir condição de fallback de endereço
+- `src/services/agreementService.ts`
+- `src/pages/ClientDetailPage.tsx`
 
