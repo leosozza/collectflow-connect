@@ -247,20 +247,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
         <h3 className="font-semibold text-sm">Contato</h3>
       </div>
       <ScrollArea className="flex-1 p-3 overflow-x-hidden">
-        {/* Contact info */}
-        <Card className="mb-3">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div>
-                <div className="font-medium text-sm">{conversation.remote_name || "Sem nome"}</div>
-                <div className="text-xs text-muted-foreground">{conversation.remote_phone}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Contact info card removed */}
 
         {/* Perfil do Devedor */}
         {linkedClient && conversation && (
