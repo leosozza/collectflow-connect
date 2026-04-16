@@ -152,54 +152,6 @@ const AISummaryPanel = ({ messages, clientInfo, onSuggestedTags }: AISummaryPane
         )}
       </Card>
 
-      {/* Classification */}
-      <Card>
-        <CardHeader className="p-3 pb-1">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs flex items-center gap-1">
-              <Brain className="w-3 h-3" />
-              Classificação
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px] gap-1"
-              onClick={handleClassify}
-              disabled={loadingClassify || messages.length === 0}
-            >
-              {loadingClassify ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
-              Classificar
-            </Button>
-          </div>
-        </CardHeader>
-        {classification && (
-          <CardContent className="p-3 pt-1 space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="outline"
-                className="text-[10px]"
-                style={{ borderColor: INTENT_COLORS[classification.intent], color: INTENT_COLORS[classification.intent] }}
-              >
-                {INTENT_LABELS[classification.intent] || classification.intent}
-              </Badge>
-              <span className="text-[10px] text-muted-foreground">
-                {Math.round(classification.confidence * 100)}% confiança
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">{classification.summary}</p>
-            {classification.suggested_tags.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap">
-                <Tag className="w-3 h-3 text-muted-foreground" />
-                {classification.suggested_tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-[10px]">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        )}
-      </Card>
     </div>
   );
 };
