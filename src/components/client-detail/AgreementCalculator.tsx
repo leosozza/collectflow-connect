@@ -737,7 +737,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
               <Label className="text-[10px]">Observações</Label>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." rows={1} className="text-xs min-h-[28px]" />
             </div>
-            <Button onClick={handleSimulate} className="w-full gap-2 h-8 text-xs" variant="secondary" disabled={selectedIds.size === 0}>
+            <Button onClick={handleSimulate} className="w-full gap-2 h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={selectedIds.size === 0}>
               <Play className="w-3 h-3" />
               SIMULAR
             </Button>
