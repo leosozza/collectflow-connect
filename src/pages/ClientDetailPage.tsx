@@ -363,12 +363,27 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
+              {pagoClients.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={allPagoSelected} onCheckedChange={handleToggleAllPago} />
+                    <span>Selecionar todas as parcelas pagas ({pagoClients.length})</span>
+                  </div>
+                  {selectedPagoIds.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={() => setShowReopenParcelasDialog(true)}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                      Reabrir {selectedPagoIds.length} parcela(s)
+                    </Button>
+                  )}
+                </div>
+              )}
               {clients.length === 0 ? (
                 <div className="p-6 text-center text-muted-foreground">Nenhum título encontrado</div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      {pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
@@ -376,6 +391,7 @@ const ClientDetailPage = () => {
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
                       <TableHead className="text-center">Status</TableHead>
+                      {pagoClients.length > 0 && <TableHead className="w-16 text-center">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -383,10 +399,11 @@ const ClientDetailPage = () => {
                       const hasDevolucao = !!(c as any).data_devolucao;
                       const isOverdue = c.status === "vencido" || (c.status === "pendente" && new Date(c.data_vencimento) < new Date());
                       const isEmAcordo = c.status === "em_acordo";
-                      const statusLabel = hasDevolucao ? "Cheque Devolvido" : c.status === "pago" ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
+                      const isPago = c.status === "pago";
+                      const statusLabel = hasDevolucao ? "Cheque Devolvido" : isPago ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
                       const statusClass = hasDevolucao
                         ? "bg-destructive/10 text-destructive border-destructive/30"
-                        : c.status === "pago"
+                        : isPago
                           ? "bg-green-500/10 text-green-600 border-green-500/30"
                           : isOverdue
                             ? "bg-destructive/10 text-destructive border-destructive/30"
@@ -399,6 +416,16 @@ const ClientDetailPage = () => {
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
+                          {pagoClients.length > 0 && (
+                            <TableCell className="w-10">
+                              {isPago && (
+                                <Checkbox
+                                  checked={selectedPagoIds.includes(c.id)}
+                                  onCheckedChange={() => handleTogglePagoSelection(c.id)}
+                                />
+                              )}
+                            </TableCell>
+                          )}
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
@@ -410,6 +437,21 @@ const ClientDetailPage = () => {
                               {statusLabel}
                             </Badge>
                           </TableCell>
+                          {pagoClients.length > 0 && (
+                            <TableCell className="text-center">
+                              {isPago && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  title="Reabrir parcela"
+                                  onClick={() => { setSelectedPagoIds([c.id]); setShowReopenParcelasDialog(true); }}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
