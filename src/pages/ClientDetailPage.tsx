@@ -39,6 +39,7 @@ import AgreementInstallments from "@/components/client-detail/AgreementInstallme
 import { cancelAgreement, updateAgreement, reopenAgreement, AgreementFormData } from "@/services/agreementService";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const statusLabelsMap: Record<string, string> = {
   approved: "Pago",
@@ -72,6 +73,7 @@ const ClientDetailPage = () => {
   const [searchParams] = useSearchParams();
   const credorFilter = searchParams.get("credor");
   const { tenant } = useTenant();
+  const { canReopenParcelas } = usePermissions();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
