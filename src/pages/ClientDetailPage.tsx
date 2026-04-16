@@ -182,6 +182,9 @@ const ClientDetailPage = () => {
     enabled: !!cpf,
   });
 
+  const pagoClients = useMemo(() => clients.filter(c => c.status === "pago"), [clients]);
+  const allPagoSelected = pagoClients.length > 0 && pagoClients.every(c => selectedPagoIds.includes(c.id));
+
   // Consolidate contact/address fields across all records for the same CPF
   // Must be before early returns to maintain consistent hook order
   const first = useMemo(() => {
