@@ -1917,6 +1917,54 @@ export type Database = {
           },
         ]
       }
+      conversation_transfers: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          from_user_id: string | null
+          id: string
+          is_active: boolean
+          reason: string | null
+          tenant_id: string
+          to_user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          from_user_id?: string | null
+          id?: string
+          is_active?: boolean
+          reason?: string | null
+          tenant_id: string
+          to_user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          from_user_id?: string | null
+          id?: string
+          is_active?: boolean
+          reason?: string | null
+          tenant_id?: string
+          to_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_transfers_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_transfers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           assigned_to: string | null
@@ -6206,6 +6254,10 @@ export type Database = {
           transaction_id: string
         }[]
       }
+      can_user_see_conversation: {
+        Args: { _conv_id: string; _user_id: string }
+        Returns: boolean
+      }
       check_token_balance: {
         Args: { p_required_amount: number; p_tenant_id: string }
         Returns: {
@@ -6456,6 +6508,39 @@ export type Database = {
           tu_role: Database["public"]["Enums"]["tenant_role"]
           tu_tenant_id: string
           tu_user_id: string
+        }[]
+      }
+      get_visible_conversations: {
+        Args: {
+          _handler_filter?: string
+          _instance_filter?: string
+          _operator_filter?: string
+          _page?: number
+          _page_size?: number
+          _search?: string
+          _status_filter?: string
+          _tenant_id: string
+          _unread_only?: boolean
+        }
+        Returns: {
+          assigned_to: string
+          client_id: string
+          client_name: string
+          created_at: string
+          id: string
+          instance_id: string
+          last_message_at: string
+          last_message_content: string
+          last_message_direction: string
+          last_message_type: string
+          remote_name: string
+          remote_phone: string
+          sla_deadline_at: string
+          status: string
+          tenant_id: string
+          total_count: number
+          unread_count: number
+          updated_at: string
         }[]
       }
       has_role: {
