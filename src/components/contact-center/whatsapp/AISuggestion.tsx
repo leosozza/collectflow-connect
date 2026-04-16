@@ -27,7 +27,42 @@ const AISuggestion = ({ messages, clientInfo, onSend, disabled }: AISuggestionPr
   const [suggestion, setSuggestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const handleSummarize = async () => {
+    if (messages.length === 0) {
+      toast.error("Nenhuma mensagem para resumir");
+      return;
+    }
+    setLoadingSummary(true);
+    setShowSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-ai-suggest", {
+        body: {
+          action: "summarize",
+          messages: messages.map((m) => ({
+            direction: m.direction,
+            content: m.content,
+            message_type: m.message_type,
+          })),
+          clientInfo: clientInfo || undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      setSummary(data?.text || "");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao gerar resumo");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   const handleSuggest = async () => {
     if (messages.length === 0) {
