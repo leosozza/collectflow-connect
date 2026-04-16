@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,6 +23,11 @@ interface MultiInstanceAlertProps {
 
 const MultiInstanceAlert = ({ clientId, conversationId, windowHours = 48 }: MultiInstanceAlertProps) => {
   const [others, setOthers] = useState<OtherConv[]>([]);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    setDismissed(false);
+  }, [conversationId]);
 
   useEffect(() => {
     if (!clientId) {
@@ -48,19 +53,19 @@ const MultiInstanceAlert = ({ clientId, conversationId, windowHours = 48 }: Mult
     };
   }, [clientId, conversationId, windowHours]);
 
-  if (others.length === 0) return null;
+  if (others.length === 0 || dismissed) return null;
 
   const first = others[0];
   const extra = others.length - 1;
 
   return (
-    <div className="mx-4 mt-2 rounded-md border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800/60 px-3 py-2 flex items-start gap-2">
-      <AlertCircle className="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400 shrink-0" />
-      <div className="text-xs text-amber-900 dark:text-amber-200 leading-snug">
-        <div className="font-medium">
+    <div className="mx-4 mt-2 rounded-md border border-border/50 bg-muted/40 backdrop-blur-sm px-3 py-2 flex items-start gap-2">
+      <AlertCircle className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+      <div className="text-xs text-muted-foreground leading-snug flex-1">
+        <div className="font-medium text-foreground/80">
           Este cliente já possui contato recente em outro número.
         </div>
-        <div className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
+        <div className="mt-0.5">
           {first.instance_name || "Outra instância"} · {first.remote_phone}
           {first.assigned_name && <> · operador: {first.assigned_name}</>}
           {" · "}
@@ -71,6 +76,13 @@ const MultiInstanceAlert = ({ clientId, conversationId, windowHours = 48 }: Mult
           {extra > 0 && <> · +{extra} outra{extra > 1 ? "s" : ""}</>}
         </div>
       </div>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0"
+        aria-label="Fechar aviso"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 };
