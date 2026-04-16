@@ -4,7 +4,10 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2, User, RotateCcw } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { logAction } from "@/services/auditService";
+import { recalcScoreForCpf } from "@/hooks/useScoreRecalc";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +80,52 @@ const ClientDetailPage = () => {
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [reactivateAgreement, setReactivateAgreement] = useState<any | null>(null);
+  const [selectedPagoIds, setSelectedPagoIds] = useState<string[]>([]);
+  const [showReopenParcelasDialog, setShowReopenParcelasDialog] = useState(false);
+  const [reopeningParcelas, setReopeningParcelas] = useState(false);
+
+
+
+  const handleTogglePagoSelection = (id: string) => {
+    setSelectedPagoIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const handleToggleAllPago = () => {
+    setSelectedPagoIds(allPagoSelected ? [] : pagoClients.map(c => c.id));
+  };
+
+  const handleReopenParcelas = async () => {
+    if (selectedPagoIds.length === 0) return;
+    setReopeningParcelas(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (const id of selectedPagoIds) {
+        const client = clients.find(c => c.id === id);
+        if (!client) continue;
+        const dueDate = new Date(client.data_vencimento);
+        dueDate.setHours(0, 0, 0, 0);
+        const newStatus = dueDate < today ? "vencido" : "pendente";
+        await supabase.from("clients").update({ status: newStatus, valor_pago: 0 } as any).eq("id", id);
+      }
+      const rawCpf = (cpf || "").replace(/\D/g, "");
+      await recalcScoreForCpf(rawCpf);
+      await logAction({
+        action: "reabrir_parcelas",
+        entity_type: "client",
+        entity_id: rawCpf,
+        details: { parcelas_reabertas: selectedPagoIds, quantidade: selectedPagoIds.length },
+      });
+      toast.success(`${selectedPagoIds.length} parcela(s) reaberta(s) com sucesso.`);
+      setSelectedPagoIds([]);
+      setShowReopenParcelasDialog(false);
+      refetch();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao reabrir parcelas.");
+    } finally {
+      setReopeningParcelas(false);
+    }
+  };
 
   const backTo = (location.state as any)?.from || "/carteira";
 
@@ -132,6 +181,9 @@ const ClientDetailPage = () => {
     },
     enabled: !!cpf,
   });
+
+  const pagoClients = useMemo(() => clients.filter(c => c.status === "pago"), [clients]);
+  const allPagoSelected = pagoClients.length > 0 && pagoClients.every(c => selectedPagoIds.includes(c.id));
 
   // Consolidate contact/address fields across all records for the same CPF
   // Must be before early returns to maintain consistent hook order
@@ -311,12 +363,27 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
+              {pagoClients.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={allPagoSelected} onCheckedChange={handleToggleAllPago} />
+                    <span>Selecionar todas as parcelas pagas ({pagoClients.length})</span>
+                  </div>
+                  {selectedPagoIds.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={() => setShowReopenParcelasDialog(true)}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                      Reabrir {selectedPagoIds.length} parcela(s)
+                    </Button>
+                  )}
+                </div>
+              )}
               {clients.length === 0 ? (
                 <div className="p-6 text-center text-muted-foreground">Nenhum título encontrado</div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      {pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
@@ -324,6 +391,7 @@ const ClientDetailPage = () => {
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
                       <TableHead className="text-center">Status</TableHead>
+                      {pagoClients.length > 0 && <TableHead className="w-16 text-center">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -331,10 +399,11 @@ const ClientDetailPage = () => {
                       const hasDevolucao = !!(c as any).data_devolucao;
                       const isOverdue = c.status === "vencido" || (c.status === "pendente" && new Date(c.data_vencimento) < new Date());
                       const isEmAcordo = c.status === "em_acordo";
-                      const statusLabel = hasDevolucao ? "Cheque Devolvido" : c.status === "pago" ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
+                      const isPago = c.status === "pago";
+                      const statusLabel = hasDevolucao ? "Cheque Devolvido" : isPago ? "Pago" : isEmAcordo ? "Em Acordo" : isOverdue ? "Vencido" : c.status === "quebrado" ? "Quebrado" : "Em Aberto";
                       const statusClass = hasDevolucao
                         ? "bg-destructive/10 text-destructive border-destructive/30"
-                        : c.status === "pago"
+                        : isPago
                           ? "bg-green-500/10 text-green-600 border-green-500/30"
                           : isOverdue
                             ? "bg-destructive/10 text-destructive border-destructive/30"
@@ -347,6 +416,16 @@ const ClientDetailPage = () => {
                       const saldoDevedor = Math.max(0, valorEfetivo - Number(c.valor_pago));
                       return (
                         <TableRow key={c.id}>
+                          {pagoClients.length > 0 && (
+                            <TableCell className="w-10">
+                              {isPago && (
+                                <Checkbox
+                                  checked={selectedPagoIds.includes(c.id)}
+                                  onCheckedChange={() => handleTogglePagoSelection(c.id)}
+                                />
+                              )}
+                            </TableCell>
+                          )}
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
@@ -358,6 +437,21 @@ const ClientDetailPage = () => {
                               {statusLabel}
                             </Badge>
                           </TableCell>
+                          {pagoClients.length > 0 && (
+                            <TableCell className="text-center">
+                              {isPago && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  title="Reabrir parcela"
+                                  onClick={() => { setSelectedPagoIds([c.id]); setShowReopenParcelasDialog(true); }}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -575,7 +669,25 @@ const ClientDetailPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Agreement Dialog */}
+      {/* Reopen Parcelas Dialog */}
+      <AlertDialog open={showReopenParcelasDialog} onOpenChange={(open) => !open && setShowReopenParcelasDialog(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir Parcelas Pagas</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja reabrir {selectedPagoIds.length} parcela(s)? O status será atualizado conforme a data de vencimento
+              (Vencido ou Pendente) e o valor pago será zerado. O status do cliente será recalculado automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reopeningParcelas}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReopenParcelas} disabled={reopeningParcelas}>
+              {reopeningParcelas ? "Reabrindo..." : "Confirmar Reabertura"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={!!editingAgreement} onOpenChange={(open) => !open && setEditingAgreement(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
