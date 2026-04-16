@@ -1,25 +1,69 @@
 
 
-# Corrigir scrollbar visível no modal "Formalizar Acordo"
+# Correções: Cancelamento de boletos + Busca de endereço para geração
 
-## Problema
+## Problema 1: Boletos NÃO são cancelados ao quebrar/cancelar acordo
 
-O `DialogContent` (pai) tem `overflow-y-auto` e o `AgreementCalculator` (filho) também tem `overflow-y-auto`. O scroll acontece no `DialogContent`, mas como ele é o container do dialog do shadcn, a scrollbar fica na borda extrema e pode ser pouco visível ou conflitar com o estilo do dialog.
+A função `cancelAgreement` em `agreementService.ts` (linha 395-468) apenas:
+- Atualiza o status do acordo para `cancelled`
+- Reverte os títulos (clients) para `pendente`
+- Recalcula o score
 
-## Solução
+**Não há nenhuma lógica para cancelar os boletos na `negociarie_cobrancas`**. Os boletos pendentes continuam ativos na Negociarie mesmo após quebra/cancelamento.
 
-Mover a responsabilidade do scroll para **dentro** do `AgreementCalculator`, removendo `overflow-y-auto` do `DialogContent` e garantindo que o componente interno tenha altura máxima e scrollbar visível.
+### Solução
+Adicionar na `cancelAgreement` uma chamada para marcar todos os boletos pendentes como `cancelado` na tabela `negociarie_cobrancas`, e opcionalmente chamar a API da Negociarie para cancelá-los lá também.
 
-### Alterações
+---
 
-**1. `src/pages/ClientDetailPage.tsx` (linha 505)**
-- Trocar `overflow-y-auto` por `overflow-hidden` no `DialogContent` — o dialog não scrolla, quem scrolla é o conteúdo interno
+## Problema 2: Endereço não encontrado ao gerar boleto
 
-**2. `src/pages/AtendimentoPage.tsx` (linha 722)**
-- Mesma alteração: `overflow-y-auto` → `overflow-hidden`
+A Edge Function `generate-agreement-boletos` faz:
+1. Busca em `client_profiles` por `tenant_id` + `cpf` (digits only)
+2. Se `email` ou `cep` estiver vazio, faz fallback na tabela `clients`
 
-**3. `src/components/client-detail/AgreementCalculator.tsx` (linha 544)**
-- Adicionar classes de scrollbar visível com Tailwind: `scrollbar-thin` ou usar CSS customizado para forçar a scrollbar sempre visível
-- Trocar `overflow-y-auto` por `overflow-y-scroll` para a barra aparecer permanentemente
-- Resultado: `className="flex flex-col overflow-y-scroll flex-1 min-h-0 gap-2 pr-1"`
+**O problema real**: Os dados da query confirmam que `client_profiles` frequentemente tem `cep`, `endereco`, `bairro`, `cidade`, `uf` como `NULL` — mesmo quando a tabela `clients` tem esses dados preenchidos.
+
+A condição de fallback (linha 204) é:
+```
+if (!clientData.email || !clientData.cep)
+```
+
+Isso faz fallback **apenas se email OU cep estiver vazio**. Se o profile tiver email preenchido mas sem endereço, o fallback não é acionado — resultando em dados incompletos.
+
+### Solução
+Alterar a lógica de fallback para verificar **todos os campos obrigatórios** individualmente, não apenas `email` e `cep`. Se qualquer campo obrigatório estiver vazio no profile, deve buscar o fallback nos `clients`.
+
+---
+
+## Alterações técnicas
+
+### 1. `src/services/agreementService.ts` — `cancelAgreement`
+Após atualizar o status do acordo, adicionar:
+```typescript
+// Cancelar boletos pendentes na negociarie_cobrancas
+await supabase
+  .from("negociarie_cobrancas")
+  .update({ status: "cancelado" })
+  .eq("agreement_id", id)
+  .in("status", ["pendente", "em_aberto"]);
+```
+
+### 2. `supabase/functions/generate-agreement-boletos/index.ts` — Lógica de fallback
+Alterar a condição de fallback (linha 204) de:
+```typescript
+if (!clientData.email || !clientData.cep)
+```
+Para:
+```typescript
+const needsFallback = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"]
+  .some(f => !String(clientData[f] || "").trim());
+if (needsFallback)
+```
+
+E alterar a lógica de merge para preencher **todos** os campos faltantes do `clients`, não apenas os que estão vazios no profile.
+
+### Arquivos alterados
+- `src/services/agreementService.ts` — cancelar boletos ao quebrar/cancelar acordo
+- `supabase/functions/generate-agreement-boletos/index.ts` — corrigir condição de fallback de endereço
 
