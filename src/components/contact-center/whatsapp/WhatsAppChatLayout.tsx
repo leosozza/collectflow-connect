@@ -31,11 +31,12 @@ const PAGE_SIZE = 30;
 
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, tenantUser } = useTenant();
   const { canManageContactCenterAdmin } = usePermissions();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tenantId = tenant?.id || profile?.tenant_id;
+  const isAdmin = tenantUser?.role === "admin" || tenantUser?.role === "super_admin";
   const phoneParamProcessed = useRef(false);
 
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
