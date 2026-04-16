@@ -89,10 +89,10 @@ const WhatsAppChatLayout = () => {
     isFetchingNextPage,
     refetch: refetchConversations,
   } = useInfiniteQuery({
-    queryKey: ["conversations", tenantId, filters],
+    queryKey: ["conversations", tenantId, filters, isAdmin],
     queryFn: async ({ pageParam = 1 }) => {
       if (!tenantId) return { data: [], count: 0 };
-      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters);
+      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters, isAdmin);
     },
     getNextPageParam: (lastPage, allPages) => {
       const totalLoaded = allPages.reduce((sum, p) => sum + p.data.length, 0);
