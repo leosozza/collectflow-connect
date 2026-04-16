@@ -121,39 +121,7 @@ const AISummaryPanel = ({ messages, clientInfo, onSuggestedTags }: AISummaryPane
     }
   };
 
-  return (
-    <div className="space-y-2">
-      {/* Summary */}
-      <Card>
-        <CardHeader className="p-3 pb-1">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs flex items-center gap-1">
-              <FileText className="w-3 h-3" />
-              Resumo IA
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px] gap-1"
-              onClick={handleSummarize}
-              disabled={loadingSummary || messages.length === 0}
-            >
-              {loadingSummary ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
-              Gerar
-            </Button>
-          </div>
-        </CardHeader>
-        {summary && (
-          <CardContent className="p-3 pt-1">
-            <div className="text-xs prose prose-xs max-w-none text-foreground">
-              <ReactMarkdown>{summary}</ReactMarkdown>
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-    </div>
-  );
+  return null;
 };
 
 export default AISummaryPanel;
