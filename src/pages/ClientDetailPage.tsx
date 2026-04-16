@@ -214,6 +214,19 @@ const ClientDetailPage = () => {
     setShowAcordoDialog(true);
   };
 
+  const handleReopenAgreement = async (id: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+      await reopenAgreement(id, user.id);
+      toast.success("Acordo reaberto com sucesso.");
+      refetch();
+      refetchAgreements();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao reabrir acordo");
+    }
+  };
+
   const handleCancelAgreement = async (id: string) => {
     try {
       await cancelAgreement(id);
@@ -375,26 +388,26 @@ const ClientDetailPage = () => {
                           >
                             {statusLabelsMap[agreement.status] || agreement.status}
                           </Badge>
-                          {activeStatuses.includes(agreement.status) && (
-                            <>
-                              <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
-                                <Pencil className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </>
+                          {editableStatuses.includes(agreement.status) && (
+                            <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                          {cancellableStatuses.includes(agreement.status) && (
+                            <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           )}
                           {agreement.status === "cancelled" && !hasActiveAgreement && (
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-xs gap-1"
-                              onClick={() => handleReactivateAgreement(agreement)}
-                              title="Reativar Acordo"
+                              onClick={() => setReopenId(agreement.id)}
+                              title="Reabrir Acordo"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
-                              Reativar
+                              Reabrir
                             </Button>
                           )}
                         </div>
