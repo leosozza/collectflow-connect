@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft } from "lucide-react";
+import TransferConversationDialog from "./TransferConversationDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ChatMessageBubble from "./ChatMessage";
@@ -61,6 +62,7 @@ const ChatPanel = ({
   const { tenant } = useTenant();
   const { profile } = useAuth();
   const [openingAtendimento, setOpeningAtendimento] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
   const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
@@ -259,6 +261,24 @@ const ChatPanel = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => setTransferOpen(true)}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  Transferir
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Transferir esta conversa para outro operador do tenant</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Select value={conversation.status} onValueChange={onStatusChange}>
             <SelectTrigger className="h-8 w-[120px] text-xs">
               <SelectValue />
@@ -336,6 +356,14 @@ const ChatPanel = ({
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
       />
+
+      {conversation && (
+        <TransferConversationDialog
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          conversationId={conversation.id}
+        />
+      )}
     </div>
   );
 };
