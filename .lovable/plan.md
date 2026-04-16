@@ -1,51 +1,52 @@
 
 
-# Otimizações de Performance e Estabilidade — Análise e Plano
+# Corrigir cálculo do VALOR ATUALIZADO no Formalizar Acordo
 
-## Análise de cada sugestão
+## Problema identificado
 
-### 1. Virtualização de Tabela no MaxListPage
-**Viável e seguro.** A tabela renderiza todas as linhas (até 5000+) dentro de um `ScrollArea` de 500px. Substituir por `@tanstack/react-virtual` mantém o mesmo visual mas renderiza apenas ~20 linhas visíveis. Risco zero de quebrar funcionalidade — checkboxes de seleção e export Excel continuam operando sobre o array `data[]` em memória, não sobre o DOM.
+No `AgreementCalculator.tsx` (linha 217-220), o cálculo faz:
 
-### 2. Carregamento progressivo (Carregar Mais / Paginação)
-**Não recomendado.** O loop `while` busca dados de uma API externa (MaxSystem) e o operador precisa do dataset completo para selecionar registros e importar. Quebrar isso em "Carregar Mais" quebraria a seleção global (`toggleAll`) e o export Excel. O progresso já é mostrado com `searchProgress`. A virtualização (item 1) resolve o problema real que é a renderização, não o fetch.
+```
+valorBruto = valor_parcela || valor_saldo  → 200
+valorPago  = valor_pago                    → 200
+valorOriginal = valorBruto - valorPago     → 0  ← base zerada!
+```
 
-### 3. Try/catch no WhatsApp Sender
-**Viável e importante.** Atualmente, se o `fetch` lançar uma exceção de rede (DNS, timeout, conexão recusada), a Edge Function crasha sem retorno controlado. Envolver cada `fetch` em try/catch garante que falhas retornem `{ ok: false, result: { error: "..." } }` ao invés de crashar.
+O campo `valor_saldo` no banco (que é 200 e representa o saldo real da dívida) é ignorado porque `valor_parcela` já tem valor e o `||` nunca chega em `valor_saldo`. Depois, `valor_pago` (que coincide com `valor_parcela`) zera tudo.
 
-### 4. Consistência visual ("Mostrando 1000 de X")
-**Viável.** A mensagem na linha 1114-1118 diz "Mostrando 1000" mas renderiza tudo. Com a virtualização, isso se torna irrelevante — pode ser removido ou ajustado para mostrar o total real. Vamos corrigir para refletir a realidade.
+## Causa raiz
 
-### 5. Otimização de Rerenders (React.memo)
-**Baixo impacto, risco moderado.** O `CadastrosPage` já é simples (navegação lateral + conteúdo condicional). O `MaxListPage` tem muitos estados mas o gargalo real é a renderização DOM (resolvida pela virtualização), não rerenders de React. Adicionar `memo` em componentes estáveis como `DatePickerField` é seguro e marginal. Não vale a complexidade de refatorar estados.
+A importação de dados preenche `valor_pago` = `valor_parcela` em muitos casos (títulos vencidos sem pagamento real), mas mantém `valor_saldo` com o valor correto do débito. O cálculo deveria usar `valor_saldo` como saldo efetivo quando disponível.
 
----
+## Correção
 
-## Plano de execução (3 alterações)
+### Arquivo: `src/components/client-detail/AgreementCalculator.tsx`
 
-### Alteração 1 — Virtualização da tabela (`MaxListPage.tsx`)
-- Instalar `@tanstack/react-virtual`
-- Substituir o `<TableBody>` que mapeia `data.map(...)` por um virtualizer com row height estimada de ~40px
-- Manter `<TableHeader>` sticky fora do container virtualizado
-- Container virtualizado dentro do `ScrollArea` existente (500px)
-- Checkboxes, seleção e export continuam inalterados (operam sobre `data[]`)
+**Linha 217-220** — Alterar a lógica de `valorOriginal`:
 
-### Alteração 2 — Corrigir mensagem de contagem (`MaxListPage.tsx`)
-- Remover a mensagem enganosa "Mostrando 1000 de X" (linhas 1114-1118)
-- O header do card já mostra `Preview (X registros)` corretamente
+```typescript
+// ANTES:
+const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+const valorPago = Number(c.valor_pago) || 0;
+const valorOriginal = Math.max(0, valorBruto - valorPago);
+const valorBase = valorOriginal;
 
-### Alteração 3 — Try/catch no WhatsApp Sender (`whatsapp-sender.ts`)
-- Envolver cada chamada `fetch` nas 7 funções de envio em try/catch
-- No catch, retornar `{ ok: false, result: { error: mensagem }, providerMessageId: null, provider }`
-- Log do erro com `console.error` para diagnóstico
-- Funções afetadas: `sendWuzapiText`, `sendWuzapiMedia`, `sendEvolutionText`, `sendEvolutionMedia`, `sendGupshupMsg`
+// DEPOIS:
+const valorBruto = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+const valorPago = Number(c.valor_pago) || 0;
+const saldoExplicito = Number(c.valor_saldo) || 0;
+// Priorizar valor_saldo quando existir; senão, calcular bruto - pago
+const valorOriginal = saldoExplicito > 0 ? saldoExplicito : Math.max(0, valorBruto - valorPago);
+const valorBase = valorOriginal;
+```
 
-### Não incluído no plano
-- **Paginação/Carregar Mais**: quebraria seleção global e export. Virtualização resolve o problema real.
-- **React.memo em CadastrosPage**: impacto negligenciável, complexidade desnecessária.
+**Mesma lógica nas linhas 112-114** (cálculo de honorários automáticos) — aplicar a mesma priorização de `valor_saldo`.
 
-## Resultado esperado
-- MaxListPage com 5000+ registros roda fluido (apenas ~15 linhas no DOM)
-- Mensagem de contagem correta
-- Edge Functions de WhatsApp nunca crasham por falha de rede
+**Linha 699** (exibição na tabela) — o V. Bruto já está correto, a coluna "Saldo" agora refletirá o `valorOriginal` correto.
+
+## Impacto
+
+- Títulos com `valor_saldo` preenchido: cálculo usa o saldo real como base para juros, multa e honorários
+- Títulos sem `valor_saldo`: comportamento inalterado (usa `bruto - pago`)
+- VALOR ATUALIZADO passará a somar corretamente os valores com juros/multa/honorários
 
