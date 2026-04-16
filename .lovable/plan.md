@@ -1,49 +1,34 @@
 
 
-# Reabrir Parcelas Pagas para Formalização de Acordo
+# Acordo apenas com Entrada (parcelas começando em zero)
 
 ## Problema
 
-Clientes importados do MaxList chegam com todas as parcelas com status `pago`. Nesse estado, não é possível formalizar um acordo pois não há títulos em aberto. É necessário uma opção para "reabrir" parcelas pagas, mudando seu status para `pendente`/`vencido` conforme a data de vencimento.
+1. O campo "Parcelas" inicia em `1` — operador não consegue criar acordo só com entrada(s)
+2. Ao deixar parcelas em `0`, o `onBlur` força de volta para `1`
+3. Quando parcelas = 0, a simulação ainda tenta gerar parcelas e exige `firstDueDate`
+4. Ao submeter, `first_due_date` é obrigatório mesmo quando não há parcelas — apenas entradas
 
-## Solução
+## Alterações em `src/components/client-detail/AgreementCalculator.tsx`
 
-### 1. Botão "Reabrir Parcela" na aba Títulos (`ClientDetailPage.tsx`)
+### A. Parcelas iniciam em 0
+- **Linha 78**: `numParcelas` de `1` para `0`
+- **Linha 694**: remover o `onBlur` que força mínimo 1 — permitir `0`
 
-- Adicionar uma coluna "Ações" na tabela de títulos
-- Para parcelas com status `pago`, exibir botão com ícone `RotateCcw` ("Reabrir")
-- Suportar seleção múltipla: checkbox em cada linha `pago` + botão "Reabrir Selecionadas" no topo
-- AlertDialog de confirmação antes de executar
+### B. Simulação funciona com 0 parcelas
+- **Linha 273-318** (`handleSimulate`): quando `numParcelas === 0`, não exigir `firstDueDate` — apenas validar que há pelo menos uma entrada com data e valor. Gerar simulação apenas com as entradas.
 
-### 2. Lógica de reabertura
+### C. Parcelas UI condicional
+- **Linhas 697-723**: Esconder os campos "Pagto Parcelas", "Intervalo" e "Vencto 1ª Parc." quando `numParcelas === 0`, pois não há parcelas a configurar — apenas entradas.
 
-Ao reabrir uma parcela:
-- Se `data_vencimento < hoje` → status = `vencido`
-- Se `data_vencimento >= hoje` → status = `pendente`
-- Zerar `valor_pago` (já que está sendo reaberta para negociação)
+### D. Submit com 0 parcelas
+- **Linha 480**: `new_installments` pode ser `0`
+- **Linha 482**: `first_due_date` usa a data da primeira entrada como fallback quando `firstDueDate` está vazio e parcelas = 0
+- **Linha 481**: `new_installment_value` = `0` quando parcelas = 0
 
-```typescript
-const handleReopenParcelas = async (clientIds: string[]) => {
-  for (const id of clientIds) {
-    const client = clients.find(c => c.id === id);
-    const newStatus = new Date(client.data_vencimento) < new Date() ? "vencido" : "pendente";
-    await supabase.from("clients").update({ status: newStatus, valor_pago: 0 }).eq("id", id);
-  }
-  // Recalc score
-  recalcScoreForCpf(cpf);
-  refetch();
-};
-```
+### E. Edge Function já suporta
+A função `generate-agreement-boletos` já itera `entradaKeys` separadamente das parcelas (linha 101-112 e 114-130). Com `new_installments = 0`, o loop de parcelas simplesmente não executa. As entradas com método BOLETO serão geradas normalmente. **Nenhuma alteração necessária na Edge Function.**
 
-### 3. Recálculo automático de status do CPF
-
-Após reabrir parcelas, chamar `recalcScoreForCpf` que aciona a Edge Function `calculate-propensity`, e o trigger `auto-status-sync` recalcula o status global do CPF/Credor (de `QUITADO`/`EM DIA` para `INADIMPLENTE`).
-
-### 4. Registro de auditoria
-
-Registrar no `audit_logs` a ação de reabertura de parcelas com os IDs afetados.
-
-## Arquivos alterados
-
-- `src/pages/ClientDetailPage.tsx` — checkbox de seleção, botão "Reabrir Parcelas", AlertDialog de confirmação, handler de reabertura
+## Arquivo alterado
+- `src/components/client-detail/AgreementCalculator.tsx`
 
