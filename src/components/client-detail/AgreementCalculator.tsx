@@ -551,6 +551,173 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
+
+      {/* ── Section 3: Two-column — Form + Simulation ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
+        {/* Left: Agreement Form */}
+        <Card className="flex flex-col overflow-hidden">
+          <CardHeader className="pb-1 pt-3">
+            <CardTitle className="text-sm">Condições do Acordo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 pb-3 overflow-y-auto max-h-[35vh] flex-1 min-h-0">
+            {/* Dynamic entradas */}
+            {entradas.map((ent, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Data Entrada ${idx + 1}` : "Data Entrada"}</Label>
+                  <Input type="date" value={ent.date} onChange={(e) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], date: e.target.value };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
+                  <Input type="text" inputMode="decimal" value={ent.value} onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.,]/g, "");
+                    const v = Number(raw.replace(",", "."));
+                    if (raw !== "" && isNaN(v)) return;
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], value: raw };
+                    setEntradas(next);
+                  }} onBlur={() => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], value: next[idx].value === "" ? "0" : next[idx].value };
+                    setEntradas(next);
+                  }} className="h-7 text-xs px-2" placeholder="0,00" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[10px]">{entradas.length > 1 ? `Pagto ${idx + 1}` : "Pagto Entrada"}</Label>
+                  <Select value={ent.method} onValueChange={(val) => {
+                    const next = [...entradas];
+                    next[idx] = { ...next[idx], method: val };
+                    setEntradas(next);
+                  }}>
+                    <SelectTrigger className="h-7 text-xs min-w-[90px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BOLETO">Boleto</SelectItem>
+                      <SelectItem value="PIX">Pix</SelectItem>
+                      <SelectItem value="CARTAO">Cartão</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-1 pb-0.5">
+                  {entradas.length > 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas(entradas.filter((_, i) => i !== idx))}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  )}
+                  {idx === entradas.length - 1 && (
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: "0", method: "BOLETO" }])}>
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Parcelas</Label>
+                <Input type="text" inputMode="numeric" value={numParcelas} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setNumParcelas(v === "" ? "" : Number(v)); }} onBlur={() => setNumParcelas(prev => prev === "" || prev === 0 ? 1 : prev)} className="h-7 text-xs px-2" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Pagto Parcelas</Label>
+                <Select value={formaPagto} onValueChange={setFormaPagto}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BOLETO">Boleto</SelectItem>
+                    <SelectItem value="PIX">Pix</SelectItem>
+                    <SelectItem value="CARTAO">Cartão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Intervalo</Label>
+                <Select value={intervalo} onValueChange={setIntervalo}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                    <SelectItem value="semanal">Semanal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-0.5">
+                <Label className="text-[10px]">Vencto 1ª Parc.</Label>
+                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-7 text-xs px-2" />
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <Label className="text-[10px]">Observações</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." rows={1} className="text-xs min-h-[28px]" />
+            </div>
+            <Button onClick={handleSimulate} className="w-full gap-2 h-8 text-xs" variant="secondary" disabled={selectedIds.size === 0}>
+              <Play className="w-3 h-3" />
+              SIMULAR
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Right: Simulation Results */}
+        <Card className={`transition-opacity ${simulated ? "opacity-100" : "opacity-40"} flex flex-col overflow-hidden`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
+            {simulated && simulatedInstallments.length > 0 ? (
+              <>
+                <div className="overflow-y-auto overflow-x-auto max-h-[30vh] flex-1 min-h-0">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-background">
+                      <TableRow className="bg-muted/50 text-[11px]">
+                        <TableHead className="px-3">Parcela</TableHead>
+                        <TableHead className="px-3">Forma Pagto</TableHead>
+                        <TableHead className="px-3">Vencimento</TableHead>
+                        <TableHead className="px-3 text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {simulatedInstallments.map((inst, idx) => (
+                        <TableRow key={`${inst.number}-${idx}`} className="text-xs">
+                          <TableCell className="px-3 font-medium">
+                            {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
+                          </TableCell>
+                          <TableCell className="px-3">
+                            <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
+                          </TableCell>
+                          <TableCell className="px-3">{formatDate(inst.dueDate)}</TableCell>
+                          <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="border-t-2 bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+                  <Table>
+                    <TableBody>
+                      <TableRow className="text-xs font-bold hover:bg-transparent">
+                        <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
+                        <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
+                          {formatCurrency(simulatedTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground text-xs">
+                Preencha as condições e clique em <strong>SIMULAR</strong> para visualizar as parcelas.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* ── Section 1: Parameters Bar ── */}
       <Card className="flex-shrink-0">
         <CardHeader className="pb-2">
@@ -751,172 +918,6 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           )}
         </CardContent>
       </Card>
-
-      {/* ── Section 3: Two-column — Form + Simulation ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
-        {/* Left: Agreement Form */}
-        <Card className="flex flex-col overflow-hidden">
-          <CardHeader className="pb-1 pt-3">
-            <CardTitle className="text-sm">Condições do Acordo</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 pb-3 overflow-y-auto max-h-[35vh] flex-1 min-h-0">
-            {/* Dynamic entradas */}
-            {entradas.map((ent, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
-                <div className="space-y-0.5">
-                  <Label className="text-[10px]">{entradas.length > 1 ? `Data Entrada ${idx + 1}` : "Data Entrada"}</Label>
-                  <Input type="date" value={ent.date} onChange={(e) => {
-                    const next = [...entradas];
-                    next[idx] = { ...next[idx], date: e.target.value };
-                    setEntradas(next);
-                  }} className="h-7 text-xs px-2" />
-                </div>
-                <div className="space-y-0.5">
-                  <Label className="text-[10px]">{entradas.length > 1 ? `Valor Entrada ${idx + 1}` : "Valor Entrada"}</Label>
-                  <Input type="text" inputMode="decimal" value={ent.value} onChange={(e) => {
-                    const raw = e.target.value.replace(/[^0-9.,]/g, "");
-                    const v = Number(raw.replace(",", "."));
-                    if (raw !== "" && isNaN(v)) return;
-                    const next = [...entradas];
-                    next[idx] = { ...next[idx], value: raw };
-                    setEntradas(next);
-                  }} onBlur={() => {
-                    const next = [...entradas];
-                    next[idx] = { ...next[idx], value: next[idx].value === "" ? "0" : next[idx].value };
-                    setEntradas(next);
-                  }} className="h-7 text-xs px-2" placeholder="0,00" />
-                </div>
-                <div className="space-y-0.5">
-                  <Label className="text-[10px]">{entradas.length > 1 ? `Pagto ${idx + 1}` : "Pagto Entrada"}</Label>
-                  <Select value={ent.method} onValueChange={(val) => {
-                    const next = [...entradas];
-                    next[idx] = { ...next[idx], method: val };
-                    setEntradas(next);
-                  }}>
-                    <SelectTrigger className="h-7 text-xs min-w-[90px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BOLETO">Boleto</SelectItem>
-                      <SelectItem value="PIX">Pix</SelectItem>
-                      <SelectItem value="CARTAO">Cartão</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-1 pb-0.5">
-                  {entradas.length > 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas(entradas.filter((_, i) => i !== idx))}>
-                      <Trash2 className="w-3 h-3 text-destructive" />
-                    </Button>
-                  )}
-                  {idx === entradas.length - 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntradas([...entradas, { date: "", value: "0", method: "BOLETO" }])}>
-                      <Plus className="w-3 h-3" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Parcelas</Label>
-                <Input type="text" inputMode="numeric" value={numParcelas} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setNumParcelas(v === "" ? "" : Number(v)); }} onBlur={() => setNumParcelas(prev => prev === "" || prev === 0 ? 1 : prev)} className="h-7 text-xs px-2" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Pagto Parcelas</Label>
-                <Select value={formaPagto} onValueChange={setFormaPagto}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BOLETO">Boleto</SelectItem>
-                    <SelectItem value="PIX">Pix</SelectItem>
-                    <SelectItem value="CARTAO">Cartão</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Intervalo</Label>
-                <Select value={intervalo} onValueChange={setIntervalo}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mensal">Mensal</SelectItem>
-                    <SelectItem value="quinzenal">Quinzenal</SelectItem>
-                    <SelectItem value="semanal">Semanal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-0.5">
-                <Label className="text-[10px]">Vencto 1ª Parc.</Label>
-                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-7 text-xs px-2" />
-              </div>
-            </div>
-            <div className="space-y-0.5">
-              <Label className="text-[10px]">Observações</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." rows={1} className="text-xs min-h-[28px]" />
-            </div>
-            <Button onClick={handleSimulate} className="w-full gap-2 h-8 text-xs" variant="secondary" disabled={selectedIds.size === 0}>
-              <Play className="w-3 h-3" />
-              SIMULAR
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Right: Simulation Results */}
-        <Card className={`transition-opacity ${simulated ? "opacity-100" : "opacity-40"} flex flex-col overflow-hidden`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
-              {simulated ? "Simulação do Acordo" : "Clique em SIMULAR"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
-            {simulated && simulatedInstallments.length > 0 ? (
-              <>
-                <div className="overflow-y-auto overflow-x-auto max-h-[30vh] flex-1 min-h-0">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-background">
-                      <TableRow className="bg-muted/50 text-[11px]">
-                        <TableHead className="px-3">Parcela</TableHead>
-                        <TableHead className="px-3">Forma Pagto</TableHead>
-                        <TableHead className="px-3">Vencimento</TableHead>
-                        <TableHead className="px-3 text-right">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {simulatedInstallments.map((inst, idx) => (
-                        <TableRow key={`${inst.number}-${idx}`} className="text-xs">
-                          <TableCell className="px-3 font-medium">
-                            {inst.number === 0 ? (inst.label || "Entrada") : `${String(inst.number).padStart(2, "0")}/${String(numParcelas).padStart(2, "0")}`}
-                          </TableCell>
-                          <TableCell className="px-3">
-                            <Badge variant="outline" className="text-[10px]">{inst.method}</Badge>
-                          </TableCell>
-                          <TableCell className="px-3">{formatDate(inst.dueDate)}</TableCell>
-                          <TableCell className="px-3 text-right font-medium">{formatCurrency(inst.value)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="border-t-2 bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
-                  <Table>
-                    <TableBody>
-                      <TableRow className="text-xs font-bold hover:bg-transparent">
-                        <TableCell colSpan={3} className="px-3 text-right">Total do Acordo:</TableCell>
-                        <TableCell className="px-3 text-right text-emerald-700 dark:text-emerald-400 text-sm">
-                          {formatCurrency(simulatedTotal)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            ) : (
-              <div className="p-8 text-center text-muted-foreground text-xs">
-                Preencha as condições e clique em <strong>SIMULAR</strong> para visualizar as parcelas.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       {/* ── Section 4: Actions Bar ── */}
       {outOfStandard.isOut && (
