@@ -369,11 +369,20 @@ const ChatPanel = ({
       />
 
       {conversation && (
-        <TransferConversationDialog
-          open={transferOpen}
-          onOpenChange={setTransferOpen}
-          conversationId={conversation.id}
-        />
+        <>
+          <TransferConversationDialog
+            open={transferOpen}
+            onOpenChange={setTransferOpen}
+            conversationId={conversation.id}
+          />
+          <CloseConversationDialog
+            open={closeOpen}
+            onOpenChange={setCloseOpen}
+            conversationId={conversation.id}
+            tenantId={conversation.tenant_id || tenant?.id || ""}
+            onConfirm={async () => onStatusChange("closed")}
+          />
+        </>
       )}
     </div>
   );
