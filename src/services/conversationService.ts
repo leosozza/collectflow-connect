@@ -91,37 +91,72 @@ export async function fetchConversations(
   tenantId: string,
   page = 1,
   pageSize = 30,
-  filters: ConversationFilters = {}
+  filters: ConversationFilters = {},
+  isAdmin = false
 ): Promise<{ data: Conversation[]; count: number }> {
+  // Operadores não-admin: usar RPC server-side com regra de visibilidade robusta (Fase 1)
+  if (!isAdmin) {
+    const { data, error } = await supabase.rpc("get_visible_conversations" as any, {
+      _tenant_id: tenantId,
+      _page: page,
+      _page_size: pageSize,
+      _status_filter: filters.statusFilter && filters.statusFilter !== "all" ? filters.statusFilter : null,
+      _instance_filter: filters.instanceFilter && filters.instanceFilter !== "all" ? filters.instanceFilter : null,
+      _operator_filter: filters.operatorFilter && filters.operatorFilter !== "all" ? filters.operatorFilter : null,
+      _unread_only: !!filters.unreadOnly,
+      _handler_filter: filters.handlerFilter && filters.handlerFilter !== "all" ? filters.handlerFilter : null,
+      _search: filters.search && filters.search.trim() ? filters.search.trim() : null,
+    });
+    if (error) throw error;
+
+    const rows = (data || []) as any[];
+    const total = rows.length > 0 ? Number(rows[0].total_count) || 0 : 0;
+    const mapped = rows.map((row: any) => ({
+      id: row.id,
+      tenant_id: row.tenant_id,
+      instance_id: row.instance_id,
+      remote_phone: row.remote_phone,
+      remote_name: row.remote_name,
+      status: row.status,
+      assigned_to: row.assigned_to,
+      last_message_at: row.last_message_at,
+      unread_count: row.unread_count,
+      client_id: row.client_id,
+      client_name: row.client_name ?? undefined,
+      last_message_content: row.last_message_content ?? undefined,
+      last_message_type: row.last_message_type ?? undefined,
+      last_message_direction: row.last_message_direction ?? undefined,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    })) as Conversation[];
+
+    return { data: mapped, count: total };
+  }
+
+  // Admins: query direta (mantém comportamento atual)
   let query = supabase
     .from("conversations" as any)
     .select("*, clients(nome_completo)", { count: "exact" })
     .eq("tenant_id", tenantId)
     .order("last_message_at", { ascending: false });
 
-  // Server-side filters
   if (filters.statusFilter && filters.statusFilter !== "all") {
     query = query.eq("status", filters.statusFilter);
   }
-
   if (filters.instanceFilter && filters.instanceFilter !== "all") {
     query = query.eq("instance_id", filters.instanceFilter);
   }
-
   if (filters.operatorFilter && filters.operatorFilter !== "all") {
     query = query.eq("assigned_to", filters.operatorFilter);
   }
-
   if (filters.unreadOnly) {
     query = query.gt("unread_count", 0);
   }
-
   if (filters.handlerFilter === "ai") {
     query = query.is("assigned_to", null);
   } else if (filters.handlerFilter === "human") {
     query = query.not("assigned_to", "is", null);
   }
-
   if (filters.search && filters.search.trim()) {
     const s = filters.search.trim();
     query = query.or(`remote_name.ilike.%${s}%,remote_phone.ilike.%${s}%`);

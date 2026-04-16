@@ -31,11 +31,12 @@ const PAGE_SIZE = 30;
 
 const WhatsAppChatLayout = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, tenantUser } = useTenant();
   const { canManageContactCenterAdmin } = usePermissions();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tenantId = tenant?.id || profile?.tenant_id;
+  const isAdmin = tenantUser?.role === "admin" || tenantUser?.role === "super_admin";
   const phoneParamProcessed = useRef(false);
 
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -88,10 +89,10 @@ const WhatsAppChatLayout = () => {
     isFetchingNextPage,
     refetch: refetchConversations,
   } = useInfiniteQuery({
-    queryKey: ["conversations", tenantId, filters],
+    queryKey: ["conversations", tenantId, filters, isAdmin],
     queryFn: async ({ pageParam = 1 }) => {
       if (!tenantId) return { data: [], count: 0 };
-      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters);
+      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters, isAdmin);
     },
     getNextPageParam: (lastPage, allPages) => {
       const totalLoaded = allPages.reduce((sum, p) => sum + p.data.length, 0);
