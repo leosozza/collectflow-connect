@@ -223,7 +223,11 @@ const ChatPanel = ({
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {/* SLA expired badge */}
+              {/* Auto-close interno (regra do tenant) — separado do SLA oficial */}
+              <AutoCloseIndicator
+                conversationStatus={conversation.status}
+                lastInteractionAt={conversation.last_interaction_at || conversation.last_message_at}
+              />
               {slaExpired && (
                 <TooltipProvider>
                   <Tooltip>

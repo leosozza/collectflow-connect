@@ -9,6 +9,7 @@ export interface Conversation {
   status: "open" | "waiting" | "closed";
   assigned_to: string | null;
   last_message_at: string;
+  last_interaction_at?: string | null;
   unread_count: number;
   client_id: string | null;
   client_name?: string;
