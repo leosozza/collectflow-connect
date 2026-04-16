@@ -6485,6 +6485,23 @@ export type Database = {
       }
       get_my_tenant_id: { Args: never; Returns: string }
       get_my_tenant_role: { Args: never; Returns: string }
+      get_other_active_conversations: {
+        Args: {
+          _client_id: string
+          _exclude_conv_id: string
+          _window_hours?: number
+        }
+        Returns: {
+          assigned_name: string
+          assigned_to: string
+          conversation_id: string
+          instance_id: string
+          instance_name: string
+          last_interaction_at: string
+          remote_phone: string
+          status: string
+        }[]
+      }
       get_tenant_token_summary: {
         Args: { p_tenant_id: string }
         Returns: {
