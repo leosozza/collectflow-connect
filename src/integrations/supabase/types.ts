@@ -1974,6 +1974,7 @@ export type Database = {
           endpoint_id: string | null
           id: string
           instance_id: string | null
+          last_interaction_at: string | null
           last_message_at: string | null
           last_message_content: string | null
           last_message_direction: string | null
@@ -1996,6 +1997,7 @@ export type Database = {
           endpoint_id?: string | null
           id?: string
           instance_id?: string | null
+          last_interaction_at?: string | null
           last_message_at?: string | null
           last_message_content?: string | null
           last_message_direction?: string | null
@@ -2018,6 +2020,7 @@ export type Database = {
           endpoint_id?: string | null
           id?: string
           instance_id?: string | null
+          last_interaction_at?: string | null
           last_message_at?: string | null
           last_message_content?: string | null
           last_message_direction?: string | null
