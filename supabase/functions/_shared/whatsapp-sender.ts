@@ -85,13 +85,18 @@ async function sendWuzapiText(
   if (!baseUrl || !token) {
     return { ok: false, result: { error: "WuzAPI URL ou token não configurado" }, providerMessageId: null, provider: "wuzapi" };
   }
-  const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
-    method: "POST",
-    headers: { "Token": token, "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
-  });
-  const result = await resp.json();
-  return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
+  try {
+    const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/send/text`, {
+      method: "POST",
+      headers: { "Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, body: message }),
+    });
+    const result = await resp.json();
+    return { ok: resp.ok, result, providerMessageId: result?.MessageID || result?.messageId || null, provider: "wuzapi" };
+  } catch (err) {
+    console.error("[wuzapi-sender] Network error:", err);
+    return { ok: false, result: { error: `Falha de rede WuzAPI: ${(err as Error).message}` }, providerMessageId: null, provider: "wuzapi" };
+  }
 }
 
 function sendGupshupText(
