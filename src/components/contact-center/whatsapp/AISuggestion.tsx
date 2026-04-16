@@ -2,9 +2,11 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Sparkles, Send, X, Loader2 } from "lucide-react";
+import { Sparkles, Send, X, Loader2, FileText } from "lucide-react";
 import { ChatMessage } from "@/services/conversationService";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
 
 interface AISuggestionProps {
   messages: ChatMessage[];
@@ -25,7 +27,42 @@ const AISuggestion = ({ messages, clientInfo, onSend, disabled }: AISuggestionPr
   const [suggestion, setSuggestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const handleSummarize = async () => {
+    if (messages.length === 0) {
+      toast.error("Nenhuma mensagem para resumir");
+      return;
+    }
+    setLoadingSummary(true);
+    setShowSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-ai-suggest", {
+        body: {
+          action: "summarize",
+          messages: messages.map((m) => ({
+            direction: m.direction,
+            content: m.content,
+            message_type: m.message_type,
+          })),
+          clientInfo: clientInfo || undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      setSummary(data?.text || "");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao gerar resumo");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   const handleSuggest = async () => {
     if (messages.length === 0) {
@@ -148,16 +185,56 @@ const AISuggestion = ({ messages, clientInfo, onSend, disabled }: AISuggestionPr
 
   if (!showSuggestion) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 gap-1.5 text-xs"
-        onClick={handleSuggest}
-        disabled={disabled || messages.length === 0}
-      >
-        <Sparkles className="w-3.5 h-3.5" />
-        Sugestão IA
-      </Button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleSuggest}
+          disabled={disabled || messages.length === 0}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Sugestão IA
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={handleSummarize}
+          disabled={disabled || messages.length === 0 || loadingSummary}
+        >
+          {loadingSummary ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+          Resumo IA
+        </Button>
+        {showSummary && (
+          <Card className="w-full border-primary/30 bg-primary/5 mt-1">
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <FileText className="w-3.5 h-3.5" />
+                  Resumo da IA
+                  {loadingSummary && <Loader2 className="w-3 h-3 animate-spin" />}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={() => { setShowSummary(false); setSummary(""); }}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+              {summary ? (
+                <div className="text-xs prose prose-xs max-w-none text-foreground">
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                </div>
+              ) : !loadingSummary ? (
+                <p className="text-xs text-muted-foreground">Sem resumo gerado.</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
