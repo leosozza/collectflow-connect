@@ -59,16 +59,16 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
   return (
     <HoverCard openDelay={200} closeDelay={300}>
       <HoverCardTrigger asChild>
-        <button className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-border hover:bg-accent/50 transition-colors w-full">
+        <button className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-md border border-border hover:bg-accent/50 transition-colors w-full">
           {saving ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : current ? (
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: current.color }} />
           ) : (
-            <UserCircle className="w-3.5 h-3.5 text-muted-foreground" />
+            <UserCircle className="w-4 h-4 text-muted-foreground" />
           )}
           <span className={current ? "font-medium" : "text-muted-foreground"}>
-            {current ? current.label : "Definir perfil"}
+            {current ? current.label : "Aguardando definição de perfil"}
           </span>
         </button>
       </HoverCardTrigger>
