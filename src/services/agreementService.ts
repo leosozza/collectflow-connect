@@ -535,6 +535,77 @@ export const updateInstallmentValue = async (
   }
 };
 
+export const reopenAgreement = async (
+  id: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("client_cpf, credor, tenant_id")
+      .eq("id", id)
+      .single();
+    if (fetchErr) throw fetchErr;
+    if (!agreement) throw new Error("Acordo não encontrado");
+
+    // Check for existing active agreement for same CPF+credor
+    const rawCpf = agreement.client_cpf.replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
+
+    const { data: existing } = await supabase
+      .from("agreements")
+      .select("id")
+      .eq("tenant_id", agreement.tenant_id)
+      .eq("credor", agreement.credor)
+      .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`)
+      .in("status", ["pending", "approved", "pending_approval"])
+      .neq("id", id)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      throw new Error("Já existe um acordo ativo para este CPF e credor.");
+    }
+
+    const { error } = await supabase
+      .from("agreements")
+      .update({ status: "pending", cancellation_type: null } as any)
+      .eq("id", id);
+    if (error) throw error;
+
+    // Re-mark titles as em_acordo
+    try {
+      const { data: acordoStatus } = await supabase
+        .from("tipos_status")
+        .select("id")
+        .eq("nome", "Acordo Vigente")
+        .single();
+
+      const updatePayload: any = { status: "em_acordo" };
+      if (acordoStatus?.id) {
+        updatePayload.status_cobranca_id = acordoStatus.id;
+      }
+
+      await supabase
+        .from("clients")
+        .update(updatePayload)
+        .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
+        .eq("credor", agreement.credor)
+        .in("status", ["pendente", "vencido", "quebrado"]);
+    } catch (e) {
+      logger.error(MODULE, "reopen_mark_em_acordo", e);
+    }
+
+    logger.info(MODULE, "reopen", { id });
+    logAction({ action: "reopen", entity_type: "agreement", entity_id: id, details: { cpf: agreement.client_cpf } });
+
+    recalcScoreForCpf(agreement.client_cpf).catch(() => {});
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,

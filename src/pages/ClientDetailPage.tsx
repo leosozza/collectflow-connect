@@ -33,7 +33,7 @@ import AgreementCalculator from "@/components/client-detail/AgreementCalculator"
 import ClientDocuments from "@/components/client-detail/ClientDocuments";
 import ClientSignature from "@/components/client-detail/ClientSignature";
 import AgreementInstallments from "@/components/client-detail/AgreementInstallments";
-import { cancelAgreement, updateAgreement, AgreementFormData } from "@/services/agreementService";
+import { cancelAgreement, updateAgreement, reopenAgreement, AgreementFormData } from "@/services/agreementService";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
 
@@ -57,8 +57,10 @@ const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "de
 
 // Statuses that show installments
 const installmentStatuses = ["pending", "pending_approval", "approved", "overdue"];
-// Statuses that allow edit/cancel
-const activeStatuses = ["pending", "pending_approval", "approved"];
+// Statuses that allow edit
+const editableStatuses = ["pending", "pending_approval", "approved", "overdue", "cancelled"];
+// Statuses that allow cancel
+const cancellableStatuses = ["pending", "pending_approval", "approved", "overdue"];
 
 const ClientDetailPage = () => {
   const { cpf } = useParams<{ cpf: string }>();
@@ -70,6 +72,7 @@ const ClientDetailPage = () => {
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
   const [editLoading, setEditLoading] = useState(false);
@@ -209,6 +212,19 @@ const ClientDetailPage = () => {
   const handleReactivateAgreement = (agreement: any) => {
     setReactivateAgreement(agreement);
     setShowAcordoDialog(true);
+  };
+
+  const handleReopenAgreement = async (id: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+      await reopenAgreement(id, user.id);
+      toast.success("Acordo reaberto com sucesso.");
+      refetch();
+      refetchAgreements();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao reabrir acordo");
+    }
   };
 
   const handleCancelAgreement = async (id: string) => {
@@ -372,26 +388,26 @@ const ClientDetailPage = () => {
                           >
                             {statusLabelsMap[agreement.status] || agreement.status}
                           </Badge>
-                          {activeStatuses.includes(agreement.status) && (
-                            <>
-                              <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
-                                <Pencil className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </>
+                          {editableStatuses.includes(agreement.status) && (
+                            <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                          {cancellableStatuses.includes(agreement.status) && (
+                            <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           )}
                           {agreement.status === "cancelled" && !hasActiveAgreement && (
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-xs gap-1"
-                              onClick={() => handleReactivateAgreement(agreement)}
-                              title="Reativar Acordo"
+                              onClick={() => setReopenId(agreement.id)}
+                              title="Reabrir Acordo"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
-                              Reativar
+                              Reabrir
                             </Button>
                           )}
                         </div>
@@ -534,6 +550,26 @@ const ClientDetailPage = () => {
               onClick={() => cancelId && handleCancelAgreement(cancelId)}
             >
               Sim, cancelar acordo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reopen Agreement Dialog */}
+      <AlertDialog open={!!reopenId} onOpenChange={(open) => !open && setReopenId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir Acordo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja reabrir este acordo? O acordo voltará ao status Vigente e os títulos serão marcados como "em acordo".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (reopenId) { handleReopenAgreement(reopenId); setReopenId(null); } }}
+            >
+              Sim, reabrir acordo
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
