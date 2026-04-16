@@ -23,7 +23,7 @@ interface PaymentConfirmationTabProps {
 }
 
 const PAYMENT_METHODS = ["PIX", "Boleto", "Cartão", "Dinheiro", "Transferência", "Outro"];
-const RECEIVERS = ["CREDOR", "ASSESSORIA"];
+const RECEIVERS = ["CREDOR", "COBRADORA"];
 
 const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
   const { profile } = useAuth();
