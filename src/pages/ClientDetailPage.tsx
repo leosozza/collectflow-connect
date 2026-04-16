@@ -111,6 +111,10 @@ const ClientDetailPage = () => {
       }
       const rawCpf = (cpf || "").replace(/\D/g, "");
       await recalcScoreForCpf(rawCpf);
+      const tenantId = clients[0]?.tenant_id;
+      if (tenantId) {
+        await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } });
+      }
       await logAction({
         action: "reabrir_parcelas",
         entity_type: "client",
