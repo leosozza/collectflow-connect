@@ -489,7 +489,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       const eventType = e.event_type || "system";
       const label = eventType === "disposition"
         ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
-        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || toTitleCase(eventType));
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || "Evento do Sistema");
       
       let detail = "";
 
