@@ -574,7 +574,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
                           {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <ResponsibleLabel operator={item.operator} type={item.type} />
+                      <ResponsibleLabel actor={item.actor} />
                       {item.type === "field_update" && meta ? (
                         <FieldUpdateDetail metadata={meta} />
                       ) : (
