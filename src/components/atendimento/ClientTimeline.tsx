@@ -70,7 +70,22 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   portal_agreement_created: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
   ai_whatsapp_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   ai_voice_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  manual_payment_requested: { border: "border-yellow-200", bg: "bg-yellow-50/50", dot: "border-yellow-400" },
+  manual_payment_confirmed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  manual_payment_rejected:  { border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
+  payment_confirmed:        { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_completed:      { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_status_completed:{ border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  debtor_profile_changed:   { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
+  call_hangup:              { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  document_previewed:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  document_generated:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  conversation_auto_closed: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  conversation_transferred: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
 };
+
+const toTitleCase = (s: string) =>
+  s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   disposition: "Disposição",
@@ -92,6 +107,19 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   portal_agreement_created: "Acordo via Portal",
   ai_whatsapp_negotiation_started: "IA WhatsApp Iniciou",
   ai_voice_negotiation_started: "IA Voz Iniciou",
+  manual_payment_requested: "Baixa Manual Solicitada",
+  manual_payment_confirmed: "Pagamento Confirmado Manualmente",
+  manual_payment_rejected: "Baixa Manual Recusada",
+  payment_confirmed: "Pagamento Confirmado",
+  agreement_completed: "Acordo Quitado",
+  agreement_status_completed: "Acordo Quitado",
+  debtor_profile_changed: "Perfil do Devedor Atualizado",
+  debtor_category: "Categoria do Devedor Definida",
+  call_hangup: "Ligação Encerrada",
+  document_previewed: "Documento Visualizado",
+  document_generated: "Documento Gerado",
+  conversation_auto_closed: "Conversa Encerrada (Inatividade)",
+  conversation_transferred: "Conversa Transferida",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -119,6 +147,18 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   portal_agreement_created: <Globe className="w-3.5 h-3.5 text-emerald-500" />,
   ai_whatsapp_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
   ai_voice_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
+  manual_payment_requested: <CreditCard className="w-3.5 h-3.5 text-yellow-500" />,
+  manual_payment_confirmed: <CreditCard className="w-3.5 h-3.5 text-emerald-500" />,
+  manual_payment_rejected: <CreditCard className="w-3.5 h-3.5 text-red-500" />,
+  payment_confirmed: <CreditCard className="w-3.5 h-3.5 text-emerald-500" />,
+  agreement_completed: <Handshake className="w-3.5 h-3.5 text-emerald-500" />,
+  agreement_status_completed: <Handshake className="w-3.5 h-3.5 text-emerald-500" />,
+  debtor_profile_changed: <Tags className="w-3.5 h-3.5 text-pink-500" />,
+  call_hangup: <Phone className="w-3.5 h-3.5 text-blue-500" />,
+  document_previewed: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
+  document_generated: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
+  conversation_auto_closed: <MessageSquare className="w-3.5 h-3.5 text-violet-500" />,
+  conversation_transferred: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -274,7 +314,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       const eventType = e.event_type || "system";
       const label = eventType === "disposition"
         ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
-        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || eventType);
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || toTitleCase(eventType));
       
       let detail = "";
       let operator = "";
