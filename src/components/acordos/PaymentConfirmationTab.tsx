@@ -61,19 +61,101 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
     if (!editDialog) return;
     setProcessingId(editDialog.id);
     try {
+      // 1. Fetch current payment row to capture oldAmount + status
+      const { data: currentRow, error: fetchErr } = await supabase
+        .from("manual_payments" as any)
+        .select("*")
+        .eq("id", editDialog.id)
+        .single();
+      if (fetchErr) throw fetchErr;
+      const current = currentRow as any;
+      const oldAmount = Number(current.amount_paid || 0);
+      const newAmount = Number(editForm.amount_paid || 0);
+      const wasConfirmed = current.status === "confirmed";
+
+      // 2. Update the manual_payments row
       const { error } = await supabase
         .from("manual_payments" as any)
         .update({
-          amount_paid: editForm.amount_paid,
+          amount_paid: newAmount,
           payment_date: editForm.payment_date,
           payment_method: editForm.payment_method,
           receiver: editForm.receiver,
           notes: editForm.notes || null,
         })
         .eq("id", editDialog.id);
-
       if (error) throw error;
-      toast({ title: "Dados da parcela atualizados!" });
+
+      // 3. If already confirmed → propagate delta to wallet + agreement status
+      if (wasConfirmed) {
+        const delta = newAmount - oldAmount;
+        const { registerAgreementPayment, reverseAgreementPayment } = await import("@/services/agreementService");
+        const agr = editDialog.agreement;
+        if (agr && Math.abs(delta) > 0.001) {
+          if (delta > 0) {
+            await registerAgreementPayment(agr.client_cpf, agr.credor, delta);
+          } else {
+            await reverseAgreementPayment(agr.client_cpf, agr.credor, Math.abs(delta));
+          }
+        }
+
+        // 4. Recalculate consolidated total and sync agreement/client status
+        if (agr) {
+          const agreementId = current.agreement_id as string;
+          const [{ data: agreementRow }, { data: mps }, { data: cobs }] = await Promise.all([
+            supabase.from("agreements").select("id, proposed_total, status, client_cpf, credor, tenant_id").eq("id", agreementId).single(),
+            supabase.from("manual_payments" as any).select("amount_paid").eq("agreement_id", agreementId).eq("status", "confirmed"),
+            supabase.from("negociarie_cobrancas" as any).select("valor_pago").eq("agreement_id", agreementId).eq("status", "pago"),
+          ]);
+
+          const manualTotal = ((mps as any[]) || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
+          const cobrancaTotal = ((cobs as any[]) || []).reduce((s, c) => s + Number(c.valor_pago || 0), 0);
+          const totalPaid = manualTotal + cobrancaTotal;
+          const ag = agreementRow as any;
+
+          if (ag && ag.proposed_total > 0) {
+            const isFullyPaid = totalPaid >= ag.proposed_total - 0.01;
+            if (isFullyPaid && ag.status !== "completed") {
+              await supabase.from("agreements").update({ status: "completed" } as any).eq("id", agreementId);
+              await supabase
+                .from("clients")
+                .update({ status: "pago" } as any)
+                .eq("cpf", ag.client_cpf)
+                .eq("credor", ag.credor)
+                .eq("status", "em_acordo");
+            } else if (!isFullyPaid && ag.status === "completed") {
+              await supabase.from("agreements").update({ status: "pending" } as any).eq("id", agreementId);
+              await supabase
+                .from("clients")
+                .update({ status: "em_acordo" } as any)
+                .eq("cpf", ag.client_cpf)
+                .eq("credor", ag.credor)
+                .eq("status", "pago");
+            }
+          }
+
+          // 5. Audit event
+          try {
+            await supabase.from("client_events").insert({
+              tenant_id: ag?.tenant_id || tenantId,
+              client_cpf: agr.client_cpf,
+              event_type: "manual_payment_edited",
+              event_source: "admin",
+              event_value: "edited",
+              metadata: {
+                manual_payment_id: editDialog.id,
+                agreement_id: agreementId,
+                old_amount: oldAmount,
+                new_amount: newAmount,
+                delta,
+                edited_by: profile?.id,
+              },
+            } as any);
+          } catch {}
+        }
+      }
+
+      toast({ title: "Dados da parcela atualizados!", description: wasConfirmed ? "Carteira e acordo sincronizados." : undefined });
       setEditDialog(null);
       refresh();
     } catch (err: any) {
