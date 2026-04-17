@@ -84,6 +84,13 @@ const ClientDetailPage = () => {
       setShowAcordoDialog(true);
     }
   }, [searchParams]);
+
+  // Initialize first agreement as expanded when agreements load
+  useEffect(() => {
+    if (agreements.length > 0 && expandedAgreements.size === 0) {
+      setExpandedAgreements(new Set([agreements[0].id]));
+    }
+  }, [agreements]);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
