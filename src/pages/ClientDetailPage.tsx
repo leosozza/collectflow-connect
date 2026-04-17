@@ -4,7 +4,7 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare, ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { logAction } from "@/services/auditService";
 import { recalcScoreForCpf } from "@/hooks/useScoreRecalc";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
