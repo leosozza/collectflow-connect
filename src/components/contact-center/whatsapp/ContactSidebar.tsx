@@ -44,6 +44,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [statusCobranca, setStatusCobranca] = useState<{ nome: string; cor: string } | null>(null);
+  const [saldoDevedor, setSaldoDevedor] = useState<number>(0);
   const [aiLinking, setAiLinking] = useState(false);
   const [aiCandidates, setAiCandidates] = useState<SimpleClient[]>([]);
   const [showAiResults, setShowAiResults] = useState(false);
@@ -52,6 +53,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
   useEffect(() => {
     if (!conversation?.client_id) {
       setLinkedClient(null);
+      setSaldoDevedor(0);
       return;
     }
     supabase
@@ -74,8 +76,31 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
         } else {
           setStatusCobranca(null);
         }
+
+        // Compute Saldo Devedor: sum of pending installments for this CPF+Credor
+        if (client?.cpf && client?.credor && conversation.tenant_id) {
+          supabase
+            .from("clients")
+            .select("status, valor_saldo, valor_parcela, valor_pago, data_devolucao")
+            .eq("tenant_id", conversation.tenant_id)
+            .eq("cpf", client.cpf)
+            .eq("credor", client.credor)
+            .then(({ data: rows }) => {
+              const list = (rows as any[]) || [];
+              const naoPagos = list.filter((c) => c.status !== "pago" || !!c.data_devolucao);
+              const total = naoPagos.reduce((sum, c) => {
+                const isDevolvido = !!c.data_devolucao;
+                const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
+                const pago = isDevolvido ? 0 : Number(c.valor_pago) || 0;
+                return sum + Math.max(0, valorBase - pago);
+              }, 0);
+              setSaldoDevedor(total);
+            });
+        } else {
+          setSaldoDevedor(0);
+        }
       });
-  }, [conversation?.client_id]);
+  }, [conversation?.client_id, conversation?.tenant_id]);
 
 
   const handleSearch = async () => {
@@ -262,24 +287,33 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               <div className="text-sm font-medium break-words">{linkedClient.nome_completo}</div>
               <div className="text-xs text-muted-foreground break-all">CPF: {linkedClient.cpf}</div>
               <div className="text-xs text-muted-foreground break-words">Credor: {linkedClient.credor}</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-[10px]">
-                  {statusLabels[linkedClient.status] || linkedClient.status}
-                </Badge>
-                {statusCobranca && (
-                  <Badge
-                    className="text-[10px]"
-                    style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
-                  >
-                    {statusCobranca.nome}
-                  </Badge>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas}
+              <div className="text-xs break-words">
+                <span className="text-muted-foreground">Saldo Devedor:</span>{" "}
+                <span className="font-semibold text-destructive">
+                  R$ {saldoDevedor.toFixed(2)}
                 </span>
               </div>
-              <div className="text-xs break-words">
-                Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
+              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground">Status:</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {statusLabels[linkedClient.status] || linkedClient.status}
+                  </Badge>
+                </div>
+                {statusCobranca && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground">Cliente:</span>
+                    <Badge
+                      className="text-[10px]"
+                      style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
+                    >
+                      {statusCobranca.nome}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas} · R$ {linkedClient.valor_parcela.toFixed(2)}
               </div>
               <Button
                 asChild
