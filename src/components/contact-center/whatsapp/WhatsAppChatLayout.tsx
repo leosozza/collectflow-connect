@@ -202,8 +202,12 @@ const WhatsAppChatLayout = () => {
       return;
     }
     fetchMessages(selectedConv.id).then((result) => setMessages(result.data)).catch(console.error);
-    markConversationRead(selectedConv.id).catch(console.error);
-  }, [selectedConv?.id]);
+    // Accept-to-read: don't mark as read if conversation is waiting (unless admin)
+    const isAdmin = profile?.role === "admin";
+    if (selectedConv.status !== "waiting" || isAdmin) {
+      markConversationRead(selectedConv.id).catch(console.error);
+    }
+  }, [selectedConv?.id, selectedConv?.status, profile?.role]);
 
   // Load client info for selected conversation
   const [clientInfo, setClientInfo] = useState<any>(null);

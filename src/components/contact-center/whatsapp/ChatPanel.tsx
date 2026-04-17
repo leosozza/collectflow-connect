@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
 import CloseConversationDialog from "./CloseConversationDialog";
 import MultiInstanceAlert from "./MultiInstanceAlert";
@@ -312,59 +312,108 @@ const ChatPanel = ({
         </div>
       </div>
 
-      {/* Waiting banner */}
-      {conversation.status === "waiting" && (
-        <div className="flex items-center justify-between px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span className="text-sm text-amber-700 dark:text-amber-300">Conversa aguardando atendimento</span>
-          </div>
-          <Button
-            size="sm"
-            className="h-7 gap-1.5 text-xs bg-[#25d366] hover:bg-[#20bd5a] text-white"
-            onClick={() => onStatusChange("open")}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            Aceitar Conversa
-          </Button>
-        </div>
-      )}
+      {/* Accept-to-read lock: operator must accept waiting conversation before reading */}
+      {(() => {
+        const isAdmin = profile?.role === "admin";
+        const isLocked = conversation.status === "waiting" && !isAdmin;
 
-      {/* Alerta multi-instância (não bloqueia, apenas contextualiza) */}
-      <MultiInstanceAlert
-        clientId={conversation.client_id}
-        conversationId={conversation.id}
-      />
+        return (
+          <>
+            {/* Waiting banner (only for admins viewing waiting conversations) */}
+            {conversation.status === "waiting" && isAdmin && (
+              <div className="flex items-center justify-between px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    Conversa aguardando atendimento (modo auditoria)
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs bg-[#25d366] hover:bg-[#20bd5a] text-white"
+                  onClick={() => onStatusChange("open")}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  Aceitar Conversa
+                </Button>
+              </div>
+            )}
 
-      {/* Messages - WhatsApp wallpaper bg */}
-      <div
-        className="flex-1 overflow-hidden"
-        style={{
-          backgroundColor: "#efeae2",
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d1cdc7' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }}
-      >
-        <ScrollArea className="h-full px-[5%] py-3">
-          <div className="space-y-[1px]">
-            {messages.map((msg) => (
-              <ChatMessageBubble
-                key={msg.id}
-                message={msg}
-                onReply={(m) => setReplyTo(m)}
-                allMessages={messages}
-              />
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        </ScrollArea>
-      </div>
+            {/* Alerta multi-instância (não bloqueia, apenas contextualiza) */}
+            <MultiInstanceAlert
+              clientId={conversation.client_id}
+              conversationId={conversation.id}
+            />
 
-      {/* AI Suggestion */}
-      {conversation && messages.length > 0 && (
-        <div className="px-4 py-1.5 border-t border-border/50 bg-card">
-          <AISuggestion messages={messages} clientInfo={clientInfo} onSend={(text) => handleSend(text)} disabled={sending} />
-        </div>
-      )}
+            {/* Messages - WhatsApp wallpaper bg */}
+            <div
+              className="flex-1 overflow-hidden relative"
+              style={{
+                backgroundColor: "#efeae2",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d1cdc7' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+              }}
+            >
+              <ScrollArea
+                className={`h-full px-[5%] py-3 ${isLocked ? "blur-md select-none pointer-events-none" : ""}`}
+                aria-hidden={isLocked}
+              >
+                <div className="space-y-[1px]">
+                  {messages.map((msg) => (
+                    <ChatMessageBubble
+                      key={msg.id}
+                      message={msg}
+                      onReply={(m) => setReplyTo(m)}
+                      allMessages={messages}
+                    />
+                  ))}
+                  <div ref={bottomRef} />
+                </div>
+              </ScrollArea>
+
+              {/* Lock overlay */}
+              {isLocked && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 z-10">
+                  <div className="bg-card/95 backdrop-blur-sm border border-border rounded-2xl shadow-2xl p-8 max-w-md w-full text-center space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center mx-auto">
+                      <Lock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Conversa aguardando atendimento
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Aceite a conversa para visualizar o histórico de mensagens e iniciar o atendimento.
+                      </p>
+                    </div>
+                    {conversation.unread_count > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {conversation.unread_count} {conversation.unread_count === 1 ? "mensagem não lida" : "mensagens não lidas"}
+                      </Badge>
+                    )}
+                    <Button
+                      autoFocus
+                      size="lg"
+                      className="w-full gap-2 bg-[#25d366] hover:bg-[#20bd5a] text-white"
+                      onClick={() => onStatusChange("open")}
+                    >
+                      <UserCheck className="w-4 h-4" />
+                      Aceitar Conversa
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* AI Suggestion - hidden when locked */}
+            {!isLocked && conversation && messages.length > 0 && (
+              <div className="px-4 py-1.5 border-t border-border/50 bg-card">
+                <AISuggestion messages={messages} clientInfo={clientInfo} onSend={(text) => handleSend(text)} disabled={sending} />
+              </div>
+            )}
+          </>
+        );
+      })()}
+
 
       {/* Input - WhatsApp style */}
       <ChatInput
