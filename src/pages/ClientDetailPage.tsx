@@ -87,6 +87,7 @@ const ClientDetailPage = () => {
   const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
+  const [editEntradas, setEditEntradas] = useState<Array<{ key: string; date: string; value: number }>>([]);
   const [editLoading, setEditLoading] = useState(false);
   const [reactivateAgreement, setReactivateAgreement] = useState<any | null>(null);
   const [selectedPagoIds, setSelectedPagoIds] = useState<string[]>([]);
