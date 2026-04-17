@@ -65,12 +65,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
             const total = (a as any)._totalCount as number | undefined;
             const showCount = typeof paid === "number" && typeof total === "number";
             const instClass = (a as any)._installmentClass as string | undefined;
-        </TableHeader>
-        <TableBody>
-          {agreements.map((a) => {
-            const paid = (a as any)._paidCount as number | undefined;
-            const total = (a as any)._totalCount as number | undefined;
-            const showCount = typeof paid === "number" && typeof total === "number";
             return (
               <TableRow key={a.id}>
                 <TableCell>
@@ -93,6 +87,19 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                     </span>
                   ) : (
                     "—"
+                  )}
+                </TableCell>
+                <TableCell>
+                  {instClass ? (
+                    <span className="inline-block" title="Status da parcela do mês selecionado">
+                      <Badge className={installmentClassColors[instClass] || ""}>
+                        {installmentClassLabels[instClass] || instClass}
+                      </Badge>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground" title="Selecione um mês para ver o status da parcela">
+                      —
+                    </span>
                   )}
                 </TableCell>
                 <TableCell>
