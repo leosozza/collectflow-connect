@@ -294,17 +294,15 @@ const AcordosPage = () => {
     const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
     const relevant = classifiedAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
 
-    if (isMonthSelected) {
-      const cls = relevant.map(a => (a as any)._installmentClass as InstallmentClassification | undefined);
-      const total = relevant.filter((_, i) => cls[i] !== undefined).length;
-      const pending = relevant.filter((_, i) => cls[i] === "vigente" || cls[i] === "pending_confirmation").length;
-      const paid = relevant.filter((_, i) => cls[i] === "pago").length;
-      return { total, pending, paid };
-    }
-
     const total = relevant.length;
-    const pending = relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
-    const paid = relevant.filter(a => a.status === "approved").length;
+    const pending = isMonthSelected
+      ? relevant.filter(a => {
+          const c = (a as any)._installmentClass as InstallmentClassification | undefined;
+          return c === "vigente" || c === "pending_confirmation";
+        }).length
+      : relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
+    // Inclusive paid: agreements with at least one paid installment in scope OR fully approved
+    const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "approved").length;
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
 
