@@ -98,6 +98,7 @@ export interface CobrancaRecord {
 export interface ManualPaymentRecord {
   agreement_id: string | null;
   installment_number: number | null;
+  installment_key?: string | null;
   amount_paid: number | null;
   status: string | null;
 }
@@ -113,11 +114,13 @@ export function classifyInstallment(
 ): InstallmentClassification {
   const agId = installment.agreementId;
 
-  // Check manual payments for this installment
+  // Match by canonical installment_key first, fallback to legacy installment_number
   const instNumber = installment.isEntrada ? 0 : installment.number;
-  const mps = manualPayments.filter(
-    mp => mp.agreement_id === agId && mp.installment_number === instNumber
-  );
+  const mps = manualPayments.filter(mp => {
+    if (mp.agreement_id !== agId) return false;
+    if (mp.installment_key) return mp.installment_key === installment.key;
+    return mp.installment_number === instNumber;
+  });
 
   // If any manual payment is pending_confirmation, show in that tab
   if (mps.some(mp => mp.status === "pending_confirmation")) {

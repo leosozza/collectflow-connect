@@ -48,7 +48,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [editingValueIdx, setEditingValueIdx] = useState<number | null>(null);
   const [editValueInput, setEditValueInput] = useState("");
-  const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number } | null>(null);
+  const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number; key: string; label: string } | null>(null);
   const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
   const [cancellingIdx, setCancellingIdx] = useState<number | null>(null);
 
@@ -188,11 +188,26 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     } else {
       remainingPaid = 0;
     }
+    // Match manual_payments by installment_key (canonical) or fallback to installment_number (legacy)
+    const matchesInst = (mp: any) =>
+      (mp.installment_key && mp.installment_key === inst.customKey) ||
+      (!mp.installment_key && mp.installment_number === inst.number);
+
     const pendingManual = manualPayments.find(
-      (mp: any) => mp.installment_number === inst.number && mp.status === "pending_confirmation"
+      (mp: any) => matchesInst(mp) && mp.status === "pending_confirmation"
     );
+
+    const confirmedManualForThis = manualPayments
+      .filter((mp: any) => matchesInst(mp) && mp.status === "confirmed")
+      .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
+    const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
+
     const status = pendingManual
       ? "pending_confirmation"
+      : inst.cobranca?.status === "pago"
+      ? "pago"
+      : isPaidByManual
+      ? "pago"
       : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
     return { ...inst, status, isOverdue, pendingManual };
   });
@@ -302,7 +317,10 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
   const handleUnconfirmPayment = async (inst: any, idx: number) => {
     const confirmedPayment = manualPayments.find(
-      (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
+      (mp: any) => (
+        (mp.installment_key && mp.installment_key === inst.customKey) ||
+        (!mp.installment_key && mp.installment_number === inst.number)
+      ) && mp.status === "confirmed"
     );
     if (!confirmedPayment) {
       toast({ title: "Nenhuma baixa manual confirmada encontrada para esta parcela.", variant: "destructive" });
@@ -700,7 +718,14 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
-                              onClick={() => setManualPaymentInst({ number: inst.number, value: Number(inst.value) })}
+                              onClick={() => setManualPaymentInst({
+                                number: inst.number,
+                                value: Number(inst.value),
+                                key: inst.customKey,
+                                label: inst.isEntrada
+                                  ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
+                                  : `Parcela ${inst.displayNumber}/${totalInstallments}`,
+                              })}
                             >
                               <DollarSign className="w-4 h-4" />
                             </Button>
@@ -789,6 +814,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           onOpenChange={(open) => !open && setManualPaymentInst(null)}
           agreementId={agreementId}
           installmentNumber={manualPaymentInst.number}
+          installmentKey={manualPaymentInst.key}
+          installmentLabel={manualPaymentInst.label}
           installmentValue={manualPaymentInst.value}
           tenantId={tenantId}
           profileId={profile.id}
