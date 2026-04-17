@@ -1,55 +1,69 @@
 
 
-## Plano — Eliminar termos em inglês / técnicos no Histórico
+## Diagnóstico confirmado — Conversa da Valéria (44 9973-2338) não aparece para Maria Eduarda
 
-### Pontos crus identificados em `ClientTimeline.tsx`
+### Dados reais no banco
 
-1. **Fallback de status de acordo** (linha 503): `Acordo ${a.status}` exibe `completed`, `cancelled`, `pending_approval` etc. quando cai no fallback (sem client_events).
-2. **Fallback de status de ligação** (linha 515): `Ligação — ${c.status || "realizada"}` exibe valores brutos como `answered`, `no_answer`, `busy`, `failed`.
-3. **Detalhe de canal** (linha 461) `Canal: ${meta.channel || "whatsapp"}` exibe em minúsculo / em inglês (`sms`, `email`, `voice`).
-4. **Fonte de field_update** (linha 463): se `event_value` não estiver no `SOURCE_LABELS`, mostra a chave crua (ex.: `whatsapp_auto`, `regua`).
-5. **Status de pagamento manual** — `event_value` ("confirmed", "rejected", "pix", "boleto") aparece como `detail` nos casos que não foram tratados; verificar e mapear.
-6. **Actor "Discador"** (linha 518) — termo já em PT, ok; mas reforçar.
-7. **Fallback final genérico** — `EVENT_TYPE_LABELS[eventType] || toTitleCase(eventType)` ainda pode produzir títulos em inglês com Title Case (ex.: "Send Failed", "Channel Switched"). Solução: dicionário expandido + fallback explícito "Evento do Sistema" quando não houver tradução.
+| Campo | Valor |
+|---|---|
+| Conversa | `48bba162-ecf7-44fd-8abe-a991aed3373f` |
+| Contato | Valeria — `554499732338` |
+| Instância | Maria Eduarda Acordo (`1872b1c5-...`) — `connected` |
+| Status | **`open`** (não é waiting, não é grupo) |
+| `assigned_to` | **NULL** (ninguém atribuído) |
+| `client_id` | **NULL** (número não bateu com nenhum cadastro) |
+| Unread | 2 |
+| Maria Eduarda vinculada à instância? | ✅ Sim (`operator_instances`) |
+| `whatsapp_visibility.open_statuses` configurado? | ❌ **NULL** |
 
-### Mudanças (apenas `src/components/atendimento/ClientTimeline.tsx`)
+### Causa-raiz
 
-**1. Novo dicionário `AGREEMENT_STATUS_LABELS`**
-```ts
-{ pending: "Pendente", pending_approval: "Aguardando Aprovação",
-  approved: "Aprovado", completed: "Quitado", cancelled: "Cancelado",
-  overdue: "Vencido", broken: "Quebrado" }
+A RPC `get_visible_conversations` define o que um **operador** enxerga. Ela retorna a conversa se **qualquer uma** das condições abaixo for verdadeira:
+
+1. ✅ `c.assigned_to = meu profile_id` → aqui é NULL, falha
+2. ✅ Cliente vinculado com `clients.operator_id = meu profile_id` → `client_id` é NULL, falha
+3. ✅ Existe transferência ativa para mim → não existe, falha
+4. ✅ `clients.status` está em `tenants.settings.whatsapp_visibility.open_statuses` → `open_statuses` é NULL, falha
+
+**Nenhuma condição é satisfeita.** O vínculo em `operator_instances` **não é consultado** pela RPC — ele só serve para UI de envio, não para visibilidade da inbox. Por isso a Maria Eduarda não vê a conversa, mesmo estando vinculada à instância correta.
+
+Esse é um padrão que afeta **todas as conversas inbound de números desconhecidos** (sem `client_id` e sem atribuição) — elas ficam órfãs e invisíveis para operadores. Só admins veem.
+
+### Correção (cirúrgica, 1 arquivo)
+
+Adicionar uma **5ª regra de visibilidade** à RPC `get_visible_conversations`:
+
+> Operador enxerga conversas **da instância à qual está vinculado em `operator_instances`**, desde que estejam **sem atribuição** (`assigned_to IS NULL`) e **sem cliente vinculado** (`client_id IS NULL`) — ou seja, conversas "mar aberto" daquela instância.
+
+Justificativa: é exatamente a lógica de "Carteira Mar Aberto" aplicada ao WhatsApp — se a operadora é dona daquela instância, ela deve ver as conversas novas órfãs que chegam ali. Quando alguém aceitar/atribuir, as outras regras (1 e 2) voltam a valer.
+
+**Migração SQL** — substituir o bloco `WHERE ... visible AS` na RPC adicionando:
+
+```sql
+OR (
+  c.assigned_to IS NULL
+  AND c.client_id IS NULL
+  AND EXISTS (
+    SELECT 1 FROM public.operator_instances oi
+    WHERE oi.profile_id = _profile_id
+      AND oi.instance_id = c.instance_id
+  )
+)
 ```
-Aplicar no fallback (linha 503).
 
-**2. Novo dicionário `CALL_STATUS_LABELS`**
-```ts
-{ answered: "Atendida", no_answer: "Não Atendida", busy: "Ocupado",
-  failed: "Falhou", completed: "Concluída", abandoned: "Abandonada",
-  voicemail: "Caixa Postal" }
-```
-Aplicar no fallback (linha 515).
+Aplicar o mesmo acréscimo na RPC irmã `get_visible_conversation_counts` (para os contadores Abertas/Aguardando/Fechadas baterem com a lista).
 
-**3. Novo dicionário `CHANNEL_LABELS`**
-```ts
-{ whatsapp: "WhatsApp", sms: "SMS", email: "E-mail", voice: "Voz",
-  call: "Ligação", boleto: "Boleto" }
-```
-Aplicar em `Canal: ...` (linha 461).
+### Efeito
 
-**4. Expandir `SOURCE_LABELS`** com todas as chaves possíveis: `whatsapp_auto: "WhatsApp Automático"`, `email_auto: "E-mail Automático"`, `regua: "Régua de Cobrança"`, `prevention: "Régua de Prevenção"`, `negociarie: "Negociarie"`, `portal: "Portal do Devedor"`, `ai: "Agente IA"`, `operator: "Operador"`, `admin: "Administrador"`. Fallback: `toTitleCase`.
-
-**5. Tratar `payment_method` em manual_payment_requested** — adicionar detail traduzido: `pix → "PIX"`, `boleto → "Boleto"`, `dinheiro → "Dinheiro"`, `cartao → "Cartão"`, etc.
-
-**6. Substituir fallback final** (linha 441): em vez de `toTitleCase(eventType)` quando o tipo é totalmente desconhecido, exibir **"Evento do Sistema"** + manter o tipo cru apenas em `title` attribute (tooltip) para depuração. Garante zero inglês visível.
-
-**7. Adicionar ao `EVENT_TYPE_LABELS`** quaisquer eventos que ainda apareçam crus: `send_failed: "Falha no Envio"` (caso vaze), `agreement_broken: "Acordo Quebrado"`.
+- Maria Eduarda passa a ver Valeria + as outras **55 conversas sem atribuição** da instância "Maria Eduarda Acordo".
+- Não expõe nada indevido: operador só vê órfãs das instâncias **às quais já foi vinculado** pelo admin.
+- Conversas com `assigned_to` de outro operador ou com `client_id` de outro operador continuam invisíveis (regras existentes).
+- Admin: sem mudança (já vê tudo).
 
 ### Sem alteração
-- Schema, RLS, edge functions, services.
-- Layout do card, ordenação, paginação "Ver tudo".
-- `ResponsibleLabel` (já em PT após ajuste anterior).
+- Código front-end, RLS de tabelas, edge functions, webhook de ingestão, schema.
+- Apenas 2 RPCs atualizadas via migração.
 
 ### Arquivo
-- `src/components/atendimento/ClientTimeline.tsx` — ~30 linhas adicionadas (3 novos dicionários, expansão de SOURCE_LABELS, fallback final humanizado, tradução de payment_method).
+- Nova migração SQL: recria `get_visible_conversations` e `get_visible_conversation_counts` com a regra adicional (~10 linhas a mais em cada).
 
