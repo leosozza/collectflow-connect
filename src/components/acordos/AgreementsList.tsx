@@ -69,7 +69,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                 Parcela
               </TableHead>
             )}
-            <TableHead>Parcelas Pagas</TableHead>
             <TableHead>Status da Parcela</TableHead>
             <TableHead>Status do Acordo</TableHead>
           </TableRow>
@@ -103,15 +102,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                     {formatParcelaLabel(instNumber, instKey)}
                   </TableCell>
                 )}
-                <TableCell className="text-sm tabular-nums">
-                  {showCount ? (
-                    <span className={paid! > 0 ? "font-medium text-foreground" : "text-muted-foreground"}>
-                      {paid} / {total}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
                 <TableCell>
                   {instClass ? (
                     <span className="inline-block" title="Status da parcela do mês selecionado">
