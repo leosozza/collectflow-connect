@@ -181,22 +181,40 @@ export async function fetchConversations(
 }
 
 export async function fetchConversationCounts(
-  tenantId: string
+  tenantId: string,
+  isAdmin = false
 ): Promise<{ open: number; waiting: number; closed: number; unread: number }> {
   const counts = { open: 0, waiting: 0, closed: 0, unread: 0 };
-  
+
+  // Operadores: usar RPC com regra de visibilidade (mesma lógica de get_visible_conversations)
+  if (!isAdmin) {
+    const { data, error } = await supabase.rpc("get_visible_conversation_counts" as any, {
+      _tenant_id: tenantId,
+    });
+    if (error) throw error;
+    const row = (data as any[])?.[0];
+    if (row) {
+      counts.open = Number(row.open_count) || 0;
+      counts.waiting = Number(row.waiting_count) || 0;
+      counts.closed = Number(row.closed_count) || 0;
+      counts.unread = Number(row.unread_count) || 0;
+    }
+    return counts;
+  }
+
+  // Admin: query direta (mantém comportamento atual)
   const [openRes, waitingRes, closedRes, unreadRes] = await Promise.all([
     supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "open"),
     supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "waiting"),
     supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "closed"),
     supabase.from("conversations" as any).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).gt("unread_count", 0),
   ]);
-  
+
   counts.open = openRes.count || 0;
   counts.waiting = waitingRes.count || 0;
   counts.closed = closedRes.count || 0;
   counts.unread = unreadRes.count || 0;
-  
+
   return counts;
 }
 
