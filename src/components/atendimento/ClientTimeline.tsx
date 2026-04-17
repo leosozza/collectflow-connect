@@ -253,7 +253,7 @@ const resolveActor = (
   const adminId = meta.reviewed_by || meta.reviewer_id || meta.confirmed_by;
   if (adminId && (eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected")) {
     const name = profileMap[adminId];
-    return { label: name ? `${name} (Admin)` : "Admin", kind: "admin" };
+    return { label: name || "Admin", kind: "admin" };
   }
 
   // Workflow / régua automática
