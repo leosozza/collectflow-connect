@@ -441,18 +441,9 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || toTitleCase(eventType));
       
       let detail = "";
-      let operator = "";
 
-      // Resolve operator name
-      if (meta.operator_id && profileMap[meta.operator_id]) {
-        operator = profileMap[meta.operator_id];
-      } else if (meta.created_by && profileMap[meta.created_by]) {
-        operator = profileMap[meta.created_by];
-      } else if (meta.updated_by && profileMap[meta.updated_by]) {
-        operator = profileMap[meta.updated_by];
-      } else if (meta.agent_name) {
-        operator = meta.agent_name;
-      }
+      const actor = resolveActor(e, profileMap, workflowMap);
+      const operator = actor.kind === "user" || actor.kind === "admin" ? actor.label.replace(/ \(Admin\)$/, "") : "";
 
       // Build detail based on type
       if (eventType === "disposition") {
@@ -482,6 +473,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         title: label,
         detail: detail || undefined,
         operator: operator || undefined,
+        actor,
         durationSeconds: eventType === "call" ? meta.duration_seconds : undefined,
       });
       usedEventIds.add(e.id);
@@ -490,24 +482,28 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     // Fallback: use props when no client_events
     dispositions.forEach((d) => {
       const label = DISPOSITION_TYPES[d.disposition_type as keyof typeof DISPOSITION_TYPES] || d.disposition_type;
+      const opName = d.operator_name || (d.operator_id && profileMap[d.operator_id]) || undefined;
       items.push({
         id: `d-${d.id}`,
         date: d.created_at,
         type: d.disposition_type === "note" ? "note" : "disposition",
         title: label,
         detail: d.notes || undefined,
-        operator: d.operator_name || (d.operator_id && profileMap[d.operator_id]) || undefined,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
       });
     });
 
     agreements.forEach((a: any) => {
+      const opName = a.creator_name || (a.created_by && profileMap[a.created_by]) || undefined;
       items.push({
         id: `a-${a.id}`,
         date: a.created_at,
         type: "agreement",
         title: `Acordo ${a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}`,
         detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
-        operator: a.creator_name || (a.created_by && profileMap[a.created_by]) || undefined,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
       });
     });
 
@@ -519,6 +515,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         title: `Ligação — ${c.status || "realizada"}`,
         detail: c.phone ? `Tel: ${c.phone}` : undefined,
         operator: c.agent_name || undefined,
+        actor: c.agent_name ? { label: c.agent_name, kind: "user" } : { label: "Discador", kind: "system" },
         recordingUrl: c.recording_url || undefined,
         durationSeconds: c.duration_seconds || 0,
       });
