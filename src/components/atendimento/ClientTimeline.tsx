@@ -128,6 +128,9 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   document_generated: "Documento Gerado",
   conversation_auto_closed: "Conversa Encerrada (Inatividade)",
   conversation_transferred: "Conversa Transferida",
+  send_failed: "Falha no Envio",
+  agreement_broken: "Acordo Quebrado",
+  note: "Observação",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
