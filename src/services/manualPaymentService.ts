@@ -11,6 +11,7 @@ export interface ManualPayment {
   tenant_id: string;
   agreement_id: string;
   installment_number: number;
+  installment_key: string | null;
   amount_paid: number;
   payment_date: string;
   payment_method: string;
@@ -39,6 +40,7 @@ export interface ManualPaymentWithDetails extends ManualPayment {
 export interface CreateManualPaymentData {
   agreement_id: string;
   installment_number: number;
+  installment_key?: string;
   amount_paid: number;
   payment_date: string;
   payment_method: string;
