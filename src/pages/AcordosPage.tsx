@@ -25,6 +25,7 @@ import {
   getInstallmentsForMonth,
   classifyInstallment,
   buildInstallmentSchedule,
+  countPaidInstallments,
   type CobrancaRecord,
   type ManualPaymentRecord,
   type InstallmentClassification,
@@ -161,7 +162,12 @@ const AcordosPage = () => {
     const m = isMonthSelected ? parseInt(selectedMonth) : -1;
     const y = parseInt(selectedYear);
 
-    type ClassifiedAgreement = Agreement & { _installmentClass?: InstallmentClassification };
+    type ClassifiedAgreement = Agreement & {
+      _installmentClass?: InstallmentClassification;
+      _hasPaidInScope?: boolean;
+      _paidCount?: number;
+      _totalCount?: number;
+    };
 
     const result: ClassifiedAgreement[] = [];
 
@@ -175,13 +181,21 @@ const AcordosPage = () => {
         if (!agreement.client_name.toLowerCase().includes(q) && !agreement.client_cpf.toLowerCase().includes(q)) continue;
       }
 
+      // Compute paid/total counts (full schedule) — used for the new "Parcelas Pagas" column
+      const { paid: paidCount, total: totalCount } = countPaidInstallments(
+        agreement,
+        cobrancas,
+        manualPayments,
+        today
+      );
+
       // For global statuses (cancelled, pending_approval), no installment logic needed
       if (agreement.status === "cancelled" || agreement.status === "rejected") {
-        result.push({ ...agreement, _installmentClass: undefined });
+        result.push({ ...agreement, _installmentClass: undefined, _paidCount: paidCount, _totalCount: totalCount });
         continue;
       }
       if (agreement.status === "pending_approval") {
-        result.push({ ...agreement, _installmentClass: undefined });
+        result.push({ ...agreement, _installmentClass: undefined, _paidCount: paidCount, _totalCount: totalCount });
         continue;
       }
 
@@ -201,12 +215,16 @@ const AcordosPage = () => {
         else if (classifications.includes("vencido")) finalClass = "vencido";
         else if (classifications.includes("vigente")) finalClass = "vigente";
 
-        result.push({ ...agreement, _installmentClass: finalClass });
+        // "Pagos" inclusive: at least one paid installment in the month
+        const hasPaidInMonth = classifications.includes("pago");
+
+        result.push({ ...agreement, _installmentClass: finalClass, _hasPaidInScope: hasPaidInMonth, _paidCount: paidCount, _totalCount: totalCount });
       } else {
         // Date range or "todos" — filter by due date range if applicable
+        let scopedHasPaid = paidCount > 0;
         if (dateFrom || dateTo) {
           const schedule = buildInstallmentSchedule(agreement);
-          const hasInRange = schedule.some((inst: any) => {
+          const inRange = schedule.filter((inst: any) => {
             const d = inst.dueDate;
             if (dateFrom && d < dateFrom) return false;
             if (dateTo) {
@@ -216,16 +234,22 @@ const AcordosPage = () => {
             }
             return true;
           });
-          if (!hasInRange) continue;
+          if (inRange.length === 0) continue;
+          scopedHasPaid = inRange.some(inst =>
+            classifyInstallment(inst, cobrancas, manualPayments, today) === "pago"
+          );
         } else if (selectedYear) {
           // "todos os meses" but year selected — show agreements with installments in that year
           const schedule = buildInstallmentSchedule(agreement);
-          const hasInYear = schedule.some((inst: any) => inst.dueDate.getFullYear() === y);
-          if (!hasInYear) continue;
+          const inYear = schedule.filter((inst: any) => inst.dueDate.getFullYear() === y);
+          if (inYear.length === 0) continue;
+          scopedHasPaid = inYear.some(inst =>
+            classifyInstallment(inst, cobrancas, manualPayments, today) === "pago"
+          );
         }
 
         // Use global status mapping
-        result.push({ ...agreement, _installmentClass: undefined });
+        result.push({ ...agreement, _installmentClass: undefined, _hasPaidInScope: scopedHasPaid, _paidCount: paidCount, _totalCount: totalCount });
       }
     }
 
@@ -243,9 +267,12 @@ const AcordosPage = () => {
         case "vigentes":
           if (isMonthSelected && cls !== undefined) return cls === "vigente";
           return a.status === "pending";
-        case "approved":
-          if (isMonthSelected && cls !== undefined) return cls === "pago";
-          return a.status === "approved";
+        case "approved": {
+          // Inclusive: agreement appears in "Pagos" if it has at least one paid installment
+          // in the selected scope, OR is fully approved.
+          const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
+          return hasPaid === true || a.status === "approved";
+        }
         case "overdue":
           if (isMonthSelected && cls !== undefined) return cls === "vencido";
           return a.status === "overdue";
@@ -267,17 +294,15 @@ const AcordosPage = () => {
     const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
     const relevant = classifiedAgreements.filter(a => a.status !== "cancelled" && a.status !== "rejected");
 
-    if (isMonthSelected) {
-      const cls = relevant.map(a => (a as any)._installmentClass as InstallmentClassification | undefined);
-      const total = relevant.filter((_, i) => cls[i] !== undefined).length;
-      const pending = relevant.filter((_, i) => cls[i] === "vigente" || cls[i] === "pending_confirmation").length;
-      const paid = relevant.filter((_, i) => cls[i] === "pago").length;
-      return { total, pending, paid };
-    }
-
     const total = relevant.length;
-    const pending = relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
-    const paid = relevant.filter(a => a.status === "approved").length;
+    const pending = isMonthSelected
+      ? relevant.filter(a => {
+          const c = (a as any)._installmentClass as InstallmentClassification | undefined;
+          return c === "vigente" || c === "pending_confirmation";
+        }).length
+      : relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
+    // Inclusive paid: agreements with at least one paid installment in scope OR fully approved
+    const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "approved").length;
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
 
