@@ -560,108 +560,126 @@ const ClientDetailPage = () => {
                 <p className="text-center text-muted-foreground">Nenhum acordo registrado</p>
               ) : (
                 <div className="space-y-6">
-                  {agreements.map((agreement: any) => (
-                    <div key={agreement.id} className="space-y-4 border-b border-border pb-6 last:border-0 last:pb-0">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-foreground">
-                          Acordo — {new Date(agreement.created_at).toLocaleDateString("pt-BR")}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={agreement.status === "pending" ? undefined : (statusVariantMap[agreement.status] || "secondary")}
-                            className={agreement.status === "pending" ? "bg-green-50 text-green-700 border border-green-300" : ""}
-                          >
-                            {statusLabelsMap[agreement.status] || agreement.status}
-                          </Badge>
-                          {editableStatuses.includes(agreement.status) && (
-                            <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
-                              <Pencil className="w-4 h-4 text-muted-foreground" />
-                            </Button>
-                          )}
-                          {cancellableStatuses.includes(agreement.status) && (
-                            <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
-                          {agreement.status === "cancelled" && !hasActiveAgreement && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs gap-1"
-                              onClick={() => setReopenId(agreement.id)}
-                              title="Reabrir Acordo"
+                  {agreements.map((agreement: any, index: number) => (
+                    <Collapsible
+                      key={agreement.id}
+                      open={expandedAgreements.has(agreement.id)}
+                      onOpenChange={(open) => {
+                        setExpandedAgreements(prev => {
+                          const newSet = new Set(prev);
+                          if (open) newSet.add(agreement.id);
+                          else newSet.delete(agreement.id);
+                          return newSet;
+                        });
+                      }}
+                      className="border-b border-border pb-6 last:border-0 last:pb-0"
+                    >
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2">
+                            <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${expandedAgreements.has(agreement.id) ? 'rotate-180' : ''}`} />
+                            <h3 className="font-semibold text-foreground text-left">
+                              Acordo — {new Date(agreement.created_at).toLocaleDateString("pt-BR")}
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={agreement.status === "pending" ? undefined : (statusVariantMap[agreement.status] || "secondary")}
+                              className={agreement.status === "pending" ? "bg-green-50 text-green-700 border border-green-300" : ""}
                             >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              Reabrir
-                            </Button>
-                          )}
+                              {statusLabelsMap[agreement.status] || agreement.status}
+                            </Badge>
+                            {editableStatuses.includes(agreement.status) && (
+                              <Button size="sm" variant="ghost" onClick={() => handleEditOpen(agreement)} title="Editar Acordo">
+                                <Pencil className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            )}
+                            {cancellableStatuses.includes(agreement.status) && (
+                              <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            )}
+                            {agreement.status === "cancelled" && !hasActiveAgreement && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs gap-1"
+                                onClick={() => setReopenId(agreement.id)}
+                                title="Reabrir Acordo"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                Reabrir
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
-                          <p className="text-sm font-semibold">{formatCurrency(Number(agreement.original_total))}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
-                          <p className="text-sm font-semibold">{formatCurrency(getEffectiveAgreementSummary(agreement).effectiveTotal)}</p>
-                        </div>
-                        {agreement.discount_percent > 0 && (
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-4 space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Desconto</p>
-                            <p className="text-sm font-semibold text-green-600">{agreement.discount_percent}%</p>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Original</p>
+                            <p className="text-sm font-semibold">{formatCurrency(Number(agreement.original_total))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Valor Proposto</p>
+                            <p className="text-sm font-semibold">{formatCurrency(getEffectiveAgreementSummary(agreement).effectiveTotal)}</p>
+                          </div>
+                          {agreement.discount_percent > 0 && (
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Desconto</p>
+                              <p className="text-sm font-semibold text-green-600">{agreement.discount_percent}%</p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
+                            <p className="text-sm font-semibold">{getEffectiveAgreementSummary(agreement).label}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
+                            <p className="text-sm font-semibold">{formatDate(agreement.first_due_date)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
+                            <p className="text-sm font-semibold">{agreement.credor}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Operador / Canal</p>
+                            <p className="text-sm font-semibold flex items-center gap-1">
+                              <User className="w-3 h-3 text-muted-foreground" />
+                              {agreement.creator_name || (agreement.portal_origin ? "Portal" : "—")}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Data do Acordo</p>
+                            <p className="text-sm font-semibold">{new Date(agreement.created_at).toLocaleDateString("pt-BR")}</p>
+                          </div>
+                        </div>
+
+                        {agreement.approval_reason && (
+                          <div className="pt-2 border-t border-border">
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Motivo da Liberação</p>
+                            <p className="text-sm text-orange-600">{agreement.approval_reason}</p>
                           </div>
                         )}
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Parcelas</p>
-                          <p className="text-sm font-semibold">{getEffectiveAgreementSummary(agreement).label}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">1º Vencimento</p>
-                          <p className="text-sm font-semibold">{formatDate(agreement.first_due_date)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
-                          <p className="text-sm font-semibold">{agreement.credor}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Operador / Canal</p>
-                          <p className="text-sm font-semibold flex items-center gap-1">
-                            <User className="w-3 h-3 text-muted-foreground" />
-                            {agreement.creator_name || (agreement.portal_origin ? "Portal" : "—")}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Data do Acordo</p>
-                          <p className="text-sm font-semibold">{new Date(agreement.created_at).toLocaleDateString("pt-BR")}</p>
-                        </div>
-                      </div>
+                        {agreement.notes && (
+                          <div className="pt-2 border-t border-border">
+                            <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
+                            <p className="text-sm text-foreground">{agreement.notes}</p>
+                          </div>
+                        )}
 
-                      {agreement.approval_reason && (
-                        <div className="pt-2 border-t border-border">
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Motivo da Liberação</p>
-                          <p className="text-sm text-orange-600">{agreement.approval_reason}</p>
-                        </div>
-                      )}
-                      {agreement.notes && (
-                        <div className="pt-2 border-t border-border">
-                          <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
-                          <p className="text-sm text-foreground">{agreement.notes}</p>
-                        </div>
-                      )}
-
-                      {/* Installments for all active statuses */}
-                      {installmentStatuses.includes(agreement.status) && (
-                        <AgreementInstallments
-                          agreementId={agreement.id}
-                          agreement={agreement}
-                          cpf={cpf || ""}
-                          tenantId={tenant?.id}
-                          onRefresh={() => { refetch(); refetchAgreements(); }}
-                        />
-                      )}
-                    </div>
+                        {/* Installments for all active statuses */}
+                        {installmentStatuses.includes(agreement.status) && (
+                          <AgreementInstallments
+                            agreementId={agreement.id}
+                            agreement={agreement}
+                            cpf={cpf || ""}
+                            tenantId={tenant?.id}
+                            onRefresh={() => { refetch(); refetchAgreements(); }}
+                          />
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
                   ))}
                 </div>
               )}
