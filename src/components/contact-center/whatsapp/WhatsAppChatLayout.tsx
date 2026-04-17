@@ -134,8 +134,8 @@ const WhatsAppChatLayout = () => {
 
   // Status counts from server (separate lightweight query)
   const { data: statusCounts } = useQuery({
-    queryKey: ["conversation-counts", tenantId],
-    queryFn: () => fetchConversationCounts(tenantId!),
+    queryKey: ["conversation-counts", tenantId, isAdmin],
+    queryFn: () => fetchConversationCounts(tenantId!, isAdmin),
     enabled: !!tenantId,
     refetchInterval: 30000, // refresh every 30s
   });
