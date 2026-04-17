@@ -179,7 +179,55 @@ const FIELD_LABELS: Record<string, string> = {
 
 const SOURCE_LABELS: Record<string, string> = {
   import: "Importação", api: "API", maxlist: "MaxList", manual: "Edição Manual",
-  regua: "Régua", whatsapp_auto: "WhatsApp Auto", system: "Sistema", workflow: "Workflow",
+  regua: "Régua de Cobrança", whatsapp_auto: "WhatsApp Automático",
+  email_auto: "E-mail Automático", prevention: "Régua de Prevenção",
+  negociarie: "Negociarie", portal: "Portal do Devedor",
+  ai: "Agente IA", ai_agent: "Agente IA",
+  operator: "Operador", admin: "Administrador",
+  system: "Sistema", workflow: "Fluxo Automático",
+};
+
+const AGREEMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  pending_approval: "Aguardando Aprovação",
+  approved: "Aprovado",
+  completed: "Quitado",
+  cancelled: "Cancelado",
+  overdue: "Vencido",
+  broken: "Quebrado",
+};
+
+const CALL_STATUS_LABELS: Record<string, string> = {
+  answered: "Atendida",
+  no_answer: "Não Atendida",
+  busy: "Ocupado",
+  failed: "Falhou",
+  completed: "Concluída",
+  abandoned: "Abandonada",
+  voicemail: "Caixa Postal",
+  realizada: "Realizada",
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+  email: "E-mail",
+  voice: "Voz",
+  call: "Ligação",
+  boleto: "Boleto",
+  pix: "PIX",
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  pix: "PIX",
+  boleto: "Boleto",
+  dinheiro: "Dinheiro",
+  cartao: "Cartão",
+  cartao_credito: "Cartão de Crédito",
+  cartao_debito: "Cartão de Débito",
+  transferencia: "Transferência",
+  ted: "TED",
+  doc: "DOC",
 };
 
 const formatDuration = (seconds: number) => {
