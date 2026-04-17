@@ -1,30 +1,32 @@
 
 
-## Plano — Padronizar nomenclatura "Acordo Atrasado"
+## Plano — Corrigir erro de CSS que impede o sistema de carregar
 
-### Problema
-- Em `/carteira/:cpf?tab=acordo` (perfil do cliente): badge vermelho **"Acordo Atrasado"**.
-- Em `/acordos` aba Vigentes, coluna "Status do Acordo": badge **"Vencido"**.
-- Mesma entidade (`agreement.status === "overdue"`), nomes diferentes. Confunde.
+### Causa
+Em `src/index.css`, o `@import` da fonte Google está na **linha 5**, depois das diretivas `@tailwind` (linhas 1-3). A regra CSS exige que **todo `@import` venha antes de qualquer outra declaração** (exceto `@charset`/`@layer` vazio). Vite está bloqueando o CSS:
 
-### Investigação rápida necessária
-Confirmar nos arquivos:
-- `src/components/acordos/AgreementsList.tsx` — `statusLabels.overdue = "Vencido"` (visto). Trocar para `"Acordo Atrasado"`.
-- Localizar o componente do perfil do cliente que renderiza "Acordo Atrasado" para confirmar que é o mesmo `status === "overdue"` (e não derivado de outra lógica como parcela vencida).
-
-### Mudança
-Em `AgreementsList.tsx`:
-```ts
-statusLabels.overdue = "Acordo Atrasado"  // era "Vencido"
 ```
-Cor (`bg-amber-100 text-amber-800`) — manter ou trocar para vermelho (`bg-red-100 text-red-800`) pra bater com o perfil? Vou confirmar a cor usada no perfil antes de decidir.
+[vite:css] @import must precede all other statements
+```
 
-### Cuidado
-Não confundir com a coluna **"Status da Parcela"** (essa sim mostra "Vencida" referindo-se à parcela individual do mês — nomenclatura correta lá, é parcela, não acordo).
+Resultado: estilos não carregam → tela em branco / "sistema não carrega".
+
+### Correção
+Mover o `@import` da fonte para a **linha 1**, antes dos `@tailwind`:
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base { ... }
+```
 
 ### Arquivo
-- `src/components/acordos/AgreementsList.tsx` — 1 linha no `statusLabels`, possivelmente 1 no `statusColors`.
+- `src/index.css` — reordenar 5 linhas no topo.
 
 ### Sem alteração
-Schema, RLS, services, classifier, perfil do cliente.
+Restante do CSS, schema, componentes, lógica.
 
