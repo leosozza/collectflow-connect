@@ -55,8 +55,16 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
             <TableHead>Credor</TableHead>
             <TableHead>Operador</TableHead>
             <TableHead>Parcelas Pagas</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Status da Parcela</TableHead>
+            <TableHead>Status do Acordo</TableHead>
           </TableRow>
+        </TableHeader>
+        <TableBody>
+          {agreements.map((a) => {
+            const paid = (a as any)._paidCount as number | undefined;
+            const total = (a as any)._totalCount as number | undefined;
+            const showCount = typeof paid === "number" && typeof total === "number";
+            const instClass = (a as any)._installmentClass as string | undefined;
         </TableHeader>
         <TableBody>
           {agreements.map((a) => {
