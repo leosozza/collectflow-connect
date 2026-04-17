@@ -167,6 +167,10 @@ const AcordosPage = () => {
       _hasPaidInScope?: boolean;
       _paidCount?: number;
       _totalCount?: number;
+      _installmentNumber?: number;
+      _installmentKey?: string;
+      _installmentDueDate?: Date;
+      _installmentValue?: number;
     };
 
     const result: ClassifiedAgreement[] = [];
