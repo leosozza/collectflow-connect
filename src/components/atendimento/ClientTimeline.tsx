@@ -556,7 +556,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         id: `a-${a.id}`,
         date: a.created_at,
         type: "agreement",
-        title: `Acordo ${a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}`,
+        title: `Acordo ${AGREEMENT_STATUS_LABELS[a.status] || "Registrado"}`,
         detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
         operator: opName,
         actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
