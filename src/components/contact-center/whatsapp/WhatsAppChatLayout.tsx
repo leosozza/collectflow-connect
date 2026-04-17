@@ -57,16 +57,42 @@ const WhatsAppChatLayout = () => {
   // Load instances + quick replies + operators + disposition types
   useEffect(() => {
     if (!tenantId) return;
-    fetchWhatsAppInstances(tenantId).then(setInstances).catch(console.error);
+    const isAdminRole = profile?.role === "admin" || profile?.role === "super_admin";
+
+    (async () => {
+      try {
+        const all = await fetchWhatsAppInstances(tenantId);
+        if (isAdminRole) {
+          setInstances(all);
+        } else {
+          // Restrict to instances assigned to this operator via operator_instances
+          const profileId = profile?.id;
+          if (!profileId) {
+            setInstances([]);
+            return;
+          }
+          const { data: assignments } = await supabase
+            .from("operator_instances" as any)
+            .select("instance_id")
+            .eq("profile_id", profileId)
+            .eq("tenant_id", tenantId);
+          const allowedIds = new Set((assignments || []).map((a: any) => a.instance_id));
+          setInstances(all.filter((i) => allowedIds.has(i.id)));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+
     fetchQuickReplies(tenantId).then(setQuickReplies).catch(console.error);
 
     supabase
       .from("profiles")
-      .select("user_id, full_name")
+      .select("id, full_name")
       .eq("tenant_id", tenantId)
       .then(({ data }) => {
         if (data) {
-          setOperators(data.map((p: any) => ({ id: p.user_id, name: p.full_name || "" })));
+          setOperators(data.map((p: any) => ({ id: p.id, name: p.full_name || "" })));
         }
       });
 
