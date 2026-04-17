@@ -20,10 +20,24 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
-  approved: "Pago",
+  approved: "Quitado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
   overdue: "Vencido",
+};
+
+const installmentClassLabels: Record<string, string> = {
+  pago: "Pago",
+  vigente: "A Vencer",
+  vencido: "Vencida",
+  pending_confirmation: "Aguardando Confirmação",
+};
+
+const installmentClassColors: Record<string, string> = {
+  pago: "bg-green-100 text-green-800 border border-green-300",
+  vigente: "bg-blue-100 text-blue-800 border border-blue-300",
+  vencido: "bg-amber-100 text-amber-800 border border-amber-300",
+  pending_confirmation: "bg-purple-100 text-purple-800 border border-purple-300",
 };
 
 const AgreementsList = ({ agreements }: AgreementsListProps) => {
