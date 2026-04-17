@@ -479,6 +479,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         customValues[`${key}_method`] = ent.method as any;
       });
 
+      // Persist payment method for each installment (so reopen restores formaPagto
+      // and Edge Function can skip non-BOLETO installments)
+      const nParc = typeof numParcelas === "number" ? numParcelas : 0;
+      for (let i = 1; i <= nParc; i++) {
+        customValues[`${i}_method`] = formaPagto as any;
+      }
+
       const data: AgreementFormData = {
         client_cpf: cpf,
         client_name: clientName,
@@ -515,12 +522,20 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             toast.error("Acordo criado, mas falha ao gerar boletos automaticamente.");
           } else if (boletoResult?.boleto_pendente) {
             toast.info("Acordo criado! Boletos pendentes — preencha os dados cadastrais do cliente.");
-          } else if (boletoResult?.success > 0 && boletoResult?.failed === 0) {
-            toast.success(`${boletoResult.success} boleto(s) gerado(s) automaticamente!`);
-          } else if (boletoResult?.success > 0 && boletoResult?.failed > 0) {
-            toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s).`);
-          } else if (boletoResult?.failed > 0) {
-            toast.error(`Falha ao gerar boletos: ${boletoResult.errors?.[0] || "Erro desconhecido"}`);
+          } else {
+            const skipped = Number(boletoResult?.skipped_non_boleto || 0);
+            const ok = Number(boletoResult?.success || 0);
+            const fail = Number(boletoResult?.failed || 0);
+            const skippedMsg = skipped > 0 ? ` ${skipped} parcela(s) Cartão/PIX serão cobradas via link de pagamento.` : "";
+            if (ok > 0 && fail === 0) {
+              toast.success(`${ok} boleto(s) gerado(s) automaticamente.${skippedMsg}`);
+            } else if (ok > 0 && fail > 0) {
+              toast.warning(`${ok} boleto(s) gerado(s), ${fail} falha(s).${skippedMsg}`);
+            } else if (fail > 0) {
+              toast.error(`Falha ao gerar boletos: ${boletoResult.errors?.[0] || "Erro desconhecido"}`);
+            } else if (skipped > 0) {
+              toast.success(`Acordo criado. ${skipped} parcela(s) Cartão/PIX serão cobradas via link de pagamento.`);
+            }
           }
         } catch (boletoErr: any) {
           console.error("Boleto edge function error:", boletoErr);
