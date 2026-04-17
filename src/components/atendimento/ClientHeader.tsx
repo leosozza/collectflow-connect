@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -35,14 +36,17 @@ interface ClientHeaderProps {
   hasActiveCall?: boolean;
 }
 
-const InfoItem = ({ label, value, icon: Icon, forceRender }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean }) => {
+const InfoItem = ({ label, value, icon: Icon, forceRender, action }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean; action?: React.ReactNode }) => {
   if (!value && !forceRender) return null;
   return (
     <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
+        <div className="flex items-center gap-1.5">
+          <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
+          {value && action}
+        </div>
       </div>
     </div>
   );
@@ -50,10 +54,57 @@ const InfoItem = ({ label, value, icon: Icon, forceRender }: { label: string; va
 
 const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate, onHangup, hangingUp, hasActiveCall }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
+  const [promotingSlot, setPromotingSlot] = useState<PhoneSlot | null>(null);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const navigate = useNavigate();
   const { isModuleEnabled } = useModules();
+  const queryClient = useQueryClient();
+
+  const handlePromoteHot = async (slot: PhoneSlot) => {
+    if (slot === "phone" || !tenantId || !client?.cpf || !client?.credor) return;
+    setPromotingSlot(slot);
+    try {
+      const { newHot } = await promotePhoneToHot({
+        cpf: client.cpf,
+        credor: client.credor,
+        tenantId,
+        slotOrigem: slot,
+      });
+      toast({
+        title: "Número quente atualizado",
+        description: newHot ? `${formatPhone(newHot)} agora é o Telefone 1.` : undefined,
+      });
+      await queryClient.invalidateQueries();
+    } catch (e: any) {
+      toast({ title: "Erro ao atualizar número quente", description: e?.message, variant: "destructive" });
+    } finally {
+      setPromotingSlot(null);
+    }
+  };
+
+  const HotBadge = ({ slot }: { slot: PhoneSlot }) => {
+    if (slot === "phone") {
+      return (
+        <span title="Número quente (Hot)" className="inline-flex">
+          <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500/30" />
+        </span>
+      );
+    }
+    const targetValue = slot === "phone2" ? client.phone2 : client.phone3;
+    if (!targetValue) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => handlePromoteHot(slot)}
+        disabled={promotingSlot !== null}
+        title="Marcar como número quente"
+        className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted transition-colors disabled:opacity-40"
+      >
+        <Flame className={`w-3.5 h-3.5 ${promotingSlot === slot ? "text-orange-500 animate-pulse" : "text-muted-foreground hover:text-orange-500"}`} />
+      </button>
+    );
+  };
 
   const openWhatsApp = () => {
     if (!client.phone) {
@@ -221,12 +272,20 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     return { label: s?.toUpperCase() || "—", className: "bg-muted text-muted-foreground" };
   })();
 
+  const PHONE_SLOT_BY_KEY: Record<string, PhoneSlot> = {
+    phone: "phone",
+    phone2: "phone2",
+    phone3: "phone3",
+  };
+
   const renderField = (f: { field_key: string }, forceRender = false) => {
     const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
     if (!renderer) return null;
     const { label, value, icon } = renderer();
     if (!value && !forceRender) return null;
-    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} />;
+    const phoneSlot = PHONE_SLOT_BY_KEY[f.field_key];
+    const action = phoneSlot ? <HotBadge slot={phoneSlot} /> : undefined;
+    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} action={action} />;
   };
 
   return (
