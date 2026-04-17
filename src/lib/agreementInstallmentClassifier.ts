@@ -156,3 +156,22 @@ export function classifyInstallment(
 
   return "vigente";
 }
+
+/**
+ * Count paid vs total installments for an agreement,
+ * considering both confirmed manual payments and Negociarie cobrancas.
+ */
+export function countPaidInstallments(
+  agreement: Agreement,
+  cobrancas: CobrancaRecord[],
+  manualPayments: ManualPaymentRecord[],
+  today: Date = new Date()
+): { paid: number; total: number } {
+  const schedule = buildInstallmentSchedule(agreement);
+  let paid = 0;
+  for (const inst of schedule) {
+    const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
+    if (cls === "pago") paid++;
+  }
+  return { paid, total: schedule.length };
+}
