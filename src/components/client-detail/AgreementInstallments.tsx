@@ -531,7 +531,9 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             return (
               <TableRow key={idx}>
                 <TableCell className="font-medium text-xs">
-                  {inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
+                  {inst.isEntrada
+                    ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
+                    : `${inst.displayNumber}/${totalInstallments}`}
                 </TableCell>
 
                 {/* Vencimento + pencil */}
