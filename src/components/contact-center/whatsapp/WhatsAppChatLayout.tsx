@@ -57,7 +57,7 @@ const WhatsAppChatLayout = () => {
   // Load instances + quick replies + operators + disposition types
   useEffect(() => {
     if (!tenantId) return;
-    const isAdminRole = profile?.role === "admin" || profile?.role === "super_admin";
+    const isAdminRole = profile?.role === "admin" || tenantUser?.role === "super_admin";
 
     (async () => {
       try {
