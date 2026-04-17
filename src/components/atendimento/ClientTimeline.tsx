@@ -568,7 +568,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         id: `call-${c.id}`,
         date: c.called_at,
         type: "call",
-        title: `Ligação — ${c.status || "realizada"}`,
+        title: `Ligação — ${CALL_STATUS_LABELS[c.status || ""] || "Realizada"}`,
         detail: c.phone ? `Tel: ${c.phone}` : undefined,
         operator: c.agent_name || undefined,
         actor: c.agent_name ? { label: c.agent_name, kind: "user" } : { label: "Discador", kind: "system" },
