@@ -282,21 +282,39 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                 Valor: R$ {linkedClient.valor_parcela.toFixed(2)}
               </div>
               <Button
+                asChild
                 variant="outline"
                 size="sm"
                 className="w-full text-xs mt-2"
-                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`)}
               >
-                <User className="w-3 h-3 mr-1" />
-                Abrir Perfil do Cliente
+                <a
+                  href={`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                    e.preventDefault();
+                    navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}`);
+                  }}
+                >
+                  <User className="w-3 h-3 mr-1" />
+                  Abrir Perfil do Cliente
+                </a>
               </Button>
               <Button
+                asChild
                 size="sm"
                 className="w-full text-xs mt-1 bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
-                onClick={() => navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?action=formalizar`)}
               >
-                <FileText className="w-3 h-3 mr-1" />
-                Formalizar Acordo
+                <a
+                  href={`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?action=formalizar`}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                    e.preventDefault();
+                    navigate(`/carteira/${linkedClient.cpf.replace(/\D/g, "")}?action=formalizar`);
+                  }}
+                >
+                  <FileText className="w-3 h-3 mr-1" />
+                  Formalizar Acordo
+                </a>
               </Button>
             </CardContent>
           </Card>
