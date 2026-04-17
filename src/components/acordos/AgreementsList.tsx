@@ -40,30 +40,47 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
             <TableHead>CPF</TableHead>
             <TableHead>Credor</TableHead>
             <TableHead>Operador</TableHead>
+            <TableHead>Parcelas Pagas</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {agreements.map((a) => (
-            <TableRow key={a.id}>
-              <TableCell>
-                <Link
-                  to={`/carteira/${a.client_cpf.replace(/\D/g, "")}?tab=acordo`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {a.client_name}
-                </Link>
-              </TableCell>
-              <TableCell>{formatCPF(a.client_cpf)}</TableCell>
-              <TableCell>{a.credor}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {(a as any).creator_name || "—"}
-              </TableCell>
-              <TableCell>
-                <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
-              </TableCell>
-            </TableRow>
-          ))}
+          {agreements.map((a) => {
+            const paid = (a as any)._paidCount as number | undefined;
+            const total = (a as any)._totalCount as number | undefined;
+            const showCount = typeof paid === "number" && typeof total === "number";
+            return (
+              <TableRow key={a.id}>
+                <TableCell>
+                  <Link
+                    to={`/carteira/${a.client_cpf.replace(/\D/g, "")}?tab=acordo`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {a.client_name}
+                  </Link>
+                </TableCell>
+                <TableCell>{formatCPF(a.client_cpf)}</TableCell>
+                <TableCell>{a.credor}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {(a as any).creator_name || "—"}
+                </TableCell>
+                <TableCell className="text-sm tabular-nums">
+                  {showCount ? (
+                    <span className={paid! > 0 ? "font-medium text-foreground" : "text-muted-foreground"}>
+                      {paid} / {total}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span className="inline-block">
+                    <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
+                  </span>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
