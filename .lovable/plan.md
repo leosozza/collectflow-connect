@@ -1,64 +1,57 @@
 
+## Plano — Marcar telefone como "Hot" (número quente) e promover a Telefone 1
 
-## Diagnóstico — Edição de valor em "Confirmação de Pagamento" não reflete no acordo/carteira
+### Conceito
+Operador clica num telefone (1, 2 ou 3) → marca como **Hot** → o número vira automaticamente o `phone` (Telefone 1) e os outros são reorganizados. O botão WhatsApp continua simples (sempre usa Telefone 1 = Hot).
 
-### Dados do caso (Kemilly — CPF 44013503832, acordo `e66340e7...`)
+### Comportamento
 
-Acordo: entrada R$ 144,00 + 2x R$ 135,95 = **proposed_total R$ 415,90**.
+**Regra de promoção (rotação de slots):**
+- Marcar Telefone 2 como Hot → `phone2` vira `phone`, `phone` antigo desce para `phone2`, `phone3` permanece.
+- Marcar Telefone 3 como Hot → `phone3` vira `phone`, `phone` antigo vira `phone2`, `phone2` antigo vira `phone3`.
+- Marcar Telefone 1 como Hot → no-op (já é).
 
-Manual payments confirmados (4 baixas):
-| installment_key | installment_number | amount_paid | status |
-|---|---|---|---|
-| `entrada` | 0 | **136,36** | confirmed (edição antiga) |
-| `2` | 2 | **136,36** | confirmed (edição antiga) |
-| `null` | 0 | **144,42** | confirmed (admin editou o valor) |
-| `null` | 2 | **136,36** | confirmed |
+Sempre preserva todos os números, só rotaciona posição. Telefone 1 = sempre o Hot.
 
-**Total em manual_payments: R$ 553,50** (valor correto que ADMIN validou).
-**Total distribuído em `clients` (carteira): R$ 1.798,36** (12 parcelas de R$ 136,xx marcadas "pago").
-→ Discrepância enorme. O que o admin editou **foi** aplicado na tabela `manual_payments` (a cópia auditada), mas a distribuição em `clients` pegou carona com o acordo original (12 parcelas geradas na Carteira sem relação com o acordo atual).
+**UI:**
+- Cada `InfoItem` de telefone (1, 2, 3) ganha um ícone de chama 🔥 (`Flame` do lucide):
+  - Telefone 1 → chama **preenchida laranja** (indica que é o Hot atual, não clicável).
+  - Telefones 2 e 3 → chama **outline cinza** clicável com tooltip "Marcar como número quente".
+- Ao clicar, confirmação inline (toast com undo opcional) + atualização otimista.
 
-### Causa-raiz
+**Persistência:**
+- UPDATE em `clients` setando os 3 campos `phone`, `phone2`, `phone3` rotacionados.
+- Aplicar para **todos os registros do mesmo CPF + credor** (manter consistência da carteira agrupada).
+- Atualizar também `client_profiles` (SSOT canônica de contatos por CPF/tenant) — campo `phone` principal.
+- Registrar `client_event` tipo `phone_promoted_hot` com metadata `{ old_phone, new_phone, slot_origem }` para aparecer no Histórico.
 
-`PaymentConfirmationTab.handleEdit` (linha 60-84) atualiza SÓ a linha em `manual_payments`. Não há:
+**Botão WhatsApp:**
+- Mantém comportamento atual (`client.phone`) — sem mudança, pois Hot = phone.
 
-1. **Revalidação/ajuste da distribuição em `clients`**: se o pagamento já foi confirmado (`confirmed`) quando o admin edita, os valores em `clients.valor_pago` ficam congelados com o que `registerAgreementPayment` aplicou na confirmação original. Editar depois **não reexecuta** a distribuição.
-2. **Sem ajuste no `agreements.custom_installment_values`**: o valor da parcela no acordo continua com `135,95` (ou `144` na entrada), mesmo o admin tendo decidido que a baixa "vale" outro valor.
-3. **Sem checagem de completude**: se a edição muda o valor total pago e faz `sum >= proposed_total`, o acordo deveria virar `completed`. Se diminui, deveria reverter. Nada disso acontece.
+### Arquivos
 
-Além disso, no caso da Kemilly há um problema colateral: a carteira (`clients`) tem **12 parcelas de R$ 136,xx** (total ~R$ 1.798) que não correspondem ao acordo atual de R$ 415,90 — parecem ter sido geradas por um fluxo anterior e `registerAgreementPayment` distribuiu as baixas sequencialmente quitando-as todas. Isso é um bug paralelo de distribuição (dados legados/desalinhados), mas o sintoma que o admin vê — "editei e o acordo não atualizou" — é o bug #1.
+1. **`src/components/atendimento/ClientHeader.tsx`** (~40 linhas)
+   - Adicionar ícone `Flame` em cada renderer de telefone (`phone`, `phone2`, `phone3`).
+   - Handler `promoteToHot(slot: 'phone2' | 'phone3')` que chama o serviço.
+   - Invalidar query do cliente após sucesso.
 
-### Correção (cirúrgica)
+2. **`src/services/clientPhoneService.ts`** (novo, ~50 linhas)
+   - Função `promotePhoneToHot(cpf, credor, tenantId, slotOrigem)`:
+     - Lê registro atual.
+     - Calcula rotação dos 3 slots.
+     - UPDATE em `clients` (todos do CPF+credor) e `client_profiles`.
+     - INSERT em `client_events` (`phone_promoted_hot`).
 
-Tornar `handleEdit` transacional e consistente com o fluxo de confirmação:
+3. **`src/components/atendimento/ClientTimeline.tsx`** (~5 linhas)
+   - Adicionar label PT no `EVENT_TYPE_LABELS`: `phone_promoted_hot: "Número Quente Definido"`.
+   - Renderização do evento mostrando o telefone novo com ícone `Flame`.
 
-**Arquivo**: `src/components/acordos/PaymentConfirmationTab.tsx` (função `handleEdit`)
-
-Nova lógica:
-1. Buscar o payment atual antes do update para saber `oldAmount` e `status`.
-2. Aplicar o UPDATE em `manual_payments` (já faz).
-3. **Se status === "confirmed"** (edição pós-confirmação): calcular delta = `newAmount - oldAmount` e chamar `registerAgreementPayment(cpf, credor, delta)` para aplicar diferença em `clients` (positiva distribui mais, negativa precisa de reversão — ver item abaixo).
-4. **Se status === "pending_confirmation"**: só atualiza `manual_payments` (ainda não foi aplicado na carteira) — comportamento atual está correto.
-5. Recalcular `total pago consolidado` (soma de `manual_payments.confirmed` + `negociarie_cobrancas.pago`) e:
-   - Se `total >= proposed_total` → `agreements.status = "completed"` e `clients.status = "pago"`.
-   - Se `total < proposed_total` e acordo estava `completed` → reverter para `pending` (voltar ao estado em andamento).
-6. Registrar `client_event` (`manual_payment_edited`) com `old_amount` / `new_amount` para auditoria e aparecer no Histórico.
-
-**Delta negativo (redução de valor)**: criar helper `reverseAgreementPayment(cpf, credor, valor)` em `agreementService.ts` que percorre títulos `pago` do mais recente para o mais antigo, subtrai `valor_pago` e reverte `status` para `pendente` + limpa `data_quitacao` quando `valor_pago < valor_parcela`.
-
-### Escopo
-
-**Arquivos alterados:**
-- `src/components/acordos/PaymentConfirmationTab.tsx` — reescrita do `handleEdit` (~40 linhas).
-- `src/services/agreementService.ts` — adiciona `reverseAgreementPayment` (~30 linhas).
-
-### Fora do escopo (será tratado separadamente se você pedir)
-
-- Correção dos dados legados da Kemilly (12 parcelas R$ 136,xx na Carteira que não batem com o acordo atual de R$ 415,90) — isso exige análise caso a caso e migração de dados manual, não é um fix de código.
-- Schema, RLS, outras abas.
+### Fora do escopo
+- Schema (campos `phone`/`phone2`/`phone3` já existem).
+- RLS, edge functions, dropdown de seleção de número (não é mais necessário — Hot resolve).
+- Mexer no `useTenant`, `useModules` ou na lógica do botão WhatsApp.
 
 ### Sem alteração
-- Fluxo de criação/confirmação/rejeição de manual_payments (já funciona).
-- `AgreementInstallments` UI inline.
-- Qualquer edge function.
-
+- Botão WhatsApp em si (continua usando `client.phone`).
+- Layout do header, ordem dos campos no `fieldConfig`.
+- Outros lugares que leem telefone (régua de cobrança, campanhas) — vão pegar o Hot automaticamente porque sempre leem `phone` primeiro.
