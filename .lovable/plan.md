@@ -1,38 +1,49 @@
 
-## Modelo B — Accept-to-Read com mensagens borradas
+## Análise das duas issues
 
-### Comportamento desejado
-Quando a conversa estiver em status `waiting`, o operador pode clicar nela mas:
-- Mensagens ficam **borradas** (efeito blur) — vê que existem, mas não consegue ler
-- Sidebar de contato fica oculta/borrada
-- Input já fica desabilitado (já está hoje)
-- Banner central com botão "Aceitar Conversa" em destaque
-- `markConversationRead` **não** é chamado automaticamente (preserva contador)
+### Issue 1 — Filtro de Instâncias mostra todas, mesmo para operador
+**Local:** `WhatsAppChatLayout.tsx` linha 60 chama `fetchWhatsAppInstances(tenantId)` sem filtrar por operador. Resultado: o `<Select>` "Instâncias" do `ConversationList` lista todas as instâncias do tenant para qualquer usuário.
 
-Admins (super_admin/admin) terão exceção: visualizam normalmente para auditoria.
+**Solução:** Para usuários **não-admin**, restringir a lista às instâncias vinculadas em `operator_instances` (M2M já existente — ver memória `operator-instance-assignment`).
 
-### Mudanças
+```ts
+// pseudo
+if (isAdmin) loadAll()
+else loadAssignedTo(profile.id) // via operator_instances WHERE profile_id = me
+```
 
-**1. `ChatPanel.tsx`** — overlay de bloqueio sobre as mensagens
-- Detectar `isLocked = conversation.status === 'waiting' && !isAdmin`
-- Aplicar `filter: blur(8px)` + `pointer-events: none` no container das mensagens
-- Sobrepor card central com ícone de cadeado, texto "Aceite a conversa para visualizar o histórico" e botão grande "Aceitar Conversa"
-- Esconder/borrar a `AISuggestion` no estado bloqueado
+Admins (`role in ('admin','super_admin')`) continuam vendo todas.
 
-**2. `WhatsAppChatLayout.tsx`** — sidebar e leitura automática
-- Em `handleSelectConv`: se `conv.status === 'waiting'` e usuário não-admin, **não chamar** `markConversationRead`
-- Forçar `sidebarOpen = false` (ou renderizar sidebar borrada) quando `waiting + não-admin`
+**Bonus consistente:** quando o operador tem 0 instâncias vinculadas, mostrar mensagem amigável ("Solicite ao administrador a vinculação a uma instância"). E ao filtrar conversas server-side, já existe `instanceFilter` — vamos passar a lista de instance_ids permitidas para garantir que mesmo conversas órfãs não apareçam (defesa em profundidade).
 
-**3. Detecção de admin**
-- Usar `profile.role` (já disponível via `useAuth`) — `super_admin` e `admin` ignoram o lock
-- Operador comum (`agent`, `user`) vê o bloqueio
+### Issue 2 — Filtro "Operadores" não retorna nada
+**Causa raiz (confirmada em DB):** `conversations.assigned_to` armazena **`profiles.id`** (PK da tabela profiles), mas o dropdown de operadores no `ConversationList` usa **`profiles.user_id`** (auth UID) como `value`. A RPC `get_conversations_paginated` compara `v.assigned_to = _operator_filter` → IDs nunca batem → 0 resultados.
 
-### Fluxo de aceitação
-- Botão "Aceitar Conversa" no overlay → chama `onStatusChange('open')` (já existe)
-- Após mudança para `open`, blur some, sidebar reaparece, input habilita, `markConversationRead` é disparado
+Exemplo Y.BRASIL: 158 conversas têm `assigned_to` setado, mas todos com `profiles.id` (ex.: `7873f5e6...`). O dropdown envia `user_id` (`33a1585b...`). Sem match.
+
+**Solução:** padronizar o dropdown para usar `profiles.id` (mesmo valor que está em `assigned_to`).
+
+```ts
+// WhatsAppChatLayout.tsx (carregamento de operadores)
+.select("id, user_id, full_name")
+setOperators(data.map(p => ({ id: p.id, name: p.full_name }))) // usar p.id, não p.user_id
+```
+
+Nenhuma mudança de schema/RPC necessária. Só alinhamento de identificadores no frontend.
+
+### Mudanças propostas (apenas frontend)
+
+**`src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`**
+1. Trocar `setOperators(p.user_id → p.id)` para alinhar com `assigned_to`.
+2. Após `fetchWhatsAppInstances`, se o usuário **não for admin**, filtrar pelas instâncias presentes em `operator_instances` (`profile_id = profile.id`). Buscar essa lista via Supabase no mesmo `useEffect`.
+3. Se `instances.length === 0` para operador, exibir aviso (passa array vazio).
+
+**Sem alterações em:**
+- RPC `get_conversations_paginated` (continua funcionando — só estava recebendo o ID errado)
+- `ConversationList.tsx` (já consome `instances` e `operators` como props)
+- Backend / RLS / migrations
 
 ### Detalhes técnicos
-- Sem mudanças de schema/backend — puramente UI
-- Banner amarelo atual de "Conversa aguardando" será substituído pelo overlay central (mais visível)
-- Blur usando Tailwind `blur-md` + `select-none` para impedir cópia de texto
-- Acessibilidade: `aria-hidden` no conteúdo borrado, foco automático no botão "Aceitar"
+- `isAdmin` derivado de `profile?.role === 'admin'` ou `'super_admin'` (mesma checagem usada no ChatPanel para "Accept-to-Read").
+- Filtro de instâncias no operador: `supabase.from('operator_instances').select('instance_id').eq('profile_id', profile.id)` → intersecta com `fetchWhatsAppInstances`.
+- Operadores no dropdown: continuar restrito a `isAdmin` (já é).
