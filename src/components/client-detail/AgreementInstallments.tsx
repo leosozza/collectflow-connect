@@ -127,17 +127,40 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const hasEntrada = agreement.entrada_value > 0;
   const installments: any[] = [];
 
-  if (hasEntrada) {
+  // Collect all entrada* keys (entrada, entrada_2, entrada_3, ...) — excluding *_method
+  const entradaKeysFromCustom = Object.keys(customValues)
+    .filter(k => k.startsWith("entrada") && !k.endsWith("_method"))
+    .sort((a, b) => {
+      const numA = a === "entrada" ? 1 : parseInt(a.replace("entrada_", "")) || 1;
+      const numB = b === "entrada" ? 1 : parseInt(b.replace("entrada_", "")) || 1;
+      return numA - numB;
+    });
+  const entradaKeys: string[] = hasEntrada
+    ? (entradaKeysFromCustom.length > 0 ? entradaKeysFromCustom : ["entrada"])
+    : [];
+
+  entradaKeys.forEach((customKey, idx) => {
     const defaultDate = agreement.entrada_date
       ? new Date(agreement.entrada_date + "T00:00:00")
       : new Date(agreement.first_due_date + "T00:00:00");
-    const customKey = "entrada";
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
-    const value = customValues[customKey] ?? agreement.entrada_value;
-    const expectedKey = `${agreementId}:0`;
+    // Fallback: if only one entrada and no custom value, use entrada_value column
+    const value = customValues[customKey] ?? (entradaKeys.length === 1 ? agreement.entrada_value : 0);
+    // Cobranca lookup: first entrada uses :0 (legacy), additional use :entrada_N
+    const expectedKey = idx === 0 ? `${agreementId}:0` : `${agreementId}:${customKey}`;
     const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
-    installments.push({ number: 0, displayNumber: 1, dueDate, value, cobranca, isEntrada: true, customKey });
-  }
+    installments.push({
+      number: 0,
+      displayNumber: idx + 1,
+      dueDate,
+      value,
+      cobranca,
+      isEntrada: true,
+      entradaIndex: idx,
+      entradaCount: entradaKeys.length,
+      customKey,
+    });
+  });
 
   for (let i = 0; i < agreement.new_installments; i++) {
     const defaultDate = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
@@ -508,7 +531,9 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             return (
               <TableRow key={idx}>
                 <TableCell className="font-medium text-xs">
-                  {inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
+                  {inst.isEntrada
+                    ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
+                    : `${inst.displayNumber}/${totalInstallments}`}
                 </TableCell>
 
                 {/* Vencimento + pencil */}

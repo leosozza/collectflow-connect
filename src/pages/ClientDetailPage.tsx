@@ -87,6 +87,7 @@ const ClientDetailPage = () => {
   const [reopenId, setReopenId] = useState<string | null>(null);
   const [editingAgreement, setEditingAgreement] = useState<any | null>(null);
   const [editForm, setEditForm] = useState<Partial<AgreementFormData>>({});
+  const [editEntradas, setEditEntradas] = useState<Array<{ key: string; date: string; value: number }>>([]);
   const [editLoading, setEditLoading] = useState(false);
   const [reactivateAgreement, setReactivateAgreement] = useState<any | null>(null);
   const [selectedPagoIds, setSelectedPagoIds] = useState<string[]>([]);
@@ -306,13 +307,42 @@ const ClientDetailPage = () => {
 
   const handleEditOpen = (agreement: any) => {
     setEditingAgreement(agreement);
+
+    // Reconstruct entrada list from custom_installment_values (supports multi-entrada)
+    const cv: Record<string, any> = agreement.custom_installment_values || {};
+    const cd: Record<string, any> = agreement.custom_installment_dates || {};
+    const entradaKeys = Object.keys(cv)
+      .filter(k => k.startsWith("entrada") && !k.endsWith("_method"))
+      .sort((a, b) => {
+        const numA = a === "entrada" ? 1 : parseInt(a.replace("entrada_", "")) || 1;
+        const numB = b === "entrada" ? 1 : parseInt(b.replace("entrada_", "")) || 1;
+        return numA - numB;
+      });
+
+    let entradas: Array<{ key: string; date: string; value: number }> = [];
+    if (entradaKeys.length > 0) {
+      entradas = entradaKeys.map(k => ({
+        key: k,
+        date: cd[k] || agreement.entrada_date || "",
+        value: Number(cv[k] || 0),
+      }));
+    } else if ((agreement.entrada_value || 0) > 0) {
+      entradas = [{
+        key: "entrada",
+        date: agreement.entrada_date || "",
+        value: Number(agreement.entrada_value || 0),
+      }];
+    }
+    setEditEntradas(entradas);
+
+    const totalEntrada = entradas.reduce((s, e) => s + Number(e.value || 0), 0);
     setEditForm({
       proposed_total: agreement.proposed_total,
       new_installments: agreement.new_installments,
       new_installment_value: agreement.new_installment_value,
       first_due_date: agreement.first_due_date,
-      entrada_value: agreement.entrada_value || 0,
-      entrada_date: agreement.entrada_date || "",
+      entrada_value: totalEntrada,
+      entrada_date: entradas[0]?.date || agreement.entrada_date || "",
       notes: agreement.notes || "",
     });
   };
@@ -322,25 +352,62 @@ const ClientDetailPage = () => {
     return installments > 0 ? Math.round((remaining / installments) * 100) / 100 : remaining;
   };
 
+  const sumEntradas = (list: Array<{ value: number }>) =>
+    list.reduce((s, e) => s + Number(e.value || 0), 0);
+
   const handleEditProposed = (proposed: number) => {
     const installments = editForm.new_installments || 1;
-    const entrada = (editForm as any).entrada_value || 0;
+    const entrada = sumEntradas(editEntradas);
     setEditForm({ ...editForm, proposed_total: proposed, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
   };
 
   // handleEditInstallments removed — installment count cannot be changed on existing agreements
 
-  const handleEditEntrada = (entrada: number) => {
+  const updateEntradaAt = (idx: number, patch: Partial<{ date: string; value: number }>) => {
+    const next = editEntradas.map((e, i) => i === idx ? { ...e, ...patch } : e);
+    setEditEntradas(next);
+    const totalEntrada = sumEntradas(next);
     const proposed = editForm.proposed_total || 0;
     const installments = editForm.new_installments || 1;
-    setEditForm({ ...editForm, entrada_value: entrada, new_installment_value: recalcInstallmentValue(proposed, entrada, installments) });
+    setEditForm({
+      ...editForm,
+      entrada_value: totalEntrada,
+      entrada_date: next[0]?.date || editForm.entrada_date,
+      new_installment_value: recalcInstallmentValue(proposed, totalEntrada, installments),
+    });
   };
 
   const handleEditSubmit = async () => {
     if (!editingAgreement) return;
     setEditLoading(true);
     try {
-      await updateAgreement(editingAgreement.id, editForm);
+      // Rebuild custom_installment_values / dates preserving non-entrada keys + _method keys
+      const liveAgreement = agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement;
+      const baseValues: Record<string, any> = { ...(liveAgreement.custom_installment_values || {}) };
+      const baseDates: Record<string, any> = { ...(liveAgreement.custom_installment_dates || {}) };
+
+      // Strip existing entrada* (non-method) keys, will be re-added from editEntradas
+      Object.keys(baseValues).forEach(k => {
+        if (k.startsWith("entrada") && !k.endsWith("_method")) delete baseValues[k];
+      });
+      Object.keys(baseDates).forEach(k => {
+        if (k.startsWith("entrada") && !k.endsWith("_method")) delete baseDates[k];
+      });
+
+      editEntradas.forEach(e => {
+        baseValues[e.key] = Number(e.value || 0);
+        if (e.date) baseDates[e.key] = e.date;
+      });
+
+      const payload: Partial<AgreementFormData> = {
+        ...editForm,
+        entrada_value: sumEntradas(editEntradas),
+        entrada_date: editEntradas[0]?.date || editForm.entrada_date,
+        custom_installment_values: baseValues,
+        custom_installment_dates: baseDates,
+      };
+
+      await updateAgreement(editingAgreement.id, payload);
       toast.success("Acordo atualizado com sucesso.");
       setEditingAgreement(null);
       refetchAgreements();
@@ -754,17 +821,43 @@ const ClientDetailPage = () => {
               </div>
 
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Entrada</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs">Valor da Entrada</Label>
-                    <CurrencyInput value={(editForm as any).entrada_value || 0} onValueChange={handleEditEntrada} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Data da Entrada</Label>
-                    <Input type="date" value={(editForm as any).entrada_date || ""} onChange={e => setEditForm({ ...editForm, entrada_date: e.target.value })} />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">
+                    {editEntradas.length > 1 ? `Entradas (${editEntradas.length})` : "Entrada"}
+                  </h4>
+                  <span className="text-xs text-muted-foreground">
+                    Total: R$ {sumEntradas(editEntradas).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
+                {editEntradas.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground text-center">
+                    Acordo sem entrada.
+                  </div>
+                ) : (
+                  editEntradas.map((ent, idx) => (
+                    <div key={ent.key} className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs">
+                          {editEntradas.length > 1 ? `Valor da Entrada ${idx + 1}` : "Valor da Entrada"}
+                        </Label>
+                        <CurrencyInput
+                          value={ent.value}
+                          onValueChange={(v) => updateEntradaAt(idx, { value: v })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">
+                          {editEntradas.length > 1 ? `Data da Entrada ${idx + 1}` : "Data da Entrada"}
+                        </Label>
+                        <Input
+                          type="date"
+                          value={ent.date || ""}
+                          onChange={(e) => updateEntradaAt(idx, { date: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="space-y-3">

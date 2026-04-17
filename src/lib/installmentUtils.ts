@@ -77,6 +77,22 @@ export interface AgreementSummary {
   label: string;
 }
 
+/**
+ * Returns the ordered list of entrada keys present in custom_installment_values.
+ * Filters out auxiliary keys like entrada_method / entrada_2_method.
+ */
+export function getEntradaKeys(customValues: Record<string, any> | null | undefined): string[] {
+  const cv = customValues || {};
+  const keys = Object.keys(cv).filter(
+    k => k.startsWith("entrada") && !k.endsWith("_method")
+  );
+  return keys.sort((a, b) => {
+    const numA = a === "entrada" ? 1 : parseInt(a.replace("entrada_", "")) || 1;
+    const numB = b === "entrada" ? 1 : parseInt(b.replace("entrada_", "")) || 1;
+    return numA - numB;
+  });
+}
+
 export function getEffectiveAgreementSummary(agreement: {
   entrada_value?: number | null;
   new_installments: number;
@@ -86,9 +102,17 @@ export function getEffectiveAgreementSummary(agreement: {
   const customValues: Record<string, number> = (agreement.custom_installment_values as any) || {};
   const hasEntrada = (agreement.entrada_value ?? 0) > 0;
 
-  const effectiveEntrada = hasEntrada
-    ? (customValues["entrada"] ?? agreement.entrada_value ?? 0)
-    : 0;
+  // Sum across all entrada* keys (entrada, entrada_2, entrada_3, …)
+  const entradaKeys = getEntradaKeys(customValues);
+  let effectiveEntrada = 0;
+  if (hasEntrada) {
+    if (entradaKeys.length > 0) {
+      effectiveEntrada = entradaKeys.reduce((sum, k) => sum + Number(customValues[k] || 0), 0);
+    } else {
+      effectiveEntrada = agreement.entrada_value ?? 0;
+    }
+  }
+  const entradaCount = hasEntrada ? Math.max(entradaKeys.length, 1) : 0;
 
   const effectiveInstallmentValues: number[] = [];
   for (let i = 0; i < agreement.new_installments; i++) {
@@ -106,11 +130,14 @@ export function getEffectiveAgreementSummary(agreement: {
 
   let label: string;
   const fmt = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  const entradaLabel = entradaCount > 1
+    ? `Entradas R$ ${fmt(effectiveEntrada)} (${entradaCount}x)`
+    : `Entrada R$ ${fmt(effectiveEntrada)}`;
 
   if (hasEntrada && allSame && effectiveInstallmentValues.length > 0) {
-    label = `Entrada R$ ${fmt(effectiveEntrada)} + ${agreement.new_installments}x R$ ${fmt(effectiveInstallmentValues[0])}`;
+    label = `${entradaLabel} + ${agreement.new_installments}x R$ ${fmt(effectiveInstallmentValues[0])}`;
   } else if (hasEntrada) {
-    label = `Entrada R$ ${fmt(effectiveEntrada)} + ${agreement.new_installments} parcelas c/ valores personalizados`;
+    label = `${entradaLabel} + ${agreement.new_installments} parcelas c/ valores personalizados`;
   } else if (allSame && effectiveInstallmentValues.length > 0) {
     label = `${agreement.new_installments}x R$ ${fmt(effectiveInstallmentValues[0])}`;
   } else {

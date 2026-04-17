@@ -382,7 +382,20 @@ export const updateAgreement = async (
   try {
     // Protect: never allow changing installment count on existing agreements
     const { new_installments, ...safeData } = data as any;
-    
+
+    // Defensive normalization: when caller sends custom_installment_values containing
+    // entrada* keys, the entrada_value column must reflect the SUM to avoid drift.
+    if (safeData.custom_installment_values && typeof safeData.custom_installment_values === "object") {
+      const cv = safeData.custom_installment_values as Record<string, any>;
+      const entradaKeys = Object.keys(cv).filter(
+        k => k.startsWith("entrada") && !k.endsWith("_method")
+      );
+      if (entradaKeys.length > 0) {
+        const sum = entradaKeys.reduce((s, k) => s + Number(cv[k] || 0), 0);
+        safeData.entrada_value = sum;
+      }
+    }
+
     const { error } = await supabase
       .from("agreements")
       .update(safeData as any)
