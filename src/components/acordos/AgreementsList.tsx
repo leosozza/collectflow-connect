@@ -69,7 +69,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                 Parcela
               </TableHead>
             )}
-            <TableHead>Parcelas Pagas</TableHead>
             <TableHead>Status da Parcela</TableHead>
             <TableHead>Status do Acordo</TableHead>
           </TableRow>
