@@ -293,28 +293,17 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
                   R$ {saldoDevedor.toFixed(2)}
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">Status:</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {statusLabels[linkedClient.status] || linkedClient.status}
+              {statusCobranca && (
+                <div className="flex items-center gap-1 pt-0.5">
+                  <span className="text-[10px] text-muted-foreground">Status Cliente:</span>
+                  <Badge
+                    className="text-[10px]"
+                    style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
+                  >
+                    {statusCobranca.nome}
                   </Badge>
                 </div>
-                {statusCobranca && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-muted-foreground">Cliente:</span>
-                    <Badge
-                      className="text-[10px]"
-                      style={{ backgroundColor: statusCobranca.cor, color: "#fff", border: "none" }}
-                    >
-                      {statusCobranca.nome}
-                    </Badge>
-                  </div>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground">
-                Parcela {linkedClient.numero_parcela}/{linkedClient.total_parcelas} · R$ {linkedClient.valor_parcela.toFixed(2)}
-              </div>
+              )}
               <Button
                 asChild
                 variant="outline"
