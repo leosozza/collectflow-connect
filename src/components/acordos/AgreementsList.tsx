@@ -25,7 +25,7 @@ const statusLabels: Record<string, string> = {
   completed: "Quitado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
-  overdue: "Vencido",
+  overdue: "Acordo Atrasado",
 };
 
 const installmentClassLabels: Record<string, string> = {
