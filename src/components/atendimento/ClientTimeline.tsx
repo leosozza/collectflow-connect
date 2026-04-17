@@ -509,12 +509,17 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta.duration_seconds) detail = `Duração: ${formatDuration(meta.duration_seconds)}`;
         if (meta.campaign_name) detail = detail ? `${detail} — ${meta.campaign_name}` : meta.campaign_name;
       } else if (eventType === "message_sent") {
-        detail = `Canal: ${meta.channel || "whatsapp"}`;
+        const ch = meta.channel || "whatsapp";
+        detail = `Canal: ${CHANNEL_LABELS[ch] || ch}`;
       } else if (eventType === "field_update") {
-        const source = SOURCE_LABELS[e.event_value] || e.event_value || "manual";
+        const srcKey = (e.event_value || "manual") as string;
+        const source = SOURCE_LABELS[srcKey] || toTitleCase(srcKey);
         detail = `Fonte: ${source}`;
       } else if (eventType === "whatsapp_inbound" || eventType === "whatsapp_outbound") {
         detail = e.event_value || "";
+      } else if (eventType === "manual_payment_requested" || eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected") {
+        const pm = meta.payment_method;
+        if (pm) detail = `Forma: ${PAYMENT_METHOD_LABELS[pm] || toTitleCase(pm)}`;
       }
 
       items.push({
