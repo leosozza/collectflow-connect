@@ -8,6 +8,13 @@ import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
 import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote } from "lucide-react";
 
+type ActorKind = "user" | "admin" | "workflow" | "ai" | "system" | "portal" | "gateway" | "client" | "unknown";
+
+interface Actor {
+  label: string;
+  kind: ActorKind;
+}
+
 interface TimelineItem {
   id: string;
   date: string;
@@ -15,6 +22,7 @@ interface TimelineItem {
   title: string;
   detail?: string;
   operator?: string;
+  actor?: Actor;
   recordingUrl?: string;
   durationSeconds?: number;
 }
