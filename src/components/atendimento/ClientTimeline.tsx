@@ -376,7 +376,10 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta?.created_by) userIds.add(meta.created_by);
         if (meta?.updated_by) userIds.add(meta.updated_by);
         if (meta?.operator_id) userIds.add(meta.operator_id);
-        if (meta?.agent_name) return; // already has name
+        if (meta?.requested_by) userIds.add(meta.requested_by);
+        if (meta?.reviewed_by) userIds.add(meta.reviewed_by);
+        if (meta?.reviewer_id) userIds.add(meta.reviewer_id);
+        if (meta?.confirmed_by) userIds.add(meta.confirmed_by);
       });
       // Also from props
       dispositions.forEach((d) => { if (d.operator_id) userIds.add(d.operator_id); });
@@ -400,6 +403,28 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       return map;
     },
     enabled: clientEvents.length > 0 || dispositions.length > 0,
+  });
+
+  // Resolve workflow names for events that reference workflow_id
+  const { data: workflowMap = {} } = useQuery({
+    queryKey: ["timeline-workflows", clientCpf, clientEvents.length],
+    queryFn: async () => {
+      const wfIds = new Set<string>();
+      clientEvents.forEach((e: any) => {
+        const wid = (e.metadata as any)?.workflow_id;
+        if (wid) wfIds.add(wid);
+      });
+      const ids = [...wfIds].filter(Boolean);
+      if (ids.length === 0) return {};
+      const { data } = await supabase
+        .from("workflow_flows" as any)
+        .select("id, name")
+        .in("id", ids);
+      const map: Record<string, string> = {};
+      ((data as any[]) || []).forEach((w: any) => { if (w.id && w.name) map[w.id] = w.name; });
+      return map;
+    },
+    enabled: clientEvents.length > 0,
   });
 
   // Build unified items
