@@ -25,7 +25,13 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
   const entradaKeys: string[] = [];
   if ((agreement.entrada_value ?? 0) > 0) {
     // Check for multiple entradas in custom values
-    const customEntradaKeys = Object.keys(customValues).filter(k => k.startsWith("entrada")).sort((a, b) => {
+    // Match ONLY canonical entrada keys: "entrada" or "entrada_<number>".
+    // Excludes meta keys like "entrada_method", "entrada_pix", etc.
+    const customEntradaKeys = Object.keys(customValues).filter(k => {
+      if (k === "entrada") return true;
+      const m = k.match(/^entrada_(\d+)$/);
+      return m !== null;
+    }).sort((a, b) => {
       const numA = a === "entrada" ? 1 : parseInt(a.replace("entrada_", ""));
       const numB = b === "entrada" ? 1 : parseInt(b.replace("entrada_", ""));
       return numA - numB;
