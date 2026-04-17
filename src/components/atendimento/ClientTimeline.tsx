@@ -147,6 +147,18 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   portal_agreement_created: <Globe className="w-3.5 h-3.5 text-emerald-500" />,
   ai_whatsapp_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
   ai_voice_negotiation_started: <Bot className="w-3.5 h-3.5 text-purple-500" />,
+  manual_payment_requested: <CreditCard className="w-3.5 h-3.5 text-yellow-500" />,
+  manual_payment_confirmed: <CreditCard className="w-3.5 h-3.5 text-emerald-500" />,
+  manual_payment_rejected: <CreditCard className="w-3.5 h-3.5 text-red-500" />,
+  payment_confirmed: <CreditCard className="w-3.5 h-3.5 text-emerald-500" />,
+  agreement_completed: <Handshake className="w-3.5 h-3.5 text-emerald-500" />,
+  agreement_status_completed: <Handshake className="w-3.5 h-3.5 text-emerald-500" />,
+  debtor_profile_changed: <Tags className="w-3.5 h-3.5 text-pink-500" />,
+  call_hangup: <Phone className="w-3.5 h-3.5 text-blue-500" />,
+  document_previewed: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
+  document_generated: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
+  conversation_auto_closed: <MessageSquare className="w-3.5 h-3.5 text-violet-500" />,
+  conversation_transferred: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {
