@@ -54,10 +54,57 @@ const InfoItem = ({ label, value, icon: Icon, forceRender, action }: { label: st
 
 const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, diasAtraso, onNegotiate, onHangup, hangingUp, hasActiveCall }: ClientHeaderProps) => {
   const [expanded, setExpanded] = useState(false);
+  const [promotingSlot, setPromotingSlot] = useState<PhoneSlot | null>(null);
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const navigate = useNavigate();
   const { isModuleEnabled } = useModules();
+  const queryClient = useQueryClient();
+
+  const handlePromoteHot = async (slot: PhoneSlot) => {
+    if (slot === "phone" || !tenantId || !client?.cpf || !client?.credor) return;
+    setPromotingSlot(slot);
+    try {
+      const { newHot } = await promotePhoneToHot({
+        cpf: client.cpf,
+        credor: client.credor,
+        tenantId,
+        slotOrigem: slot,
+      });
+      toast({
+        title: "Número quente atualizado",
+        description: newHot ? `${formatPhone(newHot)} agora é o Telefone 1.` : undefined,
+      });
+      await queryClient.invalidateQueries();
+    } catch (e: any) {
+      toast({ title: "Erro ao atualizar número quente", description: e?.message, variant: "destructive" });
+    } finally {
+      setPromotingSlot(null);
+    }
+  };
+
+  const HotBadge = ({ slot }: { slot: PhoneSlot }) => {
+    if (slot === "phone") {
+      return (
+        <span title="Número quente (Hot)" className="inline-flex">
+          <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500/30" />
+        </span>
+      );
+    }
+    const targetValue = slot === "phone2" ? client.phone2 : client.phone3;
+    if (!targetValue) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => handlePromoteHot(slot)}
+        disabled={promotingSlot !== null}
+        title="Marcar como número quente"
+        className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted transition-colors disabled:opacity-40"
+      >
+        <Flame className={`w-3.5 h-3.5 ${promotingSlot === slot ? "text-orange-500 animate-pulse" : "text-muted-foreground hover:text-orange-500"}`} />
+      </button>
+    );
+  };
 
   const openWhatsApp = () => {
     if (!client.phone) {
