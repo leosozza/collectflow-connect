@@ -1,75 +1,61 @@
 
 
-## Diagnóstico — Entrada confirmada continua "vencida"
+## Diagnóstico — Aba "Pagos" não mostra acordos com baixas confirmadas
 
-### Caso confirmado em produção
-Acordo `8702f234` (Luis Fabiano):
-- 2 entradas: `entrada` R$ 180 (vence 01/04) e `entrada_2` R$ 180 (vence 01/05)
-- `manual_payment` R$ 190, `installment_number = 0`, `status = confirmed`, reviewed_at 16/04
+### Como reproduzir
+Operador (perfil ≠ admin) entra em `/acordos`, troca para aba "Pagos". Vê lista vazia ou muito menor que o esperado, mesmo havendo dezenas de `manual_payments` confirmadas pelo admin (confirmei no banco: 20+ acordos do operador `68e1d831…` com `manual_payments.status='confirmed'` mas `agreements.status` ainda `pending`/`overdue`).
 
-**Sintoma:** após o admin confirmar, a 1ª entrada continua aparecendo como "vencida" na tabela de parcelas.
+### Causa raiz
 
-### Causa raiz — `installment_number` ambíguo para múltiplas entradas
+A lógica de filtragem da aba "Pagos" em `AcordosPage.tsx` (linhas 246–248) tem **dois caminhos divergentes**:
 
-Quando há mais de uma entrada, **todas** são gravadas com `installment_number = 0` (tanto no `ManualPaymentDialog` quanto na UI de edição em `PaymentConfirmationTab`). A UI também não distingue: ao baixar a Entrada 2, o sistema cria `installment_number = 0`. Resultado:
-
-1. **Conflito de identidade:** baixa de Entrada 1 e Entrada 2 ficam indistinguíveis no banco — ambas `= 0`.
-2. **Classificação errada na tabela:** `AgreementInstallments` (linha 191) e `agreementInstallmentClassifier.classifyInstallment` (linha 117) filtram `mp.installment_number === inst.number`. Como `inst.number` é sempre `0` para qualquer entrada, **todos os manual_payments confirmados de qualquer entrada são somados na primeira entrada** — e nada é atribuído à Entrada 2.
-3. **No caso real:** R$ 190 ≥ R$ 180 → Entrada 1 deveria virar "pago". Por que continua "vencido"?
-   - Em `AgreementInstallments` linha 196 a lógica é: `cobranca?.status || (isPaidManually ? "pago" : ...)`. Repare que **só o waterfall `agreementPaymentsTotal`** (linha 178) define `isPaidManually`. Esse waterfall vem de `clients.valor_total_pago` (não inclui `manual_payments`!). Como não há cobrança Negociarie paga e a soma do waterfall não cobre, cai em "vencido" mesmo com `manual_payments.confirmed`.
-   - Ou seja: `AgreementInstallments` **ignora completamente os manual_payments confirmados** ao decidir "pago vs vencido". Só usa para detectar `pending_confirmation`.
-
-### Bugs identificados
-
-**Bug A — `AgreementInstallments` ignora manual_payments confirmados**
-A classificação "pago" depende exclusivamente de `cobranca.status` ou do waterfall `clients.valor_total_pago`. Manual_payments confirmados não entram nessa decisão. Por isso a entrada continua "vencida" depois do aceite.
-
-**Bug B — `installment_number` colide para múltiplas entradas**
-Tanto a criação (`ManualPaymentDialog` recebe `inst.number = 0` para Entrada 1, 2, 3) quanto a confirmação tratam todas as entradas como a mesma parcela. Não dá para baixar individualmente Entrada 1 vs Entrada 2.
-
-**Bug C — Edição de manual_payment não revalida cobertura**
-`PaymentConfirmationTab.handleEdit` permite alterar `amount_paid` antes do aceite, mas não há lógica para reconciliar valores parciais (R$ 190 pagos numa entrada de R$ 180 — sobra R$ 10 que não é tratado).
-
-**Bug D — Label do PaymentConfirmationTab não distingue entradas**
-`getInstallmentLabel` retorna apenas "Entrada" para `installment_number === 0`. O admin não vê se está confirmando Entrada 1 ou Entrada 2.
-
-### Correções (frontend + 1 migration leve)
-
-**1. Migration: estender `manual_payments` com `installment_key TEXT`**
-Adicionar coluna nullable `installment_key` (ex: `entrada`, `entrada_2`, `1`, `2`). Mantém `installment_number` para retrocompat (sempre `0` para entradas, `N` para parcelas), mas a chave canônica passa a ser `installment_key`. Backfill: `installment_key = 'entrada'` quando `installment_number = 0` e há só 1 entrada; senão `entrada_N`.
-
-**2. `ManualPaymentDialog`** — aceitar `installmentKey: string` opcional além de `installmentNumber`. Persistir ambos.
-
-**3. `AgreementInstallments.tsx` (linhas 142–198)** — passar `customKey` da entrada (ex: `entrada_2`) ao abrir o dialog; ao filtrar manual_payments para classificação, casar primeiro por `installment_key === inst.customKey`, fallback para `installment_number === inst.number` (legado).
-
-**4. `AgreementInstallments` linha 196 — bug A** — incluir `manual_payments confirmed` na decisão "pago":
 ```ts
-const confirmedManualForThis = manualPayments
-  .filter(mp => (mp.installment_key === inst.customKey) || (!mp.installment_key && mp.installment_number === inst.number))
-  .filter(mp => mp.status === "confirmed")
-  .reduce((s, mp) => s + Number(mp.amount_paid || 0), 0);
-const isPaidByManual = confirmedManualForThis >= inst.value - 0.01;
-const status = pendingManual ? "pending_confirmation"
-  : inst.cobranca?.status === "pago" ? "pago"
-  : isPaidByManual ? "pago"
-  : isPaidManually ? "pago"
-  : isOverdue ? "vencido" : "pendente";
+case "approved":
+  if (isMonthSelected && cls !== undefined) return cls === "pago";  // por parcela
+  return a.status === "approved";                                    // por acordo inteiro
 ```
 
-**5. `agreementInstallmentClassifier.classifyInstallment`** — mesma lógica de matching por `installment_key` com fallback.
+**Problema 1 — Modo "Todos os Meses" / filtro por intervalo de datas**
+Quando o usuário escolhe "Todos os Meses" (ou aplica `dateFrom`/`dateTo`), `isMonthSelected = false` e o filtro cai no `a.status === "approved"`. Esse status só é setado quando o **acordo inteiro** está quitado (todas as parcelas pagas). Acordos de 12 parcelas com 1–11 baixas confirmadas continuam `pending`/`overdue` — **nunca aparecem em "Pagos"**.
 
-**6. `PaymentConfirmationTab.getInstallmentLabel`** — quando `installment_key` começa com `entrada`, mostrar "Entrada 1", "Entrada 2", etc., usando o sufixo (ou índice baseado em `entradaCount` do acordo).
+**Problema 2 — Modo mês selecionado**
+A classificação por mês usa "pior status entre as parcelas do mês" (linhas 198–203): `pending_confirmation > vencido > vigente > pago`. Ou seja, basta UMA parcela do mês estar vencida/vigente para o acordo cair em "Vencidos"/"Vigentes" — mesmo que outras parcelas do mesmo mês estejam pagas. Resultado: "Pagos" só lista acordos onde **todas** as parcelas do mês estão pagas.
 
-**7. AcordosPage `cobrancas`/`manualPayments` query** — incluir `installment_key` no `select`.
+**Problema 3 — Card de stats "Pagos" usa a mesma regra estreita**
+`stats.paid` (linha 274/280) também conta só `cls === "pago"` (todas parcelas do mês) ou `a.status === "approved"` (todas parcelas do acordo). Operador olha o número e acha que "nada foi pago", mas há dezenas de parcelas pagas.
 
-**8. Edição (PaymentConfirmationTab.handleEdit)** — manter como está; apenas garantir que se o admin alterar o valor para algo que cubra a parcela, a classificação posterior reconheça (já resolvido por #4).
+**Problema 4 — Lista mostra só status do acordo, não das parcelas**
+`AgreementsList` exibe apenas `Badge` do `agreement.status`, sem mostrar quantas parcelas estão pagas. O operador perde visibilidade de "X de Y parcelas baixadas".
 
-### Resultado esperado
-- Confirmar a baixa de R$ 190 da Entrada 1 (Luis Fabiano) → linha vira "pago" imediatamente.
-- Operador consegue baixar Entrada 1 e Entrada 2 separadamente (cada uma com seu `installment_key`).
-- Aba "Confirmação de Pagamento" mostra "Entrada 1 / Entrada 2" no rótulo.
-- Acordos antigos (1 entrada, sem `installment_key`) continuam funcionando via fallback por `installment_number`.
+### Correção (sem migration, só frontend)
+
+**1. Redefinir o que significa "Pagos" na aba** — passar a incluir acordos com **pelo menos uma parcela paga** no contexto selecionado:
+
+- **Modo mês selecionado:** acordo entra em "Pagos" se **alguma** parcela do mês tem `cls === "pago"` (em vez de exigir todas). Mantém também aparecer em "Vencidos"/"Vigentes" se houver outras parcelas — operador vê o acordo nas duas abas pelas duas óticas. Alternativa: criar atributo composto `_hasPaidInstallment` separado de `_installmentClass`.
+- **Modo "Todos os Meses" / range de datas:** acordo entra em "Pagos" se houver **qualquer** parcela paga (manual_payment confirmed OU cobrança Negociarie paga) no escopo, OU se `a.status === 'approved'`. Implementação: pré-computar um Set `agreementsWithPaidInstallments` no useMemo das classificações, varrendo todas as parcelas do schedule.
+
+**2. Ajustar `stats.paid`** para refletir a mesma lógica nova (acordos com ≥1 parcela paga).
+
+**3. Enriquecer `AgreementsList`** com coluna "Parcelas pagas" (`X / Y`) calculada a partir de `cobrancas + manualPayments` confirmados. Dá visibilidade imediata sem precisar abrir o cliente.
+
+**4. (Opcional, mas recomendado) Subdividir "Pagos" em duas leituras**:
+   - "Quitados" (acordo inteiro = `a.status === 'approved'`)
+   - "Com baixas" (≥1 parcela paga, mas acordo não quitado)
+   Renderizar como sub-tabs ou badge auxiliar. Decisão: começar simples — uma só aba "Pagos" com a regra inclusiva + coluna "Parcelas pagas" mostrando o detalhe.
+
+**5. Bug colateral (`AgreementsList` ref warning no console)** — `Badge` recebe `ref` implícito da `TableCell`. Envolver em `<span>` ou usar `forwardRef`. Correção trivial junto.
+
+### Arquivos a modificar
+- `src/pages/AcordosPage.tsx` — useMemo de `classifiedAgreements` (anotar `_paidInstallmentsCount`/`_totalInstallmentsCount`), `filteredAgreements` (regra "Pagos" inclusiva), `stats`.
+- `src/components/acordos/AgreementsList.tsx` — nova coluna "Parcelas Pagas" + fix do ref warning.
+- `src/lib/agreementInstallmentClassifier.ts` — nova helper `countPaidInstallments(agreement, cobrancas, manualPayments)` que retorna `{ paid, total }`.
 
 ### Sem alterações em
-- RLS policies, `registerAgreementPayment`, lógica de quitação total do acordo (linha 248 do service).
+- Schema, RLS, `manual_payments`, `agreementService`. Toda a correção é de leitura/UI.
+
+### Resultado esperado
+- Operador acessa "Pagos" com qualquer filtro (mês, ano, range, "todos") e vê todos os acordos com baixas confirmadas pelo admin.
+- Coluna "Parcelas Pagas" mostra "3 / 12" — clareza imediata de quanto já foi quitado.
+- Card "Pagos" reflete acordos com ao menos uma parcela paga (não só os 100% quitados).
+- Acordos 100% quitados continuam aparecendo (não há regressão).
 
