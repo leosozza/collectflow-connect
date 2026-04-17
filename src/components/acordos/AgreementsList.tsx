@@ -15,7 +15,7 @@ const statusColors: Record<string, string> = {
   completed: "bg-green-100 text-green-800",
   rejected: "bg-red-100 text-red-800",
   cancelled: "bg-red-100 text-red-800",
-  overdue: "bg-amber-100 text-amber-800",
+  overdue: "bg-red-100 text-red-800",
 };
 
 const statusLabels: Record<string, string> = {
@@ -25,7 +25,7 @@ const statusLabels: Record<string, string> = {
   completed: "Quitado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",
-  overdue: "Vencido",
+  overdue: "Acordo Atrasado",
 };
 
 const installmentClassLabels: Record<string, string> = {
