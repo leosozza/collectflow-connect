@@ -1,51 +1,38 @@
 
-## Análise
+## Modelo B — Accept-to-Read com mensagens borradas
 
-O usuário tem 3 status de conversa: **ABERTA**, **AGUARDANDO**, **FECHADA**. Quer entender o que aconteceu com conversas que aparentemente "fecharam ontem" e garantir que apareçam corretamente na aba "FECHADA".
+### Comportamento desejado
+Quando a conversa estiver em status `waiting`, o operador pode clicar nela mas:
+- Mensagens ficam **borradas** (efeito blur) — vê que existem, mas não consegue ler
+- Sidebar de contato fica oculta/borrada
+- Input já fica desabilitado (já está hoje)
+- Banner central com botão "Aceitar Conversa" em destaque
+- `markConversationRead` **não** é chamado automaticamente (preserva contador)
 
-Pelo diagnóstico anterior:
-- O autoclose runner não está agendado via cron, então não fechou nada automaticamente.
-- 0 conversas com `status = 'closed'` nos últimos 3 dias para o tenant Y.BRASIL.
+Admins (super_admin/admin) terão exceção: visualizam normalmente para auditoria.
 
-Preciso investigar mais a fundo:
-1. Quantas conversas existem em cada status hoje no tenant
-2. Conversas com `last_interaction_at` > 48h que estão como `open`/`waiting` (deveriam estar fechadas pela regra)
-3. Verificar se houve fechamentos via UI (sem registro de auto_close)
-4. Confirmar se o filtro de "Fechadas" na inbox está funcionando
+### Mudanças
 
-## Plano
+**1. `ChatPanel.tsx`** — overlay de bloqueio sobre as mensagens
+- Detectar `isLocked = conversation.status === 'waiting' && !isAdmin`
+- Aplicar `filter: blur(8px)` + `pointer-events: none` no container das mensagens
+- Sobrepor card central com ícone de cadeado, texto "Aceite a conversa para visualizar o histórico" e botão grande "Aceitar Conversa"
+- Esconder/borrar a `AISuggestion` no estado bloqueado
 
-### Passo 1 — Diagnóstico completo (read-only SQL)
-Rodar queries no banco para responder:
-- Total de conversas por status no tenant Y.BRASIL
-- Conversas elegíveis ao autoclose (open/waiting + inatividade > 48h) — essas deveriam ter sido fechadas
-- Histórico de mudanças de status nas últimas 48h (via `client_events` ou audit)
-- Verificar se a inbox está exibindo corretamente as conversas com `status = 'closed'`
+**2. `WhatsAppChatLayout.tsx`** — sidebar e leitura automática
+- Em `handleSelectConv`: se `conv.status === 'waiting'` e usuário não-admin, **não chamar** `markConversationRead`
+- Forçar `sidebarOpen = false` (ou renderizar sidebar borrada) quando `waiting + não-admin`
 
-### Passo 2 — Executar o fechamento retroativo
-Como o cron nunca rodou, as conversas inativas há mais de 48h continuam abertas. Vou:
-- Invocar manualmente o edge function `whatsapp-autoclose-runner` UMA VEZ para fechar o backlog
-- Isso usa exatamente a regra configurada (48h, status open/waiting, oficial+não-oficial)
-- As conversas fechadas receberão tabulação `auto_close` e evento `conversation_auto_closed`
+**3. Detecção de admin**
+- Usar `profile.role` (já disponível via `useAuth`) — `super_admin` e `admin` ignoram o lock
+- Operador comum (`agent`, `user`) vê o bloqueio
 
-### Passo 3 — Agendar o cron para que isso não se repita
-Criar job `pg_cron` para executar o runner a cada 1 hora automaticamente. Sem isso, o autoclose continua inerte.
+### Fluxo de aceitação
+- Botão "Aceitar Conversa" no overlay → chama `onStatusChange('open')` (já existe)
+- Após mudança para `open`, blur some, sidebar reaparece, input habilita, `markConversationRead` é disparado
 
-### Passo 4 — Validar na UI
-Confirmar que após o fechamento:
-- A aba "FECHADAS" no /contact-center/whatsapp passa a listar essas conversas
-- O contador de fechadas atualiza
-- Filtro por tabulação `auto_close` funciona
-
-## Detalhes técnicos
-- `whatsapp-autoclose-runner` já existe e está pronto (li o código). Só precisa ser chamado.
-- O cron usará `net.http_post` com a service_role key, hora cheia, todos os tenants.
-- A query `fetchConversationCounts` já conta `status='closed'` corretamente — não precisa alteração de código.
-- Nenhuma alteração de schema necessária; apenas dados + 1 cron job.
-
-## Pergunta antes de executar
-Antes de fechar conversas em massa, preciso confirmar a janela de inatividade que você quer aplicar **agora** no backlog (a regra atual configurada é 48h):
-
-- **A.** Usar 48h (configuração atual) — fecha tudo que está parado há mais de 2 dias
-- **B.** Usar uma janela diferente apenas para esse fechamento retroativo (ex: 24h, 72h, 7 dias)
-- **C.** Listar primeiro quantas conversas serão afetadas, e só então decidir
+### Detalhes técnicos
+- Sem mudanças de schema/backend — puramente UI
+- Banner amarelo atual de "Conversa aguardando" será substituído pelo overlay central (mais visível)
+- Blur usando Tailwind `blur-md` + `select-none` para impedir cópia de texto
+- Acessibilidade: `aria-hidden` no conteúdo borrado, foco automático no botão "Aceitar"
