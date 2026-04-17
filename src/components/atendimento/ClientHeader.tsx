@@ -36,14 +36,17 @@ interface ClientHeaderProps {
   hasActiveCall?: boolean;
 }
 
-const InfoItem = ({ label, value, icon: Icon, forceRender }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean }) => {
+const InfoItem = ({ label, value, icon: Icon, forceRender, action }: { label: string; value: string | null | undefined; icon?: React.ElementType; forceRender?: boolean; action?: React.ReactNode }) => {
   if (!value && !forceRender) return null;
   return (
     <div className="flex items-start gap-2 min-w-0 min-h-[40px]">
       {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
+        <div className="flex items-center gap-1.5">
+          <p className={`text-sm truncate ${value ? "text-foreground" : "text-muted-foreground/60 italic"}`}>{value || "—"}</p>
+          {value && action}
+        </div>
       </div>
     </div>
   );
