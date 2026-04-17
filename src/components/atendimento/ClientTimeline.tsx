@@ -107,6 +107,19 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   portal_agreement_created: "Acordo via Portal",
   ai_whatsapp_negotiation_started: "IA WhatsApp Iniciou",
   ai_voice_negotiation_started: "IA Voz Iniciou",
+  manual_payment_requested: "Baixa Manual Solicitada",
+  manual_payment_confirmed: "Pagamento Confirmado Manualmente",
+  manual_payment_rejected: "Baixa Manual Recusada",
+  payment_confirmed: "Pagamento Confirmado",
+  agreement_completed: "Acordo Quitado",
+  agreement_status_completed: "Acordo Quitado",
+  debtor_profile_changed: "Perfil do Devedor Atualizado",
+  debtor_category: "Categoria do Devedor Definida",
+  call_hangup: "Ligação Encerrada",
+  document_previewed: "Documento Visualizado",
+  document_generated: "Documento Gerado",
+  conversation_auto_closed: "Conversa Encerrada (Inatividade)",
+  conversation_transferred: "Conversa Transferida",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
