@@ -94,6 +94,7 @@ const ClientDetailPage = () => {
   const [selectedPagoIds, setSelectedPagoIds] = useState<string[]>([]);
   const [showReopenParcelasDialog, setShowReopenParcelasDialog] = useState(false);
   const [reopeningParcelas, setReopeningParcelas] = useState(false);
+  const [expandedAgreements, setExpandedAgreements] = useState<Set<string>>(new Set());
 
 
 
