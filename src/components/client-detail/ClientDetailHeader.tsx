@@ -4,7 +4,8 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Phone as PhoneIcon, MessageCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Headset, ChevronDown, Pencil } from "lucide-react";
+import { ArrowLeft, FileText, Headset, ChevronDown, Pencil, Flame } from "lucide-react";
+import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
@@ -72,6 +73,62 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     external_id: client.external_id || "",
   });
   const formattedCpf = formatCPF(cpf || "");
+  const [promotingSlot, setPromotingSlot] = useState<PhoneSlot | null>(null);
+
+  const handlePromoteHot = async (slot: PhoneSlot) => {
+    if (slot === "phone" || !tenant?.id || !client?.cpf || !client?.credor) return;
+    setPromotingSlot(slot);
+    try {
+      const { newHot } = await promotePhoneToHot({
+        cpf: client.cpf,
+        credor: client.credor,
+        tenantId: tenant.id,
+        slotOrigem: slot,
+      });
+      toast.success("Número quente atualizado", {
+        description: newHot ? `${formatPhone(newHot)} agora é o Telefone 1.` : undefined,
+      });
+      await queryClient.invalidateQueries();
+    } catch (e: any) {
+      toast.error("Erro ao atualizar número quente", { description: e?.message });
+    } finally {
+      setPromotingSlot(null);
+    }
+  };
+
+  const HotBadge = ({ slot }: { slot: PhoneSlot }) => {
+    if (slot === "phone") {
+      if (!client.phone) return null;
+      return (
+        <span title="Número quente (Hot)" className="inline-flex">
+          <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500/30" />
+        </span>
+      );
+    }
+    const targetValue = slot === "phone2" ? client.phone2 : client.phone3;
+    if (!targetValue) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => handlePromoteHot(slot)}
+        disabled={promotingSlot !== null}
+        title="Marcar como número quente"
+        className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted transition-colors disabled:opacity-40"
+      >
+        <Flame className={`w-3.5 h-3.5 ${promotingSlot === slot ? "text-orange-500 animate-pulse" : "text-muted-foreground hover:text-orange-500"}`} />
+      </button>
+    );
+  };
+
+  const PhoneInfo = ({ label, slot, value }: { label: string; slot: PhoneSlot; value: string | null }) => (
+    <div>
+      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-semibold text-foreground">{value ? formatPhone(value) : "—"}</p>
+        <HotBadge slot={slot} />
+      </div>
+    </div>
+  );
 
   const handleCepBlur = useCallback(async () => {
     const cleanCep = editForm.cep.replace(/\D/g, "");
@@ -399,9 +456,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
               {/* Telefones */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
-                <InfoItem label="Telefone 1" value={client.phone ? formatPhone(client.phone) : null} />
-                <InfoItem label="Telefone 2" value={client.phone2 ? formatPhone(client.phone2) : null} />
-                <InfoItem label="Telefone 3" value={client.phone3 ? formatPhone(client.phone3) : null} />
+                <PhoneInfo label="Telefone 1" slot="phone" value={client.phone} />
+                <PhoneInfo label="Telefone 2" slot="phone2" value={client.phone2} />
+                <PhoneInfo label="Telefone 3" slot="phone3" value={client.phone3} />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Todos os Telefones</p>
                   {allClientPhones.length > 0 ? (
