@@ -821,17 +821,43 @@ const ClientDetailPage = () => {
               </div>
 
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Entrada</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs">Valor da Entrada</Label>
-                    <CurrencyInput value={(editForm as any).entrada_value || 0} onValueChange={handleEditEntrada} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Data da Entrada</Label>
-                    <Input type="date" value={(editForm as any).entrada_date || ""} onChange={e => setEditForm({ ...editForm, entrada_date: e.target.value })} />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">
+                    {editEntradas.length > 1 ? `Entradas (${editEntradas.length})` : "Entrada"}
+                  </h4>
+                  <span className="text-xs text-muted-foreground">
+                    Total: R$ {sumEntradas(editEntradas).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
+                {editEntradas.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground text-center">
+                    Acordo sem entrada.
+                  </div>
+                ) : (
+                  editEntradas.map((ent, idx) => (
+                    <div key={ent.key} className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs">
+                          {editEntradas.length > 1 ? `Valor da Entrada ${idx + 1}` : "Valor da Entrada"}
+                        </Label>
+                        <CurrencyInput
+                          value={ent.value}
+                          onValueChange={(v) => updateEntradaAt(idx, { value: v })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">
+                          {editEntradas.length > 1 ? `Data da Entrada ${idx + 1}` : "Data da Entrada"}
+                        </Label>
+                        <Input
+                          type="date"
+                          value={ent.date || ""}
+                          onChange={(e) => updateEntradaAt(idx, { date: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="space-y-3">
