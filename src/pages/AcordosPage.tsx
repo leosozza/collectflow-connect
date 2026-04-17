@@ -25,6 +25,7 @@ import {
   getInstallmentsForMonth,
   classifyInstallment,
   buildInstallmentSchedule,
+  countPaidInstallments,
   type CobrancaRecord,
   type ManualPaymentRecord,
   type InstallmentClassification,
