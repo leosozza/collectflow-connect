@@ -3370,6 +3370,7 @@ export type Database = {
           amount_paid: number
           created_at: string
           id: string
+          installment_key: string | null
           installment_number: number
           notes: string | null
           payment_date: string
@@ -3387,6 +3388,7 @@ export type Database = {
           amount_paid: number
           created_at?: string
           id?: string
+          installment_key?: string | null
           installment_number: number
           notes?: string | null
           payment_date: string
@@ -3404,6 +3406,7 @@ export type Database = {
           amount_paid?: number
           created_at?: string
           id?: string
+          installment_key?: string | null
           installment_number?: number
           notes?: string | null
           payment_date?: string
