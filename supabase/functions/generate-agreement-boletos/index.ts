@@ -239,13 +239,25 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const CALLBACK_URL = `${supabaseUrl}/functions/v1/negociarie-callback`;
 
-    const result = { total: installments.length, success: 0, failed: 0, errors: [] as string[] };
+    const result = { total: installments.length, success: 0, failed: 0, skipped_non_boleto: 0, errors: [] as string[] };
+
+    const cvAll: Record<string, any> = agreement.custom_installment_values || {};
+    const defaultParcMethod = String(cvAll["1_method"] || "BOLETO").toUpperCase();
 
     for (const inst of installments) {
       try {
         // Skip past-due installments
         if (inst.dueDate < today) {
           console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — past due (${inst.dueDate})`);
+          continue;
+        }
+
+        // Resolve payment method per installment; skip if not BOLETO
+        const rawMethod = cvAll[`${inst.key}_method`] ?? (inst.isEntrada ? "BOLETO" : defaultParcMethod);
+        const method = String(rawMethod || "BOLETO").toUpperCase();
+        if (method !== "BOLETO") {
+          console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — payment method = ${method}`);
+          result.skipped_non_boleto++;
           continue;
         }
 
