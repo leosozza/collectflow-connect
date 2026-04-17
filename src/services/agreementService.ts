@@ -691,3 +691,63 @@ export const registerAgreementPayment = async (
     handleServiceError(error, MODULE);
   }
 };
+
+/**
+ * Reverts a previously distributed payment: walks paid titles (most recent first),
+ * subtracts valor_pago, reverts status to "pendente" and clears data_quitacao
+ * when valor_pago drops below valor_parcela.
+ */
+export const reverseAgreementPayment = async (
+  cpf: string,
+  credor: string,
+  valor: number
+): Promise<void> => {
+  try {
+    if (valor <= 0) return;
+
+    const { data: titles, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("cpf", cpf)
+      .eq("credor", credor)
+      .gt("valor_pago", 0)
+      .order("data_quitacao", { ascending: false, nullsFirst: false })
+      .order("data_vencimento", { ascending: false });
+
+    if (error) throw error;
+    if (!titles || titles.length === 0) return;
+
+    let remaining = valor;
+
+    for (const title of titles) {
+      if (remaining <= 0) break;
+
+      const pago = Number(title.valor_pago || 0);
+      if (pago <= 0) continue;
+
+      const reversal = Math.min(remaining, pago);
+      const newValorPago = pago - reversal;
+      const valorParcela = Number(title.valor_parcela || 0);
+
+      const updateData: any = { valor_pago: newValorPago };
+      if (newValorPago < valorParcela && title.status === "pago") {
+        updateData.status = "pendente";
+        updateData.data_quitacao = null;
+      }
+
+      const { error: updateError } = await supabase
+        .from("clients")
+        .update(updateData)
+        .eq("id", title.id);
+
+      if (updateError) throw updateError;
+
+      remaining -= reversal;
+    }
+
+    logger.info(MODULE, "reversePayment", { cpf, credor, valor, reversed: valor - remaining });
+    logAction({ action: "agreement_payment_reverse", entity_type: "client", details: { cpf, credor, valor, reversed: valor - remaining } });
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
