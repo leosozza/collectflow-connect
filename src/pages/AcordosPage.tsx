@@ -208,21 +208,21 @@ const AcordosPage = () => {
         const installments = getInstallmentsForMonth(agreement, m, y);
         if (installments.length === 0) continue; // No installment in this month
 
-        // Classify by worst status of all installments in the month
-        const classifications = installments.map(inst =>
-          classifyInstallment(inst, cobrancas, manualPayments, today)
-        );
-
-        // Priority: pending_confirmation > vencido > vigente > pago
-        let finalClass: InstallmentClassification = "pago";
-        if (classifications.includes("pending_confirmation")) finalClass = "pending_confirmation";
-        else if (classifications.includes("vencido")) finalClass = "vencido";
-        else if (classifications.includes("vigente")) finalClass = "vigente";
-
-        // "Pagos" inclusive: at least one paid installment in the month
-        const hasPaidInMonth = classifications.includes("pago");
-
-        result.push({ ...agreement, _installmentClass: finalClass, _hasPaidInScope: hasPaidInMonth, _paidCount: paidCount, _totalCount: totalCount });
+        // SPLIT: emit one row per installment in the selected month
+        for (const inst of installments) {
+          const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
+          result.push({
+            ...agreement,
+            _installmentClass: cls,
+            _hasPaidInScope: cls === "pago",
+            _paidCount: paidCount,
+            _totalCount: totalCount,
+            _installmentNumber: inst.number,
+            _installmentKey: inst.key,
+            _installmentDueDate: inst.dueDate,
+            _installmentValue: inst.value,
+          });
+        }
       } else {
         // Date range or "todos" — filter by due date range if applicable
         let scopedHasPaid = paidCount > 0;
