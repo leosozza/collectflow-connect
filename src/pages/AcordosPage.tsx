@@ -272,10 +272,11 @@ const AcordosPage = () => {
           if (isMonthSelected && cls !== undefined) return cls === "vigente";
           return a.status === "pending";
         case "approved": {
-          // Inclusive: agreement appears in "Pagos" if it has at least one paid installment
-          // in the selected scope, OR is fully approved.
+          // No modo mês, considera apenas a parcela classificada como "pago".
+          if (isMonthSelected && cls !== undefined) return cls === "pago";
+          // Fora do modo mês: usa status global ou flag de pagamento no escopo.
           const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
-          return hasPaid === true || a.status === "approved";
+          return hasPaid === true || a.status === "approved" || a.status === "completed";
         }
         case "overdue":
           if (isMonthSelected && cls !== undefined) return cls === "vencido";
