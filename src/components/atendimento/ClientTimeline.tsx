@@ -128,6 +128,9 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   document_generated: "Documento Gerado",
   conversation_auto_closed: "Conversa Encerrada (Inatividade)",
   conversation_transferred: "Conversa Transferida",
+  send_failed: "Falha no Envio",
+  agreement_broken: "Acordo Quebrado",
+  note: "Observação",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -179,7 +182,55 @@ const FIELD_LABELS: Record<string, string> = {
 
 const SOURCE_LABELS: Record<string, string> = {
   import: "Importação", api: "API", maxlist: "MaxList", manual: "Edição Manual",
-  regua: "Régua", whatsapp_auto: "WhatsApp Auto", system: "Sistema", workflow: "Workflow",
+  regua: "Régua de Cobrança", whatsapp_auto: "WhatsApp Automático",
+  email_auto: "E-mail Automático", prevention: "Régua de Prevenção",
+  negociarie: "Negociarie", portal: "Portal do Devedor",
+  ai: "Agente IA", ai_agent: "Agente IA",
+  operator: "Operador", admin: "Administrador",
+  system: "Sistema", workflow: "Fluxo Automático",
+};
+
+const AGREEMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  pending_approval: "Aguardando Aprovação",
+  approved: "Aprovado",
+  completed: "Quitado",
+  cancelled: "Cancelado",
+  overdue: "Vencido",
+  broken: "Quebrado",
+};
+
+const CALL_STATUS_LABELS: Record<string, string> = {
+  answered: "Atendida",
+  no_answer: "Não Atendida",
+  busy: "Ocupado",
+  failed: "Falhou",
+  completed: "Concluída",
+  abandoned: "Abandonada",
+  voicemail: "Caixa Postal",
+  realizada: "Realizada",
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+  email: "E-mail",
+  voice: "Voz",
+  call: "Ligação",
+  boleto: "Boleto",
+  pix: "PIX",
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  pix: "PIX",
+  boleto: "Boleto",
+  dinheiro: "Dinheiro",
+  cartao: "Cartão",
+  cartao_credito: "Cartão de Crédito",
+  cartao_debito: "Cartão de Débito",
+  transferencia: "Transferência",
+  ted: "TED",
+  doc: "DOC",
 };
 
 const formatDuration = (seconds: number) => {
@@ -438,7 +489,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       const eventType = e.event_type || "system";
       const label = eventType === "disposition"
         ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
-        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || toTitleCase(eventType));
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || "Evento do Sistema");
       
       let detail = "";
 
@@ -458,12 +509,17 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta.duration_seconds) detail = `Duração: ${formatDuration(meta.duration_seconds)}`;
         if (meta.campaign_name) detail = detail ? `${detail} — ${meta.campaign_name}` : meta.campaign_name;
       } else if (eventType === "message_sent") {
-        detail = `Canal: ${meta.channel || "whatsapp"}`;
+        const ch = meta.channel || "whatsapp";
+        detail = `Canal: ${CHANNEL_LABELS[ch] || ch}`;
       } else if (eventType === "field_update") {
-        const source = SOURCE_LABELS[e.event_value] || e.event_value || "manual";
+        const srcKey = (e.event_value || "manual") as string;
+        const source = SOURCE_LABELS[srcKey] || toTitleCase(srcKey);
         detail = `Fonte: ${source}`;
       } else if (eventType === "whatsapp_inbound" || eventType === "whatsapp_outbound") {
         detail = e.event_value || "";
+      } else if (eventType === "manual_payment_requested" || eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected") {
+        const pm = meta.payment_method;
+        if (pm) detail = `Forma: ${PAYMENT_METHOD_LABELS[pm] || toTitleCase(pm)}`;
       }
 
       items.push({
@@ -500,7 +556,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         id: `a-${a.id}`,
         date: a.created_at,
         type: "agreement",
-        title: `Acordo ${a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}`,
+        title: `Acordo ${AGREEMENT_STATUS_LABELS[a.status] || "Registrado"}`,
         detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
         operator: opName,
         actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
@@ -512,7 +568,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         id: `call-${c.id}`,
         date: c.called_at,
         type: "call",
-        title: `Ligação — ${c.status || "realizada"}`,
+        title: `Ligação — ${CALL_STATUS_LABELS[c.status || ""] || "Realizada"}`,
         detail: c.phone ? `Tel: ${c.phone}` : undefined,
         operator: c.agent_name || undefined,
         actor: c.agent_name ? { label: c.agent_name, kind: "user" } : { label: "Discador", kind: "system" },
