@@ -82,7 +82,7 @@ const AcordosPage = () => {
             .in("agreement_id", agreementIds),
           supabase
             .from("manual_payments" as any)
-            .select("agreement_id, installment_number, amount_paid, status")
+            .select("agreement_id, installment_number, installment_key, amount_paid, status")
             .in("agreement_id", agreementIds),
         ]);
         setCobrancas((cobRes.data || []) as unknown as CobrancaRecord[]);

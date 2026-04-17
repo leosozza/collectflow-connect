@@ -114,6 +114,12 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
   };
 
   const getInstallmentLabel = (p: ManualPaymentWithDetails) => {
+    const key = (p as any).installment_key as string | null | undefined;
+    // Multi-entrada via installment_key (entrada, entrada_2, entrada_3, ...)
+    if (key && key.startsWith("entrada")) {
+      const idx = key === "entrada" ? 1 : parseInt(key.replace("entrada_", "")) || 1;
+      return `Entrada ${idx}`;
+    }
     if (p.installment_number === 0) return "Entrada";
     const total = p.agreement
       ? (p.agreement.entrada_value && p.agreement.entrada_value > 0 ? 1 : 0) + p.agreement.new_installments

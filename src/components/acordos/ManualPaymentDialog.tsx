@@ -15,6 +15,8 @@ interface ManualPaymentDialogProps {
   onOpenChange: (open: boolean) => void;
   agreementId: string;
   installmentNumber: number;
+  installmentKey?: string;
+  installmentLabel?: string;
   installmentValue: number;
   tenantId: string;
   profileId: string;
@@ -30,7 +32,7 @@ const PAYMENT_METHODS = [
 ];
 
 const ManualPaymentDialog = ({
-  open, onOpenChange, agreementId, installmentNumber,
+  open, onOpenChange, agreementId, installmentNumber, installmentKey, installmentLabel,
   installmentValue, tenantId, profileId, onSuccess,
 }: ManualPaymentDialogProps) => {
   const { toast } = useToast();
@@ -50,6 +52,7 @@ const ManualPaymentDialog = ({
       const data: CreateManualPaymentData = {
         agreement_id: agreementId,
         installment_number: installmentNumber,
+        installment_key: installmentKey,
         amount_paid: amountPaid,
         payment_date: paymentDate,
         payment_method: paymentMethod,
@@ -73,7 +76,7 @@ const ManualPaymentDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HandCoins className="w-5 h-5 text-primary" />
-            Baixa Manual — Parcela {installmentNumber === 0 ? "Entrada" : installmentNumber}
+            Baixa Manual — {installmentLabel || (installmentNumber === 0 ? "Entrada" : `Parcela ${installmentNumber}`)}
           </DialogTitle>
         </DialogHeader>
 
