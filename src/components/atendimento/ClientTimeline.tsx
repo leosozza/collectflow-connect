@@ -213,22 +213,113 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
   );
 };
 
-const ResponsibleLabel = ({ operator, type }: { operator?: string; type: string }) => {
-  if (operator) {
-    return (
-      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-        <User className="w-3 h-3" /> por {operator}
-      </span>
-    );
+const ResponsibleLabel = ({ actor }: { actor?: Actor }) => {
+  const a: Actor = actor && actor.label
+    ? actor
+    : { label: "Origem desconhecida", kind: "unknown" };
+
+  const iconByKind: Record<ActorKind, React.ReactNode> = {
+    user: <User className="w-3 h-3" />,
+    admin: <Shield className="w-3 h-3 text-amber-600" />,
+    workflow: <Zap className="w-3 h-3 text-violet-600" />,
+    ai: <Bot className="w-3 h-3 text-purple-600" />,
+    system: <Bot className="w-3 h-3 text-slate-500" />,
+    portal: <Globe className="w-3 h-3 text-teal-600" />,
+    gateway: <CreditCard className="w-3 h-3 text-emerald-600" />,
+    client: <User className="w-3 h-3 text-green-600" />,
+    unknown: <Bot className="w-3 h-3 text-muted-foreground" />,
+  };
+
+  const prefix = a.kind === "user" || a.kind === "admin" ? "por " : "";
+
+  return (
+    <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+      {iconByKind[a.kind]} {prefix}{a.label}
+    </span>
+  );
+};
+
+/** Resolve who is responsible for an event */
+const resolveActor = (
+  event: any,
+  profileMap: Record<string, string>,
+  workflowMap: Record<string, string>
+): Actor => {
+  const meta = (event?.metadata || {}) as any;
+  const eventType: string = event?.event_type || "";
+  const eventSource: string = event?.event_source || "";
+
+  // Admin actions (manual payment review)
+  const adminId = meta.reviewed_by || meta.reviewer_id || meta.confirmed_by;
+  if (adminId && (eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected")) {
+    const name = profileMap[adminId];
+    return { label: name ? `${name} (Admin)` : "Admin", kind: "admin" };
   }
-  if (type === "system") {
-    return (
-      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-        <Bot className="w-3 h-3" /> Sistema
-      </span>
-    );
+
+  // Workflow / régua automática
+  if (eventSource === "workflow" || meta.source_type === "workflow" || meta.workflow_id) {
+    const wfName = meta.workflow_id ? workflowMap[meta.workflow_id] : undefined;
+    return { label: wfName ? `Fluxo: ${wfName}` : "Fluxo Automático", kind: "workflow" };
   }
-  return null;
+
+  // Régua de prevenção
+  if (eventSource === "prevention" || eventType === "message_sent") {
+    return { label: "Régua de Prevenção", kind: "workflow" };
+  }
+
+  // IA
+  if (
+    eventType.startsWith("ai_") ||
+    meta.source_type === "ai_agent" ||
+    eventSource === "ai" ||
+    eventSource === "ai_agent"
+  ) {
+    return { label: meta.agent_name ? `Agente IA — ${meta.agent_name}` : "Agente IA", kind: "ai" };
+  }
+
+  // Portal do devedor
+  if (eventType.startsWith("portal_") || eventSource === "portal") {
+    return { label: "Portal do Devedor", kind: "portal" };
+  }
+
+  // Gateway externo
+  if (eventSource === "negociarie" || eventSource === "boleto" || eventSource === "asaas") {
+    const labels: Record<string, string> = {
+      negociarie: "Negociarie",
+      boleto: "Negociarie (Boleto)",
+      asaas: "Asaas",
+    };
+    return { label: labels[eventSource] || "Gateway", kind: "gateway" };
+  }
+
+  // WhatsApp inbound = cliente respondendo
+  if (eventType === "whatsapp_inbound" || eventSource === "whatsapp_inbound") {
+    return { label: "Cliente (WhatsApp)", kind: "client" };
+  }
+
+  // Operador humano
+  const userId = meta.operator_id || meta.created_by || meta.requested_by || meta.updated_by;
+  if (userId && profileMap[userId]) {
+    return { label: profileMap[userId], kind: "user" };
+  }
+  if (meta.agent_name) {
+    return { label: meta.agent_name, kind: "user" };
+  }
+  if (meta.operator_name) {
+    return { label: meta.operator_name, kind: "user" };
+  }
+
+  // Sistema (auto-close, transferências automáticas, etc.)
+  if (
+    eventSource === "system" ||
+    eventType === "conversation_auto_closed" ||
+    eventType === "agreement_overdue" ||
+    eventType === "agreement_status_completed"
+  ) {
+    return { label: "Sistema", kind: "system" };
+  }
+
+  return { label: "Origem desconhecida", kind: "unknown" };
 };
 
 /** Render field_update changes inline */
