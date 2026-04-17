@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
-import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake } from "lucide-react";
+import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>

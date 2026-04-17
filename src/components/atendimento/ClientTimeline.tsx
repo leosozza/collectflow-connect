@@ -131,6 +131,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   send_failed: "Falha no Envio",
   agreement_broken: "Acordo Quebrado",
   note: "Observação",
+  phone_promoted_hot: "Número Quente Definido",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
