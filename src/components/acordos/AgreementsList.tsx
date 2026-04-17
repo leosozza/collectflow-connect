@@ -45,6 +45,14 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
     return <p className="text-muted-foreground text-center py-8">Nenhum acordo encontrado.</p>;
   }
 
+  const showParcelaCol = agreements.some((a) => typeof (a as any)._installmentNumber === "number");
+
+  const formatParcelaLabel = (num: number | undefined, key: string | undefined) => {
+    if (typeof num !== "number") return "—";
+    if (num === 0) return "Entrada";
+    return `${num}ª`;
+  };
+
   return (
     <div className="rounded-md border">
       <Table>
@@ -54,6 +62,11 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
             <TableHead>CPF</TableHead>
             <TableHead>Credor</TableHead>
             <TableHead>Operador</TableHead>
+            {showParcelaCol && (
+              <TableHead title="No mês selecionado, cada parcela é exibida em sua própria linha">
+                Parcela
+              </TableHead>
+            )}
             <TableHead>Parcelas Pagas</TableHead>
             <TableHead>Status da Parcela</TableHead>
             <TableHead>Status do Acordo</TableHead>
@@ -65,8 +78,11 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
             const total = (a as any)._totalCount as number | undefined;
             const showCount = typeof paid === "number" && typeof total === "number";
             const instClass = (a as any)._installmentClass as string | undefined;
+            const instNumber = (a as any)._installmentNumber as number | undefined;
+            const instKey = (a as any)._installmentKey as string | undefined;
+            const rowKey = `${a.id}:${instKey ?? "all"}`;
             return (
-              <TableRow key={a.id}>
+              <TableRow key={rowKey}>
                 <TableCell>
                   <Link
                     to={`/carteira/${a.client_cpf.replace(/\D/g, "")}?tab=acordo`}
@@ -80,6 +96,11 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                 <TableCell className="text-sm text-muted-foreground">
                   {(a as any).creator_name || "—"}
                 </TableCell>
+                {showParcelaCol && (
+                  <TableCell className="text-sm tabular-nums">
+                    {formatParcelaLabel(instNumber, instKey)}
+                  </TableCell>
+                )}
                 <TableCell className="text-sm tabular-nums">
                   {showCount ? (
                     <span className={paid! > 0 ? "font-medium text-foreground" : "text-muted-foreground"}>
