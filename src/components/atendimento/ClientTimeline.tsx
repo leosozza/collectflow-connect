@@ -8,6 +8,13 @@ import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
 import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote } from "lucide-react";
 
+type ActorKind = "user" | "admin" | "workflow" | "ai" | "system" | "portal" | "gateway" | "client" | "unknown";
+
+interface Actor {
+  label: string;
+  kind: ActorKind;
+}
+
 interface TimelineItem {
   id: string;
   date: string;
@@ -15,6 +22,7 @@ interface TimelineItem {
   title: string;
   detail?: string;
   operator?: string;
+  actor?: Actor;
   recordingUrl?: string;
   durationSeconds?: number;
 }
@@ -205,22 +213,113 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
   );
 };
 
-const ResponsibleLabel = ({ operator, type }: { operator?: string; type: string }) => {
-  if (operator) {
-    return (
-      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-        <User className="w-3 h-3" /> por {operator}
-      </span>
-    );
+const ResponsibleLabel = ({ actor }: { actor?: Actor }) => {
+  const a: Actor = actor && actor.label
+    ? actor
+    : { label: "Origem desconhecida", kind: "unknown" };
+
+  const iconByKind: Record<ActorKind, React.ReactNode> = {
+    user: <User className="w-3 h-3" />,
+    admin: <Shield className="w-3 h-3 text-amber-600" />,
+    workflow: <Zap className="w-3 h-3 text-violet-600" />,
+    ai: <Bot className="w-3 h-3 text-purple-600" />,
+    system: <Bot className="w-3 h-3 text-slate-500" />,
+    portal: <Globe className="w-3 h-3 text-teal-600" />,
+    gateway: <CreditCard className="w-3 h-3 text-emerald-600" />,
+    client: <User className="w-3 h-3 text-green-600" />,
+    unknown: <Bot className="w-3 h-3 text-muted-foreground" />,
+  };
+
+  const prefix = a.kind === "user" || a.kind === "admin" ? "por " : "";
+
+  return (
+    <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+      {iconByKind[a.kind]} {prefix}{a.label}
+    </span>
+  );
+};
+
+/** Resolve who is responsible for an event */
+const resolveActor = (
+  event: any,
+  profileMap: Record<string, string>,
+  workflowMap: Record<string, string>
+): Actor => {
+  const meta = (event?.metadata || {}) as any;
+  const eventType: string = event?.event_type || "";
+  const eventSource: string = event?.event_source || "";
+
+  // Admin actions (manual payment review)
+  const adminId = meta.reviewed_by || meta.reviewer_id || meta.confirmed_by;
+  if (adminId && (eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected")) {
+    const name = profileMap[adminId];
+    return { label: name ? `${name} (Admin)` : "Admin", kind: "admin" };
   }
-  if (type === "system") {
-    return (
-      <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-        <Bot className="w-3 h-3" /> Sistema
-      </span>
-    );
+
+  // Workflow / régua automática
+  if (eventSource === "workflow" || meta.source_type === "workflow" || meta.workflow_id) {
+    const wfName = meta.workflow_id ? workflowMap[meta.workflow_id] : undefined;
+    return { label: wfName ? `Fluxo: ${wfName}` : "Fluxo Automático", kind: "workflow" };
   }
-  return null;
+
+  // Régua de prevenção
+  if (eventSource === "prevention" || eventType === "message_sent") {
+    return { label: "Régua de Prevenção", kind: "workflow" };
+  }
+
+  // IA
+  if (
+    eventType.startsWith("ai_") ||
+    meta.source_type === "ai_agent" ||
+    eventSource === "ai" ||
+    eventSource === "ai_agent"
+  ) {
+    return { label: meta.agent_name ? `Agente IA — ${meta.agent_name}` : "Agente IA", kind: "ai" };
+  }
+
+  // Portal do devedor
+  if (eventType.startsWith("portal_") || eventSource === "portal") {
+    return { label: "Portal do Devedor", kind: "portal" };
+  }
+
+  // Gateway externo
+  if (eventSource === "negociarie" || eventSource === "boleto" || eventSource === "asaas") {
+    const labels: Record<string, string> = {
+      negociarie: "Negociarie",
+      boleto: "Negociarie (Boleto)",
+      asaas: "Asaas",
+    };
+    return { label: labels[eventSource] || "Gateway", kind: "gateway" };
+  }
+
+  // WhatsApp inbound = cliente respondendo
+  if (eventType === "whatsapp_inbound" || eventSource === "whatsapp_inbound") {
+    return { label: "Cliente (WhatsApp)", kind: "client" };
+  }
+
+  // Operador humano
+  const userId = meta.operator_id || meta.created_by || meta.requested_by || meta.updated_by;
+  if (userId && profileMap[userId]) {
+    return { label: profileMap[userId], kind: "user" };
+  }
+  if (meta.agent_name) {
+    return { label: meta.agent_name, kind: "user" };
+  }
+  if (meta.operator_name) {
+    return { label: meta.operator_name, kind: "user" };
+  }
+
+  // Sistema (auto-close, transferências automáticas, etc.)
+  if (
+    eventSource === "system" ||
+    eventType === "conversation_auto_closed" ||
+    eventType === "agreement_overdue" ||
+    eventType === "agreement_status_completed"
+  ) {
+    return { label: "Sistema", kind: "system" };
+  }
+
+  return { label: "Origem desconhecida", kind: "unknown" };
 };
 
 /** Render field_update changes inline */
@@ -277,7 +376,10 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta?.created_by) userIds.add(meta.created_by);
         if (meta?.updated_by) userIds.add(meta.updated_by);
         if (meta?.operator_id) userIds.add(meta.operator_id);
-        if (meta?.agent_name) return; // already has name
+        if (meta?.requested_by) userIds.add(meta.requested_by);
+        if (meta?.reviewed_by) userIds.add(meta.reviewed_by);
+        if (meta?.reviewer_id) userIds.add(meta.reviewer_id);
+        if (meta?.confirmed_by) userIds.add(meta.confirmed_by);
       });
       // Also from props
       dispositions.forEach((d) => { if (d.operator_id) userIds.add(d.operator_id); });
@@ -303,6 +405,28 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     enabled: clientEvents.length > 0 || dispositions.length > 0,
   });
 
+  // Resolve workflow names for events that reference workflow_id
+  const { data: workflowMap = {} } = useQuery({
+    queryKey: ["timeline-workflows", clientCpf, clientEvents.length],
+    queryFn: async () => {
+      const wfIds = new Set<string>();
+      clientEvents.forEach((e: any) => {
+        const wid = (e.metadata as any)?.workflow_id;
+        if (wid) wfIds.add(wid);
+      });
+      const ids = [...wfIds].filter(Boolean);
+      if (ids.length === 0) return {};
+      const { data } = await supabase
+        .from("workflow_flows" as any)
+        .select("id, name")
+        .in("id", ids);
+      const map: Record<string, string> = {};
+      ((data as any[]) || []).forEach((w: any) => { if (w.id && w.name) map[w.id] = w.name; });
+      return map;
+    },
+    enabled: clientEvents.length > 0,
+  });
+
   // Build unified items
   const items: TimelineItem[] = [];
   const usedEventIds = new Set<string>();
@@ -317,18 +441,9 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || toTitleCase(eventType));
       
       let detail = "";
-      let operator = "";
 
-      // Resolve operator name
-      if (meta.operator_id && profileMap[meta.operator_id]) {
-        operator = profileMap[meta.operator_id];
-      } else if (meta.created_by && profileMap[meta.created_by]) {
-        operator = profileMap[meta.created_by];
-      } else if (meta.updated_by && profileMap[meta.updated_by]) {
-        operator = profileMap[meta.updated_by];
-      } else if (meta.agent_name) {
-        operator = meta.agent_name;
-      }
+      const actor = resolveActor(e, profileMap, workflowMap);
+      const operator = actor.kind === "user" || actor.kind === "admin" ? actor.label.replace(/ \(Admin\)$/, "") : "";
 
       // Build detail based on type
       if (eventType === "disposition") {
@@ -358,6 +473,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         title: label,
         detail: detail || undefined,
         operator: operator || undefined,
+        actor,
         durationSeconds: eventType === "call" ? meta.duration_seconds : undefined,
       });
       usedEventIds.add(e.id);
@@ -366,24 +482,28 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     // Fallback: use props when no client_events
     dispositions.forEach((d) => {
       const label = DISPOSITION_TYPES[d.disposition_type as keyof typeof DISPOSITION_TYPES] || d.disposition_type;
+      const opName = d.operator_name || (d.operator_id && profileMap[d.operator_id]) || undefined;
       items.push({
         id: `d-${d.id}`,
         date: d.created_at,
         type: d.disposition_type === "note" ? "note" : "disposition",
         title: label,
         detail: d.notes || undefined,
-        operator: d.operator_name || (d.operator_id && profileMap[d.operator_id]) || undefined,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
       });
     });
 
     agreements.forEach((a: any) => {
+      const opName = a.creator_name || (a.created_by && profileMap[a.created_by]) || undefined;
       items.push({
         id: `a-${a.id}`,
         date: a.created_at,
         type: "agreement",
         title: `Acordo ${a.status === "approved" ? "Aprovado" : a.status === "pending" ? "Pendente" : a.status}`,
         detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
-        operator: a.creator_name || (a.created_by && profileMap[a.created_by]) || undefined,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
       });
     });
 
@@ -395,6 +515,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         title: `Ligação — ${c.status || "realizada"}`,
         detail: c.phone ? `Tel: ${c.phone}` : undefined,
         operator: c.agent_name || undefined,
+        actor: c.agent_name ? { label: c.agent_name, kind: "user" } : { label: "Discador", kind: "system" },
         recordingUrl: c.recording_url || undefined,
         durationSeconds: c.duration_seconds || 0,
       });
@@ -453,7 +574,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
                           {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <ResponsibleLabel operator={item.operator} type={item.type} />
+                      <ResponsibleLabel actor={item.actor} />
                       {item.type === "field_update" && meta ? (
                         <FieldUpdateDetail metadata={meta} />
                       ) : (
