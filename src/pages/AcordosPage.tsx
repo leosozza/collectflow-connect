@@ -267,9 +267,12 @@ const AcordosPage = () => {
         case "vigentes":
           if (isMonthSelected && cls !== undefined) return cls === "vigente";
           return a.status === "pending";
-        case "approved":
-          if (isMonthSelected && cls !== undefined) return cls === "pago";
-          return a.status === "approved";
+        case "approved": {
+          // Inclusive: agreement appears in "Pagos" if it has at least one paid installment
+          // in the selected scope, OR is fully approved.
+          const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
+          return hasPaid === true || a.status === "approved";
+        }
         case "overdue":
           if (isMonthSelected && cls !== undefined) return cls === "vencido";
           return a.status === "overdue";
