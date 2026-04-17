@@ -75,9 +75,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
         </TableHeader>
         <TableBody>
           {agreements.map((a) => {
-            const paid = (a as any)._paidCount as number | undefined;
-            const total = (a as any)._totalCount as number | undefined;
-            const showCount = typeof paid === "number" && typeof total === "number";
             const instClass = (a as any)._installmentClass as string | undefined;
             const instNumber = (a as any)._installmentNumber as number | undefined;
             const instKey = (a as any)._installmentKey as string | undefined;
@@ -104,11 +101,12 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                 )}
                 <TableCell>
                   {instClass ? (
-                    <span className="inline-block" title="Status da parcela do mês selecionado">
-                      <Badge className={installmentClassColors[instClass] || ""}>
-                        {installmentClassLabels[instClass] || instClass}
-                      </Badge>
-                    </span>
+                    <Badge
+                      className={installmentClassColors[instClass] || ""}
+                      title="Status da parcela do mês selecionado"
+                    >
+                      {installmentClassLabels[instClass] || instClass}
+                    </Badge>
                   ) : (
                     <span className="text-muted-foreground" title="Selecione um mês para ver o status da parcela">
                       —
@@ -116,9 +114,9 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                   )}
                 </TableCell>
                 <TableCell>
-                  <span className="inline-block">
-                    <Badge className={statusColors[a.status] || ""}>{statusLabels[a.status] || a.status}</Badge>
-                  </span>
+                  <Badge className={statusColors[a.status] || ""}>
+                    {statusLabels[a.status] || a.status}
+                  </Badge>
                 </TableCell>
               </TableRow>
             );
