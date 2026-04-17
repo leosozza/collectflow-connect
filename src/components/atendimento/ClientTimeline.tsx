@@ -70,7 +70,22 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   portal_agreement_created: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
   ai_whatsapp_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   ai_voice_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  manual_payment_requested: { border: "border-yellow-200", bg: "bg-yellow-50/50", dot: "border-yellow-400" },
+  manual_payment_confirmed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  manual_payment_rejected:  { border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
+  payment_confirmed:        { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_completed:      { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_status_completed:{ border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  debtor_profile_changed:   { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
+  call_hangup:              { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  document_previewed:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  document_generated:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  conversation_auto_closed: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  conversation_transferred: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
 };
+
+const toTitleCase = (s: string) =>
+  s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   disposition: "Disposição",
