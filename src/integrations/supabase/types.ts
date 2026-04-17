@@ -6530,6 +6530,15 @@ export type Database = {
           tu_user_id: string
         }[]
       }
+      get_visible_conversation_counts: {
+        Args: { _tenant_id: string }
+        Returns: {
+          closed_count: number
+          open_count: number
+          unread_count: number
+          waiting_count: number
+        }[]
+      }
       get_visible_conversations: {
         Args: {
           _handler_filter?: string
