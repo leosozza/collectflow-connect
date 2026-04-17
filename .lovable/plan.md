@@ -1,55 +1,51 @@
 
 
-## Plano — Humanizar nomenclaturas no Histórico de Atendimento
+## Plano — Mostrar responsável em todos os eventos do Histórico
 
 ### Problema
-No card "Histórico de Atendimento" do perfil do cliente aparecem labels técnicos crus como `manual_payment_requested`, `agreement_status_completed`, `manual_payment_confirmed`. Eles caem no fallback porque não estão no `EVENT_TYPE_LABELS` do `ClientTimeline.tsx`.
+Hoje no `ClientTimeline.tsx`, o "responsável" só aparece quando o evento tem `metadata.created_by` / `updated_by` / `operator_id` / `agent_name`. Mas vários eventos (baixa manual, workflow, prevenção, IA, sistema) gravam o autor em outros campos (`metadata.requested_by`, `metadata.reviewed_by`, `metadata.workflow_id`, ou só em `event_source`). Resultado: muitos eventos aparecem **sem responsável**.
 
-### Inventário de event_types sem label
-Levantados nos services/edge functions:
+### Mapeamento de quem é o autor por tipo
 
-| event_type (cru) | Label em PT |
-|---|---|
-| `manual_payment_requested` | Baixa Manual Solicitada |
-| `manual_payment_confirmed` | Pagamento Confirmado Manualmente |
-| `manual_payment_rejected` | Baixa Manual Recusada |
-| `agreement_status_completed` | Acordo Quitado |
-| `agreement_completed` | Acordo Quitado |
-| `payment_confirmed` | Pagamento Confirmado |
-| `debtor_profile_changed` | Perfil do Devedor Atualizado |
-| `debtor_category` | Categoria do Devedor Definida |
-| `call_hangup` | Ligação Encerrada |
-| `document_previewed` | Documento Visualizado |
-| `document_generated` | Documento Gerado |
-| `conversation_auto_closed` | Conversa Encerrada (Inatividade) |
-| `conversation_transferred` | Conversa Transferida |
+| Origem real | Onde está no `client_events` | Como exibir |
+|---|---|---|
+| Operador humano (disposição, abertura/fechamento, baixa manual solicitada) | `metadata.operator_id` / `created_by` / `requested_by` | Nome do operador (lookup em `profiles`) |
+| Admin (confirmou/recusou baixa manual) | `metadata.reviewed_by` | Nome do admin + tag "Admin" |
+| Workflow (régua/fluxo automático) | `event_source = "workflow"` ou `metadata.source_type = "workflow"` + `metadata.workflow_id` | "Fluxo: {nome do workflow}" (lookup em `workflow_flows`) |
+| Régua de prevenção | `event_source = "prevention"` | "Régua de Prevenção" |
+| IA (WhatsApp / Voz) | `event_type` contém `ai_` ou `metadata.source_type = "ai_agent"` | "Agente IA" com ícone Bot |
+| Negociarie / gateway externo | `event_source = "negociarie"` / `"boleto"` | "Negociarie (Boleto)" |
+| Portal do devedor | `event_type` começa com `portal_` | "Portal do Devedor" |
+| Sistema (auto-close, auto-expire, transferências automáticas) | `event_source = "system"` | "Sistema" com ícone Bot |
+| WhatsApp inbound | `event_source = "whatsapp"` | "Cliente (WhatsApp)" |
 
 ### Mudanças (apenas `src/components/atendimento/ClientTimeline.tsx`)
 
-**1. Expandir `EVENT_TYPE_LABELS`** (linhas 75-95) com as 13 entradas acima.
+**1. Expandir resolução de IDs no `profileMap`** (linhas 271-304):
+Coletar também `metadata.requested_by`, `metadata.reviewed_by`, `metadata.reviewer_id`, `metadata.confirmed_by`.
 
-**2. Expandir `COLOR_MAP`** (linhas 46-73) para os novos tipos:
-- `manual_payment_*` / `payment_confirmed` / `agreement_completed` / `agreement_status_completed` → verde-esmeralda (sucesso) ou amarelo (solicitação)
-- `manual_payment_rejected` → vermelho
-- `call_hangup` → azul (mesma família de `call`)
-- `document_*` → indigo
-- `debtor_profile_changed` / `debtor_category` → rosa
-- `conversation_*` → violeta
+**2. Buscar `workflow_flows`** (nova query): para `metadata.workflow_id` presentes nos eventos, buscar `name` para exibir "Fluxo: Cobrança D-3".
 
-**3. Expandir `TYPE_ICON`** (linhas 97-122) usando ícones já importados:
-- `manual_payment_*`, `payment_confirmed` → `CreditCard`
-- `agreement_completed`, `agreement_status_completed` → `Handshake`
-- `call_hangup` → `Phone`
-- `document_*` → `FileEdit`
-- `conversation_*` → `MessageSquare` / `ArrowRightLeft`
+**3. Refatorar derivação de `operator`** (linhas 322-331): nova função `resolveActor(event, profileMap, workflowMap)` que retorna `{ label: string, kind: 'user' | 'admin' | 'workflow' | 'ai' | 'system' | 'portal' | 'gateway' | 'client' }`.
 
-**4. Fallback bonito**: quando o `event_type` ainda não tiver label, em vez de exibir o snake_case cru, transformar em "Title Case com espaços" (ex.: `something_new` → "Something New"). Garante que qualquer evento futuro não apareça feio.
+**4. Atualizar `ResponsibleLabel`** (linhas 208-224) para receber o objeto `actor` e renderizar:
+- `user` → ícone User + nome
+- `admin` → ícone Shield + "{nome} (Admin)"
+- `workflow` → ícone Zap + "Fluxo: {nome}"
+- `ai` → ícone Bot roxo + "Agente IA"
+- `system` → ícone Bot cinza + "Sistema"
+- `portal` → ícone Globe + "Portal do Devedor"
+- `gateway` → ícone CreditCard + "Negociarie"
+- `client` → ícone User + "Cliente"
+
+Garantir que **sempre** renderize alguma coisa (nunca `return null`), exceto se realmente não der pra inferir nada — neste caso, exibir "Origem desconhecida" discreto.
+
+**5. Aplicar a mesma lógica no fallback (sem client_events)** (linhas 367-401) para dispositions/agreements/callLogs.
 
 ### Sem alteração
-- Schema, RLS, services, lógica de fetch.
-- Estrutura do card, ordenação, paginação "Ver tudo".
-- Coluna direita / outros cards.
+- Schema, RLS, services, edge functions, lógica de fetch base.
+- Layout do card, ordenação, paginação "Ver tudo", outros componentes.
 
 ### Arquivo
-- `src/components/atendimento/ClientTimeline.tsx` — 3 mapas expandidos + 1 helper de fallback (~40 linhas adicionadas).
+- `src/components/atendimento/ClientTimeline.tsx` — ~50 linhas adicionadas/refatoradas (nova função `resolveActor`, query `workflow_flows`, expansão do profileMap, novo `ResponsibleLabel`).
 
