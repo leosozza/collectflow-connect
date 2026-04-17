@@ -272,12 +272,20 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     return { label: s?.toUpperCase() || "—", className: "bg-muted text-muted-foreground" };
   })();
 
+  const PHONE_SLOT_BY_KEY: Record<string, PhoneSlot> = {
+    phone: "phone",
+    phone2: "phone2",
+    phone3: "phone3",
+  };
+
   const renderField = (f: { field_key: string }, forceRender = false) => {
     const renderer = FIELD_RENDERERS[f.field_key] || getCustomFieldRenderer(f.field_key);
     if (!renderer) return null;
     const { label, value, icon } = renderer();
     if (!value && !forceRender) return null;
-    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} />;
+    const phoneSlot = PHONE_SLOT_BY_KEY[f.field_key];
+    const action = phoneSlot ? <HotBadge slot={phoneSlot} /> : undefined;
+    return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} action={action} />;
   };
 
   return (
