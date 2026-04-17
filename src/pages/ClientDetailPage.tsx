@@ -61,7 +61,7 @@ const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "de
 };
 
 // Statuses that show installments
-const installmentStatuses = ["pending", "pending_approval", "approved", "overdue"];
+const installmentStatuses = ["pending", "pending_approval", "approved", "overdue", "completed", "cancelled"];
 // Statuses that allow edit
 const editableStatuses = ["pending", "pending_approval", "approved", "overdue", "cancelled"];
 // Statuses that allow cancel
