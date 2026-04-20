@@ -98,6 +98,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
   const [cepLookupLoading, setCepLookupLoading] = useState(false);
+  const [copiedTitles, setCopiedTitles] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
 
   // Fetch credor rules and auto-fill honorários + aging discount
@@ -578,11 +579,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
-  const copyTitles = () => {
+  const copyTitles = async () => {
     const selected = pendentes.filter((c) => selectedIds.has(c.id));
     const text = selected.map((c) => `${c.numero_parcela}/${c.total_parcelas} - ${formatDate(c.data_vencimento)} - ${formatCurrency(Number(c.valor_parcela) || 0)}`).join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Títulos copiados!");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTitles(true);
+      toast.success("Títulos copiados!");
+      setTimeout(() => setCopiedTitles(false), 1500);
+    } catch {
+      toast.error("Falha ao copiar");
+    }
   };
 
   const simulatedTotal = simulatedInstallments.reduce((s, i) => s + i.value, 0);
