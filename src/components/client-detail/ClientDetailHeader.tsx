@@ -460,16 +460,16 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         </div>
 
         {/* Linha 2: Metadados + Em Aberto */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-11 mt-1.5">
-          <span><strong>CPF:</strong> {formattedCpf}</span>
+        <div className="flex items-center gap-3 text-sm text-muted-foreground pl-11 mt-1.5 min-w-0">
+          <span className="whitespace-nowrap"><strong>CPF:</strong> {formattedCpf}</span>
           <span className="text-border">|</span>
-          <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
+          <span className="whitespace-nowrap"><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
           <span className="text-border">|</span>
-          <span><strong>Email:</strong> {client.email || "—"}</span>
+          <span className="truncate min-w-[120px]"><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
-          <span><strong>Credor:</strong> {client.credor}</span>
+          <span className="truncate min-w-0"><strong>Credor:</strong> {client.credor}</span>
           <span className="text-border">|</span>
-          <span><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
+          <span className="whitespace-nowrap ml-auto"><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
         </div>
 
         {/* Linha 3: Colapsável */}
