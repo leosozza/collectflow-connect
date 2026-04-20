@@ -61,7 +61,7 @@ const InlineEditableField = ({
         if (res.ok) {
           await onCepResolved?.(res.data);
         } else {
-          const reason = res.reason;
+          const reason = (res as { ok: false; reason: string }).reason;
           if (reason === "not_found") toast.error("CEP não encontrado");
           else if (reason === "network") toast.error("Falha ao consultar CEP");
         }
