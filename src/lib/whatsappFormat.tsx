@@ -50,11 +50,12 @@ const MARKERS: Marker[] = [
 
 function isBoundaryBefore(prev: string | undefined): boolean {
   if (prev === undefined) return true;
-  return /[\s(\[{<'"]/.test(prev);
+  // Anything that isn't a letter/digit/underscore counts as a boundary (includes emojis/symbols)
+  return !/[\p{L}\p{N}_]/u.test(prev);
 }
 function isBoundaryAfter(next: string | undefined): boolean {
   if (next === undefined) return true;
-  return /[\s.,!?;:)\]}>'"]/.test(next);
+  return !/[\p{L}\p{N}_]/u.test(next);
 }
 
 function parseInline(text: string): React.ReactNode[] {
@@ -178,8 +179,8 @@ export function stripWhatsAppMarkers(text: string | null | undefined): string {
   return text
     .replace(/```([\s\S]*?)```/g, "$1")
     .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/(^|[\s(\[{<'"])\*([^*\n]+?)\*(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
-    .replace(/(^|[\s(\[{<'"])_([^_\n]+?)_(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
-    .replace(/(^|[\s(\[{<'"])~([^~\n]+?)~(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])\*([^*\n]+?)\*(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])_([^_\n]+?)_(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])~([^~\n]+?)~(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
     .replace(/^>\s?/gm, "");
 }
