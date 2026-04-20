@@ -461,12 +461,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
     setSubmitting(true);
-    setEnrichingAddress(true);
-    setAddressStatus("Buscando endereço...");
     try {
-      await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
-      setEnrichingAddress(false);
-      setAddressStatus("");
+      // Fire address enrichment in background — must NOT block agreement creation.
+      // If MaxSystem is slow/down, the agreement is still saved. Address (when it
+      // arrives) will be available on the next "checkRequiredFields" run.
+      enrichClientAddress(cpf, profile.tenant_id).catch((err) =>
+        console.warn("[address-enrichment] background failed:", err)
+      );
 
       // Build custom installment maps for multiple entradas
       const customDates: Record<string, string> = {};
