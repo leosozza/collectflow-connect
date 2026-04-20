@@ -1170,6 +1170,113 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Confirmação obrigatória antes de formalizar ── */}
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => { if (!submitting && !enrichingAddress && !generatingBoletos) setConfirmOpen(o); }}>
+        <AlertDialogContent
+          className="max-w-lg"
+          onEscapeKeyDown={(e) => { if (submitting || enrichingAddress || generatingBoletos) e.preventDefault(); }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <FileCheck className="w-5 h-5 text-primary" />
+              Confirmar formalização do acordo
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Revise os dados antes de gravar. Esta ação irá criar o acordo
+              {outOfStandard.isOut ? " (com solicitação de liberação)" : " e gerar os boletos"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="grid grid-cols-2 gap-3 text-sm py-2">
+            <div className="col-span-2 rounded-md border bg-muted/40 p-3">
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Cliente</p>
+              <p className="font-semibold truncate">{clientName}</p>
+              <p className="text-xs text-muted-foreground">CPF: {formatCPF(cpf)}</p>
+              <p className="text-xs text-muted-foreground">Credor: {credor}</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Valor original</p>
+              <p className="font-semibold">{formatCurrency(totals.totalOriginal)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Valor proposto</p>
+              <p className="font-semibold text-primary">{formatCurrency(totals.totalAtualizado)}</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Desconto</p>
+              <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatCurrency(totals.descontoVal)}
+                {totals.totalBruto > 0 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({Math.round((totals.descontoVal / totals.totalBruto) * 100 * 10) / 10}%)
+                  </span>
+                )}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Entrada</p>
+              <p className="font-semibold">{numEntrada > 0 ? formatCurrency(numEntrada) : "—"}</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Parcelas</p>
+              <p className="font-semibold">
+                {(typeof numParcelas === "number" && numParcelas > 0)
+                  ? `${numParcelas}x de ${formatCurrency(installmentValue)}`
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">1º Vencimento</p>
+              <p className="font-semibold">
+                {firstDueDate
+                  ? formatDate(firstDueDate)
+                  : (entradas.find(e => e.date)?.date ? formatDate(entradas.find(e => e.date)!.date) : "—")}
+              </p>
+            </div>
+
+            <div className="col-span-2">
+              <p className="text-[10px] uppercase font-medium text-muted-foreground">Forma de pagamento</p>
+              <p className="font-semibold">
+                {(typeof numParcelas === "number" && numParcelas > 0) ? formaPagto : entradas[0]?.method || "—"}
+              </p>
+            </div>
+
+            {outOfStandard.isOut && (
+              <div className="col-span-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-2">
+                <p className="text-xs text-orange-800 dark:text-orange-300">
+                  <strong>Fora do padrão:</strong> {outOfStandard.reasons.join("; ")}.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Esta ação não pode ser desfeita automaticamente.
+          </p>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting || enrichingAddress || generatingBoletos} autoFocus>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting || enrichingAddress || generatingBoletos}
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmOpen(false);
+                void handleConfirmedSubmit();
+              }}
+            >
+              {submitting || enrichingAddress || generatingBoletos
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Processando...</>
+                : "Confirmar e Formalizar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
