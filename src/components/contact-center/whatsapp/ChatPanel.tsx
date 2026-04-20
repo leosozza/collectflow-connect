@@ -403,12 +403,14 @@ const ChatPanel = ({
                         size="sm"
                         disabled={loadingOlder}
                         onClick={async () => {
-                          const el = scrollContainerRef.current;
+                          const root = scrollContainerRef.current as unknown as HTMLElement | null;
+                          const el = root?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
                           const prevHeight = el?.scrollHeight ?? 0;
                           const prevTop = el?.scrollTop ?? 0;
                           await onLoadOlder();
                           requestAnimationFrame(() => {
-                            const node = scrollContainerRef.current;
+                            const root2 = scrollContainerRef.current as unknown as HTMLElement | null;
+                            const node = root2?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
                             if (!node) return;
                             const diff = node.scrollHeight - prevHeight;
                             node.scrollTop = prevTop + diff;
