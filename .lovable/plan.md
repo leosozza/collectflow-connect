@@ -1,82 +1,71 @@
 
 
-## Refinamentos UX Premium do WhatsApp
+## Exibir foto de perfil real dos clientes no WhatsApp
 
-Plano dividido em 6 melhorias independentes sobre o módulo `src/components/contact-center/whatsapp/`.
+### Diagnóstico atual
 
-### 1. Infinite Scroll reverso no histórico
+- A tabela `public.conversations` **não possui** coluna para foto do cliente (`remote_avatar_url` / `profile_pic_url`).
+- Nenhum webhook (`whatsapp-webhook`, `gupshup-webhook`) lê ou persiste a foto do contato hoje — apenas `pushName` / `sender.name`.
+- O componente `ConversationAvatar` em `ConversationList.tsx` renderiza somente as iniciais via `<AvatarFallback>` (não há `<AvatarImage>`).
 
-**`ChatPanel.tsx`**
-- Remover o botão "Carregar mensagens anteriores".
-- Adicionar `onScroll` no viewport do `ScrollArea` (`[data-radix-scroll-area-viewport]`):
-  - Quando `scrollTop < 80px` && `hasMoreOlder` && `!loadingOlder` → disparar `onLoadOlder()`.
-  - Debounce simples via flag local (`isFetchingRef`) para não chamar várias vezes durante o mesmo scroll.
-- Preservar a posição: antes da chamada, salvar `prevHeight = viewport.scrollHeight` e `prevTop = viewport.scrollTop`. Após `messages` mudar (via `useLayoutEffect` com dependência `messages.length`), aplicar `viewport.scrollTop = viewport.scrollHeight - prevHeight + prevTop`. Manter o ajuste já existente.
-- **Skeleton**: enquanto `loadingOlder === true`, renderizar no topo da lista 3 `<Skeleton>` em formato de bolha (alternando esquerda/direita, `h-12 w-2/3 rounded-2xl`) dentro de um wrapper `animate-fade-in`.
+### Viabilidade por provedor
 
-### 2. SLA Visual
+| Provedor | Foto disponível? | Como obter |
+|---|---|---|
+| **Evolution API** (não-oficial) | Sim | Endpoint `POST /chat/fetchProfilePictureUrl/{instance}` retorna `{ profilePictureUrl }` |
+| **Wuzapi** (não-oficial) | Sim | Endpoint `GET /user/avatar?phone=...` |
+| **Gupshup oficial (Meta Cloud API)** | Não | Meta não expõe a foto de contatos por questões de privacidade. Fallback: iniciais |
 
-**`ConversationList.tsx`**
-- Criar helper `getSlaColor(conv)` baseado em `conv.last_message_at` + janela de 24h da política WhatsApp já usada no projeto (consultar lógica existente em `WhatsAppChatLayout` ou no badge de SLA do `ChatPanel`):
-  - `> 4h` restante → `ring-green-500`
-  - `1h–4h` → `ring-orange-500`
-  - `< 1h` → `ring-red-500 animate-pulse`
-- Aplicar como `ring-2 ring-offset-1` no `Avatar` da conversa quando status for `open` ou `waiting` (não aplicar em `closed`).
+### Mudanças propostas
 
-**`ChatPanel.tsx`**
-- No badge SLA já existente no header, adicionar classe condicional `animate-pulse` quando tempo restante `< 1h`.
+**1. Schema (migração)**
+- Adicionar em `public.conversations`:
+  - `remote_avatar_url TEXT NULL`
+  - `remote_avatar_fetched_at TIMESTAMPTZ NULL` (para cache/refresh)
+- Sem RLS adicional (herda das policies existentes).
+- Atualizar a RPC `get_visible_conversations` para retornar `remote_avatar_url` no `RETURNS TABLE`.
 
-### 3. Triage Mode — tags/tabulação visíveis em `waiting`
+**2. Backend — captura sob demanda (lazy + cache)**
 
-**`ConversationList.tsx`**
-- Hoje conversas em `waiting` têm prévia/última mensagem borrada (`blur-sm` ou similar). Garantir que o container de tags/disposições renderizado no item NÃO receba a classe de blur — extrair para um nó irmão fora do wrapper borrado.
+Nova edge function `whatsapp-fetch-avatar` (POST, JWT-auth, `tenant_id` validado):
+- Input: `{ conversation_id }`.
+- Lê `instance_id` + `provider_category` da conversa.
+- Roteia:
+  - `evolution` → chama `evolution-proxy` action `fetchProfilePictureUrl` (criar este action no proxy se não existir).
+  - `wuzapi` → chama `wuzapi-proxy` action equivalente.
+  - `official_meta` (Gupshup oficial) → retorna `null` imediatamente (sem chamada).
+- Persiste resultado em `conversations.remote_avatar_url` + `remote_avatar_fetched_at`.
+- TTL: se `fetched_at < 7 dias` retorna o cache sem chamar provedor.
 
-**`ChatPanel.tsx` (header)**
-- Quando `status === "waiting"`, manter o bloco de tags + disposições renderizado no header com opacidade total (sem blur), ainda que o corpo das mensagens fique bloqueado pela tela de "Aceitar conversa".
+**Por que lazy e não no webhook?** Buscar a foto a cada mensagem inbound geraria 1 request HTTP extra por mensagem para a Evolution/Wuzapi, com risco de rate-limit. Buscar 1x por conversa (com TTL) é o padrão recomendado.
 
-### 4. Proteção de conversas fechadas
+**3. Frontend**
 
-**`ChatInput.tsx`**
-- Receber nova prop `conversationStatus?: "open" | "waiting" | "closed"` (passar do `ChatPanel`/`WhatsAppChatLayout`).
-- Quando `conversationStatus === "closed"` && `text.length > 0`:
-  - Renderizar acima do textarea um aviso sutil (bg `amber-50 dark:amber-950/30`, ícone `AlertTriangle`, texto: "Você está respondendo a uma conversa fechada. Isso irá reabri-la automaticamente.").
-  - Trocar a cor do botão Send para `bg-amber-500 hover:bg-amber-600` (sobrescreve o `bg-primary`).
-- Sem mudança de comportamento de envio — a reabertura já acontece no backend/realtime quando uma nova mensagem outbound entra.
+`ConversationList.tsx` → `ConversationAvatar`:
+- Adicionar `<AvatarImage src={conv.remote_avatar_url ?? undefined} />` antes do `<AvatarFallback>`. O Radix Avatar já faz fallback automático se a imagem falhar.
+- Hook `useConversationAvatars(conversations)`:
+  - Para cada conversa visível com `remote_avatar_url === null` && `remote_avatar_fetched_at === null` (nunca tentado), enfileira chamada à edge `whatsapp-fetch-avatar` em batches de 5 (debounce 300ms ao scrollar).
+  - Conversa cuja tentativa falhou (fetched_at preenchido mas url null) **não** é re-tentada — fica nas iniciais.
 
-### 5. Typing Indicator (Cliente digitando)
+`ChatPanel.tsx` (header):
+- Substituir/incluir `<AvatarImage src={conversation.remote_avatar_url} />` no avatar do header.
 
-**Backend (Supabase Realtime — Presence/Broadcast, sem persistência)**
-- Usar canal Supabase **Broadcast** por conversa: `whatsapp-typing-{conversation_id}`.
-- O webhook de ingestão da Gupshup/Evolution (quando o provedor envia evento `composing`/`typing`) fará `supabase.channel(...).send({ type: 'broadcast', event: 'typing', payload: { conversation_id, until: now+5s } })`.
-  - **Importante:** verificar se os webhooks atuais (`gupshup-webhook`, `evolution-webhook`) já recebem evento de typing dos provedores. Se não receberem, **pular esta sub-feature** e marcar como "depende de provedor". Confirmar com leitura das edge functions antes de implementar — se ausente, o typing fica para uma próxima iteração.
-- Frontend:
-  - Hook `useTypingIndicator(conversationId)` que retorna `boolean` (true por 5s após receber evento, auto-reset).
-  - Subscrição feita no `WhatsAppChatLayout` para a conversa selecionada (header) e, na lista, subscrição em todas conversas visíveis seria custosa → **manter typing apenas no header do `ChatPanel`** e **não** na lista (decisão de performance).
-  
-**`ChatPanel.tsx` (header)**
-- Quando `isTyping === true`, abaixo do nome do cliente, mostrar componente `TypingDots` (três bolinhas animadas via Tailwind: `animate-bounce` com delays escalonados 0/150/300ms) + texto "digitando…".
+**4. Atualização da interface `Conversation`**
+- Adicionar `remote_avatar_url: string | null` e `remote_avatar_fetched_at: string | null` em `src/services/conversationService.ts` e em todos os mapeamentos da RPC.
 
-### 6. Filtro de Tabulação colorido
+### Fora de escopo
 
-**`ConversationList.tsx`**
-- No `SelectTrigger` do filtro de tabulação:
-  - Quando `dispositionFilter !== "all"`, calcular `selectedDisp = dispositionTypes.find(d => d.id === dispositionFilter)`.
-  - Aplicar `style={{ color: selectedDisp.color }}` no ícone `Tag`.
-  - Manter texto do label normal (legibilidade).
-
-### Sem mudanças
-
-- Schema, RLS, RPCs (exceto possível ajuste de webhook se typing for viável — analisar antes).
-- Lógica de fechamento/reabertura de conversa (já está no fluxo de envio).
-- Estilos globais.
+- Refresh automático periódico (usuário pode mudar foto) — fica como "TTL de 7 dias quando o avatar é solicitado novamente".
+- Storage local da imagem em bucket Supabase. As URLs da Evolution/Wuzapi são públicas e expiram; **se observarmos expiração**, fase 2: baixar e salvar em `chat-media/{tenant_id}/avatars/{conversation_id}.jpg`. Por ora referenciamos a URL direta.
+- Foto de grupos (não aplicável — atendimento é 1:1).
 
 ### Validação
 
-1. Abrir conversa com >200 mensagens, rolar para o topo → carga automática + skeletons no topo, scroll permanece "ancorado" sem pulo.
-2. Lista: avatares com aros verde/laranja/vermelho conforme tempo desde última mensagem; aros vermelhos pulsam.
-3. Header de conversa com SLA < 1h: badge pulsa.
-4. Conversa em "waiting": tags e tabulação visíveis e nítidas (sem blur), tanto na lista quanto no header.
-5. Conversa fechada: digitar → alerta âmbar aparece e botão fica âmbar; ao enviar, conversa reabre.
-6. Typing: provedor envia evento `composing` → header mostra "digitando…" com 3 pontos animados; some após 5s sem novo evento. Se provedor não enviar, sub-feature documentada como pendente.
-7. Filtro de tabulação: selecionar uma → ícone Tag fica na cor da tabulação; voltar para "Todas" → ícone volta ao normal.
+1. Conversa em instância **Evolution**: ao abrir a lista, dentro de ~2s os avatares com foto real aparecem; quem não tem foto no WhatsApp continua com iniciais.
+2. Conversa em instância **Gupshup oficial (Meta)**: continua com iniciais, sem requests inúteis.
+3. Header do `ChatPanel` exibe a foto sincronizada com a lista.
+4. Recarregar a página: avatares aparecem instantaneamente (cache no banco).
+5. Conversa nova (inbound): a primeira renderização mostra iniciais, em seguida a foto carrega.
+6. Falha de rede no `whatsapp-fetch-avatar`: log em `webhook_logs`, UI mantém iniciais sem erro visível.
+7. Aros de SLA continuam funcionando sobre o avatar com imagem.
 
