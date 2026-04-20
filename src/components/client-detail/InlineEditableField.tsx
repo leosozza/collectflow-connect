@@ -65,6 +65,7 @@ const InlineEditableField = ({
         } else if (res.reason === "network") {
           toast.error("Falha ao consultar CEP");
         }
+        // invalid_format: ignore (shouldn't happen since we checked digits.length===8)
       } finally {
         if (!cancelled) setCepLoading(false);
       }

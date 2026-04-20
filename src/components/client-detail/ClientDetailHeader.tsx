@@ -152,9 +152,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           cidade: res.data.localidade || f.cidade,
           uf: res.data.uf || f.uf,
         }));
-      } else if (res.reason === "not_found") {
+      } else if (!res.ok && res.reason === "not_found") {
         toast.error("CEP não encontrado");
-      } else if (res.reason === "network") {
+      } else if (!res.ok && res.reason === "network") {
         toast.error("Falha ao consultar CEP");
       }
     } finally {
