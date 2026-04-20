@@ -66,6 +66,10 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf }: Dispositio
   const isCpcCpe = (d: DispositionType) => CPC_CPE_KEYS.includes(d.key);
 
   const handleToggle = async (disposition: DispositionType) => {
+    if (EM_DIA_KEYS.includes(disposition.key) && hasAgreement && !assignedIds.has(disposition.id)) {
+      toast.error(EM_DIA_BLOCKED_TITLE);
+      return;
+    }
     setLoading(true);
     try {
       const isAssigned = assignedIds.has(disposition.id);
