@@ -14,6 +14,7 @@ import {
   fetchConversations,
   fetchConversationCounts,
   fetchMessages,
+  fetchMessagesBefore,
   fetchQuickReplies,
   sendTextMessage,
   sendMediaMessage,
@@ -51,6 +52,8 @@ const WhatsAppChatLayout = () => {
 
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [sending, setSending] = useState(false);
@@ -357,15 +360,41 @@ const WhatsAppChatLayout = () => {
   useEffect(() => {
     if (!selectedConv) {
       setMessages([]);
+      setHasMoreOlder(false);
       return;
     }
-    fetchMessages(selectedConv.id).then((result) => setMessages(result.data)).catch(console.error);
+    fetchMessages(selectedConv.id)
+      .then((result) => {
+        setMessages(result.data);
+        setHasMoreOlder(result.hasMore);
+      })
+      .catch(console.error);
     // Accept-to-read: don't mark as read if conversation is waiting (unless admin)
     const isAdmin = profile?.role === "admin";
     if (selectedConv.status !== "waiting" || isAdmin) {
       markConversationRead(selectedConv.id).catch(console.error);
     }
   }, [selectedConv?.id, selectedConv?.status, profile?.role]);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!selectedConv || loadingOlder || !hasMoreOlder) return;
+    const oldest = messages[0]?.created_at;
+    if (!oldest) return;
+    setLoadingOlder(true);
+    try {
+      const result = await fetchMessagesBefore(selectedConv.id, oldest, 100);
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newOnes = result.data.filter((m) => !existingIds.has(m.id));
+        return [...newOnes, ...prev];
+      });
+      setHasMoreOlder(result.hasMore);
+    } catch (err) {
+      console.error("[WhatsAppChatLayout] loadOlderMessages error:", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [selectedConv, loadingOlder, hasMoreOlder, messages]);
 
   // Load client info for selected conversation
   const [clientInfo, setClientInfo] = useState<any>(null);
