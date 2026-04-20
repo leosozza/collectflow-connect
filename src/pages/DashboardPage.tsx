@@ -274,8 +274,17 @@ const DashboardPage = () => {
 
       {/* Meus Clientes table — virtual installments from agreements */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-card-foreground">Parcelas do Dia</h2>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-success/15 text-success border border-success/30 text-xs font-semibold">
+              {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
+            </span>
+            <span className="text-muted-foreground text-xs">/</span>
+            <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-muted text-foreground border border-border text-xs font-semibold">
+              {vencimentos.length}
+            </span>
+          </div>
         </div>
 
         {vencimentos.length === 0 ? (
