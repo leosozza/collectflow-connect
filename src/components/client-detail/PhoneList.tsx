@@ -283,7 +283,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
 
 
                   {/* Actions */}
-                  <div className="flex items-center gap-0 shrink-0 ml-auto">
+                  <div className="flex items-center shrink-0 ml-auto -space-x-0.5">
                     {!isEditingThis && (
                       <Button
                         size="icon"
@@ -291,6 +291,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                         className="h-5 w-5"
                         onClick={() => startEditNumber(slot)}
                         title="Editar número"
+                        aria-label="Editar número"
                         disabled={busy === slot}
                       >
                         <Pencil className="w-3 h-3 text-muted-foreground" />
@@ -301,7 +302,8 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                       variant="ghost"
                       className="h-5 w-5"
                       onClick={() => handleToggleInactive(slot)}
-                      title={inactive ? "Reativar" : "Inativar"}
+                      title={inactive ? "Reativar número" : "Inativar número"}
+                      aria-label={inactive ? "Reativar número" : "Inativar número"}
                       disabled={busy === slot}
                     >
                       {inactive ? (
