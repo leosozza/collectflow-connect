@@ -451,10 +451,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             >
               <Headset className="w-5 h-5" />
             </Button>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}>
-              <Pencil className="w-4 h-4" />
-              Editar
-            </Button>
+            <div className="flex flex-col items-end px-3 border-l border-border ml-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
+              <span className="text-2xl font-bold text-destructive leading-tight">{formatCurrency(totalAberto)}</span>
+            </div>
             <Button onClick={onFormalizarAcordo} className="gap-2">
               <FileText className="w-4 h-4" />
               Formalizar Acordo
