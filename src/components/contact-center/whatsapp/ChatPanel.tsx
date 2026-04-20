@@ -190,7 +190,7 @@ const ChatPanel = ({
           </div>
           <div>
             <div className="font-medium text-[15px] flex items-center gap-2 text-foreground">
-              {conversation.remote_name || conversation.remote_phone}
+              {clientInfo?.name || (conversation.remote_name && conversation.remote_name !== conversation.remote_phone ? conversation.remote_name : conversation.remote_phone)}
               {(() => {
                 const convDisps = dispositionAssignments.filter(a => a.conversation_id === conversation.id);
                 return convDisps.map(a => {
