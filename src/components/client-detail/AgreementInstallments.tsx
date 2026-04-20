@@ -220,6 +220,16 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Erro", description: "Tenant não identificado.", variant: "destructive" });
       return;
     }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(inst.dueDate); due.setHours(0, 0, 0, 0);
+    if (due < today) {
+      toast({
+        title: "Data de vencimento inválida",
+        description: "Edite o vencimento para uma data futura antes de reemitir o boleto.",
+        variant: "destructive",
+      });
+      return;
+    }
     setGeneratingIdx(idx);
     try {
       const hasPreviousBoleto = inst.cobranca?.link_boleto;
@@ -253,14 +263,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const inst = selectedInstallmentForDateEdit;
     const dateStr = format(selectedDateForEdit, "yyyy-MM-dd");
     try {
-      await updateInstallmentDate(agreementId, inst.customKey, dateStr);
+      const updated = await updateInstallmentDate(agreementId, inst.customKey, dateStr);
+      // Atualização local imediata para que a próxima ação (ex: Reemitir Boleto) já use a data nova
+      if (agreement) {
+        (agreement as any).custom_installment_dates = updated || {
+          ...((agreement as any).custom_installment_dates || {}),
+          [inst.customKey]: dateStr,
+        };
+      }
       toast({ title: "Data atualizada com sucesso" });
+      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      await Promise.resolve(onRefresh?.());
       setDateEditDialogOpen(false);
       setSelectedInstallmentForDateEdit(null);
       setSelectedDateForEdit(undefined);
-      onRefresh?.();
-      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
-      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
     } catch (err: any) {
       toast({ title: "Erro ao atualizar data", description: err.message, variant: "destructive" });
     } finally {

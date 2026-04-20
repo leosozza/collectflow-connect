@@ -513,8 +513,13 @@ export const updateInstallmentDate = async (
   agreementId: string,
   installmentKey: string,
   newDate: string
-): Promise<void> => {
+): Promise<Record<string, string>> => {
   try {
+    if (!installmentKey) throw new Error("installment_key é obrigatório");
+    if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+      throw new Error("Data inválida — formato esperado yyyy-MM-dd");
+    }
+
     const { data: agreement, error: fetchErr } = await supabase
       .from("agreements")
       .select("custom_installment_dates")
@@ -532,6 +537,13 @@ export const updateInstallmentDate = async (
     if (error) throw error;
 
     logger.info(MODULE, "updateInstallmentDate", { agreementId, installmentKey, newDate });
+    logAction({
+      action: "data_parcela_alterada",
+      entity_type: "agreement",
+      entity_id: agreementId,
+      details: { installment_key: installmentKey, new_date: newDate },
+    });
+    return updated;
   } catch (error) {
     handleServiceError(error, MODULE);
   }
