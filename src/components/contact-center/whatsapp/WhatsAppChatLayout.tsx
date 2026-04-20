@@ -196,12 +196,21 @@ const WhatsAppChatLayout = () => {
 
     (async () => {
       try {
+        const { data: resolved } = await supabase.rpc("resolve_client_by_phone" as any, {
+          p_tenant_id: tenantId,
+          p_phone: normalizedParam,
+        });
+        const clientRow: any = Array.isArray(resolved) ? resolved[0] : null;
+
         const { data, error } = await supabase
           .from("conversations")
           .insert({
             tenant_id: tenantId,
             instance_id: defaultInstance.id,
             remote_phone: normalizedParam,
+            remote_name: clientRow?.nome_completo ?? "",
+            client_id: clientRow?.client_id ?? null,
+            channel_type: "whatsapp",
             status: "open",
             last_message_at: new Date().toISOString(),
           } as any)
