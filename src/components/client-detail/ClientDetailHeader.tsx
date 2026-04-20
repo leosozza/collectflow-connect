@@ -31,6 +31,7 @@ import PhoneList from "./PhoneList";
 import { CraftButton, CraftButtonLabel, CraftButtonIcon } from "@/components/ui/craft-button";
 import EmailList from "./EmailList";
 import InlineEditableField from "./InlineEditableField";
+import StartWhatsAppConversationDialog from "./StartWhatsAppConversationDialog";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -79,6 +80,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   });
   const formattedCpf = formatCPF(cpf || "");
   const [promotingSlot, setPromotingSlot] = useState<PhoneSlot | null>(null);
+  const [waDialogOpen, setWaDialogOpen] = useState(false);
 
   const handlePromoteHot = async (slot: PhoneSlot) => {
     if (slot === "phone" || !tenant?.id || !client?.cpf || !client?.credor) return;
@@ -304,16 +306,15 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   const openWhatsApp = (phoneNumber?: string) => {
     const rawPhone = phoneNumber || client.phone;
-    if (!rawPhone) {
+    if (!rawPhone && !allClientPhones.length) {
       toast.error("Nenhum telefone cadastrado para este devedor");
       return;
     }
     if (isModuleEnabled("whatsapp")) {
-      const phone = rawPhone.replace(/\D/g, "");
-      const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
-      navigate(`/contact-center/whatsapp?phone=${intlPhone}`);
+      // Abre o diálogo para escolher telefone + instância
+      setWaDialogOpen(true);
     } else {
-      const phone = rawPhone.replace(/\D/g, "");
+      const phone = (rawPhone || "").replace(/\D/g, "");
       const intlPhone = phone.startsWith("55") ? phone : `55${phone}`;
       window.open(`https://wa.me/${intlPhone}`, "_blank");
     }
@@ -704,6 +705,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <StartWhatsAppConversationDialog
+        open={waDialogOpen}
+        onOpenChange={setWaDialogOpen}
+        client={client}
+        allClientPhones={allClientPhones}
+      />
     </>
   );
 };
