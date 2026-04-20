@@ -26,6 +26,16 @@ import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappIns
 import ConversationList from "./ConversationList";
 import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const PAGE_SIZE = 30;
 
@@ -51,6 +61,13 @@ const WhatsAppChatLayout = () => {
 
   // Filters state — lifted to parent so we can pass to useInfiniteQuery
   const [filters, setFilters] = useState<ConversationFilters>({});
+
+  // Conflict dialog: existing conversation in another instance
+  const [conflictState, setConflictState] = useState<{
+    existingConv: Conversation;
+    targetInstanceId: string;
+    phone: string;
+  } | null>(null);
 
   const knownWaitingRef = useRef<Set<string>>(new Set());
 
@@ -162,43 +179,13 @@ const WhatsAppChatLayout = () => {
     }
   }, [conversations]);
 
-  // Auto-select or create conversation from ?phone= param
-  useEffect(() => {
-    if (phoneParamProcessed.current) return;
-    const phoneParam = searchParams.get("phone");
-    if (!phoneParam || !tenantId || conversations.length === 0 && !instances.length) return;
-
-    phoneParamProcessed.current = true;
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("phone");
-      return next;
-    }, { replace: true });
-
-    const normalizedParam = phoneParam.replace(/\D/g, "");
-    const suffix = normalizedParam.slice(-8);
-
-    const existing = conversations.find((c) => {
-      const remoteSuffix = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
-      return remoteSuffix === suffix;
-    });
-
-    if (existing) {
-      setSelectedConv(existing);
-      return;
-    }
-
-    const defaultInstance = instances[0];
-    if (!defaultInstance) {
-      toast.error("Nenhuma instância WhatsApp configurada");
-      return;
-    }
-
-    (async () => {
+  // Helper: create a brand new conversation on a target instance
+  const createConversationOnInstance = useCallback(
+    async (phone: string, targetInstanceId: string) => {
       try {
         const { data: resolved } = await supabase.rpc("resolve_client_by_phone" as any, {
           p_tenant_id: tenantId,
-          p_phone: normalizedParam,
+          p_phone: phone,
         });
         const clientRow: any = Array.isArray(resolved) ? resolved[0] : null;
 
@@ -206,8 +193,8 @@ const WhatsAppChatLayout = () => {
           .from("conversations")
           .insert({
             tenant_id: tenantId,
-            instance_id: defaultInstance.id,
-            remote_phone: normalizedParam,
+            instance_id: targetInstanceId,
+            remote_phone: phone,
             remote_name: clientRow?.nome_completo ?? "",
             client_id: clientRow?.client_id ?? null,
             channel_type: "whatsapp",
@@ -225,10 +212,72 @@ const WhatsAppChatLayout = () => {
         }
       } catch (err: any) {
         console.error("Error creating conversation:", err);
-        toast.error("Erro ao criar conversa");
+        toast.error(err?.message || "Erro ao criar conversa");
       }
-    })();
-  }, [searchParams, conversations, instances, tenantId]);
+    },
+    [tenantId, refetchConversations]
+  );
+
+  // Auto-select or create conversation from ?phone= param
+  useEffect(() => {
+    if (phoneParamProcessed.current) return;
+    const phoneParam = searchParams.get("phone");
+    const instanceIdParam = searchParams.get("instanceId");
+    const forceNewParam = searchParams.get("forceNew") === "1";
+    if (!phoneParam || !tenantId || (conversations.length === 0 && !instances.length)) return;
+
+    phoneParamProcessed.current = true;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("phone");
+      next.delete("instanceId");
+      next.delete("forceNew");
+      return next;
+    }, { replace: true });
+
+    const normalizedParam = phoneParam.replace(/\D/g, "");
+    const suffix = normalizedParam.slice(-8);
+
+    const matchingByPhone = conversations.filter((c) => {
+      const remoteSuffix = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
+      return remoteSuffix === suffix;
+    });
+
+    const targetInstanceId = instanceIdParam || instances[0]?.id || null;
+
+    // Prefer same-instance match
+    const sameInstanceMatch = targetInstanceId
+      ? matchingByPhone.find((c) => c.instance_id === targetInstanceId)
+      : matchingByPhone[0];
+
+    if (sameInstanceMatch && !forceNewParam) {
+      setSelectedConv(sameInstanceMatch);
+      return;
+    }
+    if (sameInstanceMatch && forceNewParam) {
+      // Já existe na instância alvo — apenas seleciona
+      setSelectedConv(sameInstanceMatch);
+      return;
+    }
+
+    // No match in target instance, but exists in another
+    const otherInstanceMatch = matchingByPhone.find((c) => c.instance_id !== targetInstanceId);
+    if (otherInstanceMatch && targetInstanceId) {
+      setConflictState({
+        existingConv: otherInstanceMatch,
+        targetInstanceId,
+        phone: normalizedParam,
+      });
+      return;
+    }
+
+    // No conflict — create new on target (or fallback)
+    if (!targetInstanceId) {
+      toast.error("Nenhuma instância WhatsApp configurada");
+      return;
+    }
+    createConversationOnInstance(normalizedParam, targetInstanceId);
+  }, [searchParams, conversations, instances, tenantId, createConversationOnInstance, setSearchParams]);
 
   // Load messages when selecting conversation
   useEffect(() => {
