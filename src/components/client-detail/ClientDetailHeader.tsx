@@ -324,10 +324,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   // Estável entre renders. Mantém os 4 updates silenciosos e exibe um toast agregado.
   const handleCepAutoFill = useCallback(async (data: any) => {
     const updates: Promise<void>[] = [];
-    if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro, { silent: true }));
-    if (data.bairro) updates.push(updateSingleField("bairro", data.bairro, { silent: true }));
-    if (data.localidade) updates.push(updateSingleField("cidade", data.localidade, { silent: true }));
-    if (data.uf) updates.push(updateSingleField("uf", data.uf, { silent: true }));
+    const filled: string[] = [];
+    if (data.logradouro) { updates.push(updateSingleField("endereco", data.logradouro, { silent: true })); filled.push("endereco"); }
+    if (data.bairro) { updates.push(updateSingleField("bairro", data.bairro, { silent: true })); filled.push("bairro"); }
+    if (data.localidade) { updates.push(updateSingleField("cidade", data.localidade, { silent: true })); filled.push("cidade"); }
+    if (data.uf) { updates.push(updateSingleField("uf", data.uf, { silent: true })); filled.push("uf"); }
     if (updates.length === 0) return;
     const results = await Promise.allSettled(updates);
     const failed = results.filter((r) => r.status === "rejected").length;
@@ -335,6 +336,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       toast.success("Endereço preenchido", {
         description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
       });
+      // Destaca visualmente os campos preenchidos por 3 segundos
+      setHighlightedFields(new Set(filled));
+      setTimeout(() => setHighlightedFields(new Set()), 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clients, tenant?.id, cpf]);
