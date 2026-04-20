@@ -144,7 +144,7 @@ const InlineEditableField = ({
   return (
     <div className={cn(
       "group relative min-w-0 rounded-md transition-shadow",
-      highlight && "ring-2 ring-emerald-400/60 ring-offset-1 ring-offset-background -mx-1 px-1",
+      highlight && "ring-2 ring-success/60 ring-offset-1 ring-offset-background -mx-1 px-1",
       className
     )}>
       <p className="text-xs text-muted-foreground uppercase font-medium mb-1 flex items-center gap-1">
