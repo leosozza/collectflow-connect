@@ -425,47 +425,47 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   return (
     <>
-      <Card className="p-4">
+      <Card className="px-4 py-2.5">
         {/* Linha 1: Nome + Ações */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(backTo || "/carteira")}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backTo || "/carteira")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-2xl font-bold text-foreground">{client.nome_completo}</h1>
-          <div className="flex flex-col items-end gap-3 ml-auto">
+          <h1 className="text-xl font-bold text-foreground">{client.nome_completo}</h1>
+          <div className="flex flex-col items-end gap-1.5 ml-auto">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
+                className="h-9 w-9 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
                 onClick={() => openWhatsApp()}
                 title="WhatsApp"
               >
-                <WhatsAppIcon className="w-5 h-5" />
+                <WhatsAppIcon className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
+                className="h-9 w-9 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
                 onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
                 title="Atendimento"
               >
-                <Headset className="w-5 h-5" />
+                <Headset className="w-4 h-4" />
               </Button>
-              <Button onClick={onFormalizarAcordo} className="gap-2">
+              <Button onClick={onFormalizarAcordo} size="sm" className="gap-2 h-9">
                 <FileText className="w-4 h-4" />
                 Formalizar Acordo
               </Button>
             </div>
-            <div className="flex flex-col items-end leading-tight">
+            <div className="flex flex-col items-end leading-none">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-              <span className="text-2xl font-bold text-destructive leading-none">{formatCurrency(totalAberto)}</span>
+              <span className="text-xl font-bold text-destructive leading-none mt-0.5">{formatCurrency(totalAberto)}</span>
             </div>
           </div>
         </div>
 
         {/* Linha 2: Metadados */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-11 mt-1.5">
           <span><strong>CPF:</strong> {formattedCpf}</span>
           <span className="text-border">|</span>
           <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
@@ -477,7 +477,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
         {/* Linha 3: Colapsável */}
         <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-12 py-2 mt-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-11 py-1.5 mt-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
             <span>Mais informações do devedor</span>
             <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
           </CollapsibleTrigger>
