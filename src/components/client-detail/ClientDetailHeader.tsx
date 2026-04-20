@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, Headset, ChevronDown, Pencil, Flame } from "lucide-react";
 import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
 import { Button } from "@/components/ui/button";
+import { PrimaryFlowButton } from "@/components/ui/flow-button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
