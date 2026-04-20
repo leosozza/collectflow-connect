@@ -487,7 +487,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             </p>
           </div>
           <div className="px-3 py-2 min-w-0 bg-destructive/5">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Em Aberto</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Saldo Devedor</p>
             <p className="text-[15px] font-bold text-destructive truncate mt-0.5">
               {formatCurrency(totalAberto)}
             </p>
@@ -582,11 +582,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* Valores */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
+              <div className="grid grid-cols-3 gap-x-6 gap-y-2 pt-2 border-t border-border">
                 <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
-                <InfoItem label="Saldo Devedor" value={formatCurrency(totalSaldo)} />
                 <InfoItem label="Valor Atualizado" value={<span className="font-semibold">{formatCurrency(totalAtualizado)}</span>} />
-                <InfoItem label="Em Aberto" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
+                <InfoItem label="Saldo Devedor" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
               </div>
 
               {/* Datas */}
