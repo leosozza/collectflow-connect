@@ -616,17 +616,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     type="cep"
                     maxLength={10}
                     placeholder="00000-000"
-                    onCepResolved={useCallback(async (data: any) => {
-                      const updates: Promise<void>[] = [];
-                      if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro));
-                      if (data.bairro) updates.push(updateSingleField("bairro", data.bairro));
-                      if (data.localidade) updates.push(updateSingleField("cidade", data.localidade));
-                      if (data.uf) updates.push(updateSingleField("uf", data.uf));
-                      await Promise.all(updates);
-                      toast.success("Endereço preenchido", {
-                        description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
-                      });
-                    }, [clients, tenant?.id, cpf])}
+                    onCepResolved={handleCepAutoFill}
                   />
                 </div>
               </div>
