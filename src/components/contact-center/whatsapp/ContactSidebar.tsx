@@ -269,7 +269,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       }
     };
     autoAssign();
-  }, [conversation?.id, linkedClient?.status_cobranca_id, statusCobranca]);
+  }, [conversation?.id, linkedClient?.status_cobranca_id, linkedClient?.cpf, statusCobranca]);
 
   if (!conversation) return null;
 
