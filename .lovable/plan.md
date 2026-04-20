@@ -1,69 +1,93 @@
 
 
-## Revisão das mudanças recentes — bugs encontrados
+## Polimento de UX — 3 melhorias aprovadas + extras encontradas
 
-Após revisar `addressEnrichmentService.ts`, `ClientDetailHeader.tsx`, `AgreementCalculator.tsx`, `InlineEditableField.tsx` e o Edge `generate-agreement-boletos`, identifiquei **5 problemas reais** introduzidos nas últimas alterações. Eles afetam: edição inline, formalização de acordos, performance da carteira e consistência de dados. Não impactam diretamente score, WhatsApp ou discador (esses módulos não foram tocados).
+### Bloco 1 — As 3 melhorias já aprovadas
 
-### 🔴 Bug 1 — `updateSingleField` invalida todas as queries `["clients"]` (impacto severo na carteira)
-`ClientDetailHeader.tsx` linhas 273 e 310 chamam `invalidateQueries({ queryKey: ["clients"] })` sem `exact: true`. Isso invalida **todas** as queries que começam com `["clients"]` — listagem da carteira (170k+ linhas), agrupamentos, contadores, filtros etc. **Cada CEP digitado dispara 4 chamadas** de `updateSingleField` em paralelo (rua/bairro/cidade/UF), forçando 4 refetches da carteira inteira. Isso causa congelamento perceptível e, com paginação grande, pode travar a aba.
+**1.1 Suprimir toasts intermediários no auto-CEP inline**
+`InlineEditableField.tsx` + `ClientDetailHeader.tsx`:
+- Adicionar prop `silent?: boolean` no `updateSingleField`.
+- Quando o `onCepResolved` dispara os 4 updates paralelos, passar `silent: true` em todos.
+- Mostrar 1 único toast final: "Endereço preenchido automaticamente".
+- Manter toast de erro normal se algum update falhar.
 
-**Correção:** invalidar somente `["client-detail", cpf]` (mais preciso) ou usar `refetchType: "none"` no `["clients"]` para apenas marcar stale, sem refetch imediato.
+**1.2 Overlay amigável no AgreementCalculator durante enriquecimento**
+`AgreementCalculator.tsx`:
+- Trocar texto técnico "Buscando endereço no MaxSystem..." por overlay com `Loader2` + "Validando dados do cliente...".
+- Desabilitar botão Formalizar com estado visual claro (`disabled` + opacity) enquanto `enriching === true`.
+- Garantir que duplo-clique no botão não dispare 2 fluxos (guard com `isSubmitting`).
 
-### 🔴 Bug 2 — Loop de re-render no `InlineEditableField` ao auto-preencher CEP
-O `useEffect` de auto-lookup (linha 48) tem `onCepResolved` no array de dependências. No `ClientDetailHeader` linha 599, `onCepResolved` é uma **arrow function inline** recriada a cada render. Sequência:
-1. Usuário digita 8 dígitos → effect roda → `onCepResolved` chama 4 `updateSingleField` → invalidação → re-render do header → nova função `onCepResolved` → effect roda **de novo** (mesmo CEP).
-O `lastLookupRef` previne novo fetch HTTP, mas **a chamada `onCepResolved` é re-executada toda vez** porque o guard só cobre o lookup, não o callback. Isso pode disparar múltiplos updates duplicados no banco.
+**1.3 Optimistic update na edição inline**
+`InlineEditableField.tsx`:
+- Aplicar `setDraft(next)` e fechar edição imediatamente após o usuário confirmar (Enter/✓).
+- Se `onSave` rejeitar, reverter visualmente para o valor anterior + toast de erro.
+- Sensação de salvamento instantâneo, mesmo em conexão lenta.
 
-**Correção:** mover guard de `lastLookupRef` para englobar também a chamada de `onCepResolved`, ou envolver `onCepResolved` em `useCallback` no pai.
+---
 
-### 🟠 Bug 3 — `updateClientMutation` faz UPDATE sequencial em loop (lento)
-Linhas 240-243 e 296-301: o código faz `for (const id of clientIds) { await supabase.update(...).eq("id", id) }`. Para um CPF com 30 parcelas isso vira 30 round-trips sequenciais. Já era assim antes, mas agora o problema piora porque cada update dispara invalidação ampla (Bug 1).
+### Bloco 2 — Melhorias extras encontradas durante a revisão
 
-**Correção:** trocar por um único `update(...).in("id", clientIds)` (compatível com a regra de campos compartilhados; campos unique já são tratados separadamente).
+**2.1 Atalhos de teclado no perfil do cliente**
+- `Esc` para fechar diálogos abertos (já funciona em alguns, padronizar).
+- `Ctrl/Cmd+S` no diálogo "Editar Dados" para salvar sem precisar clicar.
+- `Tab` ordenado nos campos de endereço (CEP → número → complemento → bairro).
 
-### 🟠 Bug 4 — Race condition no `enrichClientAddress` durante formalização
-`AgreementCalculator.handleSubmit` (linhas 470-482) chama `await enrichClientAddress` **mas não usa o retorno**. Em seguida cria o acordo e invoca `generate-agreement-boletos`, que **lê `client_profiles` via fetch separado**. Se o `upsertClientProfile` dentro do enrich ainda não estiver visível para a próxima leitura (replicação/cache do PostgREST), o Edge pode encontrar dados vazios e marcar `boleto_pendente: true` mesmo após o enrich ter sucesso.
+**2.2 Indicador visual de campo "vindo do MaxSystem"**
+Quando o auto-fill preencher endereço, mostrar por 3 segundos um destaque sutil (border verde fade-out) nos 4 campos preenchidos. Reforça a percepção de que o sistema "trabalhou" pelo operador.
 
-**Correção:** após enrich bem-sucedido, rechecar via `checkRequiredFields()` antes de criar o acordo. Se ainda faltar, abrir o diálogo de campos faltantes em vez de seguir cego para a geração de boletos.
+**2.3 Botão "Buscar no MaxSystem" manual no diálogo Editar Dados**
+Hoje o operador depende do auto-trigger ao chegar a 8 dígitos. Adicionar um botão pequeno ao lado do CEP "🔍 Buscar dados" que força o lookup mesmo se o CEP já estiver salvo. Útil quando o cadastro está incompleto mas o CEP existe.
 
-### 🟡 Bug 5 — `updateClientMutation` não persiste `bairro` em `client_profiles`
-Linhas 256-267: o upsert canônico inclui `endereco`, `cidade`, `uf`, `cep` mas **omite `bairro`**. O bairro é gravado em `clients` (linha 232) porém não em `client_profiles`. Como o Edge de boletos lê primeiro o profile, o operador edita o bairro no diálogo, salva, e o Edge ainda vê profile sem bairro até o fallback rodar. Isso reintroduz parcialmente o bug original.
+**2.4 Confirmação visual antes de formalizar acordo de alto valor**
+`AgreementCalculator.tsx`: para acordos acima de R$ 10.000 ou com mais de 12 parcelas, mostrar um diálogo de confirmação com resumo (valor total, parcelas, descontos aplicados). Evita formalização acidental.
 
-**Correção:** incluir `bairro: (data.bairro || "").trim()` no payload do `upsertClientProfile`.
+**2.5 Preservar rascunho do AgreementCalculator**
+Se o operador fechar o diálogo de acordo sem formalizar, salvar os valores em `sessionStorage` por 30 minutos. Ao reabrir, oferecer "Restaurar rascunho?". Reduz frustração quando o operador é interrompido.
 
-### 🟢 Verificações que passaram (sem alterações de risco)
-- `viaCep.ts` está correto e isolado.
-- `ClientForm.tsx` — `bairro` agora vai no payload e o auto-trigger funciona.
-- Edge `generate-agreement-boletos` — fallback consolidado e validação de `bairro` estão OK.
-- `addressEnrichmentService.ts` — normalização de CPF e sync dual estão OK.
-- **Score, WhatsApp, discador, APIs**: nenhum dos arquivos relacionados (`useScoreRecalc`, `whatsappCampaignService`, `dispositionAutomationService`, `threecplus-proxy`, `negociarie-proxy`) foi tocado. Logs do `threecplus-proxy` mostram fluxo saudável (200s contínuos).
+**2.6 Loading skeleton no ClientDetail**
+Hoje, ao abrir um cliente, aparece tela em branco até o fetch terminar. Trocar por skeleton com a estrutura do header + abas. Sensação de carregamento muito mais rápida.
 
-### Plano de correção
+**2.7 Feedback de copiar no clipboard**
+Vários botões de copiar (CPF, telefone, link de boleto) não dão feedback claro. Adicionar microanimação (ícone troca para ✓ por 1.5s) + toast curto.
 
-**1. `src/components/client-detail/ClientDetailHeader.tsx`**
-- `updateSingleField`: trocar `invalidateQueries({ queryKey: ["clients"] })` por `invalidateQueries({ queryKey: ["clients"], refetchType: "none" })`. Manter o invalidate exato em `["client-detail", cpf]`.
-- `updateClientMutation`: mesma mudança nas invalidações.
-- Substituir o loop de `update().eq("id", id)` por um único `update(sharedData).in("id", clientIds)`. Manter a chamada extra para campos unique (`cod_contrato`, `external_id`) restrita ao `clientIds[0]`.
-- Adicionar `bairro` ao payload de `upsertClientProfile` no `updateClientMutation` (linhas 256-267).
-- Envolver o `onCepResolved` da linha 599 em `useCallback` para estabilizar a referência.
+**2.8 Persistência de filtros da Carteira**
+Hoje, ao navegar para o perfil de um cliente e voltar, os filtros da carteira se perdem. Salvar em `sessionStorage` os filtros ativos por sessão.
 
-**2. `src/components/client-detail/InlineEditableField.tsx`**
-- Mover o set de `lastLookupRef.current` para **antes** de chamar `onCepResolved`, e adicionar guard explícito: se o CEP já foi resolvido, não chamar `onCepResolved` de novo, mesmo se a função mudou de identidade.
-- Alternativa mais robusta: remover `onCepResolved` do array de deps do `useEffect` e usar uma `ref` para chamá-lo sempre na versão atual.
+---
 
-**3. `src/components/client-detail/AgreementCalculator.tsx`**
-- Após `enrichClientAddress`, rechamar `checkRequiredFields()`. Se ainda houver campos faltantes, abrir o diálogo `missingFieldsOpen` antes de criar o acordo, em vez de criar acordo + tentar boleto + cair no `boleto_pendente`.
+### Recomendação de priorização
 
-### Validação esperada
+**Fazer agora (alto impacto, baixo esforço):**
+- 1.1, 1.2, 1.3 (aprovadas)
+- 2.6 (skeleton — sensação imediata de velocidade)
+- 2.7 (feedback de cópia — 1 hora de trabalho)
+- 2.8 (preservar filtros — operadores reclamam disso constantemente)
 
-1. Editar CEP inline no perfil → 1 toast "Endereço preenchido", 4 campos atualizados, **sem travar a navegação** entre clientes.
-2. Carteira aberta em outra aba não dá flash de loading a cada edição inline.
-3. Formalizar acordo sem endereço → enrich roda, recheck confirma sucesso, boletos geram na primeira tentativa (sem `boleto_pendente`).
-4. Salvar pelo diálogo "Editar Dados" → bairro aparece imediatamente no Edge na próxima geração de boleto.
-5. Score, WhatsApp e discador continuam funcionando (não foram alterados).
+**Fazer depois (médio esforço):**
+- 2.2 (destaque visual auto-fill)
+- 2.3 (botão buscar manual)
+- 2.5 (rascunho do acordo)
+
+**Avaliar com você antes:**
+- 2.1 (atalhos — pode conflitar com atalhos do navegador)
+- 2.4 (confirmação alto valor — define os limites)
+
+### Arquivos que serão alterados (se aprovar tudo da prioridade alta)
+
+- `src/components/client-detail/InlineEditableField.tsx`
+- `src/components/client-detail/ClientDetailHeader.tsx`
+- `src/components/client-detail/AgreementCalculator.tsx`
+- `src/pages/ClientDetailPage.tsx` (skeleton)
+- `src/pages/CarteiraPage.tsx` (sessionStorage de filtros)
+- Componentes com botão de copiar (busca por `navigator.clipboard`)
 
 ### Fora de escopo
-- Refatorar a estratégia geral de cache do TanStack Query.
-- Mudar a fonte canônica `client_profiles`.
-- Alterar Edge Functions de score, WhatsApp, 3CPlus ou Negociarie.
+
+- Refatoração do sistema de cache TanStack.
+- Mudar fluxo de autenticação ou permissões.
+- Mexer em score, WhatsApp, discador ou Edge Functions de integração.
+
+### Próximo passo
+
+Me confirme quais blocos aplicar. Sugiro: **prioridade alta inteira (1.1+1.2+1.3+2.6+2.7+2.8)** numa rodada só, e o restante em outra conversa após você validar.
 
