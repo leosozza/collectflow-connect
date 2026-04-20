@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PhoneList from "./PhoneList";
 import EmailList from "./EmailList";
+import InlineEditableField from "./InlineEditableField";
 
 interface ClientDetailHeaderProps {
   client: any;
