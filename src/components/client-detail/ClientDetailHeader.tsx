@@ -455,10 +455,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             >
               <Headset className="w-4 h-4" />
             </Button>
-            <Button onClick={onFormalizarAcordo} size="sm" className="gap-2 h-9">
+            <PrimaryFlowButton onClick={onFormalizarAcordo}>
               <FileText className="w-4 h-4" />
               Formalizar Acordo
-            </Button>
+            </PrimaryFlowButton>
           </div>
         </div>
 
