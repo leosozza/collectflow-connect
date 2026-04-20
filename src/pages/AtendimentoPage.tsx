@@ -708,6 +708,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
             onDisposition={handleDisposition}
             loading={dispositionMutation.isPending}
             disabled={isLocked}
+            hasRivoAgreement={agreements.length > 0}
           />
           <DebtorCategoryPanel
             clientId={client.id}
