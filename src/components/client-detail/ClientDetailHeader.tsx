@@ -510,7 +510,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     />
                   )}
                   <div className="min-w-0 max-w-full">
-                    <EmailList emails={(clients || []).map((c: any) => c?.email).concat([client.email])} />
+                    <EmailList
+                      emails={(clients || []).map((c: any) => c?.email).concat([client.email])}
+                      tenantId={tenant?.id}
+                      cpf={client.cpf}
+                      credor={client.credor}
+                      currentEmail={client.email}
+                    />
                   </div>
                 </div>
               </div>
