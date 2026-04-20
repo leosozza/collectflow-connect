@@ -98,6 +98,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
   const [cepLookupLoading, setCepLookupLoading] = useState(false);
+  const [copiedTitles, setCopiedTitles] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
 
   // Fetch credor rules and auto-fill honorários + aging discount
@@ -578,11 +579,17 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
-  const copyTitles = () => {
+  const copyTitles = async () => {
     const selected = pendentes.filter((c) => selectedIds.has(c.id));
     const text = selected.map((c) => `${c.numero_parcela}/${c.total_parcelas} - ${formatDate(c.data_vencimento)} - ${formatCurrency(Number(c.valor_parcela) || 0)}`).join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Títulos copiados!");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTitles(true);
+      toast.success("Títulos copiados!");
+      setTimeout(() => setCopiedTitles(false), 1500);
+    } catch {
+      toast.error("Falha ao copiar");
+    }
   };
 
   const simulatedTotal = simulatedInstallments.reduce((s, i) => s + i.value, 0);
@@ -609,7 +616,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <div className="flex items-center gap-1">
               <SimpleCalculator />
               <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
-                <Copy className="w-3 h-3" /> Copiar Títulos
+                {copiedTitles ? <CheckCircle2 className="w-3 h-3 text-success animate-scale-in" /> : <Copy className="w-3 h-3" />}
+                {copiedTitles ? "Copiado!" : "Copiar Títulos"}
               </Button>
             </div>
           </div>
@@ -854,22 +862,39 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       )}
 
       {(enrichingAddress || generatingBoletos) && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          {generatingBoletos ? "Gerando boletos na Negociarie..." : addressStatus}
+        <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-fade-in">
+          <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              {generatingBoletos ? "Gerando boletos..." : "Validando dados do cliente..."}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {generatingBoletos
+                ? "Aguarde enquanto emitimos os boletos no gateway."
+                : "Estamos confirmando endereço e contato antes de formalizar o acordo."}
+            </p>
+          </div>
         </div>
       )}
 
       <div className="flex gap-3">
         <Button
           onClick={handleSubmit}
-          disabled={submitting || generatingBoletos || !simulated || hasActiveAgreement}
-          className="flex-1 gap-2"
+          disabled={submitting || generatingBoletos || enrichingAddress || !simulated || hasActiveAgreement}
+          className="flex-1 gap-2 transition-opacity disabled:opacity-60"
           size="lg"
           variant={outOfStandard.isOut ? "outline" : "default"}
         >
-          {submitting || generatingBoletos ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
-          {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
+          {submitting || generatingBoletos || enrichingAddress ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+          {generatingBoletos
+            ? "Gerando boletos..."
+            : enrichingAddress
+              ? "Validando dados..."
+              : submitting
+                ? "Gravando..."
+                : outOfStandard.isOut
+                  ? "SOLICITAR LIBERAÇÃO"
+                  : "GRAVAR ACORDO"}
         </Button>
       </div>
 

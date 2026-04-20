@@ -53,6 +53,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const CARTEIRA_LAST_QUERY_KEY = "carteira:last-query";
+
 const CarteiraPage = () => {
   useScrollRestore();
   const navigateWithOrigin = useNavigateWithOrigin();
@@ -61,8 +63,31 @@ const CarteiraPage = () => {
   const permissions = usePermissions();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Restaura filtros da última visita (sessionStorage) quando o operador entra
+  // em /carteira sem nenhum query param — caso típico de voltar pelo menu
+  // após visitar outra página. Se a URL já tem filtros, respeita-os.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (location.search && location.search.length > 1) return;
+    const saved = sessionStorage.getItem(CARTEIRA_LAST_QUERY_KEY);
+    if (saved && saved.startsWith("?") && saved.length > 1) {
+      navigate({ pathname: location.pathname, search: saved }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persiste a query atual em cada mudança de filtro/URL
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (location.search && location.search.length > 1) {
+      sessionStorage.setItem(CARTEIRA_LAST_QUERY_KEY, location.search);
+    }
+  }, [location.search]);
 
   const profileId = profile?.id;
+
 
   // URL-synced filters
   const [urlStatus, setUrlStatus] = useUrlState("status", "todos");

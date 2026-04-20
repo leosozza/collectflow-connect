@@ -31,6 +31,8 @@ const InlineEditableField = ({
 }: InlineEditableFieldProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
+  // Optimistic display value: shown imediately after save, reverted on error.
+  const [optimisticValue, setOptimisticValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,22 +46,27 @@ const InlineEditableField = ({
   useEffect(() => {
     if (!editing) {
       setDraft(value ?? "");
-      // Reset lookup guard when exiting edit mode so reopening allows a fresh lookup
       lastLookupRef.current = "";
     }
   }, [value, editing]);
+
+  // Quando o valor canônico (vindo do servidor) alcança o otimista, limpamos.
+  useEffect(() => {
+    if (optimisticValue !== null && (value ?? "") === optimisticValue) {
+      setOptimisticValue(null);
+    }
+  }, [value, optimisticValue]);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  // Auto-lookup CEP when 8 digits are typed (callback ref-based to avoid re-runs from parent re-renders)
+  // Auto-lookup CEP when 8 digits are typed
   useEffect(() => {
     if (type !== "cep" || !editing) return;
     const digits = draft.replace(/\D/g, "");
     if (digits.length !== 8) return;
     if (lastLookupRef.current === digits) return;
-    // Mark as resolved BEFORE async work to fully block any re-entry
     lastLookupRef.current = digits;
 
     let cancelled = false;
@@ -74,7 +81,6 @@ const InlineEditableField = ({
           const reason = (res as { ok: false; reason: string }).reason;
           if (reason === "not_found") toast.error("CEP não encontrado");
           else if (reason === "network") toast.error("Falha ao consultar CEP");
-          // Allow retry on error
           lastLookupRef.current = "";
         }
       } finally {
@@ -97,10 +103,19 @@ const InlineEditableField = ({
       setEditing(false);
       return;
     }
+    // Optimistic: aplica visualmente e fecha edição já.
+    const previous = value ?? "";
+    setOptimisticValue(next);
+    setEditing(false);
     setSaving(true);
     try {
       await onSave(next);
-      setEditing(false);
+      // Sucesso: o useEffect acima vai limpar optimisticValue quando o server alcançar.
+    } catch {
+      // Reverte visualmente
+      setOptimisticValue(null);
+      setDraft(previous);
+      // O onSave já mostra o toast de erro; não duplicamos aqui.
     } finally {
       setSaving(false);
     }
@@ -121,6 +136,8 @@ const InlineEditableField = ({
     }
   };
 
+  const displayValue = optimisticValue !== null ? optimisticValue : value;
+
   return (
     <div className={cn("group relative min-w-0", className)}>
       <p className="text-xs text-muted-foreground uppercase font-medium mb-1 flex items-center gap-1">
@@ -134,6 +151,9 @@ const InlineEditableField = ({
           >
             <Pencil className="w-3 h-3" />
           </button>
+        )}
+        {saving && (
+          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" aria-label="Salvando" />
         )}
       </p>
       {editing ? (
@@ -150,7 +170,6 @@ const InlineEditableField = ({
               }}
               maxLength={maxLength}
               placeholder={placeholder}
-              disabled={saving}
               className="h-7 text-sm pr-7"
             />
             {cepLoading && (
@@ -160,16 +179,14 @@ const InlineEditableField = ({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
             className="p-1 rounded hover:bg-muted text-success"
             title="Salvar"
           >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            <Check className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
             onClick={handleCancel}
-            disabled={saving}
             className="p-1 rounded hover:bg-muted text-destructive"
             title="Cancelar"
           >
@@ -178,11 +195,14 @@ const InlineEditableField = ({
         </div>
       ) : (
         <p
-          className="text-sm font-semibold text-foreground cursor-pointer truncate"
+          className={cn(
+            "text-sm font-semibold cursor-pointer truncate transition-colors",
+            optimisticValue !== null ? "text-muted-foreground italic" : "text-foreground"
+          )}
           onClick={() => setEditing(true)}
           title="Clique para editar"
         >
-          {value || "—"}
+          {displayValue || "—"}
         </p>
       )}
     </div>

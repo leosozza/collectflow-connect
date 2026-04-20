@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import CopyButton from "@/components/ui/copy-button";
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -109,10 +110,15 @@ const ClientSignature = ({ client, lastAgreement }: ClientSignatureProps) => {
               <Mail className="w-4 h-4" />
               Enviar por E-mail
             </Button>
-            <Button variant="outline" className="gap-2" onClick={copyLink}>
-              <Copy className="w-4 h-4" />
-              Copiar Link
-            </Button>
+            <CopyButton
+              value={portalUrl || ""}
+              variant="outline"
+              size="default"
+              showLabel
+              label="Copiar Link"
+              successMessage="Link copiado!"
+              className="gap-2"
+            />
           </div>
         </div>
       </CardContent>
