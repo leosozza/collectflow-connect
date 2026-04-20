@@ -591,6 +591,54 @@ const WhatsAppChatLayout = () => {
           />
         )}
       </div>
+
+      <AlertDialog
+        open={!!conflictState}
+        onOpenChange={(o) => { if (!o) setConflictState(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Já existe uma conversa com este número</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                if (!conflictState) return null;
+                const existingInstance = instances.find((i) => i.id === conflictState.existingConv.instance_id);
+                const targetInstance = instances.find((i) => i.id === conflictState.targetInstanceId);
+                const operatorName = operators.find((o) => o.id === conflictState.existingConv.assigned_to)?.name;
+                return (
+                  <>
+                    Existe uma conversa aberta com este número na instância{" "}
+                    <strong>{existingInstance?.name || "outra instância"}</strong>
+                    {operatorName && <> (operador <strong>{operatorName}</strong>)</>}.
+                    {" "}Deseja mesmo abrir uma nova conversa pela instância{" "}
+                    <strong>{targetInstance?.name || "selecionada"}</strong>?
+                  </>
+                );
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                if (conflictState) setSelectedConv(conflictState.existingConv);
+                setConflictState(null);
+              }}
+            >
+              Abrir a existente
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!conflictState) return;
+                const { phone, targetInstanceId } = conflictState;
+                setConflictState(null);
+                await createConversationOnInstance(phone, targetInstanceId);
+              }}
+            >
+              Criar nova
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
