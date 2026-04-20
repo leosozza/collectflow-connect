@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame, Pencil, Ban, RotateCcw, Plus, Check, X } from "lucide-react";
+import { Flame, Pencil, Ban, RotateCcw, Plus, Check, X, Phone as PhoneIcon, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 import { formatPhone } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -27,15 +29,53 @@ interface PhoneListProps {
 
 const SLOTS: PhoneSlot[] = ["phone", "phone2", "phone3"];
 
+const WhatsAppDot = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-label="WhatsApp">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
+
+const onlyDigits = (s: string | null | undefined) => (s || "").replace(/\D/g, "");
+
 export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: PhoneListProps) => {
   const queryClient = useQueryClient();
   const values: Record<PhoneSlot, string | null> = { phone, phone2, phone3 };
+  const cleanCpf = onlyDigits(cpf);
 
   const { data: metadata } = useQuery({
     queryKey: ["phone_metadata", tenantId, cpf, credor],
     queryFn: () => fetchPhoneMetadata({ tenantId, cpf, credor }),
     enabled: !!tenantId && !!cpf && !!credor,
   });
+
+  // Busca quais números têm WhatsApp validado (via client_phones)
+  const { data: waPhones = [] } = useQuery({
+    queryKey: ["client_phones_wa", tenantId, cleanCpf],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("client_phones")
+        .select("phone_number, phone_last10, is_whatsapp")
+        .eq("tenant_id", tenantId)
+        .eq("cpf", cleanCpf)
+        .eq("is_whatsapp", true);
+      return data || [];
+    },
+    enabled: !!tenantId && !!cleanCpf,
+  });
+
+  const waLast10Set = useMemo(() => {
+    const s = new Set<string>();
+    waPhones.forEach((p: any) => {
+      const last10 = p.phone_last10 || onlyDigits(p.phone_number).slice(-10);
+      if (last10) s.add(last10);
+    });
+    return s;
+  }, [waPhones]);
+
+  const isWhatsApp = (val: string | null) => {
+    if (!val) return false;
+    return waLast10Set.has(onlyDigits(val).slice(-10));
+  };
 
   const [busy, setBusy] = useState<PhoneSlot | null>(null);
   const [editingNumber, setEditingNumber] = useState<PhoneSlot | null>(null);
@@ -57,9 +97,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
   }, [metadata]);
 
   const refreshAll = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries(),
-    ]);
+    await queryClient.invalidateQueries();
   };
 
   const findNextEmptySlot = (): PhoneSlot | null => {
@@ -88,11 +126,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
     setBusy(slot);
     try {
       const { promotedFrom } = await togglePhoneInactive({
-        tenantId,
-        cpf,
-        credor,
-        slot,
-        isInactive: !current,
+        tenantId, cpf, credor, slot, isInactive: !current,
       });
       toast.success(current ? "Número reativado" : "Número inativado", {
         description: promotedFrom ? "Outro número foi promovido a quente." : undefined,
@@ -114,11 +148,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
     setBusy(slot);
     try {
       await updatePhoneNumber({
-        tenantId,
-        cpf,
-        credor,
-        slot,
-        newValue: numberDraft.trim() || null,
+        tenantId, cpf, credor, slot, newValue: numberDraft.trim() || null,
       });
       toast.success("Número atualizado");
       setEditingNumber(null);
@@ -149,171 +179,209 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
 
   const visibleSlots = SLOTS.filter((s) => values[s]);
   const nextEmpty = findNextEmptySlot();
+  const totalCount = visibleSlots.length;
+  const waCount = visibleSlots.filter((s) => isWhatsApp(values[s])).length;
 
   return (
     <div className="w-full">
-      <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Todos os Telefones</p>
-      <div className="space-y-1.5">
-        {visibleSlots.map((slot) => {
-          const isHot = slot === "phone";
-          const meta = metadata?.[slot];
-          const inactive = meta?.is_inactive ?? false;
-          const value = values[slot];
-          const isEditingThis = editingNumber === slot;
+      <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Telefones</p>
 
-          return (
-            <div
-              key={slot}
-              className={cn(
-                "flex items-center gap-2 px-2 py-1.5 rounded-md border border-border/50 bg-card hover:bg-muted/30 transition-colors",
-                inactive && "opacity-60"
-              )}
-            >
-              {/* Hot icon / promote */}
-              <button
-                type="button"
-                disabled={inactive || busy === slot || isHot}
-                onClick={() => !isHot && handlePromote(slot)}
-                title={isHot ? "Número quente atual" : inactive ? "Inativo" : "Marcar como quente"}
-                className={cn(
-                  "shrink-0 inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
-                  isHot ? "cursor-default" : "hover:bg-orange-500/10",
-                  inactive && "cursor-not-allowed"
+      <HoverCard openDelay={120} closeDelay={150}>
+        <HoverCardTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-border/60 bg-card hover:bg-muted/40 transition-colors group"
+          >
+            <PhoneIcon className="w-3.5 h-3.5 text-muted-foreground" />
+            {totalCount === 0 ? (
+              <span className="text-xs text-muted-foreground">Nenhum cadastrado</span>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-foreground">
+                  {values.phone ? formatPhone(values.phone) : "—"}
+                </span>
+                {isWhatsApp(values.phone) && (
+                  <WhatsAppDot className="w-3 h-3 text-green-600" />
                 )}
-              >
-                <Flame
-                  className={cn(
-                    "w-4 h-4",
-                    isHot && !inactive
-                      ? "text-orange-500 fill-orange-500/30"
-                      : "text-muted-foreground/50"
-                  )}
-                />
-              </button>
+                {totalCount > 1 && (
+                  <Badge variant="secondary" className="h-4 px-1 text-[10px] font-medium">
+                    +{totalCount - 1}
+                  </Badge>
+                )}
+                {waCount > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-green-700 dark:text-green-400">
+                    <WhatsAppDot className="w-2.5 h-2.5" />
+                    {waCount}
+                  </span>
+                )}
+              </>
+            )}
+            <ChevronDown className="w-3 h-3 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
+          </button>
+        </HoverCardTrigger>
 
-              {/* Number */}
-              <div className="w-36 shrink-0">
-                {isEditingThis ? (
-                  <div className="flex items-center gap-1">
+        <HoverCardContent align="start" className="w-[420px] p-2">
+          <div className="space-y-1">
+            {visibleSlots.map((slot) => {
+              const isHot = slot === "phone";
+              const meta = metadata?.[slot];
+              const inactive = meta?.is_inactive ?? false;
+              const value = values[slot];
+              const isEditingThis = editingNumber === slot;
+              const wa = isWhatsApp(value);
+
+              return (
+                <div
+                  key={slot}
+                  className={cn(
+                    "flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-muted/40 transition-colors",
+                    inactive && "opacity-60"
+                  )}
+                >
+                  {/* Hot icon / promote */}
+                  <button
+                    type="button"
+                    disabled={inactive || busy === slot || isHot}
+                    onClick={() => !isHot && handlePromote(slot)}
+                    title={isHot ? "Número quente atual" : inactive ? "Inativo" : "Marcar como quente"}
+                    className={cn(
+                      "shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-colors",
+                      !isHot && !inactive && "hover:bg-orange-500/10",
+                      (inactive || isHot) && "cursor-default"
+                    )}
+                  >
+                    <Flame
+                      className={cn(
+                        "w-3.5 h-3.5",
+                        isHot && !inactive ? "text-orange-500 fill-orange-500/30" : "text-muted-foreground/40"
+                      )}
+                    />
+                  </button>
+
+                  {/* Number (or inline edit) */}
+                  <div className="w-32 shrink-0">
+                    {isEditingThis ? (
+                      <div className="flex items-center gap-0.5">
+                        <Input
+                          autoFocus
+                          value={numberDraft}
+                          onChange={(e) => setNumberDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveNumber(slot);
+                            if (e.key === "Escape") setEditingNumber(null);
+                          }}
+                          placeholder="(11) 99999-9999"
+                          className="h-6 text-xs px-1.5"
+                        />
+                        <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleSaveNumber(slot)}>
+                          <Check className="w-3 h-3 text-green-600" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingNumber(null)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className={cn("text-sm font-medium text-foreground", inactive && "line-through")}>
+                        {value ? formatPhone(value) : "—"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* WhatsApp badge */}
+                  <div className="w-5 shrink-0 flex items-center justify-center">
+                    {wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600" />}
+                  </div>
+
+                  {/* Observação compacta */}
+                  <Input
+                    value={obsDrafts[slot]}
+                    onChange={(e) => setObsDrafts((d) => ({ ...d, [slot]: e.target.value }))}
+                    onBlur={() => handleSaveObs(slot)}
+                    placeholder="obs"
+                    className="h-6 text-xs px-1.5 w-24"
+                    disabled={inactive}
+                  />
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-0 shrink-0 ml-auto">
+                    {!isEditingThis && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => startEditNumber(slot)}
+                        title="Editar número"
+                        disabled={busy === slot}
+                      >
+                        <Pencil className="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-5 w-5"
+                      onClick={() => handleToggleInactive(slot)}
+                      title={inactive ? "Reativar" : "Inativar"}
+                      disabled={busy === slot}
+                    >
+                      {inactive ? (
+                        <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                      ) : (
+                        <Ban className="w-3 h-3 text-destructive/70" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Linha em edição para slot vazio (add) */}
+            {nextEmpty && editingNumber === nextEmpty && !values[nextEmpty] && (
+              <div className="flex items-center gap-1.5 px-1.5 py-1 rounded border border-dashed border-border bg-muted/20">
+                <Flame className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                <div className="w-32 shrink-0">
+                  <div className="flex items-center gap-0.5">
                     <Input
                       autoFocus
                       value={numberDraft}
                       onChange={(e) => setNumberDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveNumber(slot);
+                        if (e.key === "Enter") handleSaveNumber(nextEmpty);
                         if (e.key === "Escape") setEditingNumber(null);
                       }}
                       placeholder="(11) 99999-9999"
-                      className="h-7 text-xs"
+                      className="h-6 text-xs px-1.5"
                     />
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleSaveNumber(slot)}>
-                      <Check className="w-3.5 h-3.5 text-green-600" />
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleSaveNumber(nextEmpty)}>
+                      <Check className="w-3 h-3 text-green-600" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingNumber(null)}>
-                      <X className="w-3.5 h-3.5" />
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingNumber(null)}>
+                      <X className="w-3 h-3" />
                     </Button>
                   </div>
-                ) : (
-                  <span
-                    className={cn(
-                      "text-sm font-semibold text-foreground",
-                      inactive && "line-through"
-                    )}
-                  >
-                    {value ? formatPhone(value) : "—"}
-                  </span>
-                )}
+                </div>
+                <span className="text-xs text-muted-foreground">Novo telefone</span>
               </div>
+            )}
 
-              {/* Observação */}
-              <Input
-                value={obsDrafts[slot]}
-                onChange={(e) => setObsDrafts((d) => ({ ...d, [slot]: e.target.value }))}
-                onBlur={() => handleSaveObs(slot)}
-                placeholder="Observação (ex: Mãe, Pai, Trabalho)"
-                className="h-7 text-xs flex-1 min-w-0"
-                disabled={inactive}
-              />
+            {nextEmpty && editingNumber !== nextEmpty && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground w-full justify-start"
+                onClick={handleAddNew}
+              >
+                <Plus className="w-3 h-3" />
+                Adicionar telefone
+              </Button>
+            )}
 
-              {/* Actions */}
-              <div className="flex items-center gap-0.5 shrink-0">
-                {!isEditingThis && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => startEditNumber(slot)}
-                    title="Editar número"
-                    disabled={busy === slot}
-                  >
-                    <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                  </Button>
-                )}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => handleToggleInactive(slot)}
-                  title={inactive ? "Reativar número" : "Inativar número"}
-                  disabled={busy === slot}
-                >
-                  {inactive ? (
-                    <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
-                  ) : (
-                    <Ban className="w-3.5 h-3.5 text-destructive/70" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Linha em edição para slot vazio (add) */}
-        {nextEmpty && editingNumber === nextEmpty && !values[nextEmpty] && (
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-dashed border-border bg-muted/20">
-            <Flame className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-            <div className="w-36 shrink-0">
-              <div className="flex items-center gap-1">
-                <Input
-                  autoFocus
-                  value={numberDraft}
-                  onChange={(e) => setNumberDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSaveNumber(nextEmpty);
-                    if (e.key === "Escape") setEditingNumber(null);
-                  }}
-                  placeholder="(11) 99999-9999"
-                  className="h-7 text-xs"
-                />
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleSaveNumber(nextEmpty)}>
-                  <Check className="w-3.5 h-3.5 text-green-600" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingNumber(null)}>
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-            <span className="text-xs text-muted-foreground flex-1">Novo telefone</span>
+            {visibleSlots.length === 0 && !editingNumber && (
+              <p className="text-xs text-muted-foreground italic px-1.5">Nenhum telefone cadastrado</p>
+            )}
           </div>
-        )}
-
-        {/* Botão adicionar */}
-        {nextEmpty && editingNumber !== nextEmpty && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-            onClick={handleAddNew}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Adicionar telefone
-          </Button>
-        )}
-
-        {visibleSlots.length === 0 && !editingNumber && (
-          <p className="text-sm text-muted-foreground italic">Nenhum telefone cadastrado</p>
-        )}
-      </div>
+        </HoverCardContent>
+      </HoverCard>
     </div>
   );
 };
