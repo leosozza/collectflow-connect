@@ -27,6 +27,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PhoneList from "./PhoneList";
+import EmailList from "./EmailList";
 
 interface ClientDetailHeaderProps {
   client: any;
