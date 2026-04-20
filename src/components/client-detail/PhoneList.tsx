@@ -197,22 +197,11 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
               <span className="text-xs text-muted-foreground">Nenhum cadastrado</span>
             ) : (
               <>
-                <span className="text-sm font-semibold text-foreground">
+                <span className="text-sm font-semibold text-foreground whitespace-nowrap">
                   {values.phone ? formatPhone(values.phone) : "—"}
                 </span>
-                {isWhatsApp(values.phone) && (
-                  <WhatsAppDot className="w-3 h-3 text-green-600" />
-                )}
-                {totalCount > 1 && (
-                  <Badge variant="secondary" className="h-4 px-1 text-[10px] font-medium">
-                    +{totalCount - 1}
-                  </Badge>
-                )}
                 {waCount > 0 && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-green-700 dark:text-green-400">
-                    <WhatsAppDot className="w-2.5 h-2.5" />
-                    {waCount}
-                  </span>
+                  <WhatsAppDot className="w-3.5 h-3.5 text-green-600 shrink-0" />
                 )}
               </>
             )}
