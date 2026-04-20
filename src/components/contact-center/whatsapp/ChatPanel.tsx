@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw, ChevronUp } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
 import CloseConversationDialog from "./CloseConversationDialog";
 import MultiInstanceAlert from "./MultiInstanceAlert";
@@ -38,6 +38,9 @@ interface ChatPanelProps {
   operatorName?: string;
   dispositionAssignments?: { conversation_id: string; disposition_type_id: string }[];
   dispositionTypes?: { id: string; label: string; color: string; key: string }[];
+  hasMoreOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void | Promise<void>;
 }
 
 const ChatPanel = ({
@@ -59,8 +62,12 @@ const ChatPanel = ({
   operatorName,
   dispositionAssignments = [],
   dispositionTypes = [],
+  hasMoreOlder = false,
+  loadingOlder = false,
+  onLoadOlder,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { tenant } = useTenant();
   const { profile } = useAuth();
@@ -384,10 +391,42 @@ const ChatPanel = ({
               }}
             >
               <ScrollArea
+                ref={scrollContainerRef}
                 className={`h-full px-[5%] py-3 ${isLocked ? "blur-md select-none pointer-events-none" : ""}`}
                 aria-hidden={isLocked}
               >
                 <div className="space-y-[1px]">
+                  {hasMoreOlder && onLoadOlder && (
+                    <div className="flex justify-center py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={loadingOlder}
+                        onClick={async () => {
+                          const root = scrollContainerRef.current as unknown as HTMLElement | null;
+                          const el = root?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+                          const prevHeight = el?.scrollHeight ?? 0;
+                          const prevTop = el?.scrollTop ?? 0;
+                          await onLoadOlder();
+                          requestAnimationFrame(() => {
+                            const root2 = scrollContainerRef.current as unknown as HTMLElement | null;
+                            const node = root2?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+                            if (!node) return;
+                            const diff = node.scrollHeight - prevHeight;
+                            node.scrollTop = prevTop + diff;
+                          });
+                        }}
+                        className="gap-1.5 text-xs bg-card/80 hover:bg-card border border-border"
+                      >
+                        {loadingOlder ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        )}
+                        Carregar mensagens anteriores
+                      </Button>
+                    </div>
+                  )}
                   {messages.map((msg) => (
                     <ChatMessageBubble
                       key={msg.id}

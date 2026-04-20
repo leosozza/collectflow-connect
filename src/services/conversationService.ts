@@ -227,7 +227,7 @@ export async function fetchConversationCounts(
 export async function fetchMessages(
   conversationId: string,
   page = 1,
-  pageSize = 100
+  pageSize = 200
 ): Promise<{ data: ChatMessage[]; hasMore: boolean }> {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -237,6 +237,23 @@ export async function fetchMessages(
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .range(from, to);
+  if (error) throw error;
+  const messages = ((data || []) as unknown as ChatMessage[]).reverse();
+  return { data: messages, hasMore: (data || []).length === pageSize };
+}
+
+export async function fetchMessagesBefore(
+  conversationId: string,
+  beforeCreatedAt: string,
+  pageSize = 100
+): Promise<{ data: ChatMessage[]; hasMore: boolean }> {
+  const { data, error } = await supabase
+    .from("chat_messages" as any)
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .lt("created_at", beforeCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(pageSize);
   if (error) throw error;
   const messages = ((data || []) as unknown as ChatMessage[]).reverse();
   return { data: messages, hasMore: (data || []).length === pageSize };
