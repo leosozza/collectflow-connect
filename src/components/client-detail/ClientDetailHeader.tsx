@@ -496,9 +496,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
         {/* Linha 3: Colapsável */}
         <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full py-1.5 mt-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
-            <span>Mais informações do devedor</span>
-            <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
+          <CollapsibleTrigger asChild>
+            <CraftButton size="sm" className="w-full justify-between mt-1.5 text-muted-foreground">
+              <CraftButtonLabel>Mais informações do devedor</CraftButtonLabel>
+              <CraftButtonIcon>
+                <ChevronDown className={cn("size-3 stroke-2 transition-transform duration-500", open && "rotate-180")} />
+              </CraftButtonIcon>
+            </CraftButton>
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="pt-2 pb-1 border-t border-border mt-2 space-y-2">
