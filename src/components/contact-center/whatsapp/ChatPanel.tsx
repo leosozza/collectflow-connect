@@ -391,10 +391,40 @@ const ChatPanel = ({
               }}
             >
               <ScrollArea
+                viewportRef={scrollContainerRef as any}
                 className={`h-full px-[5%] py-3 ${isLocked ? "blur-md select-none pointer-events-none" : ""}`}
                 aria-hidden={isLocked}
               >
                 <div className="space-y-[1px]">
+                  {hasMoreOlder && onLoadOlder && (
+                    <div className="flex justify-center py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={loadingOlder}
+                        onClick={async () => {
+                          const el = scrollContainerRef.current;
+                          const prevHeight = el?.scrollHeight ?? 0;
+                          const prevTop = el?.scrollTop ?? 0;
+                          await onLoadOlder();
+                          requestAnimationFrame(() => {
+                            const node = scrollContainerRef.current;
+                            if (!node) return;
+                            const diff = node.scrollHeight - prevHeight;
+                            node.scrollTop = prevTop + diff;
+                          });
+                        }}
+                        className="gap-1.5 text-xs bg-card/80 hover:bg-card border border-border"
+                      >
+                        {loadingOlder ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        )}
+                        Carregar mensagens anteriores
+                      </Button>
+                    </div>
+                  )}
                   {messages.map((msg) => (
                     <ChatMessageBubble
                       key={msg.id}
