@@ -51,7 +51,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Resolve user's tenant
     const { data: tenantRow } = await userClient
       .from("tenant_users")
       .select("tenant_id")
@@ -67,7 +66,6 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Load conversations (filter by tenant for safety) + instance info
     const { data: convs, error: convErr } = await admin
       .from("conversations")
       .select("id, tenant_id, instance_id, endpoint_id, remote_phone, remote_avatar_url, remote_avatar_fetched_at")
@@ -84,15 +82,14 @@ Deno.serve(async (req) => {
     const results: Record<string, { url: string | null; cached: boolean }> = {};
     const now = Date.now();
 
-    // Collect unique instances
     const instanceIds = Array.from(new Set((convs || []).map((c: any) => c.endpoint_id || c.instance_id).filter(Boolean)));
     const { data: insts } = instanceIds.length
-      ? await admin.from("whatsapp_instances").select("id, provider_category, instance_name, instance_url, api_key").in("id", instanceIds)
+      ? await admin.from("whatsapp_instances").select("id, provider, provider_category, instance_name, instance_url, api_key").in("id", instanceIds)
       : { data: [] as any[] };
     const instMap = new Map<string, any>((insts || []).map((i: any) => [i.id, i]));
 
-    const evolutionUrl = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+    const EVOLUTION_API_URL_GLOBAL = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
+    const EVOLUTION_API_KEY_GLOBAL = Deno.env.get("EVOLUTION_API_KEY") || "";
 
     for (const conv of (convs || []) as any[]) {
       // TTL cache
@@ -106,57 +103,69 @@ Deno.serve(async (req) => {
 
       const inst = instMap.get(conv.endpoint_id || conv.instance_id);
       if (!inst) {
+        console.log("[avatar] conv", conv.id, "no instance");
         results[conv.id] = { url: null, cached: false };
         continue;
       }
 
-      const category = (inst.provider_category || "").toLowerCase();
+      const kind = `${inst.provider || ""} ${inst.provider_category || ""}`.toLowerCase();
       let avatarUrl: string | null = null;
+      let httpResponded = false; // only set fetched_at if we actually got a response (or category unsupported)
 
       try {
-        if (category === "evolution" || category === "unofficial_evolution") {
-          if (evolutionUrl && evolutionKey && inst.instance_name) {
+        if (kind.includes("evolution")) {
+          const baseUrl = (inst.instance_url || EVOLUTION_API_URL_GLOBAL).replace(/\/+$/, "");
+          const apiKey = inst.api_key || EVOLUTION_API_KEY_GLOBAL;
+          console.log("[avatar] conv", conv.id, "kind=evolution host=", baseUrl, "instance=", inst.instance_name);
+
+          if (baseUrl && apiKey && inst.instance_name) {
             const resp = await fetch(
-              `${evolutionUrl}/chat/fetchProfilePictureUrl/${encodeURIComponent(inst.instance_name)}`,
+              `${baseUrl}/chat/fetchProfilePictureUrl/${encodeURIComponent(inst.instance_name)}`,
               {
                 method: "POST",
-                headers: { apikey: evolutionKey, "Content-Type": "application/json" },
+                headers: { apikey: apiKey, "Content-Type": "application/json" },
                 body: JSON.stringify({ number: conv.remote_phone }),
               }
             );
-            if (resp.ok) {
-              const json = await resp.json().catch(() => ({}));
-              avatarUrl = json?.profilePictureUrl || json?.url || null;
-            }
+            httpResponded = resp.status < 500; // treat 5xx as transient → retry next time
+            const json = await resp.json().catch(() => ({}));
+            avatarUrl = json?.profilePictureUrl || json?.url || null;
+            console.log("[avatar] result", conv.id, "status=", resp.status, "url=", avatarUrl);
+          } else {
+            console.log("[avatar] conv", conv.id, "evolution missing creds (baseUrl/apiKey/instance_name)");
+            httpResponded = true; // mark as attempted to avoid hot loop
           }
-        } else if (category === "wuzapi" || category === "unofficial_wuzapi") {
+        } else if (kind.includes("wuzapi")) {
           const baseUrl = (inst.instance_url || "").replace(/\/+$/, "");
           const apiKey = inst.api_key || "";
+          console.log("[avatar] conv", conv.id, "kind=wuzapi host=", baseUrl);
           if (baseUrl && apiKey) {
             const resp = await fetch(
               `${baseUrl}/user/avatar?phone=${encodeURIComponent(conv.remote_phone)}`,
               { method: "GET", headers: { Token: apiKey } }
             );
-            if (resp.ok) {
-              const json = await resp.json().catch(() => ({}));
-              avatarUrl = json?.url || json?.data?.URL || json?.data?.url || null;
-            }
+            httpResponded = resp.status < 500;
+            const json = await resp.json().catch(() => ({}));
+            avatarUrl = json?.url || json?.data?.URL || json?.data?.url || null;
+            console.log("[avatar] result", conv.id, "status=", resp.status, "url=", avatarUrl);
+          } else {
+            httpResponded = true;
           }
+        } else {
+          // official_meta / gupshup / unknown → unsupported, mark attempted to avoid retries
+          console.log("[avatar] conv", conv.id, "unsupported kind=", kind);
+          httpResponded = true;
         }
-        // official_meta / official / gupshup → not supported, leave null
       } catch (err) {
-        console.error("[whatsapp-fetch-avatar] provider error", conv.id, err);
+        console.error("[avatar] provider error", conv.id, err);
         avatarUrl = null;
+        httpResponded = false; // network error → allow retry
       }
 
-      // Persist (even null, to flag attempted)
-      await admin
-        .from("conversations")
-        .update({
-          remote_avatar_url: avatarUrl,
-          remote_avatar_fetched_at: new Date().toISOString(),
-        })
-        .eq("id", conv.id);
+      const updatePayload: Record<string, any> = { remote_avatar_url: avatarUrl };
+      if (httpResponded) updatePayload.remote_avatar_fetched_at = new Date().toISOString();
+
+      await admin.from("conversations").update(updatePayload).eq("id", conv.id);
 
       results[conv.id] = { url: avatarUrl, cached: false };
     }
