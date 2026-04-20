@@ -63,6 +63,8 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [fetchingCep, setFetchingCep] = useState(false);
+  const [editFetchingCepManual, setEditFetchingCepManual] = useState(false);
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [editForm, setEditForm] = useState({
     nome_completo: client.nome_completo || "",
     phone: client.phone || "",
