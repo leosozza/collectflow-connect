@@ -172,16 +172,18 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf }: Dispositio
             <div className="flex gap-1 flex-wrap">
               {otherDispositions.map((d) => {
                 const active = assignedIds.has(d.id);
+                const blocked = EM_DIA_KEYS.includes(d.key) && hasAgreement && !active;
                 return (
                   <button
                     key={d.id}
-                    disabled={loading}
+                    disabled={loading || blocked}
                     onClick={() => handleToggle(d)}
-                    className="transition-all"
+                    title={blocked ? EM_DIA_BLOCKED_TITLE : undefined}
+                    className={`transition-all ${blocked ? "cursor-not-allowed" : ""}`}
                   >
                     <Badge
                       variant={active ? "default" : "outline"}
-                      className="text-[10px] cursor-pointer hover:opacity-80 transition-all"
+                      className={`text-[10px] hover:opacity-80 transition-all ${blocked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                       style={
                         active
                           ? { backgroundColor: d.color, color: "#fff", borderColor: d.color }
