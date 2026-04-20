@@ -455,37 +455,23 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 
               </div>
 
-              {/* Telefones */}
+              {/* Telefones + Email */}
               <div className="pt-2 border-t border-border">
-                {tenant?.id && client?.cpf && client?.credor && (
-                  <PhoneList
-                    tenantId={tenant.id}
-                    cpf={client.cpf}
-                    credor={client.credor}
-                    phone={client.phone}
-                    phone2={client.phone2}
-                    phone3={client.phone3}
-                  />
-                )}
-              </div>
-
-              {/* Email */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
-                <InfoItem label="Email" value={
-                  client.email ? (
-                    <span className="flex items-center gap-1">
-                      {client.email}
-                      {client.enrichment_data && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild><span className="cursor-help">🧹</span></TooltipTrigger>
-                            <TooltipContent>Dado obtido via higienização</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </span>
-                  ) : null
-                } />
+                <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                  {tenant?.id && client?.cpf && client?.credor && (
+                    <PhoneList
+                      tenantId={tenant.id}
+                      cpf={client.cpf}
+                      credor={client.credor}
+                      phone={client.phone}
+                      phone2={client.phone2}
+                      phone3={client.phone3}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <EmailList emails={(clients || []).map((c: any) => c?.email).concat([client.email])} />
+                  </div>
+                </div>
               </div>
 
               {/* Endereço */}
