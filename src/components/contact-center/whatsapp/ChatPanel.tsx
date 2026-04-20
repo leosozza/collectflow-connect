@@ -391,7 +391,7 @@ const ChatPanel = ({
               }}
             >
               <ScrollArea
-                viewportRef={scrollContainerRef as any}
+                ref={scrollContainerRef}
                 className={`h-full px-[5%] py-3 ${isLocked ? "blur-md select-none pointer-events-none" : ""}`}
                 aria-hidden={isLocked}
               >
