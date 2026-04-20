@@ -110,6 +110,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [cepLookupLoading, setCepLookupLoading] = useState(false);
   const [copiedTitles, setCopiedTitles] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Fetch credor rules and auto-fill honorários + aging discount
   useEffect(() => {
