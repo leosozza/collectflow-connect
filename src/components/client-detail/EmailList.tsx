@@ -70,7 +70,7 @@ export const EmailList = ({ emails, tenantId, cpf, credor, currentEmail }: Email
 
   return (
     <div className="inline-block">
-      <div className="flex items-center gap-1.5 mb-1">
+      <div className="group/email flex items-center gap-1.5 mb-1">
         <p className="text-xs text-muted-foreground uppercase font-medium">Email</p>
         {canEdit && !editing && (
           <button
@@ -79,7 +79,7 @@ export const EmailList = ({ emails, tenantId, cpf, credor, currentEmail }: Email
               setValue(currentEmail || first || "");
               setEditing(true);
             }}
-            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+            className="text-muted-foreground/70 hover:text-foreground transition-opacity opacity-0 group-hover/email:opacity-100 focus-visible:opacity-100"
             title="Editar e-mail"
           >
             <Pencil className="w-3 h-3" />
