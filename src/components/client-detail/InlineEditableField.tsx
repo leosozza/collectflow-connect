@@ -60,12 +60,10 @@ const InlineEditableField = ({
         if (cancelled) return;
         if (res.ok) {
           await onCepResolved?.(res.data);
-        } else if (res.reason === "not_found") {
-          toast.error("CEP não encontrado");
-        } else if (res.reason === "network") {
-          toast.error("Falha ao consultar CEP");
+        } else {
+          if (res.reason === "not_found") toast.error("CEP não encontrado");
+          else if (res.reason === "network") toast.error("Falha ao consultar CEP");
         }
-        // invalid_format: ignore (shouldn't happen since we checked digits.length===8)
       } finally {
         if (!cancelled) setCepLoading(false);
       }
