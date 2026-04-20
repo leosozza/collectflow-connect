@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Conversation, ConversationFilters } from "@/services/conversationService";
+import { stripWhatsAppMarkers } from "@/lib/whatsappFormat";
 
 interface ConversationTag {
   id: string;
