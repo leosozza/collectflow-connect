@@ -706,22 +706,35 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             </div>
             <div className="grid gap-2">
               <Label htmlFor="cep">CEP</Label>
-              <div className="relative">
-                <Input
-                  id="cep"
-                  value={editForm.cep}
-                  onChange={e => {
-                    const masked = formatCEP(e.target.value);
-                    setEditForm(f => ({ ...f, cep: masked }));
-                    if (masked.replace(/\D/g, "").length === 8) {
-                      runCepLookup(masked);
-                    }
-                  }}
-                  onBlur={handleCepBlur}
-                  placeholder="00000-000"
-                  maxLength={10}
-                />
-                {fetchingCep && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="cep"
+                    value={editForm.cep}
+                    onChange={e => {
+                      const masked = formatCEP(e.target.value);
+                      setEditForm(f => ({ ...f, cep: masked }));
+                      if (masked.replace(/\D/g, "").length === 8) {
+                        runCepLookup(masked);
+                      }
+                    }}
+                    onBlur={handleCepBlur}
+                    placeholder="00000-000"
+                    maxLength={10}
+                  />
+                  {fetchingCep && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={fetchingCep || (editForm.cep || "").replace(/\D/g, "").length !== 8}
+                  onClick={() => runCepLookup(editForm.cep)}
+                  title="Buscar endereço pelo CEP"
+                >
+                  {fetchingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  <span className="ml-1.5 hidden sm:inline">Buscar</span>
+                </Button>
               </div>
             </div>
             <div className="grid gap-2">
