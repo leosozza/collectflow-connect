@@ -227,25 +227,14 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                     inactive && "opacity-60"
                   )}
                 >
-                  {/* Hot icon / promote */}
-                  <button
-                    type="button"
-                    disabled={inactive || busy === slot || isHot}
-                    onClick={() => !isHot && handlePromote(slot)}
-                    title={isHot ? "Número quente atual" : inactive ? "Inativo" : "Marcar como quente"}
-                    className={cn(
-                      "shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-colors",
-                      !isHot && !inactive && "hover:bg-orange-500/10",
-                      (inactive || isHot) && "cursor-default"
+                  {/* WhatsApp à esquerda do número (ou placeholder p/ alinhar) */}
+                  <div className="shrink-0 w-5 h-5 inline-flex items-center justify-center">
+                    {wa ? (
+                      <WhatsAppDot className="w-3.5 h-3.5 text-green-600" />
+                    ) : (
+                      <PhoneIcon className="w-3.5 h-3.5 text-muted-foreground/40" />
                     )}
-                  >
-                    <Flame
-                      className={cn(
-                        "w-3.5 h-3.5",
-                        isHot && !inactive ? "text-orange-500 fill-orange-500/30" : "text-muted-foreground/40"
-                      )}
-                    />
-                  </button>
+                  </div>
 
                   {/* Number (or inline edit) */}
                   <div className={cn("shrink-0", isEditingThis ? "w-44" : "w-auto")}>
@@ -276,9 +265,26 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                     )}
                   </div>
 
-                  {/* Actions + WhatsApp agrupados */}
+                  {/* Actions: Hot + Editar + Inativar */}
                   <div className="flex items-center shrink-0 ml-1 -space-x-0.5">
-                    {wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600 mr-0.5" />}
+                    <button
+                      type="button"
+                      disabled={inactive || busy === slot || isHot}
+                      onClick={() => !isHot && handlePromote(slot)}
+                      title={isHot ? "Número quente atual" : inactive ? "Inativo" : "Marcar como quente"}
+                      className={cn(
+                        "shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-colors",
+                        !isHot && !inactive && "hover:bg-orange-500/10",
+                        (inactive || isHot) && "cursor-default"
+                      )}
+                    >
+                      <Flame
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          isHot && !inactive ? "text-orange-500 fill-orange-500/30" : "text-muted-foreground/40"
+                        )}
+                      />
+                    </button>
                     {!isEditingThis && (
                       <Button
                         size="icon"
