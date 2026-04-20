@@ -483,12 +483,18 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                <InfoItem label="Cod. Devedor" value={client.external_id} />
-                <InfoItem label="Cod. Contrato" value={codContratos} />
+                <InlineEditableField
+                  label="Cod. Devedor"
+                  value={client.external_id}
+                  onSave={(v) => updateSingleField("external_id", v)}
+                />
+                <InlineEditableField
+                  label="Cod. Contrato"
+                  value={client.cod_contrato}
+                  onSave={(v) => updateSingleField("cod_contrato", v)}
+                />
                 <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
-                <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
-                
               </div>
 
               {/* Telefones + Email */}
@@ -512,19 +518,39 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
               {/* Endereço */}
               <div className="pt-2 border-t border-border">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-muted-foreground uppercase font-medium">Endereço</p>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={() => setEditOpen(true)}>
-                    <Pencil className="w-3 h-3" />
-                    Editar endereço
-                  </Button>
-                </div>
+                <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Endereço</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                  <InfoItem label="Rua" value={client.endereco} className="md:col-span-2" />
-                  <InfoItem label="Bairro" value={client.bairro} />
-                  <InfoItem label="Cidade" value={client.cidade} />
-                  <InfoItem label="UF" value={client.uf} />
-                  <InfoItem label="CEP" value={client.cep} />
+                  <InlineEditableField
+                    label="Rua"
+                    value={client.endereco}
+                    onSave={(v) => updateSingleField("endereco", v)}
+                    className="md:col-span-2"
+                  />
+                  <InlineEditableField
+                    label="Bairro"
+                    value={client.bairro}
+                    onSave={(v) => updateSingleField("bairro", v)}
+                  />
+                  <InlineEditableField
+                    label="Cidade"
+                    value={client.cidade}
+                    onSave={(v) => updateSingleField("cidade", v)}
+                  />
+                  <InlineEditableField
+                    label="UF"
+                    value={client.uf}
+                    onSave={(v) => updateSingleField("uf", v)}
+                    type="uf"
+                    maxLength={2}
+                  />
+                  <InlineEditableField
+                    label="CEP"
+                    value={client.cep}
+                    onSave={(v) => updateSingleField("cep", v)}
+                    type="cep"
+                    maxLength={10}
+                    placeholder="00000-000"
+                  />
                 </div>
               </div>
 
