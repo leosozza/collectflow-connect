@@ -215,11 +215,17 @@ const CloseConversationDialog = ({
               <div className="flex gap-1.5 flex-wrap">
                 {others.map((d) => {
                   const active = assignedIds.has(d.id);
+                  const blocked = EM_DIA_KEYS.includes(d.key) && hasAgreement && !active;
                   return (
-                    <button key={d.id} disabled={loading} onClick={() => handleToggle(d)}>
+                    <button
+                      key={d.id}
+                      disabled={loading || blocked}
+                      onClick={() => handleToggle(d)}
+                      title={blocked ? EM_DIA_BLOCKED_TITLE : undefined}
+                    >
                       <Badge
                         variant={active ? "default" : "outline"}
-                        className="text-xs cursor-pointer hover:opacity-80"
+                        className={`text-xs hover:opacity-80 ${blocked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                         style={
                           active
                             ? { backgroundColor: d.color, color: "#fff", borderColor: d.color }
