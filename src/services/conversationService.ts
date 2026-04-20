@@ -194,7 +194,10 @@ export async function fetchConversationCounts(
     const { data, error } = await supabase.rpc("get_visible_conversation_counts" as any, {
       _tenant_id: tenantId,
     });
-    if (error) throw error;
+    if (error) {
+      console.error("[conversationService] get_visible_conversation_counts RPC error:", error);
+      throw error;
+    }
     const row = (data as any[])?.[0];
     if (row) {
       counts.open = Number(row.open_count) || 0;
