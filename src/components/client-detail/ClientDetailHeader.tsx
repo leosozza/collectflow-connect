@@ -432,33 +432,35 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-2xl font-bold text-foreground flex-1">{client.nome_completo}</h1>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
-              onClick={() => openWhatsApp()}
-              title="WhatsApp"
-            >
-              <WhatsAppIcon className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
-              onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
-              title="Atendimento"
-            >
-              <Headset className="w-5 h-5" />
-            </Button>
-            <div className="flex flex-col items-end px-3 border-l border-border ml-1">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-              <span className="text-2xl font-bold text-destructive leading-tight">{formatCurrency(totalAberto)}</span>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
+                onClick={() => openWhatsApp()}
+                title="WhatsApp"
+              >
+                <WhatsAppIcon className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
+                onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
+                title="Atendimento"
+              >
+                <Headset className="w-5 h-5" />
+              </Button>
+              <Button onClick={onFormalizarAcordo} className="gap-2">
+                <FileText className="w-4 h-4" />
+                Formalizar Acordo
+              </Button>
             </div>
-            <Button onClick={onFormalizarAcordo} className="gap-2">
-              <FileText className="w-4 h-4" />
-              Formalizar Acordo
-            </Button>
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
+              <span className="text-2xl font-bold text-destructive leading-none">{formatCurrency(totalAberto)}</span>
+            </div>
           </div>
         </div>
 
