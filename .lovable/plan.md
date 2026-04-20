@@ -1,56 +1,78 @@
 
 
-## Bloquear tabulação "Em Dia" para clientes com acordo no Rivo
+## Correção: busca de endereço (MaxList) e ViaCEP no fluxo de Acordo
 
-### Regra de negócio
+### Problemas identificados
 
-A tabulação "Em Dia" (`em_dia` no canal voz, `wa_em_dia` no canal WhatsApp) deve ficar disponível **somente** para clientes importados que vêm pagando suas parcelas originais (sem acordo formalizado dentro do Rivo). Se existir qualquer registro em `public.agreements` para o `cpf` + `tenant_id` do cliente, a tabulação fica bloqueada.
+**1. Enriquecimento de endereço bloqueia a criação do acordo**
+- Em `AgreementCalculator.handleSubmit` (linha 467), `enrichClientAddress` é chamado **antes** de `createAgreement`, dentro do mesmo `try`. Se a chamada ao MaxSystem falhar (timeout, 500, contrato não encontrado, JWT expirado), a exceção sobe e o acordo **nunca é gravado** — o usuário vê apenas "Erro ao gravar acordo".
+- O serviço também grava direto na tabela `clients` (`update().in("id", clientIds)`), o que pode disparar políticas RLS/validações e travar o fluxo principal.
 
-### Detecção de "tem acordo no Rivo"
+**2. Latência alta com muitos contratos**
+- `enrichClientAddress` itera todos os `cod_contrato` únicos do CPF em batches de 5, fazendo 2 requests por contrato (`model-search` + `model-details`). CPFs com 20+ contratos demoram dezenas de segundos antes mesmo do acordo começar a ser criado.
+- Para na primeira resposta com endereço, mas só **depois** de processar o batch inteiro.
 
-Hook reutilizável `useHasRivoAgreement(cpf, tenantId)` em `src/hooks/useHasRivoAgreement.ts`:
+**3. Falta de ViaCEP no diálogo "Campos faltantes"**
+- Em `AgreementCalculator.tsx` (linhas 1024–1037), o input de CEP é um `<Input>` simples. Não dispara ViaCEP, então o operador precisa digitar manualmente endereço, bairro, cidade e UF — exatamente os campos que o ViaCEP retorna. Os outros formulários do projeto (`ClientForm`, `ClientDetailHeader`, `CobrancaForm`) já têm essa lógica.
+
+### Mudanças
+
+**A. `src/components/client-detail/AgreementCalculator.tsx`**
+
+1. **Tornar o enriquecimento não-bloqueante** — mover `enrichClientAddress` para fora do caminho crítico:
+   - Antes: `await enrichClientAddress(...)` → `createAgreement(...)`.
+   - Depois: disparar `enrichClientAddress(...)` em background (`.catch(console.warn)`), criar o acordo imediatamente. O endereço, quando vier, fica disponível para `checkRequiredFields` na próxima execução.
+   - Manter o indicador "Buscando endereço..." apenas se já houver endereço em cache; caso contrário, ir direto para "Gravando acordo".
+
+2. **Adicionar ViaCEP no diálogo de "Campos faltantes"** (linhas ~1024–1037):
+   - Detectar quando `field === "cep"`, atrelar `onBlur` ao input que:
+     - Faz fetch em `https://viacep.com.br/ws/{cleanCep}/json/`.
+     - Se sucesso, popula automaticamente `endereco`, `bairro`, `cidade`, `uf` no estado `missingFields` (apenas se estiverem vazios — não sobrescreve o que o operador já digitou).
+     - Mostra um spinner (`Loader2`) enquanto busca.
+   - Reaproveitar o helper já existente em `ClientDetailHeader.handleCepBlur` extraindo para `src/lib/viaCep.ts` (função pura `lookupCep(cep): Promise<{logradouro, bairro, localidade, uf} | null>`) e importando nos 4 lugares (`ClientForm`, `ClientDetailHeader`, `CobrancaForm`, `AgreementCalculator`).
+
+**B. `src/services/addressEnrichmentService.ts`**
+
+3. **Reduzir tentativas e respeitar limite de tempo**:
+   - Limitar a no máximo 3 contratos únicos (priorizar os mais recentes por `created_at` desc).
+   - Reduzir timeout por request de 30s (default global) para **8s** explícitos.
+   - Logar `console.warn("[address-enrichment] failed:", err)` em vez de engolir silenciosamente — para observabilidade.
+   - Se a primeira tentativa retornar endereço, abortar as demais (curto-circuito real).
+
+4. **Não bloquear se update de `clients` falhar**:
+   - Envolver `supabase.from("clients").update(...)` em try/catch isolado. Falha de RLS ou trigger não deve fazer a função inteira retornar `null`.
+
+**C. `src/lib/viaCep.ts` (novo)**
 
 ```ts
-// SELECT id FROM agreements 
-// WHERE tenant_id = $tenantId AND cpf = $cpf 
-// LIMIT 1
-// Retorna boolean (qualquer status conta — pending_approval, pending, approved, completed, broken)
+export async function lookupCep(cep: string): Promise<{
+  logradouro: string; bairro: string; localidade: string; uf: string;
+} | null> {
+  const clean = cep.replace(/\D/g, "");
+  if (clean.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+    const data = await res.json();
+    if (data?.erro) return null;
+    return data;
+  } catch { return null; }
+}
 ```
 
-Cacheado via React Query com `queryKey: ["has-rivo-agreement", tenantId, cpf]`, `staleTime: 60s`.
+**D. Refactor leve dos 3 consumidores existentes**
+- `ClientForm.tsx`, `ClientDetailHeader.tsx`, `CobrancaForm.tsx`: trocar o fetch inline por `lookupCep()`. Comportamento visível inalterado.
 
-### Pontos de bloqueio (4 lugares)
+### Fora de escopo
 
-**1. `src/components/contact-center/whatsapp/DispositionSelector.tsx`** (sidebar do chat WhatsApp)
-- Receber `clientCpf?: string | null` via prop (passar a partir de `ContactSidebar` usando `linkedClient.cpf`).
-- Usar o hook para obter `hasAgreement`.
-- Se `d.key === "wa_em_dia" && hasAgreement` → renderizar o badge com `opacity-40 cursor-not-allowed`, `disabled` no botão, e `title="Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais"`.
-
-**2. `src/components/contact-center/whatsapp/CloseConversationDialog.tsx`** (modal de fechar conversa)
-- Buscar o `cpf` do `client_id` da `conversation` (pequena query `.from("clients").select("cpf").eq("id", conversation.client_id)` já no `useEffect` de carregamento, ou aceitar via prop a partir do parent que já tem o cliente vinculado).
-- Mesmo bloqueio visual + impedir o `handleToggle` quando a chave é `wa_em_dia` e há acordo.
-
-**3. `src/components/contact-center/whatsapp/ContactSidebar.tsx`** (auto-assign existente)
-- Adicionar no `useEffect` de auto-assign (linhas 219–259): antes de inserir, verificar se há acordo em `agreements` para o `linkedClient.cpf` + `tenant_id`. Se houver, **não** auto-atribui `em_dia`. Mantém o auto-assign de `quitado` inalterado.
-
-**4. `src/components/atendimento/DispositionPanel.tsx`** (painel do AtendimentoPage — canal voz)
-- Receber nova prop opcional `hasRivoAgreement?: boolean` (passada do `AtendimentoPage` que já tem `agreements` carregado — `agreements.length > 0`).
-- No `renderChip` (e no botão de `contatoGroup`): se `d.key === "em_dia" && hasRivoAgreement` → `disabled` + `opacity-40` + `title` explicativo.
-- No `handleDisposition`: guard inicial `if (type === "em_dia" && hasRivoAgreement) { toast.error("Esta tabulação é exclusiva para clientes em dia com pagamentos originais (sem acordo no Rivo)"); return; }`.
-
-**5. `src/pages/AtendimentoPage.tsx`**
-- Passar `hasRivoAgreement={agreements.length > 0}` ao `<DispositionPanel />` (linha 707).
-
-### Defesa em backend (opcional, fora do escopo desta entrega)
-
-Para garantir mesmo via API direta, poderíamos criar um trigger `BEFORE INSERT` em `conversation_disposition_assignments`/`call_dispositions` que rejeita `em_dia`/`wa_em_dia` quando há acordo. **Não** será incluído agora — o bloqueio fica apenas na UI conforme escopo do pedido. Mencionado para o usuário decidir em iteração futura.
+- Não vamos alterar a edge `maxsystem-proxy` (o backend está OK; o problema é como o frontend trata as falhas).
+- Não vamos cachear endereços em uma tabela dedicada — `client_profiles`/`clients` já cumprem esse papel via `enrichClientAddress`.
+- Não vamos adicionar autocomplete de endereço por número (Google Places) — fica como evolução futura.
 
 ### Validação
 
-1. WhatsApp, cliente vinculado **sem** registro em `agreements`: badge "Em Dia" clicável normalmente.
-2. WhatsApp, cliente vinculado **com** acordo (qualquer status) no Rivo: badge "Em Dia" aparece desabilitado/cinza, com tooltip explicativo; clicar não faz nada.
-3. Modal "Fechar conversa": mesmo comportamento.
-4. Auto-assign: cliente com `status_cobranca` "Em dia" mas com acordo no Rivo → não recebe mais `em_dia` automaticamente. Sem acordo → continua recebendo.
-5. AtendimentoPage (voz): chip "Em Dia" desabilitado quando `agreements.length > 0`; toast bloqueia tentativas via teclado.
-6. Tabulações já registradas anteriormente continuam visíveis (não removemos histórico).
+1. Acordo com CPF que **tem endereço** em `client_profiles`/`clients`: criação imediata, sem chamada ao MaxSystem.
+2. Acordo com CPF **sem endereço** e MaxSystem **lento/fora do ar**: acordo é criado normalmente; toast de sucesso aparece em <2s; warning silencioso no console; endereço continua faltando e o diálogo "Campos faltantes" abre como hoje.
+3. Acordo com CPF sem endereço e MaxSystem OK: endereço é enriquecido em background; na próxima abertura do cliente já aparece.
+4. Diálogo "Campos faltantes" com CEP listado: digitar CEP válido → ao sair do campo, `endereco`, `bairro`, `cidade` e `uf` são preenchidos automaticamente; spinner aparece durante a busca; CEP inválido (8 dígitos não encontrados) não trava nem mostra erro ruidoso.
+5. Os 3 formulários antigos (`ClientForm`, `ClientDetailHeader`, `CobrancaForm`) continuam funcionando idênticos após refactor para `lookupCep`.
 
