@@ -247,7 +247,40 @@ const WhatsAppChatLayout = () => {
   // Load client info for selected conversation
   const [clientInfo, setClientInfo] = useState<any>(null);
   useEffect(() => {
-    if (!selectedConv?.client_id) {
+    if (!selectedConv) {
+      setClientInfo(null);
+      return;
+    }
+
+    // Auto-resolve: if conversation has no client_id but has a remote_phone, try to link it
+    if (!selectedConv.client_id && selectedConv.remote_phone && tenantId) {
+      (async () => {
+        const { data: resolved } = await supabase.rpc("resolve_client_by_phone" as any, {
+          p_tenant_id: tenantId,
+          p_phone: selectedConv.remote_phone,
+        });
+        const clientRow: any = Array.isArray(resolved) ? resolved[0] : null;
+        if (clientRow?.client_id) {
+          await supabase
+            .from("conversations")
+            .update({
+              client_id: clientRow.client_id,
+              remote_name: clientRow.nome_completo || selectedConv.remote_name || "",
+            } as any)
+            .eq("id", selectedConv.id);
+          setSelectedConv({
+            ...selectedConv,
+            client_id: clientRow.client_id,
+            remote_name: clientRow.nome_completo || selectedConv.remote_name,
+          } as any);
+        } else {
+          setClientInfo(null);
+        }
+      })();
+      return;
+    }
+
+    if (!selectedConv.client_id) {
       setClientInfo(null);
       return;
     }
@@ -258,7 +291,7 @@ const WhatsAppChatLayout = () => {
       .eq("tenant_id", tenantId!)
       .single()
       .then(({ data }) => setClientInfo(data));
-  }, [selectedConv?.client_id]);
+  }, [selectedConv?.client_id, selectedConv?.id, tenantId]);
 
   // Realtime subscriptions
   useEffect(() => {
