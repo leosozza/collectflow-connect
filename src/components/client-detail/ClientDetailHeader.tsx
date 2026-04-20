@@ -264,6 +264,42 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     onError: (err: any) => toast.error(err?.message || "Erro ao salvar dados"),
   });
 
+  const SHARED_FIELDS = new Set(["endereco", "bairro", "cidade", "uf", "cep", "phone", "phone2", "phone3", "email", "nome_completo", "observacoes"]);
+  const PROFILE_FIELD_MAP: Record<string, string> = {
+    endereco: "endereco", bairro: "bairro", cidade: "cidade", uf: "uf", cep: "cep",
+    phone: "phone", phone2: "phone2", phone3: "phone3", email: "email", nome_completo: "nome_completo",
+  };
+
+  const updateSingleField = async (field: string, rawValue: string) => {
+    let value: string | null = rawValue.trim() || null;
+    if (field === "cep" && value) {
+      const digits = value.replace(/\D/g, "");
+      if (digits.length === 8) value = `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    }
+    if (field === "uf" && value) value = value.toUpperCase();
+
+    try {
+      const clientIds = clients.map(c => c.id);
+      const targetIds = SHARED_FIELDS.has(field) ? clientIds : [clientIds[0]];
+      for (const id of targetIds) {
+        const { error } = await supabase.from("clients").update({ [field]: value } as any).eq("id", id);
+        if (error) throw error;
+      }
+      // Sync profile if applicable
+      if (tenant?.id && PROFILE_FIELD_MAP[field]) {
+        const cleanCpfVal = cpf?.replace(/\D/g, "") || "";
+        if (cleanCpfVal) {
+          await upsertClientProfile(tenant.id, cleanCpfVal, { [PROFILE_FIELD_MAP[field]]: value || "" } as any, "manual_inline");
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Campo atualizado");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar campo");
+      throw e;
+    }
+  };
+
   const openWhatsApp = (phoneNumber?: string) => {
     const rawPhone = phoneNumber || client.phone;
     if (!rawPhone) {
