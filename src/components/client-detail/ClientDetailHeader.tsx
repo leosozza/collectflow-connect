@@ -434,10 +434,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </Button>
           <h1 className="text-xl font-bold text-foreground flex-1 min-w-0 truncate">{client.nome_completo}</h1>
           <div className="flex items-center gap-3 ml-auto shrink-0">
-            <div className="flex flex-col items-end leading-none mr-1">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-              <span className="text-lg font-bold text-destructive leading-none mt-0.5">{formatCurrency(totalAberto)}</span>
-            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -463,7 +459,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </div>
         </div>
 
-        {/* Linha 2: Metadados */}
+        {/* Linha 2: Metadados + Em Aberto */}
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-11 mt-1.5">
           <span><strong>CPF:</strong> {formattedCpf}</span>
           <span className="text-border">|</span>
@@ -472,6 +468,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
+          <div className="ml-auto flex items-baseline gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
+            <span className="text-base font-bold text-destructive">{formatCurrency(totalAberto)}</span>
+          </div>
         </div>
 
         {/* Linha 3: Colapsável */}
