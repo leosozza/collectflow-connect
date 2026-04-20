@@ -153,8 +153,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           uf: res.data.uf || f.uf,
         }));
       } else {
-        if (res.reason === "not_found") toast.error("CEP não encontrado");
-        else if (res.reason === "network") toast.error("Falha ao consultar CEP");
+        const reason = res.reason;
+        if (reason === "not_found") toast.error("CEP não encontrado");
+        else if (reason === "network") toast.error("Falha ao consultar CEP");
       }
     } finally {
       setFetchingCep(false);
