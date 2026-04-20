@@ -11,7 +11,7 @@ export const EmailList = ({ emails }: EmailListProps) => {
   const extra = unique.length - 1;
 
   return (
-    <div className="w-full">
+    <div className="inline-block">
       <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Email</p>
 
       <HoverCard openDelay={120} closeDelay={150}>
