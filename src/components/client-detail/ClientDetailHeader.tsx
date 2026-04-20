@@ -461,31 +461,31 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
         {/* Linha 2: Grid de informações (estilo CRM) */}
         <div className="ml-11 mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
-          <div className="px-4 py-2 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">CPF</p>
-            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5">{formattedCpf}</p>
+          <div className="px-3 py-2 min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">CPF</p>
+            <p className="text-[13px] font-semibold text-foreground truncate mt-0.5">{formattedCpf}</p>
           </div>
-          <div className="px-4 py-2 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Telefone</p>
-            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5">
+          <div className="px-3 py-2 min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Telefone</p>
+            <p className="text-[13px] font-semibold text-foreground truncate mt-0.5">
               {client.phone ? formatPhone(client.phone) : "—"}
             </p>
           </div>
-          <div className="px-4 py-2 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Email</p>
-            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5" title={client.email || ""}>
+          <div className="px-3 py-2 min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Email</p>
+            <p className="text-[13px] font-semibold text-foreground truncate mt-0.5" title={client.email || ""}>
               {client.email || "—"}
             </p>
           </div>
-          <div className="px-4 py-2 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Credor</p>
-            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5" title={client.credor}>
-              {client.credor}
+          <div className="px-3 py-2 min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Credor</p>
+            <p className="text-[13px] font-semibold text-foreground truncate mt-0.5" title={client.credor}>
+              {client.credor ? client.credor.split(/\s+/).slice(0, 2).join(" ") : "—"}
             </p>
           </div>
-          <div className="px-4 py-2 min-w-0 bg-destructive/5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Em Aberto</p>
-            <p className="text-[17px] font-bold text-destructive truncate mt-0.5">
+          <div className="px-3 py-2 min-w-0 bg-destructive/5">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Em Aberto</p>
+            <p className="text-[15px] font-bold text-destructive truncate mt-0.5">
               {formatCurrency(totalAberto)}
             </p>
           </div>
