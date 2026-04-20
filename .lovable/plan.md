@@ -1,88 +1,82 @@
 
 
-## Validação Fase 1 + Plano Fase 2
+## Validação Fase 2 + Plano das demais melhorias
 
-### Parte A — Validação dos 3 fluxos aplicados (leitura de código)
+### Parte A — Validação Fase 2 (confirmação obrigatória de acordo)
 
-Vou auditar os 3 fluxos da Fase 1 lendo os arquivos alterados, sem usar browser. Relatório por fluxo:
+Auditei `AgreementCalculator.tsx` linha por linha:
 
-**Fluxo 1 — Auto-CEP inline (1.1 + 1.3)**
-Arquivos: `InlineEditableField.tsx`, `ClientDetailHeader.tsx`
-- Confirmar que `silent: true` está propagado nos 4 updates paralelos do `onCepResolved`.
-- Confirmar que apenas 1 toast final ("Endereço preenchido") é exibido.
-- Confirmar que o `setDraft(next)` é aplicado antes do `await onSave` (optimistic) e que há rollback no catch.
-- Confirmar que o `lastLookupRef` previne re-execução em re-render.
+| Item | Status | Evidência |
+|---|---|---|
+| Estado `confirmOpen` adicionado | ✅ | linha 113 |
+| `handleSubmit` agora só abre o diálogo | ✅ | linhas 476-479 (valida + guarda + `setConfirmOpen(true)`) |
+| Lógica real movida para `handleConfirmedSubmit` | ✅ | linha 481 |
+| `AlertDialog` com resumo completo | ✅ | linhas 1175-1279 — Cliente, CPF, Credor, Valor original, Valor proposto, Desconto (R$ + %), Entrada, Parcelas, 1º vencimento, Forma de pagamento |
+| Aviso "fora do padrão" quando aplicável | ✅ | linhas 1248-1254 |
+| Bloqueio contra fechar durante processamento | ✅ | `onOpenChange` (1175) + `onEscapeKeyDown` (1178) |
+| Foco inicial no botão Cancelar (seguro) | ✅ | `autoFocus` na linha 1262 |
+| Botões desabilitados durante processamento | ✅ | linhas 1262, 1266 |
+| Loader visual no botão de confirmar | ✅ | linhas 1273-1275 |
+| Aviso "ação não pode ser desfeita" | ✅ | linha 1257-1259 |
 
-**Fluxo 2 — Overlay no AgreementCalculator (1.2)**
-Arquivo: `AgreementCalculator.tsx`
-- Confirmar overlay com `Loader2` + texto amigável durante `enriching`.
-- Confirmar `disabled` + opacity no botão Formalizar/Gravar.
-- Confirmar guard contra duplo-clique (`isSubmitting || enriching`).
-- Confirmar recheck via `checkRequiredFields()` após enrich.
-
-**Fluxo 3 — Persistência + feedback (2.6, 2.7, 2.8)**
-Arquivos: `CarteiraPage.tsx`, `ClientDetailPage.tsx`, `CopyButton.tsx`, `ClientSignature.tsx`, `useSessionStorage.ts`
-- Confirmar que filtros da Carteira são salvos em `sessionStorage` e restaurados ao voltar.
-- Confirmar skeleton no `ClientDetailPage` enquanto carrega.
-- Confirmar que `CopyButton` troca ícone para ✓ por 1.5s e dá toast.
-- Confirmar uso do `CopyButton` em pelo menos 2 lugares (assinatura, links de boleto).
-
-**Entregável da validação:** relatório curto por fluxo — ✅ implementado / ⚠️ divergência (com linha) / ❌ faltando. Se houver divergência, ajusto antes de iniciar a Fase 2.
+**Resultado:** ✅ Fase 2 totalmente implementada conforme o plano. Nenhuma divergência. Pronto para teste end-to-end.
 
 ---
 
-### Parte B — Fase 2: Validação obrigatória de acordo
+### Parte B — Plano das melhorias restantes
 
-Você pediu confirmação **sempre** antes de formalizar acordo, independente de valor ou parcelas. Isso substitui a ideia original do item 2.4 (que tinha limite de R$10.000 / 12 parcelas) por uma regra universal.
+Da lista original (Fase 1 + extras), restam 3 itens classificados como "médio esforço" e 2 como "avaliar antes":
 
-**Comportamento proposto:**
+#### 🟢 Fase 3 — Médio esforço (recomendo agrupar)
 
-1. Operador clica em "GRAVAR ACORDO" no `AgreementCalculator`.
-2. Antes de qualquer escrita no banco, abre um `AlertDialog` com resumo:
-   - Nome do cliente + CPF
-   - Credor
-   - Valor original vs. valor proposto
-   - Desconto aplicado (% e R$)
-   - Quantidade de parcelas
-   - Valor da entrada (se houver)
-   - Valor de cada parcela
-   - Data do primeiro vencimento
-   - Forma de pagamento
-3. Dois botões:
-   - **"Cancelar"** → fecha o diálogo, mantém formulário aberto.
-   - **"Confirmar e Formalizar"** → procede com o fluxo atual (enrich, criar acordo, gerar boletos).
-4. O diálogo é bloqueante (não permite fechar clicando fora) — exige decisão consciente.
-5. Acessibilidade: foco inicial no botão Cancelar (mais seguro).
+**3.1 Indicador visual de campo "vindo do MaxSystem" (item 2.2)**
+- Quando o `onCepResolved` preencher rua/bairro/cidade/UF, aplicar classe CSS `ring-2 ring-emerald-400/60` por 3 segundos nos 4 campos preenchidos.
+- Implementação: adicionar prop `highlight?: boolean` no `InlineEditableField`; controlar via state em `ClientDetailHeader` (`Set<string>` de campos destacados, `setTimeout` de 3s para limpar).
+- Reforça percepção de "o sistema trabalhou por mim".
 
-**Onde encaixar no fluxo atual:**
-- Hoje `handleSubmit` faz: validar → enrich → criar acordo → gerar boletos.
-- Novo fluxo: validar → **abrir diálogo de confirmação** → (se confirmado) enrich → criar acordo → gerar boletos.
-- Se faltar campo obrigatório, manter o diálogo `missingFieldsOpen` atual antes do diálogo de confirmação.
+**3.2 Botão "Buscar dados" manual no diálogo Editar Dados (item 2.3)**
+- Adicionar botão pequeno (ícone Search + texto "Buscar") ao lado do campo CEP no `ClientForm.tsx` / diálogo Editar Dados.
+- Dispara o mesmo lookup do auto-trigger, mas força execução mesmo se o CEP já estiver salvo.
+- Útil quando bairro/rua estão incompletos mas o CEP existe.
+- Estado `looking` local + `Loader2` no botão.
 
-**Edge cases:**
-- Se já existir confirmação em andamento, ignorar cliques adicionais.
-- Se o operador cancelar, o estado do formulário permanece intacto (já compatível com a melhoria 2.5 de rascunho, se aplicarmos depois).
+**3.3 Rascunho do AgreementCalculator (item 2.5)**
+- Usar o hook `useSessionStorage` já criado (Fase 1).
+- Salvar `{ entradas, numParcelas, formaPagto, jurosPercent, multaPercent, descontoPercent, calcDate }` em `sessionStorage` com chave `agreement-draft:${cpf}:${credor}` por 30 minutos (timestamp + TTL).
+- Ao montar o componente, se houver rascunho válido, mostrar banner discreto "Restaurar rascunho de HH:mm?" com botões Restaurar / Descartar.
+- Limpar automaticamente após formalização bem-sucedida.
 
-**Visual:**
-- Usar `AlertDialog` do shadcn (já existe em `src/components/ui/alert-dialog.tsx`).
-- Resumo em cards/grid 2 colunas com labels destacados.
-- Valores monetários em destaque (font-semibold + cor primária).
-- Aviso curto no rodapé: "Esta ação não pode ser desfeita automaticamente."
+#### 🟡 Avaliar antes de aplicar
 
-### Arquivos que serão alterados na Fase 2
+**3.4 Atalhos de teclado (item 2.1)**
+- `Esc` para fechar diálogos: já é padrão do shadcn — só precisa garantir que nenhum diálogo bloqueia indevidamente.
+- `Ctrl/Cmd+S` no diálogo Editar Dados: precisa de `useEffect` com listener global escopado ao diálogo aberto.
+- Ordem do `Tab` nos campos de endereço: revisar atributo `tabIndex` ou ordem do JSX.
+- **Risco:** Ctrl+S no navegador abre "Salvar página" — precisamos de `e.preventDefault()` agressivo, e isso pode confundir power-users que usam o atalho do navegador.
+- **Recomendação:** aplicar só `Esc` (já vem grátis) e revisar ordem do Tab. Pular Ctrl+S por enquanto.
 
-- `src/components/client-detail/AgreementCalculator.tsx` — adicionar estado `confirmOpen`, abrir diálogo antes de processar, mover lógica atual de `handleSubmit` para `handleConfirmedSubmit`.
+**3.5 Item 2.4 (limites de R$10k / 12 parcelas)**
+- ❌ **Cancelado** — substituído pela validação universal da Fase 2. Não há nada a fazer aqui.
 
-### Fora de escopo (Fase 2)
+---
 
-- Não mexer em score, WhatsApp, discador, Edge Functions de integração.
-- Não alterar a lógica de cálculo de desconto/parcelas.
-- Não tocar no `AgreementForm.tsx` (formulário antigo da página de Acordos) — escopo é apenas a formalização dentro do perfil do cliente.
+### Sequência sugerida
 
-### Sequência de execução
+1. **Você testa a Fase 2 end-to-end** (formalizar 1 acordo real, confirmar que o diálogo aparece, o resumo está correto, cancelar mantém formulário, confirmar processa normal).
+2. Se OK, aplicar **Fase 3 inteira (3.1 + 3.2 + 3.3)** numa única rodada.
+3. Decidir depois sobre 3.4 (atalhos).
 
-1. Rodar a validação da Parte A e reportar resultado.
-2. Se houver divergência, corrigir.
-3. Implementar a Parte B (validação obrigatória).
-4. Pedir teste end-to-end de uma formalização real.
+### Arquivos que serão alterados na Fase 3
+
+- `src/components/client-detail/InlineEditableField.tsx` — prop `highlight`
+- `src/components/client-detail/ClientDetailHeader.tsx` — controlar destaque pós-CEP
+- `src/components/client-detail/ClientForm.tsx` (ou diálogo Editar Dados equivalente) — botão "Buscar dados" manual
+- `src/components/client-detail/AgreementCalculator.tsx` — rascunho via `useSessionStorage`
+
+### Fora de escopo
+- Score, WhatsApp, discador, APIs, Edge Functions de integração.
+- Refatoração de cache TanStack ou autenticação.
+
+### Próximo passo
+Me confirme: **"Aplicar Fase 3"** (3.1 + 3.2 + 3.3) ou prefere escolher itens específicos.
 
