@@ -2024,6 +2024,8 @@ export type Database = {
           last_message_direction: string | null
           last_message_type: string | null
           provider: string | null
+          remote_avatar_fetched_at: string | null
+          remote_avatar_url: string | null
           remote_name: string
           remote_phone: string
           sla_deadline_at: string | null
@@ -2047,6 +2049,8 @@ export type Database = {
           last_message_direction?: string | null
           last_message_type?: string | null
           provider?: string | null
+          remote_avatar_fetched_at?: string | null
+          remote_avatar_url?: string | null
           remote_name?: string
           remote_phone: string
           sla_deadline_at?: string | null
@@ -2070,6 +2074,8 @@ export type Database = {
           last_message_direction?: string | null
           last_message_type?: string | null
           provider?: string | null
+          remote_avatar_fetched_at?: string | null
+          remote_avatar_url?: string | null
           remote_name?: string
           remote_phone?: string
           sla_deadline_at?: string | null
@@ -6610,6 +6616,8 @@ export type Database = {
               last_message_content: string
               last_message_direction: string
               last_message_type: string
+              remote_avatar_fetched_at: string
+              remote_avatar_url: string
               remote_name: string
               remote_phone: string
               sla_deadline_at: string

@@ -6,6 +6,8 @@ export interface Conversation {
   instance_id: string;
   remote_phone: string;
   remote_name: string;
+  remote_avatar_url?: string | null;
+  remote_avatar_fetched_at?: string | null;
   status: "open" | "waiting" | "closed";
   assigned_to: string | null;
   last_message_at: string;
@@ -122,6 +124,8 @@ export async function fetchConversations(
       instance_id: row.instance_id,
       remote_phone: row.remote_phone,
       remote_name: row.remote_name,
+      remote_avatar_url: row.remote_avatar_url ?? null,
+      remote_avatar_fetched_at: row.remote_avatar_fetched_at ?? null,
       status: row.status,
       assigned_to: row.assigned_to,
       last_message_at: row.last_message_at,
@@ -133,6 +137,7 @@ export async function fetchConversations(
       last_message_direction: row.last_message_direction ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      ...(row.sla_deadline_at !== undefined ? { sla_deadline_at: row.sla_deadline_at } : {}),
     })) as Conversation[];
 
     return { data: mapped, count: total };
