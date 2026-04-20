@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { Pencil, Check, X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatCEP } from "@/lib/formatters";
+import { lookupCepDetailed, type ViaCepResult } from "@/lib/viaCep";
+import { toast } from "sonner";
 
 interface InlineEditableFieldProps {
   label: string;
@@ -12,6 +15,7 @@ interface InlineEditableFieldProps {
   className?: string;
   placeholder?: string;
   onBlurExtra?: (value: string) => void;
+  onCepResolved?: (data: ViaCepResult) => void | Promise<void>;
 }
 
 const InlineEditableField = ({
@@ -23,11 +27,14 @@ const InlineEditableField = ({
   className,
   placeholder,
   onBlurExtra,
+  onCepResolved,
 }: InlineEditableFieldProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
   const [saving, setSaving] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastLookupRef = useRef<string>("");
 
   useEffect(() => {
     if (!editing) setDraft(value ?? "");
@@ -37,9 +44,43 @@ const InlineEditableField = ({
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
+  // Auto-lookup CEP when 8 digits are typed
+  useEffect(() => {
+    if (type !== "cep" || !editing) return;
+    const digits = draft.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    if (lastLookupRef.current === digits) return;
+    lastLookupRef.current = digits;
+
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      setCepLoading(true);
+      try {
+        const res = await lookupCepDetailed(digits);
+        if (cancelled) return;
+        if (res.ok) {
+          await onCepResolved?.(res.data);
+        } else {
+          const reason = (res as { ok: false; reason: string }).reason;
+          if (reason === "not_found") toast.error("CEP não encontrado");
+          else if (reason === "network") toast.error("Falha ao consultar CEP");
+        }
+      } finally {
+        if (!cancelled) setCepLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [draft, type, editing, onCepResolved]);
+
   const handleSave = async () => {
     if (saving) return;
-    const next = type === "uf" ? draft.trim().toUpperCase() : draft.trim();
+    let next = draft.trim();
+    if (type === "uf") next = next.toUpperCase();
+    if (type === "cep") next = formatCEP(next);
     if (next === (value ?? "")) {
       setEditing(false);
       return;
@@ -56,6 +97,16 @@ const InlineEditableField = ({
   const handleCancel = () => {
     setDraft(value ?? "");
     setEditing(false);
+  };
+
+  const handleChange = (raw: string) => {
+    if (type === "uf") {
+      setDraft(raw.toUpperCase());
+    } else if (type === "cep") {
+      setDraft(formatCEP(raw));
+    } else {
+      setDraft(raw);
+    }
   };
 
   return (
@@ -75,23 +126,25 @@ const InlineEditableField = ({
       </p>
       {editing ? (
         <div className="flex items-center gap-1">
-          <Input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => {
-              const v = type === "uf" ? e.target.value.toUpperCase() : e.target.value;
-              setDraft(v);
-            }}
-            onBlur={() => onBlurExtra?.(draft)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-              if (e.key === "Escape") handleCancel();
-            }}
-            maxLength={maxLength}
-            placeholder={placeholder}
-            disabled={saving}
-            className="h-7 text-sm"
-          />
+          <div className="relative flex-1">
+            <Input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => handleChange(e.target.value)}
+              onBlur={() => onBlurExtra?.(draft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") handleCancel();
+              }}
+              maxLength={maxLength}
+              placeholder={placeholder}
+              disabled={saving}
+              className="h-7 text-sm pr-7"
+            />
+            {cepLoading && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            )}
+          </div>
           <button
             type="button"
             onClick={handleSave}

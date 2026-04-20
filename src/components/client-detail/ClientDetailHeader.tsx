@@ -15,7 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCPF, formatCurrency, formatPhone, formatDate } from "@/lib/formatters";
+import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -137,24 +137,34 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     </div>
   );
 
-  const handleCepBlur = useCallback(async () => {
+  const runCepLookup = useCallback(async (cepValue: string) => {
+    const digits = (cepValue || "").replace(/\D/g, "");
+    if (digits.length !== 8) return;
     setFetchingCep(true);
     try {
-      const { lookupCep } = await import("@/lib/viaCep");
-      const data = await lookupCep(editForm.cep);
-      if (data) {
+      const { lookupCepDetailed } = await import("@/lib/viaCep");
+      const res = await lookupCepDetailed(digits);
+      if (res.ok) {
         setEditForm(f => ({
           ...f,
-          endereco: data.logradouro || f.endereco,
-          bairro: data.bairro || f.bairro,
-          cidade: data.localidade || f.cidade,
-          uf: data.uf || f.uf,
+          endereco: res.data.logradouro || f.endereco,
+          bairro: res.data.bairro || f.bairro,
+          cidade: res.data.localidade || f.cidade,
+          uf: res.data.uf || f.uf,
         }));
+      } else {
+        const reason = (res as { ok: false; reason: string }).reason;
+        if (reason === "not_found") toast.error("CEP não encontrado");
+        else if (reason === "network") toast.error("Falha ao consultar CEP");
       }
     } finally {
       setFetchingCep(false);
     }
-  }, [editForm.cep]);
+  }, []);
+
+  const handleCepBlur = useCallback(() => {
+    runCepLookup(editForm.cep);
+  }, [editForm.cep, runCepLookup]);
 
   const { data: tiposDevedor = [] } = useQuery({
     queryKey: ["tipos_devedor", tenant?.id],
@@ -581,6 +591,17 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     type="cep"
                     maxLength={10}
                     placeholder="00000-000"
+                    onCepResolved={async (data) => {
+                      const updates: Promise<void>[] = [];
+                      if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro));
+                      if (data.bairro) updates.push(updateSingleField("bairro", data.bairro));
+                      if (data.localidade) updates.push(updateSingleField("cidade", data.localidade));
+                      if (data.uf) updates.push(updateSingleField("uf", data.uf));
+                      await Promise.all(updates);
+                      toast.success("Endereço preenchido", {
+                        description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
+                      });
+                    }}
                   />
                 </div>
               </div>
@@ -664,7 +685,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 <Input
                   id="cep"
                   value={editForm.cep}
-                  onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))}
+                  onChange={e => {
+                    const masked = formatCEP(e.target.value);
+                    setEditForm(f => ({ ...f, cep: masked }));
+                    if (masked.replace(/\D/g, "").length === 8) {
+                      runCepLookup(masked);
+                    }
+                  }}
                   onBlur={handleCepBlur}
                   placeholder="00000-000"
                   maxLength={10}

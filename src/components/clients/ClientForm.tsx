@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { ClientFormData } from "@/services/clientService";
-import { formatCPF } from "@/lib/formatters";
+import { formatCPF, formatCEP } from "@/lib/formatters";
 import { clientSchema } from "@/lib/validations";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   // Endereço
   const [cep, setCep] = useState(defaultValues?.cep || "");
   const [endereco, setEndereco] = useState(defaultValues?.endereco || "");
-  const [bairro, setBairro] = useState("");
+  const [bairro, setBairro] = useState((defaultValues as any)?.bairro || "");
   const [cidade, setCidade] = useState(defaultValues?.cidade || "");
   const [uf, setUf] = useState(defaultValues?.uf || "");
   const [fetchingCep, setFetchingCep] = useState(false);
@@ -56,21 +56,39 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [valorPago, setValorPago] = useState(defaultValues?.valor_pago?.toString() || "0");
   const [observacoes, setObservacoes] = useState(defaultValues?.observacoes || "");
 
-  const handleCepBlur = useCallback(async () => {
+  const runCepLookup = useCallback(async (cepValue: string) => {
+    const digits = (cepValue || "").replace(/\D/g, "");
+    if (digits.length !== 8) return;
     setFetchingCep(true);
     try {
-      const { lookupCep } = await import("@/lib/viaCep");
-      const data = await lookupCep(cep);
-      if (data) {
-        setEndereco(data.logradouro || "");
-        setBairro(data.bairro || "");
-        setCidade(data.localidade || "");
-        setUf(data.uf || "");
+      const { lookupCepDetailed } = await import("@/lib/viaCep");
+      const res = await lookupCepDetailed(digits);
+      if (res.ok) {
+        if (res.data.logradouro) setEndereco(res.data.logradouro);
+        if (res.data.bairro) setBairro(res.data.bairro);
+        if (res.data.localidade) setCidade(res.data.localidade);
+        if (res.data.uf) setUf(res.data.uf);
+      } else {
+        const reason = (res as { ok: false; reason: string }).reason;
+        if (reason === "not_found") toast.error("CEP não encontrado");
+        else if (reason === "network") toast.error("Falha ao consultar CEP");
       }
     } finally {
       setFetchingCep(false);
     }
-  }, [cep]);
+  }, []);
+
+  const handleCepBlur = useCallback(() => {
+    runCepLookup(cep);
+  }, [cep, runCepLookup]);
+
+  const handleCepChange = useCallback((raw: string) => {
+    const masked = formatCEP(raw);
+    setCep(masked);
+    if (masked.replace(/\D/g, "").length === 8) {
+      runCepLookup(masked);
+    }
+  }, [runCepLookup]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +100,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
       email: email.trim() || undefined,
       external_id: externalId.trim() || undefined, // auto-gerado pelo serviço se vazio
       endereco: endereco.trim() || undefined,
+      bairro: bairro.trim() || undefined,
       cidade: cidade.trim() || undefined,
       uf: uf.trim() || undefined,
       cep: cep.trim() || undefined,
@@ -145,7 +164,7 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
             <div className="relative">
               <Input
                 value={cep}
-                onChange={(e) => setCep(e.target.value)}
+                onChange={(e) => handleCepChange(e.target.value)}
                 onBlur={handleCepBlur}
                 placeholder="00000-000"
                 maxLength={10}
