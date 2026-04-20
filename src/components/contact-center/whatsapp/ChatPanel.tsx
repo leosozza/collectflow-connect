@@ -260,17 +260,17 @@ const ChatPanel = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={handleOpenAtendimento}
                   disabled={openingAtendimento}
+                  aria-label="Atendimento"
                 >
                   {openingAtendimento ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Headphones className="w-3.5 h-3.5" />
+                    <Headphones className="w-4 h-4" />
                   )}
-                  Atendimento
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
@@ -283,12 +283,12 @@ const ChatPanel = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 text-xs"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={() => setTransferOpen(true)}
+                  aria-label="Transferir conversa"
                 >
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                  Transferir
+                  <ArrowRightLeft className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
@@ -297,26 +297,44 @@ const ChatPanel = ({
             </Tooltip>
           </TooltipProvider>
           {conversation.status === "open" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => handleStatusChange("closed")}
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              Fechar conversa
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleStatusChange("closed")}
+                    aria-label="Fechar conversa"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Fechar conversa</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {conversation.status === "closed" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => handleStatusChange("open")}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Abrir conversa
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleStatusChange("open")}
+                    aria-label="Abrir conversa"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Abrir conversa</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           <Button variant="ghost" size="icon" onClick={onToggleSidebar} className="h-8 w-8">
             {sidebarOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
