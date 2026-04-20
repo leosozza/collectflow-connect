@@ -452,18 +452,16 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
-              {canReopenParcelas && pagoClients.length > 0 && (
+              {canReopenParcelas && pagoClients.length > 0 && selectedPagoIds.length > 2 && (
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox checked={allPagoSelected} onCheckedChange={handleToggleAllPago} />
                     <span>Selecionar todas as parcelas pagas ({pagoClients.length})</span>
                   </div>
-                  {selectedPagoIds.length > 0 && (
-                    <Button size="sm" variant="outline" onClick={() => setShowReopenParcelasDialog(true)}>
-                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-                      Reabrir {selectedPagoIds.length} parcela(s)
-                    </Button>
-                  )}
+                  <Button size="sm" variant="outline" onClick={() => setShowReopenParcelasDialog(true)}>
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                    Reabrir {selectedPagoIds.length} parcela(s)
+                  </Button>
                 </div>
               )}
               {clients.length === 0 ? (
