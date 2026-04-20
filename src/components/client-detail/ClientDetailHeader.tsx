@@ -426,11 +426,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => navigate(backTo || "/carteira")}>
-          <ArrowLeft className="w-5 h-5" />
+      <div className="flex items-center gap-1 mb-1 -mt-1">
+        <Button variant="ghost" size="icon" className="h-6 w-6 -ml-1" onClick={() => navigate(backTo || "/carteira")}>
+          <ArrowLeft className="w-4 h-4" />
         </Button>
-        <span className="text-sm text-muted-foreground">Voltar</span>
+        <span className="text-xs text-muted-foreground">Voltar</span>
       </div>
       <Card className="px-4 py-2.5">
         {/* Linha 1: Nome + Ações */}
