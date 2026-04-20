@@ -854,22 +854,39 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       )}
 
       {(enrichingAddress || generatingBoletos) && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          {generatingBoletos ? "Gerando boletos na Negociarie..." : addressStatus}
+        <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-fade-in">
+          <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              {generatingBoletos ? "Gerando boletos..." : "Validando dados do cliente..."}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {generatingBoletos
+                ? "Aguarde enquanto emitimos os boletos no gateway."
+                : "Estamos confirmando endereço e contato antes de formalizar o acordo."}
+            </p>
+          </div>
         </div>
       )}
 
       <div className="flex gap-3">
         <Button
           onClick={handleSubmit}
-          disabled={submitting || generatingBoletos || !simulated || hasActiveAgreement}
-          className="flex-1 gap-2"
+          disabled={submitting || generatingBoletos || enrichingAddress || !simulated || hasActiveAgreement}
+          className="flex-1 gap-2 transition-opacity disabled:opacity-60"
           size="lg"
           variant={outOfStandard.isOut ? "outline" : "default"}
         >
-          {submitting || generatingBoletos ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
-          {generatingBoletos ? "Gerando boletos..." : enrichingAddress ? addressStatus : submitting ? "Gravando..." : outOfStandard.isOut ? "SOLICITAR LIBERAÇÃO" : "GRAVAR ACORDO"}
+          {submitting || generatingBoletos || enrichingAddress ? <Loader2 className="w-4 h-4 animate-spin" /> : outOfStandard.isOut ? <AlertTriangle className="w-4 h-4" /> : <FileCheck className="w-4 h-4" />}
+          {generatingBoletos
+            ? "Gerando boletos..."
+            : enrichingAddress
+              ? "Validando dados..."
+              : submitting
+                ? "Gravando..."
+                : outOfStandard.isOut
+                  ? "SOLICITAR LIBERAÇÃO"
+                  : "GRAVAR ACORDO"}
         </Button>
       </div>
 
