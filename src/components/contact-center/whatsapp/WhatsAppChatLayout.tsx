@@ -685,6 +685,9 @@ const WhatsAppChatLayout = () => {
           operatorName={profile?.full_name}
           dispositionAssignments={dispositionAssignments}
           dispositionTypes={dispositionTypes}
+          hasMoreOlder={hasMoreOlder}
+          loadingOlder={loadingOlder}
+          onLoadOlder={handleLoadOlderMessages}
         />
         {sidebarOpen && (
           <ContactSidebar
