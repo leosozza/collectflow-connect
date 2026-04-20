@@ -1,8 +1,17 @@
 
-## Análise: SALDO DEVEDOR vs EM ABERTO
+Aplicar o `CraftButton` no botão "Mais informações do devedor" no `ClientDetailHeader`, mantendo o comportamento de toggle do collapsible e a rotação do chevron quando aberto.
 
-### Investigação necessária
-Preciso verificar:
-1. Onde esses dois campos são populados (origem dos dados na tabela `clients`)
-2. Se há lógica condicional baseada em `saldo_devedor` separadamente de `em_aberto`
-3. Se algum relatório/dashboard/RPC consome especificamente `saldo_devedor`
+### Mudanças
+**Arquivo**: `src/components/client-detail/ClientDetailHeader.tsx`
+
+1. Importar `CraftButton`, `CraftButtonLabel`, `CraftButtonIcon` de `@/components/ui/craft-button`.
+2. Trocar o `<Button variant="ghost">` que está dentro do `CollapsibleTrigger asChild` por um `CraftButton` com `asChild`:
+   - `CraftButtonLabel`: texto "Mais informações do devedor" / "Menos informações"
+   - `CraftButtonIcon`: ícone `ChevronDown` com classe condicional `rotate-180` quando aberto (mantém a transição atual)
+3. Manter `size="sm"` para harmonizar com o tamanho usado nas abas.
+4. Preservar a largura/alinhamento atual (provavelmente `w-full` ou auto-width — confirmar no arquivo) para não quebrar o layout do header.
+
+### Resultado visual
+- Mesma animação de bolha expandindo no hover já aplicada nas abas.
+- Chevron continua girando 180° ao abrir o collapsible.
+- Consistência visual entre os 6 tabs e o botão de expandir informações.
