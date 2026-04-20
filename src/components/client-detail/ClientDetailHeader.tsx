@@ -28,6 +28,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PhoneList from "./PhoneList";
+import { CraftButton, CraftButtonLabel, CraftButtonIcon } from "@/components/ui/craft-button";
 import EmailList from "./EmailList";
 import InlineEditableField from "./InlineEditableField";
 
