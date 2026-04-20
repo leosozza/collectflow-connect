@@ -248,7 +248,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                   </button>
 
                   {/* Number (or inline edit) */}
-                  <div className="w-44 shrink-0">
+                  <div className={cn("shrink-0", isEditingThis ? "w-44" : "w-auto")}>
                     {isEditingThis ? (
                       <div className="flex items-center gap-0.5">
                         <Input
@@ -270,7 +270,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                         </Button>
                       </div>
                     ) : (
-                      <span className={cn("text-sm font-medium text-foreground", inactive && "line-through")}>
+                      <span className={cn("text-sm font-medium text-foreground whitespace-nowrap", inactive && "line-through")}>
                         {value ? formatPhone(value) : "—"}
                       </span>
                     )}
