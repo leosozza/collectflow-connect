@@ -4,7 +4,7 @@ import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCPF, formatCurrency, formatDate } from "@/lib/formatters";
-import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare, ChevronDown } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, User, RotateCcw, CheckSquare, ChevronDown, ArrowUpRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { logAction } from "@/services/auditService";
 import { recalcScoreForCpf } from "@/hooks/useScoreRecalc";
@@ -440,13 +440,31 @@ const ClientDetailPage = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
-          <TabsTrigger value="acordo">Acordos</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="titulos" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Títulos em Aberto</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
+          <TabsTrigger value="acordo" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Acordos</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
+          <TabsTrigger value="historico" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Histórico</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
           
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
-          <TabsTrigger value="anexos">Anexos</TabsTrigger>
+          <TabsTrigger value="documentos" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Documentos</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
+          <TabsTrigger value="assinatura" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Assinatura</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
+          <TabsTrigger value="anexos" className="group">
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Anexos</span>
+            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="titulos">
