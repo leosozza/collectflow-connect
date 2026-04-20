@@ -1,56 +1,81 @@
 
 
-## Por que as fotos ainda não aparecem
+## Renderizar formatação estilo WhatsApp nas mensagens do chat
 
-Diagnóstico no banco:
+Hoje o conteúdo da mensagem é renderizado como texto puro em `ChatMessage.tsx` (linhas 70, 119, 157, 169 e o preview de reply em 213–214). Os caracteres `*`, `_`, `~` e ` ``` ` aparecem literais — sem virar negrito/itálico/etc.
 
-| Coluna | Valor real | Esperado pela edge atual |
-|---|---|---|
-| `provider` | `"evolution"` | (não usado) |
-| `provider_category` | `"unofficial"` | `"evolution"` ou `"unofficial_evolution"` |
+### Padrão WhatsApp a suportar
 
-A edge `whatsapp-fetch-avatar` filtra por `provider_category` igual a `"evolution"`/`"unofficial_evolution"`/`"wuzapi"`/`"unofficial_wuzapi"`. Como **todas** as instâncias do tenant têm `provider_category = "unofficial"`, **nenhum branch executa** e a função retorna `url: null` para todas as conversas → a UI segue mostrando iniciais.
+| Sintaxe | Resultado |
+|---|---|
+| `*texto*` | **negrito** |
+| `_texto_` | *itálico* |
+| `~texto~` | ~~tachado~~ |
+| `` `texto` `` ou ` ``` `bloco` ``` ` | `monoespaçado` |
+| `> citação` (no início da linha) | bloco de citação com barra lateral |
+| URLs (`https://…`, `www.…`) | link clicável azul |
+| `\n` | quebra de linha (já funciona via `whitespace-pre-wrap`) |
 
-Adicionalmente, a edge usa `EVOLUTION_API_URL`/`EVOLUTION_API_KEY` (secrets globais), mas as instâncias do tenant têm `instance_url` próprio (`https://evolution.ybrasil.com.br`) e `api_key` por instância. Mesmo que o filtro fosse corrigido, ela tentaria bater no host errado.
+Regras-chave do WhatsApp (replicar fielmente):
+- Marcadores só viram formatação se delimitarem texto real e tiverem **fronteiras de palavra** (não dentro de `foo*bar*baz`).
+- Aceitam aninhamento simples (`*_negrito itálico_*`).
+- Se não houver marcador de fechamento, exibir literal.
+- Não interpretar dentro de bloco de código (` ``` ` ou `` ` ``).
 
 ### Mudanças
 
-**`supabase/functions/whatsapp-fetch-avatar/index.ts`**
+**1. Novo helper `src/lib/whatsappFormat.tsx`**
 
-1. Carregar também as colunas `provider`, `instance_url`, `api_key` (já carrega) e usar **`provider`** como discriminador, com fallback para `provider_category`:
-   ```ts
-   const kind = (inst.provider || inst.provider_category || "").toLowerCase();
-   ```
-   - Se `kind` contém `"evolution"` → branch Evolution.
-   - Se `kind` contém `"wuzapi"` → branch Wuzapi.
-   - Se `kind` contém `"gupshup"` ou `"official"` → pula (não suportado).
+Função pura `formatWhatsAppText(text: string): React.ReactNode[]` que:
+- Faz parse linha a linha; identifica `>` como citação.
+- Processa code blocks ` ``` ` primeiro (preservando conteúdo intacto), depois inline code `` ` ``.
+- Aplica regex com lookbehind/lookahead para `*`, `_`, `~`:
+  - `(?<=^|[\s(])\*([^*\n]+?)\*(?=$|[\s.,!?)])` etc.
+- Detecta URLs (`https?://…` e `www\.…`) e renderiza `<a target="_blank" rel="noopener noreferrer">`.
+- Faz escape implícito (não usa `dangerouslySetInnerHTML`) — retorna `<strong>`, `<em>`, `<s>`, `<code>`, `<blockquote>`, `<a>` aninháveis.
+- Devolve `React.ReactNode[]` para inserir direto em `<p>`.
 
-2. **Branch Evolution** — preferir credenciais da instância sobre as globais:
-   ```ts
-   const baseUrl = (inst.instance_url || EVOLUTION_API_URL_GLOBAL).replace(/\/+$/, "");
-   const apiKey  = inst.api_key || EVOLUTION_API_KEY_GLOBAL;
-   ```
-   Manter o `POST /chat/fetchProfilePictureUrl/{instance_name}` com `{ number: remote_phone }`.
+Tipografia/cores compatíveis com a bolha:
+- `<strong>` → `font-semibold`
+- `<em>` → `italic`
+- `<s>` → `line-through opacity-80`
+- `<code>` → `font-mono text-[13px] bg-black/5 dark:bg-white/10 px-1 rounded`
+- bloco de código → `block bg-black/5 dark:bg-white/10 px-2 py-1 rounded my-1 whitespace-pre-wrap`
+- `<blockquote>` → `border-l-[3px] border-current/40 pl-2 opacity-85 my-0.5`
+- `<a>` → `underline text-[#027eb5] dark:text-[#53bdeb] break-all`
 
-3. Logar de forma estruturada no início e ao final de cada conversa processada para que a falha real apareça em `edge_function_logs`:
-   ```ts
-   console.log("[avatar] conv", conv.id, "kind=", kind, "host=", baseUrl);
-   console.log("[avatar] result", conv.id, "status=", resp.status, "url=", avatarUrl);
-   ```
+**2. `src/components/contact-center/whatsapp/ChatMessage.tsx`**
 
-4. Persistir `remote_avatar_fetched_at` mesmo em falha de rede (já faz), mas **não** persistir o timestamp se o erro for "rede caiu" (status 5xx) — assim a próxima visualização da conversa tenta de novo em vez de esperar 7 dias. Regra: só grava `fetched_at` se a chamada HTTP retornou (mesmo que sem URL) ou se a categoria não for suportada.
+Substituir todas as renderizações de texto puro por `formatWhatsAppText(...)`:
+- Linha 70 (caption de imagem)
+- Linha 119 (caption de vídeo)
+- Linha 157 (texto padrão da mensagem) — manter `whitespace-pre-wrap break-words`
+- Linha 169 (nota interna) — também aplicar
+- Linhas 213–214 (preview de mensagem respondida) — aplicar com `line-clamp-2`
 
-**`src/hooks/useConversationAvatars.ts`**
+A transcrição de áudio (linha 99) **não** recebe formatação (é texto gerado por IA, sem marcadores).
 
-5. Forçar nova tentativa após o deploy: ignorar o cache `requestedRef` para conversas cujo `remote_avatar_fetched_at` ainda é `null`. Já está assim — basta limpar o `requestedRef` quando o usuário troca de filtro/aba (já remonta o componente, então sem alteração extra necessária).
+**3. Aplicar nos demais pontos de exibição de mensagens**
 
-### Validação após deploy
+- `src/components/atendimento/WhatsAppChat.tsx` (linha 39 — `msg.message_body`).
+- Verificar também `WhatsAppChatLayout` e qualquer preview de "última mensagem" na lista de conversas: **manter texto puro** lá (lista compacta), apenas remover os marcadores visualmente com um `stripWhatsAppMarkers(text)` auxiliar — para o preview ficar limpo sem mostrar `*`/`_`.
 
-1. Abrir a aba **Conversas** do WhatsApp.
-2. Em ~1 segundo, verificar nas requests que `whatsapp-fetch-avatar` retorna `results: { <id>: { url: "https://...", cached: false } }`.
-3. Avatares passam a aparecer em conversas Evolution; conversas Gupshup oficial mantêm iniciais.
-4. Recarregar: avatares vêm do cache da tabela (`remote_avatar_url` populado), instantâneos.
-5. Conferir `edge_function_logs` de `whatsapp-fetch-avatar` — deve haver entradas `[avatar] conv ... host=https://evolution.ybrasil.com.br ... status=200`.
+### Validação
 
-Sem alterações de schema, sem migrações, sem novos secrets — só a edge function + um pequeno ajuste no hook é opcional.
+1. Cliente envia `*Olá* _tudo bem?_` → bolha mostra **Olá** *tudo bem?*; nenhum `*` ou `_` literal.
+2. Operador envia ` ```js\nconsole.log(1)\n``` ` → bloco monoespaçado com fundo escuro.
+3. Mensagem `> não esqueça do prazo` → linha com barra lateral (citação).
+4. URL `https://rivoconnect.com` vira link clicável (abre em nova aba).
+5. Marcador desbalanceado: `Custa R$ 5*` → exibe literal `Custa R$ 5*` (sem virar negrito).
+6. Aninhamento `*_negrito e itálico_*` → renderiza ambos.
+7. Preview de "responder" e lista de conversas mostram o texto **sem** os marcadores `*`/`_`/`~` (limpo).
+8. Quebras de linha (`\n`) continuam preservadas.
+9. Nota interna (amarela) também aplica formatação.
+10. Performance: lista com 200 mensagens não trava (regex linear, sem re-render extra).
+
+### Fora de escopo
+
+- Emojis customizados / reactions (já tratados separadamente).
+- Mentions (`@5511…`) — WhatsApp Business API não envia para chats individuais.
+- Editor rich-text no `ChatInput` (continua texto puro; o operador digita os marcadores manualmente, idêntico ao app oficial).
 
