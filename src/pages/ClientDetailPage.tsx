@@ -443,7 +443,7 @@ const ClientDetailPage = () => {
           <TabsTrigger value="titulos">Títulos em Aberto</TabsTrigger>
           <TabsTrigger value="acordo">Acordos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
-          <TabsTrigger value="atualizacoes">Atualizações</TabsTrigger>
+          
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
@@ -693,10 +693,6 @@ const ClientDetailPage = () => {
             agreements={agreements}
             clientCpf={cpf}
           />
-        </TabsContent>
-
-        <TabsContent value="atualizacoes">
-          <ClientUpdateHistory clientIds={clients.map((c) => c.id)} />
         </TabsContent>
 
         <TabsContent value="documentos">
