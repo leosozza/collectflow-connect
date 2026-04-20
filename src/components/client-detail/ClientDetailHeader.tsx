@@ -597,16 +597,19 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     value={client.endereco}
                     onSave={(v) => updateSingleField("endereco", v)}
                     className="md:col-span-2"
+                    highlight={highlightedFields.has("endereco")}
                   />
                   <InlineEditableField
                     label="Bairro"
                     value={client.bairro}
                     onSave={(v) => updateSingleField("bairro", v)}
+                    highlight={highlightedFields.has("bairro")}
                   />
                   <InlineEditableField
                     label="Cidade"
                     value={client.cidade}
                     onSave={(v) => updateSingleField("cidade", v)}
+                    highlight={highlightedFields.has("cidade")}
                   />
                   <InlineEditableField
                     label="UF"
@@ -614,6 +617,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     onSave={(v) => updateSingleField("uf", v)}
                     type="uf"
                     maxLength={2}
+                    highlight={highlightedFields.has("uf")}
                   />
                   <InlineEditableField
                     label="CEP"
