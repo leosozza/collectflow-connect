@@ -76,9 +76,35 @@ const CloseConversationDialog = ({
     loadAssignments();
   }, [open, tenantId, loadDispositions, loadAssignments]);
 
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    supabase
+      .from("conversations")
+      .select("client_id")
+      .eq("id", conversationId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const cid = (data as any)?.client_id;
+        if (!cid) {
+          setClientCpf(null);
+          return;
+        }
+        supabase
+          .from("clients")
+          .select("cpf")
+          .eq("id", cid)
+          .maybeSingle()
+          .then(({ data: c }) => setClientCpf(((c as any)?.cpf as string | undefined) || null));
+      });
+  }, [open, conversationId]);
+
   const isCpcCpe = (d: DispositionType) => CPC_CPE_KEYS.includes(d.key);
 
   const handleToggle = async (d: DispositionType) => {
+    if (EM_DIA_KEYS.includes(d.key) && hasAgreement && !assignedIds.has(d.id)) {
+      toast.error(EM_DIA_BLOCKED_TITLE);
+      return;
+    }
     setLoading(true);
     try {
       const isAssigned = assignedIds.has(d.id);
