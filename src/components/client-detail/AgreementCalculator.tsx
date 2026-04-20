@@ -469,7 +469,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   };
 
-  const handleSubmit = async () => {
+  // Validação leve antes de abrir o diálogo de confirmação.
+  // Não toca no banco; apenas garante que há simulação válida.
+  const handleSubmit = () => {
+    if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
+    if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
+    if (submitting || enrichingAddress || generatingBoletos) return;
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmedSubmit = async () => {
     if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
