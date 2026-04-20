@@ -327,10 +327,10 @@ const ConversationList = ({
             <Select value={dispositionFilter} onValueChange={setDispositionFilter}>
               <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
                 <Tag className="w-3 h-3 mr-1 shrink-0" />
-                <SelectValue placeholder="Tabulação" />
+                <SelectValue placeholder="Tabulações" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as tabulações</SelectItem>
+                <SelectItem value="all">Tabulações</SelectItem>
                 {dispositionTypes.map((dt) => (
                   <SelectItem key={dt.id} value={dt.id}>
                     <div className="flex items-center gap-1.5">
