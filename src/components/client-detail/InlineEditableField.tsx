@@ -30,6 +30,7 @@ const InlineEditableField = ({
   placeholder,
   onBlurExtra,
   onCepResolved,
+  highlight = false,
 }: InlineEditableFieldProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
