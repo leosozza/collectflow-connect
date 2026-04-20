@@ -468,10 +468,8 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
-          <div className="ml-auto flex flex-col items-end leading-none">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-            <span className="text-base font-bold text-destructive mt-0.5">{formatCurrency(totalAberto)}</span>
-          </div>
+          <span className="text-border">|</span>
+          <span><strong>Em Aberto:</strong> <span className="text-destructive font-bold">{formatCurrency(totalAberto)}</span></span>
         </div>
 
         {/* Linha 3: Colapsável */}
