@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
 import CloseConversationDialog from "./CloseConversationDialog";
 import MultiInstanceAlert from "./MultiInstanceAlert";
@@ -296,16 +296,28 @@ const ChatPanel = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Select value={conversation.status} onValueChange={handleStatusChange}>
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="open">{statusLabels.open}</SelectItem>
-              <SelectItem value="waiting">{statusLabels.waiting}</SelectItem>
-              <SelectItem value="closed">{statusLabels.closed}</SelectItem>
-            </SelectContent>
-          </Select>
+          {conversation.status === "open" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => handleStatusChange("closed")}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              Fechar conversa
+            </Button>
+          )}
+          {conversation.status === "closed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => handleStatusChange("open")}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Abrir conversa
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={onToggleSidebar} className="h-8 w-8">
             {sidebarOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
           </Button>
