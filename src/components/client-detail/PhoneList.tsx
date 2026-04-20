@@ -292,15 +292,6 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                     {wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600" />}
                   </div>
 
-                  {/* Observação compacta */}
-                  <Input
-                    value={obsDrafts[slot]}
-                    onChange={(e) => setObsDrafts((d) => ({ ...d, [slot]: e.target.value }))}
-                    onBlur={() => handleSaveObs(slot)}
-                    placeholder="obs"
-                    className="h-6 text-xs px-1.5 w-24"
-                    disabled={inactive}
-                  />
 
                   {/* Actions */}
                   <div className="flex items-center gap-0 shrink-0 ml-auto">
