@@ -718,6 +718,30 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
+      {draftRestoreOpen && draft && !draftDismissed && (
+        <Alert className="border-primary/40 bg-primary/5">
+          <RotateCcw className="w-4 h-4" />
+          <AlertDescription className="flex items-center justify-between gap-3 w-full">
+            <span className="text-sm">
+              Há um rascunho deste acordo salvo às{" "}
+              <strong>
+                {new Date(draft.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </strong>
+              . Deseja restaurar?
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button type="button" size="sm" variant="default" onClick={restoreDraft} className="h-7 px-3 text-xs">
+                Restaurar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={discardDraft} className="h-7 px-2 text-xs">
+                <XIcon className="w-3.5 h-3.5 mr-1" />
+                Descartar
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── Section 1: Parameters Bar ── */}
       <Card className="flex-shrink-0">
         <CardHeader className="pb-2">
