@@ -1,41 +1,19 @@
 
 
-## Plano
+Reduzir altura/padding vertical do card do header em `ClientDetailHeader.tsx` para deixá-lo mais fino.
 
-Reorganizar o canto direito do header em `ClientDetailHeader.tsx` para eliminar o espaço vazio abaixo do botão Formalizar Acordo.
-
-### Layout proposto
-```
-[WA] [Atend] [Formalizar Acordo]
-                      EM ABERTO
-                      R$ 1.789,20
-```
-
-- **Botão "Formalizar Acordo"** sobe para a linha dos botões WhatsApp/Atendimento (lado direito, colado no Atendimento).
-- **Card "Em Aberto"** fica logo abaixo do botão Formalizar, alinhado à direita, ocupando a mesma largura visual — preenchendo o espaço que hoje está vazio.
-- Remove a borda lateral / `border-l` do card atual; o agrupamento vira vertical (`flex-col items-end`) à direita.
-
-### Mudança em `ClientDetailHeader.tsx`
-Substituir o cluster atual `[WA] [Atend] | [Em Aberto card] [Formalizar]` por:
-
-```tsx
-<div className="flex flex-col items-end gap-2">
-  <div className="flex items-center gap-2">
-    <Button>WhatsApp</Button>
-    <Button>Atendimento</Button>
-    <Button onClick={onFormalizarAcordo} className="bg-primary">
-      <FileText className="w-4 h-4" /> Formalizar Acordo
-    </Button>
-  </div>
-  <div className="flex flex-col items-end leading-tight">
-    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-    <span className="text-2xl font-bold text-destructive">{formatCurrency(totalAberto)}</span>
-  </div>
-</div>
-```
+### Ajustes
+- Reduzir padding do container externo do card (de `p-6` ou similar para `px-6 py-3`).
+- Reduzir gap vertical do cluster direito de `gap-3` para `gap-1.5`.
+- Reduzir tamanho do nome do cliente de `text-2xl` para `text-xl`.
+- Reduzir altura dos botões circulares (WhatsApp/Atendimento) de `h-10 w-10` para `h-9 w-9`.
+- Reduzir tamanho do valor "Em Aberto" de `text-2xl` para `text-xl` e `leading-none` para compactar.
+- Reduzir margem vertical entre Linha 1 (nome+botões) e Linha 2 (CPF/Tel/Email) de `mt-3` para `mt-1.5`.
+- Reduzir margem vertical entre Linha 2 e o trigger "Mais informações do devedor".
+- Trigger colapsável: reduzir `py-3` para `py-2`.
 
 ### Arquivo afetado
 | Arquivo | Mudança |
 |---|---|
-| `src/components/client-detail/ClientDetailHeader.tsx` | Reagrupa botões + card "Em Aberto" em coluna vertical à direita; Formalizar Acordo ao lado do Atendimento; saldo abaixo |
+| `src/components/client-detail/ClientDetailHeader.tsx` | Compactação vertical: paddings, gaps, font-sizes e altura de botões reduzidos |
 
