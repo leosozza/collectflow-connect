@@ -15,7 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCPF, formatCurrency, formatPhone, formatDate } from "@/lib/formatters";
+import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
