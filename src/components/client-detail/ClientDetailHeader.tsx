@@ -459,17 +459,20 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </div>
         </div>
 
-        {/* Linha 2: Metadados + Em Aberto */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground pl-11 mt-1.5 min-w-0">
-          <span className="whitespace-nowrap"><strong>CPF:</strong> {formattedCpf}</span>
-          <span className="text-border">|</span>
-          <span className="whitespace-nowrap"><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
-          <span className="text-border">|</span>
-          <span className="truncate min-w-[120px]"><strong>Email:</strong> {client.email || "—"}</span>
-          <span className="text-border">|</span>
-          <span className="truncate min-w-0"><strong>Credor:</strong> {client.credor}</span>
-          <span className="text-border">|</span>
-          <span className="whitespace-nowrap ml-auto"><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
+        {/* Linha 2: Metadados + Em Aberto (duas sublinhas) */}
+        <div className="pl-11 mt-1.5 space-y-0.5 text-sm text-muted-foreground min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="whitespace-nowrap"><strong>CPF:</strong> {formattedCpf}</span>
+            <span className="text-border">|</span>
+            <span className="whitespace-nowrap"><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
+            <span className="text-border">|</span>
+            <span className="truncate min-w-[120px]"><strong>Email:</strong> {client.email || "—"}</span>
+          </div>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="truncate min-w-0"><strong>Credor:</strong> {client.credor}</span>
+            <span className="text-border">|</span>
+            <span className="whitespace-nowrap"><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
+          </div>
         </div>
 
         {/* Linha 3: Colapsável */}
