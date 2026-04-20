@@ -1,98 +1,54 @@
 
 
-## Diagnóstico — Renata Cibin do Nascimento não abre no WhatsApp
+## Abrir conversa nova por instância (com aviso de duplicidade)
 
-### O que está acontecendo
+Hoje, ao clicar no botão WhatsApp dentro do perfil do devedor, o sistema **reusa a primeira conversa existente** com o mesmo final de telefone — por isso a Maria Eduarda cai na conversa da instância "Acordos Vitor Santana" e não consegue iniciar uma nova pela instância dela. Vamos trocar esse comportamento por um fluxo guiado de seleção de telefone + instância.
 
-A cliente **existe** no sistema:
-- CPF `06338297907` · Credor `TESS MODELS PRODUTOS FOTOGRAFICOS LTDA`
-- Telefones: `41998824444` (hot) e `4133364843`
-- Está corretamente em `client_profiles` e `client_phones` (E.164 `5541998824444`, `client_id` vinculado)
+### Comportamento novo
 
-**Mas existe uma conversa órfã** em `conversations`:
-- ID `470ad94a-2d73-44c1-962e-133d45fa3afc`
-- `remote_phone = 5541998824444` (é o telefone da Renata)
-- `remote_name = vazio`
-- **`client_id = NULL`** ← raiz do problema
-- Última mensagem: 13:22 hoje · Sem nenhuma `chat_message` registrada
-- `assigned_to = NULL`, `status = open`
+**Origem (`ClientDetailHeader.tsx`)** — botão WhatsApp:
+1. Buscar telefones do cliente em `client_phones` (já carregados via `allClientPhones`) + fallback `client.phone/phone2/phone3`, deduplicados por E.164.
+2. Buscar as instâncias WhatsApp permitidas ao operador (via `operator_instances` + role admin = todas) ativas no tenant.
+3. Abrir um diálogo `StartWhatsAppConversationDialog` com:
+   - **Seleção de telefone** (se houver mais de 1) — mostra o número formatado e marca o "principal".
+   - **Seleção de instância** (se houver mais de 1 elegível) — mostra nome e provider; pré-seleciona a única do operador quando houver só uma.
+   - Após escolher, navega para `/contact-center/whatsapp?phone=<E.164>&instanceId=<id>&forceNew=1`.
 
-### Por que o botão "WhatsApp" não acessa a cliente
+**Destino (`WhatsAppChatLayout.tsx`)** — efeito que processa `?phone=`:
+1. Ler também `instanceId` e `forceNew` da query.
+2. Procurar conversa existente com mesmo último-8 dígitos **na mesma instância** (`instance_id === instanceId`):
+   - Se existir → seleciona ela (comportamento atual, sem aviso).
+3. Se NÃO existir naquela instância, mas existir conversa em **outra instância** com o mesmo telefone:
+   - Mostrar `AlertDialog` "Já existe uma conversa aberta com este número na instância **X** (operador Y, status Z). Deseja mesmo abrir uma nova conversa pela instância **W**?"
+   - **Confirmar** → cria nova conversa na instância selecionada (mantém a chamada atual a `resolve_client_by_phone` para popular `client_id`/`remote_name`).
+   - **Cancelar** → seleciona a conversa existente (comportamento atual).
+4. Se não existir em nenhuma → cria direto na instância selecionada (sem aviso).
+5. Quando `instanceId` estiver ausente (ex.: link antigo), manter o fallback atual (`instances[0]`).
 
-Quando a Maria Eduarda clica no botão de WhatsApp em `ClientDetailHeader`, o app navega para `/contact-center/whatsapp?phone=5541998824444`. O `WhatsAppChatLayout` então:
+### Constraint a verificar / contornar
 
-1. Procura uma conversa existente cujo telefone termine com os mesmos 8 dígitos.
-2. **Encontra a conversa órfã `470ad94a`** (mesmo telefone) e a seleciona.
-3. A conversa selecionada tem `client_id = NULL`, então o painel lateral não mostra os dados do cliente, agreements, histórico, etc. → "não consegue acessar a cliente".
-
-Adicionalmente, como `assigned_to` está NULL e o status é `open` (não `waiting`), a Maria Eduarda pode nem enxergar a conversa nos seus filtros de inbox dependendo da regra de visibilidade (memory: inbox-filters / operational-flow-and-sla).
-
-### Causa raiz
-
-A conversa foi criada (provavelmente por um clique anterior no botão WhatsApp ou por evento da Evolution/Gupshup) **antes** do enriquecimento via `ingest_channel_event_v2`, ou a chamada de criação manual no `WhatsAppChatLayout` (linhas 197-221) **insere a conversa sem resolver `client_id`**:
-
-```ts
-// WhatsAppChatLayout.tsx — INSERT atual (sem resolução)
-.insert({
-  tenant_id, instance_id, remote_phone: normalizedParam,
-  status: "open", last_message_at: ...
-  // ❌ não chama resolve_client_by_phone, não preenche client_id, remote_name, channel_type, provider
-})
-```
-
-Como não há mensagens nessa conversa (`chat_messages` = 0 linhas), o trigger/ingestão jamais rodou para enriquecê-la.
-
-### Plano de correção
-
-#### 1. Backfill da conversa atual (migração SQL pontual)
-Vincular conversas órfãs existentes do tenant cujo `remote_phone` resolve a um cliente conhecido:
-
-```sql
-UPDATE conversations c
-SET client_id = cp.client_id,
-    remote_name = COALESCE(NULLIF(c.remote_name,''), prof.nome_completo)
-FROM client_phones cp
-LEFT JOIN client_profiles prof
-  ON prof.tenant_id = cp.tenant_id AND prof.cpf = cp.cpf
-WHERE c.client_id IS NULL
-  AND c.tenant_id = cp.tenant_id
-  AND right(regexp_replace(c.remote_phone,'\D','','g'),8) = cp.phone_last8;
-```
-
-Isso resolve a Renata imediatamente e qualquer outra conversa órfã.
-
-#### 2. Correção do `WhatsAppChatLayout.tsx` — criar conversa já vinculada
-Antes do `INSERT`, chamar a RPC `resolve_client_by_phone(tenant_id, phone)` que já existe no projeto (Fase 2 — multichannel) e usar o resultado para popular `client_id` e `remote_name`. Também preencher `channel_type='whatsapp'`, `provider` e `endpoint_id` da instância (alinhado com a arquitetura canônica multichannel).
-
-```ts
-const { data: resolved } = await supabase.rpc("resolve_client_by_phone", {
-  p_tenant_id: tenantId, p_phone: normalizedParam,
-});
-const clientRow = resolved?.[0];
-
-const { data } = await supabase.from("conversations").insert({
-  tenant_id, instance_id: defaultInstance.id,
-  remote_phone: normalizedParam,
-  remote_name: clientRow?.nome_completo ?? null,
-  client_id: clientRow?.client_id ?? null,
-  channel_type: "whatsapp",
-  status: "open",
-  last_message_at: new Date().toISOString(),
-}).select().single();
-```
-
-#### 3. Defesa adicional — re-resolver ao selecionar
-No `useEffect` que carrega `clientInfo` (linha 240), se `selectedConv.client_id` estiver NULL e `remote_phone` existir, chamar `resolve_client_by_phone` e fazer um UPDATE silencioso na conversa para auto-vincular. Isso cura conversas legadas sem precisar de outra migração no futuro.
-
-#### 4. Validação final
-- Recarregar a página, clicar no botão WhatsApp na Renata como Maria Eduarda.
-- Confirmar que abre a conversa `470ad94a` já com nome e dados da cliente no painel lateral, agreements visíveis e histórico carregado.
+A tabela `conversations` provavelmente tem UNIQUE em `(tenant_id, instance_id, remote_phone)`. Como a nova conversa será em **outra** `instance_id`, o INSERT é válido — não exige migração. Se houver UNIQUE apenas em `(tenant_id, remote_phone)`, capturar o erro `23505` e exibir toast "já existe conversa com este número neste tenant" (mantendo seleção da existente como fallback). Vou validar antes de mexer; se precisar relaxar a constraint, abro migração separada.
 
 ### Arquivos impactados
-- Migração SQL (backfill único)
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` (criação + auto-resolve ao selecionar)
+
+- **Novo**: `src/components/client-detail/StartWhatsAppConversationDialog.tsx` — diálogo de seleção de telefone + instância.
+- **Editar**: `src/components/client-detail/ClientDetailHeader.tsx` — `openWhatsApp()` passa a abrir o diálogo (e só navega depois da escolha). Carrega instâncias permitidas via `operator_instances` (fallback admin = todas as ativas).
+- **Editar**: `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — efeito do `?phone=`:
+  - Considerar `instanceId` na busca de conversa existente.
+  - Quando há conflito em outra instância, exibir `AlertDialog` de confirmação antes de criar a nova.
+  - Usar `instanceId` da URL no INSERT.
 
 ### Sem impacto
-- Nenhuma mudança em RLS, schema ou edge functions.
-- A RPC `resolve_client_by_phone` já existe e é usada no engine de ingestão.
+
+- RLS, schema, edge functions e RPC `resolve_client_by_phone` permanecem como estão.
+- Conversas já existentes (como a órfã `470ad94a` que já foi vinculada) seguem acessíveis normalmente.
+
+### Validação
+
+1. Como Maria Eduarda, abrir perfil da Renata Cibin → clicar WhatsApp.
+2. Diálogo aparece pedindo telefone (2 opções) e instância (apenas as dela).
+3. Escolher número + instância "Maria Eduarda Acordo" → aparece aviso "já existe conversa em Acordos Vitor Santana, deseja confirmar?".
+4. Confirmar → nova conversa é criada e selecionada na instância correta, com cliente vinculado.
+5. Cancelar → cai na conversa existente (Acordos Vitor Santana), comportamento legado preservado.
+6. Repetir com cliente que tem só 1 telefone e operador com só 1 instância → diálogo abre direto pré-selecionado (1 clique para confirmar) ou pular o diálogo se ambos forem únicos (decisão: manter sempre o diálogo para consistência, mas com botão "Abrir" em foco).
 
