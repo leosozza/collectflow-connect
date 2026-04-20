@@ -97,6 +97,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
+  const [cepLookupLoading, setCepLookupLoading] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
 
   // Fetch credor rules and auto-fill honorários + aging discount
