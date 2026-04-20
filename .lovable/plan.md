@@ -1,36 +1,66 @@
 
 
-## Problema
-No `PhoneList.tsx`, o container de ações usa `ml-auto`, que empurra WhatsApp/editar/inativar para a extrema direita do popover (460px de largura). Resultado: espaço enorme entre o número curto e os ícones.
+## Plano
 
-## Solução
-Remover o `ml-auto` do cluster de ações para que os ícones fiquem **colados ao número**, com apenas um pequeno gap. O `ml-auto` migra para um spacer invisível ou simplesmente é eliminado — os ícones passam a seguir naturalmente o fluxo flex logo após o número.
+### 1. Aumentar destaque do "Em Aberto" no header
+Em `ClientDetailHeader.tsx`, na **Linha 2 (metadados, ~L429-439)**, separar o "Em Aberto" do resto da linha e renderizá-lo com tipografia maior — aproximando o estilo do screenshot 1 ("SALDO DEVEDOR TOTAL R$ 14.582,40").
 
-## Mudança em `src/components/client-detail/PhoneList.tsx`
-
-**Linha ~226** — trocar:
-```tsx
-<div className="flex items-center shrink-0 ml-auto -space-x-0.5">
+Estrutura proposta na Linha 1 (à direita, antes dos botões de ação):
 ```
-por:
-```tsx
-<div className="flex items-center shrink-0 ml-1 -space-x-0.5">
+┌─────────────────────────────┐
+│ EM ABERTO                   │
+│ R$ 1.789,20  (text-2xl bold)│
+└─────────────────────────────┘
 ```
+- Label pequeno (`text-[10px] uppercase tracking-wider text-muted-foreground`)
+- Valor grande (`text-2xl font-bold text-destructive`)
+- Posicionado entre o título do nome e os botões de ação (ou substituindo o "Em Aberto" textual da linha 2)
+- Remover o `Em Aberto` repetido da linha de metadados (L437-438)
 
-E também remover a `div` wrapper de `w-5` em volta do WhatsAppDot, renderizando o ícone só quando existe (sem reservar espaço fixo):
-```tsx
-{wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600 mr-0.5" />}
+### 2. Remover botão "Editar" + edição inline com hover
+- **Remover** o botão "Editar" da Linha 1 (L417-420) e o "Editar endereço" da seção Endereço (L482-485).
+- **Manter** o `Sheet` de edição existente como fallback (não remover — não vamos quebrar a mutation).
+- **Criar componente novo `InlineEditableField`** em `src/components/client-detail/InlineEditableField.tsx`:
+  - Props: `label`, `value`, `onSave(newValue)`, `type` ("text" | "phone" | "cep" | "uf"), `className`.
+  - Comportamento:
+    - Estado padrão: mostra `label` + `value` (mesma aparência do `InfoItem` atual).
+    - No hover do container: aparece ícone `Pencil` minúsculo à direita (`opacity-0 group-hover:opacity-100`).
+    - Click no ícone (ou no campo): troca para `<Input>` controlado + botões check/X (ou Enter/Esc).
+    - Ao salvar: chama `onSave`, mostra `Loader2` durante a mutation.
+- **Substituir** todos os `<InfoItem>` editáveis dentro do colapsável por `<InlineEditableField>`:
+  - Identificação: Cod. Devedor (`external_id`), Cod. Contrato (`cod_contrato`)
+  - Endereço: Rua, Bairro, Cidade, UF, CEP (CEP mantém auto-fill via ViaCEP no blur)
+- Campos **read-only** (não editáveis inline): Modelo, Credor, valores financeiros, datas, classificações — permanecem como `InfoItem`.
+- **Mutation única reutilizável**: criar `updateSingleField(field, value)` que chama `supabase.from("clients").update({ [field]: value })` em todos os `clientIds` (compartilhado) ou só no principal (campos unique como `cod_contrato`/`external_id`), e sincroniza com `client_profiles` (igual ao `updateClientMutation` atual). Invalida `["clients"]` ao fim.
+
+### 3. Remover "Parcelas 2/11"
+Em `ClientDetailHeader.tsx` **L455**: remover o `<InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />`. Ajustar o grid para 4 colunas continuar harmônico (Cod. Devedor, Cod. Contrato, Modelo, Credor).
+
+### Resumo de alterações
+| Arquivo | Mudança |
+|---|---|
+| `src/components/client-detail/InlineEditableField.tsx` | **Novo** componente |
+| `src/components/client-detail/ClientDetailHeader.tsx` | Hero "Em Aberto", remoção do botão Editar + Editar endereço, substituição de InfoItems editáveis, remoção de "Parcelas", nova mutation por campo |
+
+### Resultado visual (header expandido)
 ```
+← Ana Paula Estevão da Silva    [WA] [📞]   EM ABERTO
+                                            R$ 1.789,20    [Formalizar Acordo]
+   CPF: ... | Tel: ... | Email: ... | Credor: ...
 
-Assim:
-- Número, WhatsApp (se houver), editar e inativar ficam todos juntos, com gap mínimo (`ml-1` = 4px) após o número.
-- Sem espaço reservado para WhatsApp quando o número não tem WhatsApp.
-- Layout enxuto, alinhado à esquerda junto do número.
+   ▼ Mais informações do devedor
+   ──────────────────────────────────────────
+   COD. DEVEDOR ✏  COD. CONTRATO ✏  MODELO    CREDOR
+   1315794         768385             Vitória   TESS MODELS...
 
-## Resultado esperado
-```
-🔥  (11) 96551-9515  🟢 ✏️ 🚫
-○   (81) 98489-1623  ✏️ 🚫
-+ Adicionar telefone
+   TELEFONES                        EMAIL
+   📞 (11) 96551-9515 🟢 ▾          ✉ anapaula...
+
+   ENDEREÇO
+   RUA ✏          BAIRRO ✏    CIDADE ✏    UF ✏
+   —              —           —           —
+   CEP ✏
+   —
+   ...
 ```
 
