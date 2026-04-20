@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Conversation, ConversationFilters } from "@/services/conversationService";
+import { stripWhatsAppMarkers } from "@/lib/whatsappFormat";
 
 interface ConversationTag {
   id: string;
@@ -450,7 +451,7 @@ const ConversationList = ({
                             {conv.last_message_content
                               ? (conv.last_message_type !== "text"
                                 ? `📎 ${conv.last_message_type === "audio" ? "Áudio" : conv.last_message_type === "image" ? "Imagem" : conv.last_message_type === "video" ? "Vídeo" : conv.last_message_type === "document" ? "Documento" : conv.last_message_type === "sticker" ? "Sticker" : "Mídia"}`
-                                : conv.last_message_content)
+                                : stripWhatsAppMarkers(conv.last_message_content))
                               : conv.remote_phone}
                           </span>
                           

@@ -2,6 +2,7 @@ import { ChatMessage as ChatMessageType } from "@/services/conversationService";
 import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatWhatsAppText, stripWhatsAppMarkers } from "@/lib/whatsappFormat";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -67,7 +68,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
                 onClick={() => window.open(message.media_url!, "_blank")}
               />
             )}
-            {message.content && <p className="text-[14.2px] leading-[19px]">{message.content}</p>}
+            {message.content && <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words">{formatWhatsAppText(message.content)}</p>}
           </div>
         );
       case "audio":
@@ -116,7 +117,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
                 <source src={message.media_url} type={message.media_mime_type || "video/mp4"} />
               </video>
             )}
-            {message.content && <p className="text-[14.2px] leading-[19px]">{message.content}</p>}
+            {message.content && <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words">{formatWhatsAppText(message.content)}</p>}
           </div>
         );
       case "document": {
@@ -154,7 +155,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
           <span className="text-[14.2px] text-muted-foreground">Sticker</span>
         );
       default:
-        return <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words">{message.content}</p>;
+        return <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words">{formatWhatsAppText(message.content)}</p>;
     }
   };
 
@@ -166,7 +167,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
             <StickyNote className="w-3 h-3 text-yellow-600 dark:text-yellow-400" />
             <span className="text-[11px] font-medium text-yellow-700 dark:text-yellow-400">Nota interna</span>
           </div>
-          <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words text-yellow-900 dark:text-yellow-100">{message.content}</p>
+          <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words text-yellow-900 dark:text-yellow-100">{formatWhatsAppText(message.content)}</p>
           <div className="flex justify-end mt-0.5">
             <span className="text-[11px] text-yellow-600 dark:text-yellow-400">
               {format(new Date(message.created_at), "HH:mm")}
@@ -211,7 +212,9 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [] }: ChatMessagePr
                   {repliedMessage.direction === "inbound" ? "Cliente" : "Operador"}
                 </span>
                 <span className="line-clamp-2 text-muted-foreground">
-                  {repliedMessage.content || `[${repliedMessage.message_type}]`}
+                  {repliedMessage.content
+                    ? stripWhatsAppMarkers(repliedMessage.content)
+                    : `[${repliedMessage.message_type}]`}
                 </span>
               </>
             ) : (

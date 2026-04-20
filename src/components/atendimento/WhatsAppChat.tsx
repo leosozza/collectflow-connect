@@ -2,6 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, MessageCircle } from "lucide-react";
+import { formatWhatsAppText } from "@/lib/whatsappFormat";
 
 interface WhatsAppChatProps {
   messages: any[];
@@ -36,7 +37,7 @@ const WhatsAppChat = ({ messages }: WhatsAppChatProps) => {
                         : "bg-muted text-muted-foreground rounded-bl-none"
                     }`}
                   >
-                    <p>{msg.message_body || "—"}</p>
+                    <p className="whitespace-pre-wrap break-words">{msg.message_body ? formatWhatsAppText(msg.message_body) : "—"}</p>
                     <span className="text-[10px] opacity-70 block text-right mt-1">
                       {new Date(msg.created_at).toLocaleString("pt-BR", {
                         hour: "2-digit",
