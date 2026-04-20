@@ -53,8 +53,8 @@ const StartWhatsAppConversationDialog = ({
   allClientPhones = [],
 }: Props) => {
   const navigate = useNavigate();
-  const { profile, tenantUser } = useAuth();
-  const { tenant } = useTenant();
+  const { profile } = useAuth();
+  const { tenant, tenantUser } = useTenant();
   const tenantId = tenant?.id;
   const isAdmin = tenantUser?.role === "admin" || tenantUser?.role === "super_admin";
 
