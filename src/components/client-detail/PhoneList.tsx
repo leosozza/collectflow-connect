@@ -209,7 +209,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
           </button>
         </HoverCardTrigger>
 
-        <HoverCardContent align="start" className="w-[420px] p-2">
+        <HoverCardContent align="start" className="w-[460px] p-2">
           <div className="space-y-1">
             {visibleSlots.map((slot) => {
               const isHot = slot === "phone";
@@ -248,7 +248,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                   </button>
 
                   {/* Number (or inline edit) */}
-                  <div className="w-32 shrink-0">
+                  <div className="w-44 shrink-0">
                     {isEditingThis ? (
                       <div className="flex items-center gap-0.5">
                         <Input
@@ -319,7 +319,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
             {nextEmpty && editingNumber === nextEmpty && !values[nextEmpty] && (
               <div className="flex items-center gap-1.5 px-1.5 py-1 rounded border border-dashed border-border bg-muted/20">
                 <Flame className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-                <div className="w-32 shrink-0">
+                <div className="w-44 shrink-0">
                   <div className="flex items-center gap-0.5">
                     <Input
                       autoFocus
