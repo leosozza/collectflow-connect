@@ -296,7 +296,7 @@ const WhatsAppChatLayout = () => {
       return;
     }
     createConversationOnInstance(normalizedParam, targetInstanceId);
-  }, [searchParams, conversations, instances, tenantId, createConversationOnInstance, setSearchParams]);
+  }, [searchParams, convPages, instances, tenantId, createConversationOnInstance, setSearchParams]);
 
   // Load messages when selecting conversation
   useEffect(() => {
