@@ -39,6 +39,8 @@ import { getClientProfile, upsertClientProfile } from "@/services/clientProfileS
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
 import SimpleCalculator from "./SimpleCalculator";
+import { useSessionStorage } from "@/hooks/useSessionStorage";
+import { RotateCcw, X as XIcon } from "lucide-react";
 
 interface AgreementCalculatorProps {
   clients: any[];
