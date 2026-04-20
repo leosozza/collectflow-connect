@@ -1,0 +1,1 @@
+UPDATE public.conversations SET remote_avatar_fetched_at = NULL WHERE remote_avatar_url IS NULL;
