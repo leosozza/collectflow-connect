@@ -426,12 +426,15 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
   return (
     <>
+      <div className="flex items-center gap-2 mb-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => navigate(backTo || "/carteira")}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <span className="text-sm text-muted-foreground">Voltar</span>
+      </div>
       <Card className="px-4 py-2.5">
         {/* Linha 1: Nome + Ações */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backTo || "/carteira")}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
           <h1 className="text-xl font-bold text-foreground flex-1 min-w-0 truncate">{client.nome_completo}</h1>
           <div className="flex items-center gap-3 ml-auto shrink-0">
             <Button
@@ -460,7 +463,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         </div>
 
         {/* Linha 2: Grid de informações (estilo CRM) */}
-        <div className="ml-11 mt-3 grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:auto_auto_minmax(0,1fr)_minmax(0,200px)_auto] lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:auto_auto_minmax(0,1fr)_minmax(0,200px)_auto] lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
           <div className="px-3 py-2 min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">CPF</p>
             <p className="text-[13px] font-semibold text-foreground truncate mt-0.5">{formattedCpf}</p>
@@ -493,12 +496,12 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
         {/* Linha 3: Colapsável */}
         <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-11 py-1.5 mt-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
+          <CollapsibleTrigger className="flex items-center justify-between w-full py-1.5 mt-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-md hover:bg-muted/50">
             <span>Mais informações do devedor</span>
             <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", open && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
+            <div className="pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                 <InlineEditableField
