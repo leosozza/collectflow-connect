@@ -5,6 +5,7 @@ import { ClipboardCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
 
 interface DispositionType {
   id: string;
@@ -17,11 +18,16 @@ interface DispositionType {
 interface DispositionSelectorProps {
   conversationId: string;
   tenantId: string;
+  clientCpf?: string | null;
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
+const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
+const EM_DIA_BLOCKED_TITLE =
+  "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
-const DispositionSelector = ({ conversationId, tenantId }: DispositionSelectorProps) => {
+const DispositionSelector = ({ conversationId, tenantId, clientCpf }: DispositionSelectorProps) => {
+  const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
   const { profile } = useAuth();
   const [dispositions, setDispositions] = useState<DispositionType[]>([]);
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
