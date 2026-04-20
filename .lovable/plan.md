@@ -1,71 +1,56 @@
 
 
-## Exibir foto de perfil real dos clientes no WhatsApp
+## Bloquear tabulação "Em Dia" para clientes com acordo no Rivo
 
-### Diagnóstico atual
+### Regra de negócio
 
-- A tabela `public.conversations` **não possui** coluna para foto do cliente (`remote_avatar_url` / `profile_pic_url`).
-- Nenhum webhook (`whatsapp-webhook`, `gupshup-webhook`) lê ou persiste a foto do contato hoje — apenas `pushName` / `sender.name`.
-- O componente `ConversationAvatar` em `ConversationList.tsx` renderiza somente as iniciais via `<AvatarFallback>` (não há `<AvatarImage>`).
+A tabulação "Em Dia" (`em_dia` no canal voz, `wa_em_dia` no canal WhatsApp) deve ficar disponível **somente** para clientes importados que vêm pagando suas parcelas originais (sem acordo formalizado dentro do Rivo). Se existir qualquer registro em `public.agreements` para o `cpf` + `tenant_id` do cliente, a tabulação fica bloqueada.
 
-### Viabilidade por provedor
+### Detecção de "tem acordo no Rivo"
 
-| Provedor | Foto disponível? | Como obter |
-|---|---|---|
-| **Evolution API** (não-oficial) | Sim | Endpoint `POST /chat/fetchProfilePictureUrl/{instance}` retorna `{ profilePictureUrl }` |
-| **Wuzapi** (não-oficial) | Sim | Endpoint `GET /user/avatar?phone=...` |
-| **Gupshup oficial (Meta Cloud API)** | Não | Meta não expõe a foto de contatos por questões de privacidade. Fallback: iniciais |
+Hook reutilizável `useHasRivoAgreement(cpf, tenantId)` em `src/hooks/useHasRivoAgreement.ts`:
 
-### Mudanças propostas
+```ts
+// SELECT id FROM agreements 
+// WHERE tenant_id = $tenantId AND cpf = $cpf 
+// LIMIT 1
+// Retorna boolean (qualquer status conta — pending_approval, pending, approved, completed, broken)
+```
 
-**1. Schema (migração)**
-- Adicionar em `public.conversations`:
-  - `remote_avatar_url TEXT NULL`
-  - `remote_avatar_fetched_at TIMESTAMPTZ NULL` (para cache/refresh)
-- Sem RLS adicional (herda das policies existentes).
-- Atualizar a RPC `get_visible_conversations` para retornar `remote_avatar_url` no `RETURNS TABLE`.
+Cacheado via React Query com `queryKey: ["has-rivo-agreement", tenantId, cpf]`, `staleTime: 60s`.
 
-**2. Backend — captura sob demanda (lazy + cache)**
+### Pontos de bloqueio (4 lugares)
 
-Nova edge function `whatsapp-fetch-avatar` (POST, JWT-auth, `tenant_id` validado):
-- Input: `{ conversation_id }`.
-- Lê `instance_id` + `provider_category` da conversa.
-- Roteia:
-  - `evolution` → chama `evolution-proxy` action `fetchProfilePictureUrl` (criar este action no proxy se não existir).
-  - `wuzapi` → chama `wuzapi-proxy` action equivalente.
-  - `official_meta` (Gupshup oficial) → retorna `null` imediatamente (sem chamada).
-- Persiste resultado em `conversations.remote_avatar_url` + `remote_avatar_fetched_at`.
-- TTL: se `fetched_at < 7 dias` retorna o cache sem chamar provedor.
+**1. `src/components/contact-center/whatsapp/DispositionSelector.tsx`** (sidebar do chat WhatsApp)
+- Receber `clientCpf?: string | null` via prop (passar a partir de `ContactSidebar` usando `linkedClient.cpf`).
+- Usar o hook para obter `hasAgreement`.
+- Se `d.key === "wa_em_dia" && hasAgreement` → renderizar o badge com `opacity-40 cursor-not-allowed`, `disabled` no botão, e `title="Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais"`.
 
-**Por que lazy e não no webhook?** Buscar a foto a cada mensagem inbound geraria 1 request HTTP extra por mensagem para a Evolution/Wuzapi, com risco de rate-limit. Buscar 1x por conversa (com TTL) é o padrão recomendado.
+**2. `src/components/contact-center/whatsapp/CloseConversationDialog.tsx`** (modal de fechar conversa)
+- Buscar o `cpf` do `client_id` da `conversation` (pequena query `.from("clients").select("cpf").eq("id", conversation.client_id)` já no `useEffect` de carregamento, ou aceitar via prop a partir do parent que já tem o cliente vinculado).
+- Mesmo bloqueio visual + impedir o `handleToggle` quando a chave é `wa_em_dia` e há acordo.
 
-**3. Frontend**
+**3. `src/components/contact-center/whatsapp/ContactSidebar.tsx`** (auto-assign existente)
+- Adicionar no `useEffect` de auto-assign (linhas 219–259): antes de inserir, verificar se há acordo em `agreements` para o `linkedClient.cpf` + `tenant_id`. Se houver, **não** auto-atribui `em_dia`. Mantém o auto-assign de `quitado` inalterado.
 
-`ConversationList.tsx` → `ConversationAvatar`:
-- Adicionar `<AvatarImage src={conv.remote_avatar_url ?? undefined} />` antes do `<AvatarFallback>`. O Radix Avatar já faz fallback automático se a imagem falhar.
-- Hook `useConversationAvatars(conversations)`:
-  - Para cada conversa visível com `remote_avatar_url === null` && `remote_avatar_fetched_at === null` (nunca tentado), enfileira chamada à edge `whatsapp-fetch-avatar` em batches de 5 (debounce 300ms ao scrollar).
-  - Conversa cuja tentativa falhou (fetched_at preenchido mas url null) **não** é re-tentada — fica nas iniciais.
+**4. `src/components/atendimento/DispositionPanel.tsx`** (painel do AtendimentoPage — canal voz)
+- Receber nova prop opcional `hasRivoAgreement?: boolean` (passada do `AtendimentoPage` que já tem `agreements` carregado — `agreements.length > 0`).
+- No `renderChip` (e no botão de `contatoGroup`): se `d.key === "em_dia" && hasRivoAgreement` → `disabled` + `opacity-40` + `title` explicativo.
+- No `handleDisposition`: guard inicial `if (type === "em_dia" && hasRivoAgreement) { toast.error("Esta tabulação é exclusiva para clientes em dia com pagamentos originais (sem acordo no Rivo)"); return; }`.
 
-`ChatPanel.tsx` (header):
-- Substituir/incluir `<AvatarImage src={conversation.remote_avatar_url} />` no avatar do header.
+**5. `src/pages/AtendimentoPage.tsx`**
+- Passar `hasRivoAgreement={agreements.length > 0}` ao `<DispositionPanel />` (linha 707).
 
-**4. Atualização da interface `Conversation`**
-- Adicionar `remote_avatar_url: string | null` e `remote_avatar_fetched_at: string | null` em `src/services/conversationService.ts` e em todos os mapeamentos da RPC.
+### Defesa em backend (opcional, fora do escopo desta entrega)
 
-### Fora de escopo
-
-- Refresh automático periódico (usuário pode mudar foto) — fica como "TTL de 7 dias quando o avatar é solicitado novamente".
-- Storage local da imagem em bucket Supabase. As URLs da Evolution/Wuzapi são públicas e expiram; **se observarmos expiração**, fase 2: baixar e salvar em `chat-media/{tenant_id}/avatars/{conversation_id}.jpg`. Por ora referenciamos a URL direta.
-- Foto de grupos (não aplicável — atendimento é 1:1).
+Para garantir mesmo via API direta, poderíamos criar um trigger `BEFORE INSERT` em `conversation_disposition_assignments`/`call_dispositions` que rejeita `em_dia`/`wa_em_dia` quando há acordo. **Não** será incluído agora — o bloqueio fica apenas na UI conforme escopo do pedido. Mencionado para o usuário decidir em iteração futura.
 
 ### Validação
 
-1. Conversa em instância **Evolution**: ao abrir a lista, dentro de ~2s os avatares com foto real aparecem; quem não tem foto no WhatsApp continua com iniciais.
-2. Conversa em instância **Gupshup oficial (Meta)**: continua com iniciais, sem requests inúteis.
-3. Header do `ChatPanel` exibe a foto sincronizada com a lista.
-4. Recarregar a página: avatares aparecem instantaneamente (cache no banco).
-5. Conversa nova (inbound): a primeira renderização mostra iniciais, em seguida a foto carrega.
-6. Falha de rede no `whatsapp-fetch-avatar`: log em `webhook_logs`, UI mantém iniciais sem erro visível.
-7. Aros de SLA continuam funcionando sobre o avatar com imagem.
+1. WhatsApp, cliente vinculado **sem** registro em `agreements`: badge "Em Dia" clicável normalmente.
+2. WhatsApp, cliente vinculado **com** acordo (qualquer status) no Rivo: badge "Em Dia" aparece desabilitado/cinza, com tooltip explicativo; clicar não faz nada.
+3. Modal "Fechar conversa": mesmo comportamento.
+4. Auto-assign: cliente com `status_cobranca` "Em dia" mas com acordo no Rivo → não recebe mais `em_dia` automaticamente. Sem acordo → continua recebendo.
+5. AtendimentoPage (voz): chip "Em Dia" desabilitado quando `agreements.length > 0`; toast bloqueia tentativas via teclado.
+6. Tabulações já registradas anteriormente continuam visíveis (não removemos histórico).
 
