@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw, ChevronUp } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
 import CloseConversationDialog from "./CloseConversationDialog";
 import MultiInstanceAlert from "./MultiInstanceAlert";
@@ -38,6 +38,9 @@ interface ChatPanelProps {
   operatorName?: string;
   dispositionAssignments?: { conversation_id: string; disposition_type_id: string }[];
   dispositionTypes?: { id: string; label: string; color: string; key: string }[];
+  hasMoreOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void | Promise<void>;
 }
 
 const ChatPanel = ({
@@ -59,8 +62,12 @@ const ChatPanel = ({
   operatorName,
   dispositionAssignments = [],
   dispositionTypes = [],
+  hasMoreOlder = false,
+  loadingOlder = false,
+  onLoadOlder,
 }: ChatPanelProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { tenant } = useTenant();
   const { profile } = useAuth();
