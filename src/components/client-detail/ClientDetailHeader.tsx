@@ -137,24 +137,34 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     </div>
   );
 
-  const handleCepBlur = useCallback(async () => {
+  const runCepLookup = useCallback(async (cepValue: string) => {
+    const digits = (cepValue || "").replace(/\D/g, "");
+    if (digits.length !== 8) return;
     setFetchingCep(true);
     try {
-      const { lookupCep } = await import("@/lib/viaCep");
-      const data = await lookupCep(editForm.cep);
-      if (data) {
+      const { lookupCepDetailed } = await import("@/lib/viaCep");
+      const res = await lookupCepDetailed(digits);
+      if (res.ok) {
         setEditForm(f => ({
           ...f,
-          endereco: data.logradouro || f.endereco,
-          bairro: data.bairro || f.bairro,
-          cidade: data.localidade || f.cidade,
-          uf: data.uf || f.uf,
+          endereco: res.data.logradouro || f.endereco,
+          bairro: res.data.bairro || f.bairro,
+          cidade: res.data.localidade || f.cidade,
+          uf: res.data.uf || f.uf,
         }));
+      } else if (res.reason === "not_found") {
+        toast.error("CEP não encontrado");
+      } else if (res.reason === "network") {
+        toast.error("Falha ao consultar CEP");
       }
     } finally {
       setFetchingCep(false);
     }
-  }, [editForm.cep]);
+  }, []);
+
+  const handleCepBlur = useCallback(() => {
+    runCepLookup(editForm.cep);
+  }, [editForm.cep, runCepLookup]);
 
   const { data: tiposDevedor = [] } = useQuery({
     queryKey: ["tipos_devedor", tenant?.id],
