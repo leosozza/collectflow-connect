@@ -276,14 +276,11 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                     )}
                   </div>
 
-                  {/* WhatsApp badge */}
-                  <div className="w-5 shrink-0 flex items-center justify-center">
-                    {wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600" />}
-                  </div>
-
-
-                  {/* Actions */}
+                  {/* Actions + WhatsApp agrupados */}
                   <div className="flex items-center shrink-0 ml-auto -space-x-0.5">
+                    <div className="w-5 flex items-center justify-center">
+                      {wa && <WhatsAppDot className="w-3.5 h-3.5 text-green-600" />}
+                    </div>
                     {!isEditingThis && (
                       <Button
                         size="icon"
