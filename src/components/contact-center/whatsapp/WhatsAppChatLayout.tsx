@@ -27,6 +27,7 @@ import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappIns
 import ConversationList from "./ConversationList";
 import ChatPanel from "./ChatPanel";
 import ContactSidebar from "./ContactSidebar";
+import { useConversationAvatars } from "@/hooks/useConversationAvatars";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -157,6 +158,25 @@ const WhatsAppChatLayout = () => {
 
   // Flatten pages into single conversations array
   const conversations = convPages?.pages.flatMap((p) => p.data) || [];
+
+  // Lazy-fetch profile pictures for visible conversations (Evolution/Wuzapi only)
+  useConversationAvatars(conversations, useCallback((id: string, url: string | null) => {
+    if (!url) return;
+    queryClient.setQueryData(["conversations", tenantId, filters, isAdmin], (old: any) => {
+      if (!old?.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((p: any) => ({
+          ...p,
+          data: p.data.map((c: Conversation) =>
+            c.id === id ? { ...c, remote_avatar_url: url, remote_avatar_fetched_at: new Date().toISOString() } : c
+          ),
+        })),
+      };
+    });
+    // Also update selected conversation if it matches
+    setSelectedConv((prev) => (prev && prev.id === id ? { ...prev, remote_avatar_url: url } : prev));
+  }, [queryClient, tenantId, filters, isAdmin]));
 
   // Status counts from server (separate lightweight query)
   const { data: statusCounts } = useQuery({
