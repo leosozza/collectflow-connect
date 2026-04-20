@@ -469,7 +469,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
           <span className="text-border">|</span>
-          <span><strong>Em Aberto:</strong> <span className="text-destructive font-bold">{formatCurrency(totalAberto)}</span></span>
+          <span><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
         </div>
 
         {/* Linha 3: Colapsável */}
