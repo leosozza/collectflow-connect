@@ -432,7 +432,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-bold text-foreground">{client.nome_completo}</h1>
-          <div className="flex flex-col items-end gap-1.5 ml-auto">
+          <div className="flex flex-col items-end gap-1.5 ml-auto mr-auto">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
