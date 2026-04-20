@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Phone as PhoneIcon, MessageCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Headset, ChevronDown, Pencil, Flame } from "lucide-react";
+import { ArrowLeft, FileText, Headset, ChevronDown, Pencil, Flame, Search } from "lucide-react";
 import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
 import { Button } from "@/components/ui/button";
 import { PrimaryFlowButton } from "@/components/ui/flow-button";
@@ -63,6 +63,8 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [fetchingCep, setFetchingCep] = useState(false);
+  const [editFetchingCepManual, setEditFetchingCepManual] = useState(false);
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   const [editForm, setEditForm] = useState({
     nome_completo: client.nome_completo || "",
     phone: client.phone || "",
@@ -322,10 +324,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   // Estável entre renders. Mantém os 4 updates silenciosos e exibe um toast agregado.
   const handleCepAutoFill = useCallback(async (data: any) => {
     const updates: Promise<void>[] = [];
-    if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro, { silent: true }));
-    if (data.bairro) updates.push(updateSingleField("bairro", data.bairro, { silent: true }));
-    if (data.localidade) updates.push(updateSingleField("cidade", data.localidade, { silent: true }));
-    if (data.uf) updates.push(updateSingleField("uf", data.uf, { silent: true }));
+    const filled: string[] = [];
+    if (data.logradouro) { updates.push(updateSingleField("endereco", data.logradouro, { silent: true })); filled.push("endereco"); }
+    if (data.bairro) { updates.push(updateSingleField("bairro", data.bairro, { silent: true })); filled.push("bairro"); }
+    if (data.localidade) { updates.push(updateSingleField("cidade", data.localidade, { silent: true })); filled.push("cidade"); }
+    if (data.uf) { updates.push(updateSingleField("uf", data.uf, { silent: true })); filled.push("uf"); }
     if (updates.length === 0) return;
     const results = await Promise.allSettled(updates);
     const failed = results.filter((r) => r.status === "rejected").length;
@@ -333,6 +336,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       toast.success("Endereço preenchido", {
         description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
       });
+      // Destaca visualmente os campos preenchidos por 3 segundos
+      setHighlightedFields(new Set(filled));
+      setTimeout(() => setHighlightedFields(new Set()), 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clients, tenant?.id, cpf]);
@@ -591,16 +597,19 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     value={client.endereco}
                     onSave={(v) => updateSingleField("endereco", v)}
                     className="md:col-span-2"
+                    highlight={highlightedFields.has("endereco")}
                   />
                   <InlineEditableField
                     label="Bairro"
                     value={client.bairro}
                     onSave={(v) => updateSingleField("bairro", v)}
+                    highlight={highlightedFields.has("bairro")}
                   />
                   <InlineEditableField
                     label="Cidade"
                     value={client.cidade}
                     onSave={(v) => updateSingleField("cidade", v)}
+                    highlight={highlightedFields.has("cidade")}
                   />
                   <InlineEditableField
                     label="UF"
@@ -608,6 +617,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     onSave={(v) => updateSingleField("uf", v)}
                     type="uf"
                     maxLength={2}
+                    highlight={highlightedFields.has("uf")}
                   />
                   <InlineEditableField
                     label="CEP"
@@ -696,22 +706,35 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             </div>
             <div className="grid gap-2">
               <Label htmlFor="cep">CEP</Label>
-              <div className="relative">
-                <Input
-                  id="cep"
-                  value={editForm.cep}
-                  onChange={e => {
-                    const masked = formatCEP(e.target.value);
-                    setEditForm(f => ({ ...f, cep: masked }));
-                    if (masked.replace(/\D/g, "").length === 8) {
-                      runCepLookup(masked);
-                    }
-                  }}
-                  onBlur={handleCepBlur}
-                  placeholder="00000-000"
-                  maxLength={10}
-                />
-                {fetchingCep && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="cep"
+                    value={editForm.cep}
+                    onChange={e => {
+                      const masked = formatCEP(e.target.value);
+                      setEditForm(f => ({ ...f, cep: masked }));
+                      if (masked.replace(/\D/g, "").length === 8) {
+                        runCepLookup(masked);
+                      }
+                    }}
+                    onBlur={handleCepBlur}
+                    placeholder="00000-000"
+                    maxLength={10}
+                  />
+                  {fetchingCep && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={fetchingCep || (editForm.cep || "").replace(/\D/g, "").length !== 8}
+                  onClick={() => runCepLookup(editForm.cep)}
+                  title="Buscar endereço pelo CEP"
+                >
+                  {fetchingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  <span className="ml-1.5 hidden sm:inline">Buscar</span>
+                </Button>
               </div>
             </div>
             <div className="grid gap-2">

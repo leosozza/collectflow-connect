@@ -39,6 +39,8 @@ import { getClientProfile, upsertClientProfile } from "@/services/clientProfileS
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosService";
 import SimpleCalculator from "./SimpleCalculator";
+import { useSessionStorage } from "@/hooks/useSessionStorage";
+import { RotateCcw, X as XIcon } from "lucide-react";
 
 interface AgreementCalculatorProps {
   clients: any[];
@@ -214,11 +216,100 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     }
   }, [reactivateFrom]);
 
-  // Reset simulation when params change
+  // ─── Rascunho do acordo (sessionStorage com TTL de 30 minutos) ───
+  // Persiste parâmetros para evitar perda de trabalho em re-render/navegação acidental.
+  const draftKey = `agreement-draft:${cpf}:${credor}`;
+  const DRAFT_TTL_MS = 30 * 60 * 1000;
+  type DraftPayload = {
+    ts: number;
+    entradas: EntradaItem[];
+    numParcelas: number | "";
+    formaPagto: string;
+    intervalo: string;
+    firstDueDate: string;
+    jurosPercent: string;
+    multaPercent: string;
+    honorariosPercent: string;
+    descontoPercent: string;
+    descontoReais: string;
+    discountSource: "percent" | "amount";
+    notes: string;
+    calcDate: string;
+  };
+  const [draft, setDraft, clearDraft] = useSessionStorage<DraftPayload | null>(draftKey, null);
+  const [draftRestoreOpen, setDraftRestoreOpen] = useState(false);
+  const [draftDismissed, setDraftDismissed] = useState(false);
+
+  // On mount: se houver rascunho válido (não expirado), oferecer restauração.
+  useEffect(() => {
+    if (!draft) return;
+    if (reactivateFrom) return; // reativação tem prioridade
+    if (Date.now() - draft.ts > DRAFT_TTL_MS) {
+      clearDraft();
+      return;
+    }
+    setDraftRestoreOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const restoreDraft = () => {
+    if (!draft) return;
+    setEntradas(draft.entradas);
+    setNumParcelas(draft.numParcelas);
+    setFormaPagto(draft.formaPagto);
+    setIntervalo(draft.intervalo);
+    setFirstDueDate(draft.firstDueDate);
+    setJurosPercent(draft.jurosPercent);
+    setMultaPercent(draft.multaPercent);
+    setHonorariosPercent(draft.honorariosPercent);
+    setDescontoPercent(draft.descontoPercent);
+    setDescontoReais(draft.descontoReais);
+    setDiscountSource(draft.discountSource);
+    setNotes(draft.notes);
+    setCalcDate(draft.calcDate);
+    setDraftRestoreOpen(false);
+    toast.success("Rascunho restaurado");
+  };
+
+  const discardDraft = () => {
+    clearDraft();
+    setDraftRestoreOpen(false);
+    setDraftDismissed(true);
+  };
+
+  // Reset simulation when params change + salvar rascunho (debounced via useEffect natural)
   useEffect(() => {
     setSimulated(false);
     setSimulatedInstallments([]);
   }, [selectedIds, jurosPercent, multaPercent, honorariosPercent, descontoPercent, entradas, numParcelas, firstDueDate, formaPagto, intervalo]);
+
+  // Auto-save rascunho sempre que houver mudança significativa após o usuário interagir
+  useEffect(() => {
+    if (draftRestoreOpen) return; // não sobrescreve enquanto o usuário decide
+    // Só salva se há algo "trabalhado": parcelas > 0 ou entrada > 0 ou notas
+    const hasWork =
+      (typeof numParcelas === "number" && numParcelas > 0) ||
+      entradas.some((e) => parseDecimal(e.value) > 0) ||
+      notes.trim().length > 0;
+    if (!hasWork) return;
+    setDraft({
+      ts: Date.now(),
+      entradas,
+      numParcelas,
+      formaPagto,
+      intervalo,
+      firstDueDate,
+      jurosPercent,
+      multaPercent,
+      honorariosPercent,
+      descontoPercent,
+      descontoReais,
+      discountSource,
+      notes,
+      calcDate,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entradas, numParcelas, formaPagto, intervalo, firstDueDate, jurosPercent, multaPercent, honorariosPercent, descontoPercent, descontoReais, discountSource, notes, calcDate, draftRestoreOpen]);
 
   const numEntrada = entradas.reduce((sum, e) => sum + parseDecimal(e.value), 0);
 
@@ -589,6 +680,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         }
       }
 
+      // Limpa rascunho — acordo formalizado com sucesso
+      clearDraft();
       onAgreementCreated();
     } catch (err: any) {
       toast.error(err.message || "Erro ao gravar acordo");
@@ -621,6 +714,30 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription>
             Este cliente já possui um acordo vigente. Cancele o anterior para criar um novo.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {draftRestoreOpen && draft && !draftDismissed && (
+        <Alert className="border-primary/40 bg-primary/5">
+          <RotateCcw className="w-4 h-4" />
+          <AlertDescription className="flex items-center justify-between gap-3 w-full">
+            <span className="text-sm">
+              Há um rascunho deste acordo salvo às{" "}
+              <strong>
+                {new Date(draft.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </strong>
+              . Deseja restaurar?
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button type="button" size="sm" variant="default" onClick={restoreDraft} className="h-7 px-3 text-xs">
+                Restaurar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={discardDraft} className="h-7 px-2 text-xs">
+                <XIcon className="w-3.5 h-3.5 mr-1" />
+                Descartar
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}

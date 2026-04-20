@@ -16,6 +16,8 @@ interface InlineEditableFieldProps {
   placeholder?: string;
   onBlurExtra?: (value: string) => void;
   onCepResolved?: (data: ViaCepResult) => void | Promise<void>;
+  /** Aplica destaque temporário (ring) — usado quando o campo foi auto-preenchido. */
+  highlight?: boolean;
 }
 
 const InlineEditableField = ({
@@ -28,6 +30,7 @@ const InlineEditableField = ({
   placeholder,
   onBlurExtra,
   onCepResolved,
+  highlight = false,
 }: InlineEditableFieldProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
@@ -139,7 +142,11 @@ const InlineEditableField = ({
   const displayValue = optimisticValue !== null ? optimisticValue : value;
 
   return (
-    <div className={cn("group relative min-w-0", className)}>
+    <div className={cn(
+      "group relative min-w-0 rounded-md transition-shadow",
+      highlight && "ring-2 ring-success/60 ring-offset-1 ring-offset-background -mx-1 px-1",
+      className
+    )}>
       <p className="text-xs text-muted-foreground uppercase font-medium mb-1 flex items-center gap-1">
         {label}
         {!editing && (
