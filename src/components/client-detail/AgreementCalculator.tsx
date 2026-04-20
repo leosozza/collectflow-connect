@@ -609,7 +609,8 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             <div className="flex items-center gap-1">
               <SimpleCalculator />
               <Button variant="ghost" size="sm" onClick={copyTitles} className="gap-1 text-xs">
-                <Copy className="w-3 h-3" /> Copiar Títulos
+                {copiedTitles ? <CheckCircle2 className="w-3 h-3 text-success animate-scale-in" /> : <Copy className="w-3 h-3" />}
+                {copiedTitles ? "Copiado!" : "Copiar Títulos"}
               </Button>
             </div>
           </div>
