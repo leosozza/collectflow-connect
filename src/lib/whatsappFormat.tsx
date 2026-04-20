@@ -50,11 +50,12 @@ const MARKERS: Marker[] = [
 
 function isBoundaryBefore(prev: string | undefined): boolean {
   if (prev === undefined) return true;
-  return /[\s(\[{<'"]/.test(prev);
+  // Anything that isn't a letter/digit/underscore counts as a boundary (includes emojis/symbols)
+  return !/[\p{L}\p{N}_]/u.test(prev);
 }
 function isBoundaryAfter(next: string | undefined): boolean {
   if (next === undefined) return true;
-  return /[\s.,!?;:)\]}>'"]/.test(next);
+  return !/[\p{L}\p{N}_]/u.test(next);
 }
 
 function parseInline(text: string): React.ReactNode[] {
