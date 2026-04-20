@@ -266,17 +266,16 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                   </div>
 
                   {/* Actions: Hot + Editar + Inativar */}
-                  <div className="flex items-center shrink-0 ml-1 -space-x-0.5">
-                    <button
-                      type="button"
+                  <div className="flex items-center shrink-0 ml-1 gap-0.5">
+                    {/* 1. Hot */}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className={cn("h-5 w-5", (inactive || isHot) && "cursor-default")}
                       disabled={inactive || busy === slot || isHot}
                       onClick={() => !isHot && handlePromote(slot)}
                       title={isHot ? "Número quente atual" : inactive ? "Inativo" : "Marcar como quente"}
-                      className={cn(
-                        "shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-colors",
-                        !isHot && !inactive && "hover:bg-orange-500/10",
-                        (inactive || isHot) && "cursor-default"
-                      )}
+                      aria-label="Marcar como quente"
                     >
                       <Flame
                         className={cn(
@@ -284,20 +283,8 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                           isHot && !inactive ? "text-orange-500 fill-orange-500/30" : "text-muted-foreground/40"
                         )}
                       />
-                    </button>
-                    {!isEditingThis && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-5 w-5"
-                        onClick={() => startEditNumber(slot)}
-                        title="Editar número"
-                        aria-label="Editar número"
-                        disabled={busy === slot}
-                      >
-                        <Pencil className="w-3 h-3 text-muted-foreground" />
-                      </Button>
-                    )}
+                    </Button>
+                    {/* 2. Inativar / Reativar */}
                     <Button
                       size="icon"
                       variant="ghost"
@@ -308,11 +295,25 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                       disabled={busy === slot}
                     >
                       {inactive ? (
-                        <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                        <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
                       ) : (
-                        <Ban className="w-3 h-3 text-destructive/70" />
+                        <Ban className="w-3.5 h-3.5 text-destructive/70" />
                       )}
                     </Button>
+                    {/* 3. Editar */}
+                    {!isEditingThis && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => startEditNumber(slot)}
+                        title="Editar número"
+                        aria-label="Editar número"
+                        disabled={busy === slot}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
