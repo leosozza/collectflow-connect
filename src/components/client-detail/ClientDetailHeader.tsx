@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PhoneList from "./PhoneList";
 import EmailList from "./EmailList";
+import InlineEditableField from "./InlineEditableField";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -263,6 +264,42 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     onError: (err: any) => toast.error(err?.message || "Erro ao salvar dados"),
   });
 
+  const SHARED_FIELDS = new Set(["endereco", "bairro", "cidade", "uf", "cep", "phone", "phone2", "phone3", "email", "nome_completo", "observacoes"]);
+  const PROFILE_FIELD_MAP: Record<string, string> = {
+    endereco: "endereco", bairro: "bairro", cidade: "cidade", uf: "uf", cep: "cep",
+    phone: "phone", phone2: "phone2", phone3: "phone3", email: "email", nome_completo: "nome_completo",
+  };
+
+  const updateSingleField = async (field: string, rawValue: string) => {
+    let value: string | null = rawValue.trim() || null;
+    if (field === "cep" && value) {
+      const digits = value.replace(/\D/g, "");
+      if (digits.length === 8) value = `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    }
+    if (field === "uf" && value) value = value.toUpperCase();
+
+    try {
+      const clientIds = clients.map(c => c.id);
+      const targetIds = SHARED_FIELDS.has(field) ? clientIds : [clientIds[0]];
+      for (const id of targetIds) {
+        const { error } = await supabase.from("clients").update({ [field]: value } as any).eq("id", id);
+        if (error) throw error;
+      }
+      // Sync profile if applicable
+      if (tenant?.id && PROFILE_FIELD_MAP[field]) {
+        const cleanCpfVal = cpf?.replace(/\D/g, "") || "";
+        if (cleanCpfVal) {
+          await upsertClientProfile(tenant.id, cleanCpfVal, { [PROFILE_FIELD_MAP[field]]: value || "" } as any, "manual_inline");
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Campo atualizado");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar campo");
+      throw e;
+    }
+  };
+
   const openWhatsApp = (phoneNumber?: string) => {
     const rawPhone = phoneNumber || client.phone;
     if (!rawPhone) {
@@ -414,10 +451,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             >
               <Headset className="w-5 h-5" />
             </Button>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}>
-              <Pencil className="w-4 h-4" />
-              Editar
-            </Button>
+            <div className="flex flex-col items-end px-3 border-l border-border ml-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
+              <span className="text-2xl font-bold text-destructive leading-tight">{formatCurrency(totalAberto)}</span>
+            </div>
             <Button onClick={onFormalizarAcordo} className="gap-2">
               <FileText className="w-4 h-4" />
               Formalizar Acordo
@@ -434,8 +471,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
-          <span className="text-border">|</span>
-          <span><strong>Em Aberto:</strong> <span className="text-destructive font-semibold">{formatCurrency(totalAberto)}</span></span>
         </div>
 
         {/* Linha 3: Colapsável */}
@@ -448,12 +483,18 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <div className="px-12 pt-2 pb-1 border-t border-border mt-2 space-y-2">
               {/* Identificação */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                <InfoItem label="Cod. Devedor" value={client.external_id} />
-                <InfoItem label="Cod. Contrato" value={codContratos} />
+                <InlineEditableField
+                  label="Cod. Devedor"
+                  value={client.external_id}
+                  onSave={(v) => updateSingleField("external_id", v)}
+                />
+                <InlineEditableField
+                  label="Cod. Contrato"
+                  value={client.cod_contrato}
+                  onSave={(v) => updateSingleField("cod_contrato", v)}
+                />
                 <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
-                <InfoItem label="Parcelas" value={`${pagas}/${clients.length}`} />
-                
               </div>
 
               {/* Telefones + Email */}
@@ -477,19 +518,39 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
               {/* Endereço */}
               <div className="pt-2 border-t border-border">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-muted-foreground uppercase font-medium">Endereço</p>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={() => setEditOpen(true)}>
-                    <Pencil className="w-3 h-3" />
-                    Editar endereço
-                  </Button>
-                </div>
+                <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Endereço</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                  <InfoItem label="Rua" value={client.endereco} className="md:col-span-2" />
-                  <InfoItem label="Bairro" value={client.bairro} />
-                  <InfoItem label="Cidade" value={client.cidade} />
-                  <InfoItem label="UF" value={client.uf} />
-                  <InfoItem label="CEP" value={client.cep} />
+                  <InlineEditableField
+                    label="Rua"
+                    value={client.endereco}
+                    onSave={(v) => updateSingleField("endereco", v)}
+                    className="md:col-span-2"
+                  />
+                  <InlineEditableField
+                    label="Bairro"
+                    value={client.bairro}
+                    onSave={(v) => updateSingleField("bairro", v)}
+                  />
+                  <InlineEditableField
+                    label="Cidade"
+                    value={client.cidade}
+                    onSave={(v) => updateSingleField("cidade", v)}
+                  />
+                  <InlineEditableField
+                    label="UF"
+                    value={client.uf}
+                    onSave={(v) => updateSingleField("uf", v)}
+                    type="uf"
+                    maxLength={2}
+                  />
+                  <InlineEditableField
+                    label="CEP"
+                    value={client.cep}
+                    onSave={(v) => updateSingleField("cep", v)}
+                    type="cep"
+                    maxLength={10}
+                    placeholder="00000-000"
+                  />
                 </div>
               </div>
 
