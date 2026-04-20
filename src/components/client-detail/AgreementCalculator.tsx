@@ -17,6 +17,16 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
 import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
