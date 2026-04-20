@@ -459,19 +459,35 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </div>
         </div>
 
-        {/* Linha 2: Metadados + Em Aberto (duas sublinhas) */}
-        <div className="pl-11 mt-1.5 space-y-0.5 text-sm text-muted-foreground min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="whitespace-nowrap"><strong>CPF:</strong> {formattedCpf}</span>
-            <span className="text-border">|</span>
-            <span className="whitespace-nowrap"><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
-            <span className="text-border">|</span>
-            <span className="truncate min-w-[120px]"><strong>Email:</strong> {client.email || "—"}</span>
+        {/* Linha 2: Grid de informações (estilo CRM) */}
+        <div className="ml-11 mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
+          <div className="px-4 py-2 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">CPF</p>
+            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5">{formattedCpf}</p>
           </div>
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="truncate min-w-0"><strong>Credor:</strong> {client.credor}</span>
-            <span className="text-border">|</span>
-            <span className="whitespace-nowrap"><strong>Em Aberto:</strong> <span className="text-destructive font-bold text-base">{formatCurrency(totalAberto)}</span></span>
+          <div className="px-4 py-2 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Telefone</p>
+            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5">
+              {client.phone ? formatPhone(client.phone) : "—"}
+            </p>
+          </div>
+          <div className="px-4 py-2 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Email</p>
+            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5" title={client.email || ""}>
+              {client.email || "—"}
+            </p>
+          </div>
+          <div className="px-4 py-2 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Credor</p>
+            <p className="text-[15px] font-semibold text-foreground truncate mt-0.5" title={client.credor}>
+              {client.credor}
+            </p>
+          </div>
+          <div className="px-4 py-2 min-w-0 bg-destructive/5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Em Aberto</p>
+            <p className="text-[17px] font-bold text-destructive truncate mt-0.5">
+              {formatCurrency(totalAberto)}
+            </p>
           </div>
         </div>
 
