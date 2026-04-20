@@ -184,8 +184,8 @@ const WhatsAppChatLayout = () => {
     async (phone: string, targetInstanceId: string) => {
       try {
         const { data: resolved } = await supabase.rpc("resolve_client_by_phone" as any, {
-          p_tenant_id: tenantId,
-          p_phone: phone,
+          _tenant_id: tenantId,
+          _phone: phone,
         });
         const clientRow: any = Array.isArray(resolved) ? resolved[0] : null;
 
@@ -204,7 +204,25 @@ const WhatsAppChatLayout = () => {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          // Conversa já existe nesta instância → buscar e selecionar
+          if (error.code === "23505") {
+            const { data: existing } = await supabase
+              .from("conversations")
+              .select("*")
+              .eq("tenant_id", tenantId)
+              .eq("instance_id", targetInstanceId)
+              .eq("remote_phone", phone)
+              .maybeSingle();
+            if (existing) {
+              setSelectedConv(existing as unknown as Conversation);
+              refetchConversations();
+              toast.info("Conversa já existente foi selecionada");
+              return;
+            }
+          }
+          throw error;
+        }
         if (data) {
           const newConv = data as unknown as Conversation;
           setSelectedConv(newConv);
@@ -224,7 +242,8 @@ const WhatsAppChatLayout = () => {
     const phoneParam = searchParams.get("phone");
     const instanceIdParam = searchParams.get("instanceId");
     const forceNewParam = searchParams.get("forceNew") === "1";
-    if (!phoneParam || !tenantId || (conversations.length === 0 && !instances.length)) return;
+    // Aguarda BOTH carregarem para evitar criar duplicata enquanto a lista ainda paginava
+    if (!phoneParam || !tenantId || instances.length === 0 || convPages === undefined) return;
 
     phoneParamProcessed.current = true;
     setSearchParams((prev) => {
@@ -277,7 +296,7 @@ const WhatsAppChatLayout = () => {
       return;
     }
     createConversationOnInstance(normalizedParam, targetInstanceId);
-  }, [searchParams, conversations, instances, tenantId, createConversationOnInstance, setSearchParams]);
+  }, [searchParams, convPages, instances, tenantId, createConversationOnInstance, setSearchParams]);
 
   // Load messages when selecting conversation
   useEffect(() => {
@@ -305,8 +324,8 @@ const WhatsAppChatLayout = () => {
     if (!selectedConv.client_id && selectedConv.remote_phone && tenantId) {
       (async () => {
         const { data: resolved } = await supabase.rpc("resolve_client_by_phone" as any, {
-          p_tenant_id: tenantId,
-          p_phone: selectedConv.remote_phone,
+          _tenant_id: tenantId,
+          _phone: selectedConv.remote_phone,
         });
         const clientRow: any = Array.isArray(resolved) ? resolved[0] : null;
         if (clientRow?.client_id) {
