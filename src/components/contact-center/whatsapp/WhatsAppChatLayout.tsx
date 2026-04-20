@@ -135,7 +135,13 @@ const WhatsAppChatLayout = () => {
     queryKey: ["conversations", tenantId, filters, isAdmin],
     queryFn: async ({ pageParam = 1 }) => {
       if (!tenantId) return { data: [], count: 0 };
-      return fetchConversations(tenantId, pageParam, PAGE_SIZE, filters, isAdmin);
+      try {
+        return await fetchConversations(tenantId, pageParam, PAGE_SIZE, filters, isAdmin);
+      } catch (err: any) {
+        console.error("[WhatsAppChatLayout] fetchConversations failed:", err);
+        toast.error(`Falha ao carregar conversas: ${err?.message || err}`);
+        throw err;
+      }
     },
     getNextPageParam: (lastPage, allPages) => {
       const totalLoaded = allPages.reduce((sum, p) => sum + p.data.length, 0);
@@ -152,7 +158,15 @@ const WhatsAppChatLayout = () => {
   // Status counts from server (separate lightweight query)
   const { data: statusCounts } = useQuery({
     queryKey: ["conversation-counts", tenantId, isAdmin],
-    queryFn: () => fetchConversationCounts(tenantId!, isAdmin),
+    queryFn: async () => {
+      try {
+        return await fetchConversationCounts(tenantId!, isAdmin);
+      } catch (err: any) {
+        console.error("[WhatsAppChatLayout] fetchConversationCounts failed:", err);
+        toast.error(`Falha ao carregar contadores: ${err?.message || err}`);
+        throw err;
+      }
+    },
     enabled: !!tenantId,
     refetchInterval: 30000, // refresh every 30s
   });
