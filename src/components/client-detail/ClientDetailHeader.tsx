@@ -468,9 +468,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
-          <div className="ml-auto flex items-baseline gap-2">
+          <div className="ml-auto flex flex-col items-end leading-none">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-            <span className="text-base font-bold text-destructive">{formatCurrency(totalAberto)}</span>
+            <span className="text-base font-bold text-destructive mt-0.5">{formatCurrency(totalAberto)}</span>
           </div>
         </div>
 
