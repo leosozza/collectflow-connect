@@ -108,7 +108,10 @@ export async function fetchConversations(
       _handler_filter: filters.handlerFilter && filters.handlerFilter !== "all" ? filters.handlerFilter : null,
       _search: filters.search && filters.search.trim() ? filters.search.trim() : null,
     });
-    if (error) throw error;
+    if (error) {
+      console.error("[conversationService] get_visible_conversations RPC error:", error);
+      throw error;
+    }
 
     const rows = (data || []) as any[];
     const total = rows.length > 0 ? Number(rows[0].total_count) || 0 : 0;
