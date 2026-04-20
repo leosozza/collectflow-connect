@@ -680,9 +680,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         }
       }
 
+      // Limpa rascunho — acordo formalizado com sucesso
+      clearDraft();
       onAgreementCreated();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao gravar acordo");
     } finally {
       setSubmitting(false);
       setEnrichingAddress(false);
