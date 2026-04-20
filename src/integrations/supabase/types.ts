@@ -1306,6 +1306,50 @@ export type Database = {
           },
         ]
       }
+      client_phone_metadata: {
+        Row: {
+          cpf: string
+          created_at: string
+          credor: string
+          id: string
+          is_inactive: boolean
+          observacao: string | null
+          slot: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          credor: string
+          id?: string
+          is_inactive?: boolean
+          observacao?: string | null
+          slot: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          credor?: string
+          id?: string
+          is_inactive?: boolean
+          observacao?: string | null
+          slot?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_phone_metadata_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_phones: {
         Row: {
           client_id: string | null
