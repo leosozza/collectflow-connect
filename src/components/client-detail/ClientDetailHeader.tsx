@@ -286,7 +286,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     phone: "phone", phone2: "phone2", phone3: "phone3", email: "email", nome_completo: "nome_completo",
   };
 
-  const updateSingleField = async (field: string, rawValue: string) => {
+  const updateSingleField = async (field: string, rawValue: string, options: { silent?: boolean } = {}) => {
     let value: string | null = rawValue.trim() || null;
     if (field === "cep" && value) {
       const digits = value.replace(/\D/g, "");
@@ -311,12 +311,31 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       // Refetch the active profile, mark "clients" stale without immediate refetch (avoids freezing huge lists)
       await queryClient.invalidateQueries({ queryKey: ["client-detail"] });
       queryClient.invalidateQueries({ queryKey: ["clients"], refetchType: "none" });
-      toast.success("Campo atualizado");
+      if (!options.silent) toast.success("Campo atualizado");
     } catch (e: any) {
+      // Errors always surface, even on silent updates.
       toast.error(e?.message || "Erro ao atualizar campo");
       throw e;
     }
   };
+
+  // Estável entre renders. Mantém os 4 updates silenciosos e exibe um toast agregado.
+  const handleCepAutoFill = useCallback(async (data: any) => {
+    const updates: Promise<void>[] = [];
+    if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro, { silent: true }));
+    if (data.bairro) updates.push(updateSingleField("bairro", data.bairro, { silent: true }));
+    if (data.localidade) updates.push(updateSingleField("cidade", data.localidade, { silent: true }));
+    if (data.uf) updates.push(updateSingleField("uf", data.uf, { silent: true }));
+    if (updates.length === 0) return;
+    const results = await Promise.allSettled(updates);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === 0) {
+      toast.success("Endereço preenchido", {
+        description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients, tenant?.id, cpf]);
 
   const openWhatsApp = (phoneNumber?: string) => {
     const rawPhone = phoneNumber || client.phone;
