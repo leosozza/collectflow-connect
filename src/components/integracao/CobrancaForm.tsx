@@ -52,9 +52,9 @@ const CobrancaForm = ({ tenantId, onCreated }: CobrancaFormProps) => {
 
   const fetchAddressByCep = useCallback(async (cep: string) => {
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await res.json();
-      if (!data.erro) {
+      const { lookupCep } = await import("@/lib/viaCep");
+      const data = await lookupCep(cep);
+      if (data) {
         setForm((prev) => ({
           ...prev,
           endereco: data.logradouro || prev.endereco,

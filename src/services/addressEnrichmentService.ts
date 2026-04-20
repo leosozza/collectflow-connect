@@ -18,6 +18,8 @@ export interface AddressData {
   model_name: string | null;
 }
 
+const REQUEST_TIMEOUT_MS = 8_000;
+
 async function fetchAddressForContract(
   contractNumber: string,
   token: string,
@@ -31,7 +33,7 @@ async function fetchAddressForContract(
   try {
     const searchResp = await fetchWithTimeout(
       `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-search&contractNumber=${contractNumber}`,
-      { headers }
+      { headers, timeoutMs: REQUEST_TIMEOUT_MS }
     );
     if (!searchResp.ok) { cache.set(contractNumber, emptyAddress()); return null; }
     const searchJson = await searchResp.json();
@@ -40,7 +42,7 @@ async function fetchAddressForContract(
 
     const detResp = await fetchWithTimeout(
       `${supabaseUrl}/functions/v1/maxsystem-proxy?action=model-details&modelId=${modelId}`,
-      { headers }
+      { headers, timeoutMs: REQUEST_TIMEOUT_MS }
     );
     if (!detResp.ok) { cache.set(contractNumber, emptyAddress()); return null; }
     const raw = await detResp.json();
@@ -56,7 +58,8 @@ async function fetchAddressForContract(
     };
     cache.set(contractNumber, addr);
     return addr;
-  } catch {
+  } catch (err) {
+    console.warn("[address-enrichment] failed for contract", contractNumber, err);
     cache.set(contractNumber, emptyAddress());
     return null;
   }
@@ -70,6 +73,13 @@ function emptyAddress(): AddressData {
  * Enrich client address data by fetching from MaxSystem API.
  * Looks up unique cod_contrato values for the given CPF, fetches address,
  * and updates the clients table.
+ *
+ * Optimisations vs original:
+ * - Limited to 3 most-recent contracts (avoids excessive requests).
+ * - 8 s timeout per request (was 30 s).
+ * - Early exit as soon as a valid address is found.
+ * - Update of clients table wrapped in isolated try/catch — failures
+ *   do not prevent the address from being returned.
  */
 export async function enrichClientAddress(
   cpf: string,
@@ -78,9 +88,10 @@ export async function enrichClientAddress(
 ): Promise<AddressData | null> {
   const { data: clients, error } = await supabase
     .from("clients")
-    .select("id, cod_contrato, endereco")
+    .select("id, cod_contrato, endereco, created_at")
     .eq("cpf", cpf)
-    .eq("tenant_id", tenantId);
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
 
   if (error || !clients?.length) return null;
 
@@ -88,7 +99,6 @@ export async function enrichClientAddress(
   const hasAddress = clients.some((c: any) => c.endereco && c.endereco.trim() !== "");
   if (hasAddress) {
     const withAddr = clients.find((c: any) => c.endereco && c.endereco.trim() !== "");
-    // Return existing address - no need to fetch
     const { data: full } = await supabase
       .from("clients")
       .select("endereco, cep, bairro, cidade, uf, email")
@@ -101,7 +111,7 @@ export async function enrichClientAddress(
     clients
       .map((c: any) => (c.cod_contrato || "").trim())
       .filter(Boolean)
-  )];
+  )].slice(0, 3); // Limit to 3 most-recent contracts
 
   if (uniqueContracts.length === 0) return null;
 
@@ -111,16 +121,11 @@ export async function enrichClientAddress(
   const token = session.data.session?.access_token || "";
   const cache = new Map<string, AddressData>();
 
-  // Fetch addresses in parallel batches of 5
-  for (let i = 0; i < uniqueContracts.length; i += 5) {
-    const batch = uniqueContracts.slice(i, i + 5);
-    await Promise.all(batch.map((c) => fetchAddressForContract(c, token, cache)));
-  }
-
-  // Find first valid address
+  // Fetch sequentially with early exit on first valid address
   let bestAddress: AddressData | null = null;
-  for (const addr of cache.values()) {
-    if (addr.endereco) {
+  for (const contract of uniqueContracts) {
+    const addr = await fetchAddressForContract(contract, token, cache);
+    if (addr?.endereco) {
       bestAddress = addr;
       break;
     }
@@ -130,20 +135,24 @@ export async function enrichClientAddress(
 
   onProgress?.("Atualizando endereço...");
 
-  // Update all client records for this CPF with the address
-  const clientIds = clients.map((c: any) => c.id);
-  await supabase
-    .from("clients")
-    .update({
-      endereco: bestAddress.endereco,
-      cep: bestAddress.cep,
-      bairro: bestAddress.bairro,
-      cidade: bestAddress.cidade,
-      uf: bestAddress.uf,
-      email: bestAddress.email,
-      model_name: bestAddress.model_name || undefined,
-    } as any)
-    .in("id", clientIds);
+  // Update all client records — isolated so failures don't block the return
+  try {
+    const clientIds = clients.map((c: any) => c.id);
+    await supabase
+      .from("clients")
+      .update({
+        endereco: bestAddress.endereco,
+        cep: bestAddress.cep,
+        bairro: bestAddress.bairro,
+        cidade: bestAddress.cidade,
+        uf: bestAddress.uf,
+        email: bestAddress.email,
+        model_name: bestAddress.model_name || undefined,
+      } as any)
+      .in("id", clientIds);
+  } catch (updateErr) {
+    console.warn("[address-enrichment] client update failed (non-blocking):", updateErr);
+  }
 
   return bestAddress;
 }

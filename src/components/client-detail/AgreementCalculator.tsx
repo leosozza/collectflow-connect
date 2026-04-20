@@ -97,6 +97,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
   const [pendingAgreement, setPendingAgreement] = useState<any>(null);
+  const [cepLookupLoading, setCepLookupLoading] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
 
   // Fetch credor rules and auto-fill honorários + aging discount
@@ -461,12 +462,13 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
     setSubmitting(true);
-    setEnrichingAddress(true);
-    setAddressStatus("Buscando endereço...");
     try {
-      await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
-      setEnrichingAddress(false);
-      setAddressStatus("");
+      // Fire address enrichment in background — must NOT block agreement creation.
+      // If MaxSystem is slow/down, the agreement is still saved. Address (when it
+      // arrives) will be available on the next "checkRequiredFields" run.
+      enrichClientAddress(cpf, profile.tenant_id).catch((err) =>
+        console.warn("[address-enrichment] background failed:", err)
+      );
 
       // Build custom installment maps for multiple entradas
       const customDates: Record<string, string> = {};
@@ -1026,15 +1028,41 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
                 email: "E-mail", phone: "Telefone", cep: "CEP",
                 endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
               };
+              const isCep = field === "cep";
               return (
                 <div key={field} className="space-y-1">
                   <Label className="text-xs font-medium">{labelMap[field] || field}</Label>
-                  <Input
-                    value={missingFields[field]}
-                    onChange={(e) => setMissingFields((prev) => ({ ...prev, [field]: e.target.value }))}
-                    placeholder={`Informe o ${(labelMap[field] || field).toLowerCase()}`}
-                    className="h-9"
-                  />
+                  <div className="relative">
+                    <Input
+                      value={missingFields[field]}
+                      onChange={(e) => setMissingFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                      onBlur={isCep ? async (e) => {
+                        const cepVal = e.target.value;
+                        if ((cepVal || "").replace(/\D/g, "").length !== 8) return;
+                        setCepLookupLoading(true);
+                        try {
+                          const { lookupCep } = await import("@/lib/viaCep");
+                          const data = await lookupCep(cepVal);
+                          if (data) {
+                            setMissingFields((prev) => ({
+                              ...prev,
+                              endereco: prev.endereco || data.logradouro || "",
+                              bairro: prev.bairro || data.bairro || "",
+                              cidade: prev.cidade || data.localidade || "",
+                              uf: prev.uf || data.uf || "",
+                            }));
+                          }
+                        } finally {
+                          setCepLookupLoading(false);
+                        }
+                      } : undefined}
+                      placeholder={`Informe o ${(labelMap[field] || field).toLowerCase()}`}
+                      className="h-9"
+                    />
+                    {isCep && cepLookupLoading && (
+                      <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
               );
             })}

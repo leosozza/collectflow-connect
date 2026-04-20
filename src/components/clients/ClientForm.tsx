@@ -57,20 +57,16 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
   const [observacoes, setObservacoes] = useState(defaultValues?.observacoes || "");
 
   const handleCepBlur = useCallback(async () => {
-    const cleanCep = cep.replace(/\D/g, "");
-    if (cleanCep.length !== 8) return;
     setFetchingCep(true);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      const data = await res.json();
-      if (!data.erro) {
+      const { lookupCep } = await import("@/lib/viaCep");
+      const data = await lookupCep(cep);
+      if (data) {
         setEndereco(data.logradouro || "");
         setBairro(data.bairro || "");
         setCidade(data.localidade || "");
         setUf(data.uf || "");
       }
-    } catch {
-      // silently fail
     } finally {
       setFetchingCep(false);
     }
