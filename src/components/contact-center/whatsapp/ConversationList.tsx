@@ -124,37 +124,32 @@ function ConversationAvatar({ conv, slaRingClass }: { conv: Conversation; slaRin
   const displayName = conv.client_name || conv.remote_name;
   const isSystemName = displayName?.toLowerCase() === SYSTEM_NAME;
   const isUnlinked = !conv.client_id;
+  const avatarUrl = (conv as any).remote_avatar_url as string | null | undefined;
 
   const borderClass = isUnlinked ? "ring-2 ring-yellow-500" : slaRingClass;
 
-  if (displayName && !isSystemName) {
-    const initials = getInitials(displayName);
-    const colorClass = stringToColor(displayName);
-    return (
-      <div className="relative shrink-0">
-        <div className={`w-[49px] h-[49px] rounded-full ${colorClass} ${borderClass} flex items-center justify-center`}>
-          <span className="text-white font-semibold text-[15px]">{initials}</span>
-        </div>
-        {isUnlinked && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
-                  <Link2Off className="w-3 h-3 text-white" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent><p>Cliente não vinculado</p></TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
-    );
-  }
+  const initials = displayName && !isSystemName ? getInitials(displayName) : null;
+  const colorClass = displayName && !isSystemName ? stringToColor(displayName) : "bg-muted";
 
   return (
     <div className="relative shrink-0">
-      <div className={`w-[49px] h-[49px] rounded-full bg-muted ${borderClass} flex items-center justify-center`}>
-        <User className="w-6 h-6 text-muted-foreground" />
+      <div className={`w-[49px] h-[49px] rounded-full ${avatarUrl ? "bg-muted" : colorClass} ${borderClass} flex items-center justify-center overflow-hidden`}>
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={displayName || "avatar"}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              // Hide broken image so the fallback shows
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : initials ? (
+          <span className="text-white font-semibold text-[15px]">{initials}</span>
+        ) : (
+          <User className="w-6 h-6 text-muted-foreground" />
+        )}
       </div>
       {isUnlinked && (
         <TooltipProvider>

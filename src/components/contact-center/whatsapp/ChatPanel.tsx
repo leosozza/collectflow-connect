@@ -249,8 +249,17 @@ const ChatPanel = ({
       {/* Header - WhatsApp style */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-[#f0f2f5] dark:bg-[#202c33]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#dfe5e7] dark:bg-[#6b7c85] flex items-center justify-center">
-            <User className="w-5 h-5 text-[#cfd7db] dark:text-[#aebac1]" />
+          <div className="w-10 h-10 rounded-full bg-[#dfe5e7] dark:bg-[#6b7c85] flex items-center justify-center overflow-hidden">
+            {(conversation as any).remote_avatar_url ? (
+              <img
+                src={(conversation as any).remote_avatar_url}
+                alt={conversation.remote_name || "avatar"}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <User className="w-5 h-5 text-[#cfd7db] dark:text-[#aebac1]" />
+            )}
           </div>
           <div>
             <div className="font-medium text-[15px] flex items-center gap-2 text-foreground">
