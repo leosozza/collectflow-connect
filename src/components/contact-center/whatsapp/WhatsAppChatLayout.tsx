@@ -389,12 +389,14 @@ const WhatsAppChatLayout = () => {
         setHasMoreOlder(result.hasMore);
       })
       .catch(console.error);
-    // Accept-to-read: don't mark as read if conversation is waiting (unless admin)
-    const isAdmin = profile?.role === "admin";
-    if (selectedConv.status !== "waiting" || isAdmin) {
+    // Spectator mode: only the responsible operator clears unread_count.
+    const currentUserId = profile?.user_id || profile?.id;
+    const isResponsibleOperator =
+      !!selectedConv.assigned_to && !!currentUserId && selectedConv.assigned_to === currentUserId;
+    if (isResponsibleOperator) {
       markConversationRead(selectedConv.id).catch(console.error);
     }
-  }, [selectedConv?.id, selectedConv?.status, profile?.role]);
+  }, [selectedConv?.id, selectedConv?.assigned_to, profile?.user_id, profile?.id]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedConv || loadingOlder || !hasMoreOlder) return;
