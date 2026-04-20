@@ -183,7 +183,7 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
   const waCount = visibleSlots.filter((s) => isWhatsApp(values[s])).length;
 
   return (
-    <div className="w-full">
+    <div className="inline-block">
       <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Telefones</p>
 
       <HoverCard openDelay={120} closeDelay={150}>
