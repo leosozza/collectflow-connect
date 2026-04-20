@@ -469,7 +469,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                       phone3={client.phone3}
                     />
                   )}
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 max-w-full">
                     <EmailList emails={(clients || []).map((c: any) => c?.email).concat([client.email])} />
                   </div>
                 </div>
