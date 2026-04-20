@@ -429,7 +429,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap pl-12 mt-2">
           <span><strong>CPF:</strong> {formattedCpf}</span>
           <span className="text-border">|</span>
-          <span><strong>Tel:</strong> {phones.length > 0 ? phones.map(p => formatPhone(p)).join(" / ") : "—"}</span>
+          <span><strong>Tel:</strong> {client.phone ? formatPhone(client.phone) : "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
