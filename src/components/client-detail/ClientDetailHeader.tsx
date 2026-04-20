@@ -432,29 +432,35 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-bold text-foreground flex-1 min-w-0 truncate">{client.nome_completo}</h1>
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
-              onClick={() => openWhatsApp()}
-              title="WhatsApp"
-            >
-              <WhatsAppIcon className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
-              onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
-              title="Atendimento"
-            >
-              <Headset className="w-4 h-4" />
-            </Button>
-            <Button onClick={onFormalizarAcordo} size="sm" className="gap-2 h-9">
-              <FileText className="w-4 h-4" />
-              Formalizar Acordo
-            </Button>
+          <div className="flex flex-col items-end gap-3 ml-auto shrink-0">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-600"
+                onClick={() => openWhatsApp()}
+                title="WhatsApp"
+              >
+                <WhatsAppIcon className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 hover:text-blue-600"
+                onClick={() => navigate(`/atendimento?clientId=${client.id}`)}
+                title="Atendimento"
+              >
+                <Headset className="w-4 h-4" />
+              </Button>
+              <Button onClick={onFormalizarAcordo} size="sm" className="gap-2 h-9">
+                <FileText className="w-4 h-4" />
+                Formalizar Acordo
+              </Button>
+            </div>
+            <div className="flex flex-col items-end leading-none">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
+              <span className="text-2xl font-bold text-destructive leading-none mt-1">{formatCurrency(totalAberto)}</span>
+            </div>
           </div>
         </div>
 
@@ -467,10 +473,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           <span><strong>Email:</strong> {client.email || "—"}</span>
           <span className="text-border">|</span>
           <span><strong>Credor:</strong> {client.credor}</span>
-          <span className="ml-auto flex items-baseline gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-            <span className="text-base font-bold text-destructive">{formatCurrency(totalAberto)}</span>
-          </span>
         </div>
 
         {/* Linha 3: Colapsável */}
