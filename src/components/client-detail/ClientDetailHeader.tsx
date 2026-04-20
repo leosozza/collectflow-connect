@@ -432,7 +432,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-bold text-foreground flex-1 min-w-0 truncate">{client.nome_completo}</h1>
-          <div className="flex flex-col items-end gap-1.5 ml-auto shrink-0">
+          <div className="flex flex-col items-end gap-3 ml-auto shrink-0">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -459,7 +459,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             </div>
             <div className="flex flex-col items-end leading-none">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Em Aberto</span>
-              <span className="text-xl font-bold text-destructive leading-none mt-0.5">{formatCurrency(totalAberto)}</span>
+              <span className="text-2xl font-bold text-destructive leading-none mt-1">{formatCurrency(totalAberto)}</span>
             </div>
           </div>
         </div>
