@@ -13,6 +13,7 @@ import { Loader2, ClipboardCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
 
 interface DispositionType {
   id: string;
@@ -31,6 +32,9 @@ interface CloseConversationDialogProps {
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
+const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
+const EM_DIA_BLOCKED_TITLE =
+  "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
 const CloseConversationDialog = ({
   open,
@@ -44,6 +48,8 @@ const CloseConversationDialog = ({
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [clientCpf, setClientCpf] = useState<string | null>(null);
+  const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
 
   const loadDispositions = useCallback(async () => {
     const { data } = await supabase
