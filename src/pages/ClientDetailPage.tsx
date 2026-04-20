@@ -452,7 +452,7 @@ const ClientDetailPage = () => {
         <TabsContent value="titulos">
           <Card>
             <CardContent className="p-0">
-              {canReopenParcelas && pagoClients.length > 0 && selectedPagoIds.length > 2 && (
+              {canReopenParcelas && pagoClients.length > 0 && selectedPagoIds.length > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox checked={allPagoSelected} onCheckedChange={handleToggleAllPago} />
