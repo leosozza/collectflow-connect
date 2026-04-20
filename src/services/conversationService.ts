@@ -53,7 +53,7 @@ export interface ConversationFilters {
   operatorFilter?: string;
   search?: string;
   unreadOnly?: boolean;
-  handlerFilter?: string;
+  dispositionFilter?: string;
 }
 
 export async function fetchQuickReplies(tenantId: string): Promise<QuickReply[]> {
@@ -105,8 +105,9 @@ export async function fetchConversations(
       _instance_filter: filters.instanceFilter && filters.instanceFilter !== "all" ? filters.instanceFilter : null,
       _operator_filter: filters.operatorFilter && filters.operatorFilter !== "all" ? filters.operatorFilter : null,
       _unread_only: !!filters.unreadOnly,
-      _handler_filter: filters.handlerFilter && filters.handlerFilter !== "all" ? filters.handlerFilter : null,
+      _handler_filter: null,
       _search: filters.search && filters.search.trim() ? filters.search.trim() : null,
+      _disposition_filter: filters.dispositionFilter && filters.dispositionFilter !== "all" ? filters.dispositionFilter : null,
     });
     if (error) {
       console.error("[conversationService] get_visible_conversations RPC error:", error);
@@ -156,10 +157,14 @@ export async function fetchConversations(
   if (filters.unreadOnly) {
     query = query.gt("unread_count", 0);
   }
-  if (filters.handlerFilter === "ai") {
-    query = query.is("assigned_to", null);
-  } else if (filters.handlerFilter === "human") {
-    query = query.not("assigned_to", "is", null);
+  if (filters.dispositionFilter && filters.dispositionFilter !== "all") {
+    const { data: ids } = await supabase
+      .from("conversation_disposition_assignments" as any)
+      .select("conversation_id")
+      .eq("disposition_type_id", filters.dispositionFilter);
+    const convIds = ((ids || []) as any[]).map((r: any) => r.conversation_id);
+    if (convIds.length === 0) return { data: [], count: 0 };
+    query = query.in("id", convIds);
   }
   if (filters.search && filters.search.trim()) {
     const s = filters.search.trim();

@@ -6586,39 +6586,74 @@ export type Database = {
           waiting_count: number
         }[]
       }
-      get_visible_conversations: {
-        Args: {
-          _handler_filter?: string
-          _instance_filter?: string
-          _operator_filter?: string
-          _page?: number
-          _page_size?: number
-          _search?: string
-          _status_filter?: string
-          _tenant_id: string
-          _unread_only?: boolean
-        }
-        Returns: {
-          assigned_to: string
-          client_id: string
-          client_name: string
-          created_at: string
-          id: string
-          instance_id: string
-          last_message_at: string
-          last_message_content: string
-          last_message_direction: string
-          last_message_type: string
-          remote_name: string
-          remote_phone: string
-          sla_deadline_at: string
-          status: string
-          tenant_id: string
-          total_count: number
-          unread_count: number
-          updated_at: string
-        }[]
-      }
+      get_visible_conversations:
+        | {
+            Args: {
+              _handler_filter?: string
+              _instance_filter?: string
+              _operator_filter?: string
+              _page?: number
+              _page_size?: number
+              _search?: string
+              _status_filter?: string
+              _tenant_id: string
+              _unread_only?: boolean
+            }
+            Returns: {
+              assigned_to: string
+              client_id: string
+              client_name: string
+              created_at: string
+              id: string
+              instance_id: string
+              last_message_at: string
+              last_message_content: string
+              last_message_direction: string
+              last_message_type: string
+              remote_name: string
+              remote_phone: string
+              sla_deadline_at: string
+              status: string
+              tenant_id: string
+              total_count: number
+              unread_count: number
+              updated_at: string
+            }[]
+          }
+        | {
+            Args: {
+              _disposition_filter?: string
+              _handler_filter?: string
+              _instance_filter?: string
+              _operator_filter?: string
+              _page?: number
+              _page_size?: number
+              _search?: string
+              _status_filter?: string
+              _tenant_id: string
+              _unread_only?: boolean
+            }
+            Returns: {
+              assigned_to: string
+              client_id: string
+              client_name: string
+              created_at: string
+              id: string
+              instance_id: string
+              last_message_at: string
+              last_message_content: string
+              last_message_direction: string
+              last_message_type: string
+              remote_name: string
+              remote_phone: string
+              sla_deadline_at: string
+              status: string
+              tenant_id: string
+              total_count: number
+              unread_count: number
+              updated_at: string
+            }[]
+          }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
