@@ -250,6 +250,44 @@ const WhatsAppChatLayout = () => {
     [tenantId, refetchConversations]
   );
 
+  // Auto-select via ?conversationId= param (highest priority)
+  useEffect(() => {
+    if (phoneParamProcessed.current) return;
+    const conversationIdParam = searchParams.get("conversationId");
+    if (!conversationIdParam || !tenantId || convPages === undefined) return;
+
+    phoneParamProcessed.current = true;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("conversationId");
+      return next;
+    }, { replace: true });
+
+    const found = conversations.find((c) => c.id === conversationIdParam);
+    if (found) {
+      setSelectedConv(found);
+      return;
+    }
+    // Not in loaded pages — fetch directly
+    (async () => {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("id", conversationIdParam)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (error) {
+        console.error("Error fetching conversation by id:", error);
+        toast.error("Não foi possível abrir a conversa");
+        return;
+      }
+      if (data) {
+        setSelectedConv(data as unknown as Conversation);
+        refetchConversations();
+      }
+    })();
+  }, [searchParams, convPages, tenantId, setSearchParams, refetchConversations]);
+
   // Auto-select or create conversation from ?phone= param
   useEffect(() => {
     if (phoneParamProcessed.current) return;
@@ -271,40 +309,43 @@ const WhatsAppChatLayout = () => {
     const normalizedParam = phoneParam.replace(/\D/g, "");
     const suffix = normalizedParam.slice(-8);
 
+    const allowedInstanceIds = new Set(instances.map((i) => i.id));
     const matchingByPhone = conversations.filter((c) => {
       const remoteSuffix = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
-      return remoteSuffix === suffix;
+      return remoteSuffix === suffix && (!c.instance_id || allowedInstanceIds.has(c.instance_id));
     });
 
     const targetInstanceId = instanceIdParam || instances[0]?.id || null;
 
-    // Prefer same-instance match
-    const sameInstanceMatch = targetInstanceId
-      ? matchingByPhone.find((c) => c.instance_id === targetInstanceId)
-      : matchingByPhone[0];
-
-    if (sameInstanceMatch && !forceNewParam) {
-      setSelectedConv(sameInstanceMatch);
-      return;
-    }
-    if (sameInstanceMatch && forceNewParam) {
-      // Já existe na instância alvo — apenas seleciona
-      setSelectedConv(sameInstanceMatch);
+    // If not forcing new: prefer ANY existing match (most recent first — lista vem ordenada por last_message_at desc)
+    if (!forceNewParam && matchingByPhone.length > 0) {
+      const sameInstanceMatch = targetInstanceId
+        ? matchingByPhone.find((c) => c.instance_id === targetInstanceId)
+        : null;
+      setSelectedConv(sameInstanceMatch || matchingByPhone[0]);
       return;
     }
 
-    // No match in target instance, but exists in another
-    const otherInstanceMatch = matchingByPhone.find((c) => c.instance_id !== targetInstanceId);
-    if (otherInstanceMatch && targetInstanceId) {
-      setConflictState({
-        existingConv: otherInstanceMatch,
-        targetInstanceId,
-        phone: normalizedParam,
-      });
-      return;
+    // forceNew + already exists in target instance → just select (não duplicar)
+    if (forceNewParam && targetInstanceId) {
+      const sameInstanceMatch = matchingByPhone.find((c) => c.instance_id === targetInstanceId);
+      if (sameInstanceMatch) {
+        setSelectedConv(sameInstanceMatch);
+        return;
+      }
+      // forceNew + existe em outra instância permitida → conflict dialog (admin pode escolher)
+      const otherInstanceMatch = matchingByPhone.find((c) => c.instance_id !== targetInstanceId);
+      if (otherInstanceMatch) {
+        setConflictState({
+          existingConv: otherInstanceMatch,
+          targetInstanceId,
+          phone: normalizedParam,
+        });
+        return;
+      }
     }
 
-    // No conflict — create new on target (or fallback)
+    // No match — create new on target (or fallback)
     if (!targetInstanceId) {
       toast.error("Nenhuma instância WhatsApp configurada");
       return;
