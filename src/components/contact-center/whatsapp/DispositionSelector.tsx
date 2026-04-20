@@ -115,7 +115,7 @@ const DispositionSelector = ({ conversationId, tenantId }: DispositionSelectorPr
       <CardHeader className="p-3 pb-1">
         <CardTitle className="text-xs flex items-center gap-1">
           <ClipboardCheck className="w-3 h-3" />
-          Tabulação
+          Tabulações
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 pt-1 space-y-2">

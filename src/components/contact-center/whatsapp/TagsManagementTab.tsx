@@ -41,7 +41,7 @@ const TagsManagementTab = () => {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Tag className="w-5 h-5" /> Etiquetas de Tabulação
+          <Tag className="w-5 h-5" /> Tabulações
         </h2>
         <Button
           variant="outline"
@@ -56,7 +56,7 @@ const TagsManagementTab = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">
-            Tabulações de WhatsApp (somente leitura)
+            Tabulações (somente leitura)
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
