@@ -1,93 +1,88 @@
 
 
-## Polimento de UX — 3 melhorias aprovadas + extras encontradas
+## Validação Fase 1 + Plano Fase 2
 
-### Bloco 1 — As 3 melhorias já aprovadas
+### Parte A — Validação dos 3 fluxos aplicados (leitura de código)
 
-**1.1 Suprimir toasts intermediários no auto-CEP inline**
-`InlineEditableField.tsx` + `ClientDetailHeader.tsx`:
-- Adicionar prop `silent?: boolean` no `updateSingleField`.
-- Quando o `onCepResolved` dispara os 4 updates paralelos, passar `silent: true` em todos.
-- Mostrar 1 único toast final: "Endereço preenchido automaticamente".
-- Manter toast de erro normal se algum update falhar.
+Vou auditar os 3 fluxos da Fase 1 lendo os arquivos alterados, sem usar browser. Relatório por fluxo:
 
-**1.2 Overlay amigável no AgreementCalculator durante enriquecimento**
-`AgreementCalculator.tsx`:
-- Trocar texto técnico "Buscando endereço no MaxSystem..." por overlay com `Loader2` + "Validando dados do cliente...".
-- Desabilitar botão Formalizar com estado visual claro (`disabled` + opacity) enquanto `enriching === true`.
-- Garantir que duplo-clique no botão não dispare 2 fluxos (guard com `isSubmitting`).
+**Fluxo 1 — Auto-CEP inline (1.1 + 1.3)**
+Arquivos: `InlineEditableField.tsx`, `ClientDetailHeader.tsx`
+- Confirmar que `silent: true` está propagado nos 4 updates paralelos do `onCepResolved`.
+- Confirmar que apenas 1 toast final ("Endereço preenchido") é exibido.
+- Confirmar que o `setDraft(next)` é aplicado antes do `await onSave` (optimistic) e que há rollback no catch.
+- Confirmar que o `lastLookupRef` previne re-execução em re-render.
 
-**1.3 Optimistic update na edição inline**
-`InlineEditableField.tsx`:
-- Aplicar `setDraft(next)` e fechar edição imediatamente após o usuário confirmar (Enter/✓).
-- Se `onSave` rejeitar, reverter visualmente para o valor anterior + toast de erro.
-- Sensação de salvamento instantâneo, mesmo em conexão lenta.
+**Fluxo 2 — Overlay no AgreementCalculator (1.2)**
+Arquivo: `AgreementCalculator.tsx`
+- Confirmar overlay com `Loader2` + texto amigável durante `enriching`.
+- Confirmar `disabled` + opacity no botão Formalizar/Gravar.
+- Confirmar guard contra duplo-clique (`isSubmitting || enriching`).
+- Confirmar recheck via `checkRequiredFields()` após enrich.
 
----
+**Fluxo 3 — Persistência + feedback (2.6, 2.7, 2.8)**
+Arquivos: `CarteiraPage.tsx`, `ClientDetailPage.tsx`, `CopyButton.tsx`, `ClientSignature.tsx`, `useSessionStorage.ts`
+- Confirmar que filtros da Carteira são salvos em `sessionStorage` e restaurados ao voltar.
+- Confirmar skeleton no `ClientDetailPage` enquanto carrega.
+- Confirmar que `CopyButton` troca ícone para ✓ por 1.5s e dá toast.
+- Confirmar uso do `CopyButton` em pelo menos 2 lugares (assinatura, links de boleto).
 
-### Bloco 2 — Melhorias extras encontradas durante a revisão
-
-**2.1 Atalhos de teclado no perfil do cliente**
-- `Esc` para fechar diálogos abertos (já funciona em alguns, padronizar).
-- `Ctrl/Cmd+S` no diálogo "Editar Dados" para salvar sem precisar clicar.
-- `Tab` ordenado nos campos de endereço (CEP → número → complemento → bairro).
-
-**2.2 Indicador visual de campo "vindo do MaxSystem"**
-Quando o auto-fill preencher endereço, mostrar por 3 segundos um destaque sutil (border verde fade-out) nos 4 campos preenchidos. Reforça a percepção de que o sistema "trabalhou" pelo operador.
-
-**2.3 Botão "Buscar no MaxSystem" manual no diálogo Editar Dados**
-Hoje o operador depende do auto-trigger ao chegar a 8 dígitos. Adicionar um botão pequeno ao lado do CEP "🔍 Buscar dados" que força o lookup mesmo se o CEP já estiver salvo. Útil quando o cadastro está incompleto mas o CEP existe.
-
-**2.4 Confirmação visual antes de formalizar acordo de alto valor**
-`AgreementCalculator.tsx`: para acordos acima de R$ 10.000 ou com mais de 12 parcelas, mostrar um diálogo de confirmação com resumo (valor total, parcelas, descontos aplicados). Evita formalização acidental.
-
-**2.5 Preservar rascunho do AgreementCalculator**
-Se o operador fechar o diálogo de acordo sem formalizar, salvar os valores em `sessionStorage` por 30 minutos. Ao reabrir, oferecer "Restaurar rascunho?". Reduz frustração quando o operador é interrompido.
-
-**2.6 Loading skeleton no ClientDetail**
-Hoje, ao abrir um cliente, aparece tela em branco até o fetch terminar. Trocar por skeleton com a estrutura do header + abas. Sensação de carregamento muito mais rápida.
-
-**2.7 Feedback de copiar no clipboard**
-Vários botões de copiar (CPF, telefone, link de boleto) não dão feedback claro. Adicionar microanimação (ícone troca para ✓ por 1.5s) + toast curto.
-
-**2.8 Persistência de filtros da Carteira**
-Hoje, ao navegar para o perfil de um cliente e voltar, os filtros da carteira se perdem. Salvar em `sessionStorage` os filtros ativos por sessão.
+**Entregável da validação:** relatório curto por fluxo — ✅ implementado / ⚠️ divergência (com linha) / ❌ faltando. Se houver divergência, ajusto antes de iniciar a Fase 2.
 
 ---
 
-### Recomendação de priorização
+### Parte B — Fase 2: Validação obrigatória de acordo
 
-**Fazer agora (alto impacto, baixo esforço):**
-- 1.1, 1.2, 1.3 (aprovadas)
-- 2.6 (skeleton — sensação imediata de velocidade)
-- 2.7 (feedback de cópia — 1 hora de trabalho)
-- 2.8 (preservar filtros — operadores reclamam disso constantemente)
+Você pediu confirmação **sempre** antes de formalizar acordo, independente de valor ou parcelas. Isso substitui a ideia original do item 2.4 (que tinha limite de R$10.000 / 12 parcelas) por uma regra universal.
 
-**Fazer depois (médio esforço):**
-- 2.2 (destaque visual auto-fill)
-- 2.3 (botão buscar manual)
-- 2.5 (rascunho do acordo)
+**Comportamento proposto:**
 
-**Avaliar com você antes:**
-- 2.1 (atalhos — pode conflitar com atalhos do navegador)
-- 2.4 (confirmação alto valor — define os limites)
+1. Operador clica em "GRAVAR ACORDO" no `AgreementCalculator`.
+2. Antes de qualquer escrita no banco, abre um `AlertDialog` com resumo:
+   - Nome do cliente + CPF
+   - Credor
+   - Valor original vs. valor proposto
+   - Desconto aplicado (% e R$)
+   - Quantidade de parcelas
+   - Valor da entrada (se houver)
+   - Valor de cada parcela
+   - Data do primeiro vencimento
+   - Forma de pagamento
+3. Dois botões:
+   - **"Cancelar"** → fecha o diálogo, mantém formulário aberto.
+   - **"Confirmar e Formalizar"** → procede com o fluxo atual (enrich, criar acordo, gerar boletos).
+4. O diálogo é bloqueante (não permite fechar clicando fora) — exige decisão consciente.
+5. Acessibilidade: foco inicial no botão Cancelar (mais seguro).
 
-### Arquivos que serão alterados (se aprovar tudo da prioridade alta)
+**Onde encaixar no fluxo atual:**
+- Hoje `handleSubmit` faz: validar → enrich → criar acordo → gerar boletos.
+- Novo fluxo: validar → **abrir diálogo de confirmação** → (se confirmado) enrich → criar acordo → gerar boletos.
+- Se faltar campo obrigatório, manter o diálogo `missingFieldsOpen` atual antes do diálogo de confirmação.
 
-- `src/components/client-detail/InlineEditableField.tsx`
-- `src/components/client-detail/ClientDetailHeader.tsx`
-- `src/components/client-detail/AgreementCalculator.tsx`
-- `src/pages/ClientDetailPage.tsx` (skeleton)
-- `src/pages/CarteiraPage.tsx` (sessionStorage de filtros)
-- Componentes com botão de copiar (busca por `navigator.clipboard`)
+**Edge cases:**
+- Se já existir confirmação em andamento, ignorar cliques adicionais.
+- Se o operador cancelar, o estado do formulário permanece intacto (já compatível com a melhoria 2.5 de rascunho, se aplicarmos depois).
 
-### Fora de escopo
+**Visual:**
+- Usar `AlertDialog` do shadcn (já existe em `src/components/ui/alert-dialog.tsx`).
+- Resumo em cards/grid 2 colunas com labels destacados.
+- Valores monetários em destaque (font-semibold + cor primária).
+- Aviso curto no rodapé: "Esta ação não pode ser desfeita automaticamente."
 
-- Refatoração do sistema de cache TanStack.
-- Mudar fluxo de autenticação ou permissões.
-- Mexer em score, WhatsApp, discador ou Edge Functions de integração.
+### Arquivos que serão alterados na Fase 2
 
-### Próximo passo
+- `src/components/client-detail/AgreementCalculator.tsx` — adicionar estado `confirmOpen`, abrir diálogo antes de processar, mover lógica atual de `handleSubmit` para `handleConfirmedSubmit`.
 
-Me confirme quais blocos aplicar. Sugiro: **prioridade alta inteira (1.1+1.2+1.3+2.6+2.7+2.8)** numa rodada só, e o restante em outra conversa após você validar.
+### Fora de escopo (Fase 2)
+
+- Não mexer em score, WhatsApp, discador, Edge Functions de integração.
+- Não alterar a lógica de cálculo de desconto/parcelas.
+- Não tocar no `AgreementForm.tsx` (formulário antigo da página de Acordos) — escopo é apenas a formalização dentro do perfil do cliente.
+
+### Sequência de execução
+
+1. Rodar a validação da Parte A e reportar resultado.
+2. Se houver divergência, corrigir.
+3. Implementar a Parte B (validação obrigatória).
+4. Pedir teste end-to-end de uma formalização real.
 
