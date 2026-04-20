@@ -199,27 +199,37 @@ Deno.serve(async (req) => {
       .eq("cpf", cleanCpf)
       .maybeSingle();
 
-    // Fallback: try from clients table
-    let clientData: any = clientProfile || {};
-    const fallbackFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"];
+    // Fallback: consolidate from ALL clients rows of this CPF (not just .limit(1)).
+    // A single CPF may have multiple parcelas, and address data can be split
+    // across rows (some empty, others filled). We pick the first non-empty
+    // value for each field, mirroring the consolidation logic in the frontend.
+    let clientData: any = { ...(clientProfile || {}) };
+    const fallbackFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf", "nome_completo"];
     const needsFallback = fallbackFields.some(f => !String(clientData[f] || "").trim());
     if (needsFallback) {
-      const { data: clientRow } = await supabaseAdmin
+      const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      const { data: clientRows } = await supabaseAdmin
         .from("clients")
         .select("email, phone, cep, endereco, bairro, cidade, uf, nome_completo")
         .eq("tenant_id", agreement.tenant_id)
-        .or(`cpf.eq.${cleanCpf},cpf.eq.${cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}`)
-        .limit(1)
-        .maybeSingle();
-      if (clientRow) {
-        for (const f of ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf", "nome_completo"]) {
-          if (!String(clientData[f] || "").trim() && (clientRow as any)[f]) clientData[f] = (clientRow as any)[f];
+        .or(`cpf.eq.${cleanCpf},cpf.eq.${formattedCpf}`);
+      if (Array.isArray(clientRows) && clientRows.length > 0) {
+        for (const f of fallbackFields) {
+          if (String(clientData[f] || "").trim()) continue;
+          for (const row of clientRows) {
+            const v = (row as any)[f];
+            if (v && String(v).trim()) {
+              clientData[f] = String(v).trim();
+              break;
+            }
+          }
         }
       }
     }
 
-    // Check required fields
-    const requiredFields = ["email", "phone", "cep", "endereco", "cidade", "uf"];
+    // Check required fields — bairro is now required to match Negociarie payload
+    // and the AgreementCalculator pre-flight validation.
+    const requiredFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"];
     const missingFields = requiredFields.filter(f => !String(clientData[f] || "").trim());
 
     if (missingFields.length > 0) {

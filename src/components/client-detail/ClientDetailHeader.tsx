@@ -269,7 +269,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       }
     },
     onSuccess: () => {
+      // Invalidate BOTH the legacy "clients" lists AND the client-detail page query
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail"] });
       toast.success("Dados do devedor atualizados!");
       setEditOpen(false);
     },
@@ -304,7 +306,10 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           await upsertClientProfile(tenant.id, cleanCpfVal, { [PROFILE_FIELD_MAP[field]]: value || "" } as any, "manual_inline");
         }
       }
-      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["clients"] }),
+        queryClient.invalidateQueries({ queryKey: ["client-detail"] }),
+      ]);
       toast.success("Campo atualizado");
     } catch (e: any) {
       toast.error(e?.message || "Erro ao atualizar campo");
