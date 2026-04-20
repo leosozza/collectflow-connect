@@ -179,8 +179,8 @@ export function stripWhatsAppMarkers(text: string | null | undefined): string {
   return text
     .replace(/```([\s\S]*?)```/g, "$1")
     .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/(^|[\s(\[{<'"])\*([^*\n]+?)\*(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
-    .replace(/(^|[\s(\[{<'"])_([^_\n]+?)_(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
-    .replace(/(^|[\s(\[{<'"])~([^~\n]+?)~(?=$|[\s.,!?;:)\]}>'"])/g, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])\*([^*\n]+?)\*(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])_([^_\n]+?)_(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
+    .replace(/(^|[^\p{L}\p{N}_])~([^~\n]+?)~(?=$|[^\p{L}\p{N}_])/gu, "$1$2")
     .replace(/^>\s?/gm, "");
 }
