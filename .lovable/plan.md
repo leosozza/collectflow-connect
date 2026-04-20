@@ -1,73 +1,82 @@
 
 
-## Substituir filtro "Com IA / Com Humano" por filtro de Tabulação
+## Refinamentos UX Premium do WhatsApp
 
-### Diagnóstico
+Plano dividido em 6 melhorias independentes sobre o módulo `src/components/contact-center/whatsapp/`.
 
-Em `ConversationList.tsx` (linhas 326-336) existe o `Select` "Atendente" com opções **Todos / Com IA / Com Humano**, controlado por `handlerFilter` e propagado server-side via `get_visible_conversations` (`_handler_filter`) e via query direta de admin em `conversationService.ts`.
+### 1. Infinite Scroll reverso no histórico
 
-As tabulações (dispositions) de WhatsApp já existem na tabela `conversation_disposition_assignments` (FK para `disposition_types`, channel=`whatsapp`) e já são carregadas no `WhatsAppChatLayout` (`dispositionTypes` e `dispositionAssignments`) e exibidas no header do chat. Hoje **não há filtro** por tabulação na lista.
+**`ChatPanel.tsx`**
+- Remover o botão "Carregar mensagens anteriores".
+- Adicionar `onScroll` no viewport do `ScrollArea` (`[data-radix-scroll-area-viewport]`):
+  - Quando `scrollTop < 80px` && `hasMoreOlder` && `!loadingOlder` → disparar `onLoadOlder()`.
+  - Debounce simples via flag local (`isFetchingRef`) para não chamar várias vezes durante o mesmo scroll.
+- Preservar a posição: antes da chamada, salvar `prevHeight = viewport.scrollHeight` e `prevTop = viewport.scrollTop`. Após `messages` mudar (via `useLayoutEffect` com dependência `messages.length`), aplicar `viewport.scrollTop = viewport.scrollHeight - prevHeight + prevTop`. Manter o ajuste já existente.
+- **Skeleton**: enquanto `loadingOlder === true`, renderizar no topo da lista 3 `<Skeleton>` em formato de bolha (alternando esquerda/direita, `h-12 w-2/3 rounded-2xl`) dentro de um wrapper `animate-fade-in`.
 
-### Mudanças
+### 2. SLA Visual
 
-#### 1. Banco — adicionar suporte server-side ao filtro
+**`ConversationList.tsx`**
+- Criar helper `getSlaColor(conv)` baseado em `conv.last_message_at` + janela de 24h da política WhatsApp já usada no projeto (consultar lógica existente em `WhatsAppChatLayout` ou no badge de SLA do `ChatPanel`):
+  - `> 4h` restante → `ring-green-500`
+  - `1h–4h` → `ring-orange-500`
+  - `< 1h` → `ring-red-500 animate-pulse`
+- Aplicar como `ring-2 ring-offset-1` no `Avatar` da conversa quando status for `open` ou `waiting` (não aplicar em `closed`).
 
-Migração: alterar a função `get_visible_conversations` para receber novo parâmetro `_disposition_filter uuid DEFAULT NULL`. Adicionar no bloco `filtered`:
+**`ChatPanel.tsx`**
+- No badge SLA já existente no header, adicionar classe condicional `animate-pulse` quando tempo restante `< 1h`.
 
-```sql
-AND (
-  _disposition_filter IS NULL
-  OR EXISTS (
-    SELECT 1 FROM public.conversation_disposition_assignments cda
-    WHERE cda.conversation_id = v.conv_id
-      AND cda.disposition_type_id = _disposition_filter
-  )
-)
-```
+### 3. Triage Mode — tags/tabulação visíveis em `waiting`
 
-Sem alterações em RLS (a tabela já é acessada via SECURITY DEFINER da RPC).
+**`ConversationList.tsx`**
+- Hoje conversas em `waiting` têm prévia/última mensagem borrada (`blur-sm` ou similar). Garantir que o container de tags/disposições renderizado no item NÃO receba a classe de blur — extrair para um nó irmão fora do wrapper borrado.
 
-#### 2. `src/services/conversationService.ts`
+**`ChatPanel.tsx` (header)**
+- Quando `status === "waiting"`, manter o bloco de tags + disposições renderizado no header com opacidade total (sem blur), ainda que o corpo das mensagens fique bloqueado pela tela de "Aceitar conversa".
 
-- Em `ConversationFilters`: remover `handlerFilter`, adicionar `dispositionFilter?: string`.
-- No path RPC (não-admin): remover `_handler_filter` da chamada e passar `_disposition_filter`.
-- No path admin (query direta): remover bloco `if (filters.handlerFilter === ...)` e adicionar:
-  ```ts
-  if (filters.dispositionFilter && filters.dispositionFilter !== "all") {
-    const { data: ids } = await supabase
-      .from("conversation_disposition_assignments")
-      .select("conversation_id")
-      .eq("disposition_type_id", filters.dispositionFilter);
-    const convIds = (ids || []).map((r: any) => r.conversation_id);
-    if (convIds.length === 0) return { data: [], count: 0 };
-    query = query.in("id", convIds);
-  }
-  ```
+### 4. Proteção de conversas fechadas
 
-#### 3. `src/components/contact-center/whatsapp/ConversationList.tsx`
+**`ChatInput.tsx`**
+- Receber nova prop `conversationStatus?: "open" | "waiting" | "closed"` (passar do `ChatPanel`/`WhatsAppChatLayout`).
+- Quando `conversationStatus === "closed"` && `text.length > 0`:
+  - Renderizar acima do textarea um aviso sutil (bg `amber-50 dark:amber-950/30`, ícone `AlertTriangle`, texto: "Você está respondendo a uma conversa fechada. Isso irá reabri-la automaticamente.").
+  - Trocar a cor do botão Send para `bg-amber-500 hover:bg-amber-600` (sobrescreve o `bg-primary`).
+- Sem mudança de comportamento de envio — a reabertura já acontece no backend/realtime quando uma nova mensagem outbound entra.
 
-- Remover `handlerFilter` state e o `<Select>` "Atendente" (linhas 192, 207, 326-336) e o ícone `Bot` do import se não for mais usado em outro lugar.
-- Adicionar `dispositionFilter` state (default `"all"`) e novo `<Select>` no mesmo lugar, ocupando `flex-1`:
-  - Trigger com ícone `Tag` e placeholder "Tabulação".
-  - Itens: `"Todas as tabulações"` + `dispositionTypes.map(dt => <SelectItem value={dt.id}>` exibindo bolinha colorida (`backgroundColor: dt.color`) + `dt.label`.
-  - Só renderizar se `dispositionTypes.length > 0`.
-- O `Select` "Etiqueta" atual (`tagFilter`, linhas 337-355) é cliente-only e ficou pouco usado. **Mantemos o filtro de Etiqueta como está** (não foi pedido remover) — posicionado ao lado do novo filtro de Tabulação.
-  - Observação: se a fila ficar apertada visualmente em larguras menores, podemos esconder Etiqueta quando `tags.length === 0` (já é o caso hoje).
-- Atualizar `useEffect` para enviar `dispositionFilter` em vez de `handlerFilter` no `onFiltersChange`.
+### 5. Typing Indicator (Cliente digitando)
 
-#### 4. Sem mudanças
+**Backend (Supabase Realtime — Presence/Broadcast, sem persistência)**
+- Usar canal Supabase **Broadcast** por conversa: `whatsapp-typing-{conversation_id}`.
+- O webhook de ingestão da Gupshup/Evolution (quando o provedor envia evento `composing`/`typing`) fará `supabase.channel(...).send({ type: 'broadcast', event: 'typing', payload: { conversation_id, until: now+5s } })`.
+  - **Importante:** verificar se os webhooks atuais (`gupshup-webhook`, `evolution-webhook`) já recebem evento de typing dos provedores. Se não receberem, **pular esta sub-feature** e marcar como "depende de provedor". Confirmar com leitura das edge functions antes de implementar — se ausente, o typing fica para uma próxima iteração.
+- Frontend:
+  - Hook `useTypingIndicator(conversationId)` que retorna `boolean` (true por 5s após receber evento, auto-reset).
+  - Subscrição feita no `WhatsAppChatLayout` para a conversa selecionada (header) e, na lista, subscrição em todas conversas visíveis seria custosa → **manter typing apenas no header do `ChatPanel`** e **não** na lista (decisão de performance).
+  
+**`ChatPanel.tsx` (header)**
+- Quando `isTyping === true`, abaixo do nome do cliente, mostrar componente `TypingDots` (três bolinhas animadas via Tailwind: `animate-bounce` com delays escalonados 0/150/300ms) + texto "digitando…".
 
-- `WhatsAppChatLayout.tsx`: já passa `dispositionTypes` e `dispositionAssignments` para `ConversationList`. Nada a alterar além do tipo de filtros (já é `ConversationFilters`).
-- `ChatPanel.tsx`: nada.
-- Edge functions, realtime, schema das tabelas (apenas a função RPC é recriada).
+### 6. Filtro de Tabulação colorido
+
+**`ConversationList.tsx`**
+- No `SelectTrigger` do filtro de tabulação:
+  - Quando `dispositionFilter !== "all"`, calcular `selectedDisp = dispositionTypes.find(d => d.id === dispositionFilter)`.
+  - Aplicar `style={{ color: selectedDisp.color }}` no ícone `Tag`.
+  - Manter texto do label normal (legibilidade).
+
+### Sem mudanças
+
+- Schema, RLS, RPCs (exceto possível ajuste de webhook se typing for viável — analisar antes).
+- Lógica de fechamento/reabertura de conversa (já está no fluxo de envio).
+- Estilos globais.
 
 ### Validação
 
-1. Lista de conversas: o seletor "Atendente / Com IA / Com Humano" não aparece mais.
-2. No mesmo lugar aparece "Tabulação" listando todas as tabulações de WhatsApp ativas do tenant, com bolinha colorida.
-3. Selecionar uma tabulação → lista filtra apenas conversas que possuem aquela tabulação atribuída (validar com paginação infinita: rolar até o fim e confirmar contagem coerente).
-4. Selecionar "Todas as tabulações" → volta a lista completa.
-5. Combinação com outros filtros (status, instância, busca, não lidas) continua funcionando.
-6. Operador comum: filtro respeita visibilidade (só vê conversas que ele já enxergaria sem filtro).
-7. Tenant sem nenhuma tabulação WhatsApp cadastrada: o seletor não é renderizado (sem ocupar espaço inútil).
+1. Abrir conversa com >200 mensagens, rolar para o topo → carga automática + skeletons no topo, scroll permanece "ancorado" sem pulo.
+2. Lista: avatares com aros verde/laranja/vermelho conforme tempo desde última mensagem; aros vermelhos pulsam.
+3. Header de conversa com SLA < 1h: badge pulsa.
+4. Conversa em "waiting": tags e tabulação visíveis e nítidas (sem blur), tanto na lista quanto no header.
+5. Conversa fechada: digitar → alerta âmbar aparece e botão fica âmbar; ao enviar, conversa reabre.
+6. Typing: provedor envia evento `composing` → header mostra "digitando…" com 3 pontos animados; some após 5s sem novo evento. Se provedor não enviar, sub-feature documentada como pendente.
+7. Filtro de tabulação: selecionar uma → ícone Tag fica na cor da tabulação; voltar para "Todas" → ícone volta ao normal.
 
