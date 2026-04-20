@@ -591,6 +591,17 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     type="cep"
                     maxLength={10}
                     placeholder="00000-000"
+                    onCepResolved={async (data) => {
+                      const updates: Promise<void>[] = [];
+                      if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro));
+                      if (data.bairro) updates.push(updateSingleField("bairro", data.bairro));
+                      if (data.localidade) updates.push(updateSingleField("cidade", data.localidade));
+                      if (data.uf) updates.push(updateSingleField("uf", data.uf));
+                      await Promise.all(updates);
+                      toast.success("Endereço preenchido", {
+                        description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
+                      });
+                    }}
                   />
                 </div>
               </div>
@@ -674,7 +685,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 <Input
                   id="cep"
                   value={editForm.cep}
-                  onChange={e => setEditForm(f => ({ ...f, cep: e.target.value }))}
+                  onChange={e => {
+                    const masked = formatCEP(e.target.value);
+                    setEditForm(f => ({ ...f, cep: masked }));
+                    if (masked.replace(/\D/g, "").length === 8) {
+                      runCepLookup(masked);
+                    }
+                  }}
                   onBlur={handleCepBlur}
                   placeholder="00000-000"
                   maxLength={10}
