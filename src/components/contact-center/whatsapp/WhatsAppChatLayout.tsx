@@ -527,7 +527,12 @@ const WhatsAppChatLayout = () => {
             return [...prev, newMsg];
           });
           if (newMsg.direction === "inbound") {
-            markConversationRead(selectedConv.id).catch(console.error);
+            const currentUserId = profile?.user_id || profile?.id;
+            const isResponsibleOperator =
+              !!selectedConv.assigned_to && !!currentUserId && selectedConv.assigned_to === currentUserId;
+            if (isResponsibleOperator) {
+              markConversationRead(selectedConv.id).catch(console.error);
+            }
           }
         }
       )
