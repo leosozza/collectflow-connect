@@ -237,19 +237,21 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       };
 
       const clientIds = clients.map(c => c.id);
-      for (const id of clientIds) {
-        const { error } = await supabase.from("clients").update(sharedData as any).eq("id", id);
+      if (clientIds.length > 0) {
+        const { error } = await supabase.from("clients").update(sharedData as any).in("id", clientIds);
         if (error) throw error;
       }
 
       // Campos com constraint unique: atualizar apenas no registro principal
-      const { error: uniqueError } = await supabase.from("clients").update({
-        cod_contrato: data.cod_contrato || null,
-        external_id: data.external_id || null,
-      } as any).eq("id", clientIds[0]);
-      if (uniqueError) throw uniqueError;
+      if (clientIds[0]) {
+        const { error: uniqueError } = await supabase.from("clients").update({
+          cod_contrato: data.cod_contrato || null,
+          external_id: data.external_id || null,
+        } as any).eq("id", clientIds[0]);
+        if (uniqueError) throw uniqueError;
+      }
 
-      // Sync to canonical client_profiles
+      // Sync to canonical client_profiles (includes bairro)
       if (tenant?.id) {
         const cleanCpfVal = cpf?.replace(/\D/g, "") || "";
         if (cleanCpfVal) {
@@ -269,9 +271,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
       }
     },
     onSuccess: () => {
-      // Invalidate BOTH the legacy "clients" lists AND the client-detail page query
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      // Invalidate client-detail (active) and mark "clients" stale without refetching massive lists
       queryClient.invalidateQueries({ queryKey: ["client-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"], refetchType: "none" });
       toast.success("Dados do devedor atualizados!");
       setEditOpen(false);
     },
@@ -294,9 +296,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
 
     try {
       const clientIds = clients.map(c => c.id);
-      const targetIds = SHARED_FIELDS.has(field) ? clientIds : [clientIds[0]];
-      for (const id of targetIds) {
-        const { error } = await supabase.from("clients").update({ [field]: value } as any).eq("id", id);
+      const targetIds = SHARED_FIELDS.has(field) ? clientIds : [clientIds[0]].filter(Boolean);
+      if (targetIds.length > 0) {
+        const { error } = await supabase.from("clients").update({ [field]: value } as any).in("id", targetIds);
         if (error) throw error;
       }
       // Sync profile if applicable
@@ -306,10 +308,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           await upsertClientProfile(tenant.id, cleanCpfVal, { [PROFILE_FIELD_MAP[field]]: value || "" } as any, "manual_inline");
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["clients"] }),
-        queryClient.invalidateQueries({ queryKey: ["client-detail"] }),
-      ]);
+      // Refetch the active profile, mark "clients" stale without immediate refetch (avoids freezing huge lists)
+      await queryClient.invalidateQueries({ queryKey: ["client-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"], refetchType: "none" });
       toast.success("Campo atualizado");
     } catch (e: any) {
       toast.error(e?.message || "Erro ao atualizar campo");
@@ -596,7 +597,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     type="cep"
                     maxLength={10}
                     placeholder="00000-000"
-                    onCepResolved={async (data) => {
+                    onCepResolved={useCallback(async (data: any) => {
                       const updates: Promise<void>[] = [];
                       if (data.logradouro) updates.push(updateSingleField("endereco", data.logradouro));
                       if (data.bairro) updates.push(updateSingleField("bairro", data.bairro));
@@ -606,7 +607,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                       toast.success("Endereço preenchido", {
                         description: "Rua, bairro, cidade e UF atualizados pelo CEP.",
                       });
-                    }}
+                    }, [clients, tenant?.id, cpf])}
                   />
                 </div>
               </div>

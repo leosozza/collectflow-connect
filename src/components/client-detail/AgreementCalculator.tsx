@@ -473,6 +473,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           setEnrichingAddress(true);
           setAddressStatus("Buscando endereço no MaxSystem...");
           await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
+          setAddressStatus("");
+          setEnrichingAddress(false);
+          // Re-check: if still missing, open the dialog instead of falling into boleto_pendente
+          const post = await checkRequiredFields();
+          if (Object.keys(post.missing).length > 0) {
+            setMissingFields(post.missing);
+            setMissingFieldsOpen(true);
+            setSubmitting(false);
+            return;
+          }
         }
       } catch (enrichErr) {
         console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);

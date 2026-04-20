@@ -35,21 +35,31 @@ const InlineEditableField = ({
   const [cepLoading, setCepLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastLookupRef = useRef<string>("");
+  const onCepResolvedRef = useRef(onCepResolved);
 
   useEffect(() => {
-    if (!editing) setDraft(value ?? "");
+    onCepResolvedRef.current = onCepResolved;
+  }, [onCepResolved]);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(value ?? "");
+      // Reset lookup guard when exiting edit mode so reopening allows a fresh lookup
+      lastLookupRef.current = "";
+    }
   }, [value, editing]);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  // Auto-lookup CEP when 8 digits are typed
+  // Auto-lookup CEP when 8 digits are typed (callback ref-based to avoid re-runs from parent re-renders)
   useEffect(() => {
     if (type !== "cep" || !editing) return;
     const digits = draft.replace(/\D/g, "");
     if (digits.length !== 8) return;
     if (lastLookupRef.current === digits) return;
+    // Mark as resolved BEFORE async work to fully block any re-entry
     lastLookupRef.current = digits;
 
     let cancelled = false;
@@ -59,11 +69,13 @@ const InlineEditableField = ({
         const res = await lookupCepDetailed(digits);
         if (cancelled) return;
         if (res.ok) {
-          await onCepResolved?.(res.data);
+          await onCepResolvedRef.current?.(res.data);
         } else {
           const reason = (res as { ok: false; reason: string }).reason;
           if (reason === "not_found") toast.error("CEP não encontrado");
           else if (reason === "network") toast.error("Falha ao consultar CEP");
+          // Allow retry on error
+          lastLookupRef.current = "";
         }
       } finally {
         if (!cancelled) setCepLoading(false);
@@ -74,7 +86,7 @@ const InlineEditableField = ({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [draft, type, editing, onCepResolved]);
+  }, [draft, type, editing]);
 
   const handleSave = async () => {
     if (saving) return;
