@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CraftButton, CraftButtonLabel, CraftButtonIcon } from "@/components/ui/craft-button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -439,32 +440,31 @@ const ClientDetailPage = () => {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="titulos" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Títulos em Aberto</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
-          <TabsTrigger value="acordo" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Acordos</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
-          <TabsTrigger value="historico" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Histórico</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
-          
-          <TabsTrigger value="documentos" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Documentos</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
-          <TabsTrigger value="assinatura" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Assinatura</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
-          <TabsTrigger value="anexos" className="group">
-            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">Anexos</span>
-            <ArrowUpRight className="size-3 stroke-2 ml-1 opacity-0 -translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 group-hover:rotate-45" />
-          </TabsTrigger>
+        <TabsList className="flex-wrap gap-2 bg-transparent p-0 h-auto">
+          {[
+            { value: "titulos", label: "Títulos em Aberto" },
+            { value: "acordo", label: "Acordos" },
+            { value: "historico", label: "Histórico" },
+            { value: "documentos", label: "Documentos" },
+            { value: "assinatura", label: "Assinatura" },
+            { value: "anexos", label: "Anexos" },
+          ].map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              asChild
+            >
+              <CraftButton
+                size="sm"
+                className="data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:border-primary/30"
+              >
+                <CraftButtonLabel>{tab.label}</CraftButtonLabel>
+                <CraftButtonIcon>
+                  <ArrowUpRight className="size-3 stroke-2 transition-transform duration-500 group-hover:rotate-45" />
+                </CraftButtonIcon>
+              </CraftButton>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="titulos">
