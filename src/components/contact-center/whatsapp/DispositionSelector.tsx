@@ -5,6 +5,7 @@ import { ClipboardCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
 
 interface DispositionType {
   id: string;
@@ -17,11 +18,16 @@ interface DispositionType {
 interface DispositionSelectorProps {
   conversationId: string;
   tenantId: string;
+  clientCpf?: string | null;
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
+const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
+const EM_DIA_BLOCKED_TITLE =
+  "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
-const DispositionSelector = ({ conversationId, tenantId }: DispositionSelectorProps) => {
+const DispositionSelector = ({ conversationId, tenantId, clientCpf }: DispositionSelectorProps) => {
+  const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
   const { profile } = useAuth();
   const [dispositions, setDispositions] = useState<DispositionType[]>([]);
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
@@ -60,6 +66,10 @@ const DispositionSelector = ({ conversationId, tenantId }: DispositionSelectorPr
   const isCpcCpe = (d: DispositionType) => CPC_CPE_KEYS.includes(d.key);
 
   const handleToggle = async (disposition: DispositionType) => {
+    if (EM_DIA_KEYS.includes(disposition.key) && hasAgreement && !assignedIds.has(disposition.id)) {
+      toast.error(EM_DIA_BLOCKED_TITLE);
+      return;
+    }
     setLoading(true);
     try {
       const isAssigned = assignedIds.has(disposition.id);
@@ -162,16 +172,18 @@ const DispositionSelector = ({ conversationId, tenantId }: DispositionSelectorPr
             <div className="flex gap-1 flex-wrap">
               {otherDispositions.map((d) => {
                 const active = assignedIds.has(d.id);
+                const blocked = EM_DIA_KEYS.includes(d.key) && hasAgreement && !active;
                 return (
                   <button
                     key={d.id}
-                    disabled={loading}
+                    disabled={loading || blocked}
                     onClick={() => handleToggle(d)}
-                    className="transition-all"
+                    title={blocked ? EM_DIA_BLOCKED_TITLE : undefined}
+                    className={`transition-all ${blocked ? "cursor-not-allowed" : ""}`}
                   >
                     <Badge
                       variant={active ? "default" : "outline"}
-                      className="text-[10px] cursor-pointer hover:opacity-80 transition-all"
+                      className={`text-[10px] hover:opacity-80 transition-all ${blocked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                       style={
                         active
                           ? { backgroundColor: d.color, color: "#fff", borderColor: d.color }

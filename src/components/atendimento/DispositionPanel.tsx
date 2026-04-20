@@ -14,7 +14,11 @@ interface DispositionPanelProps {
   onDisposition: (type: DispositionType, notes?: string, scheduledCallback?: string) => Promise<void>;
   loading?: boolean;
   disabled?: boolean;
+  hasRivoAgreement?: boolean;
 }
+
+const EM_DIA_BLOCKED_MSG =
+  "Esta tabulação é exclusiva para clientes em dia com pagamentos originais (sem acordo no Rivo)";
 
 const DEFAULT_GROUP_MAP: Record<string, string> = {
   voicemail: "resultado",
@@ -24,7 +28,7 @@ const DEFAULT_GROUP_MAP: Record<string, string> = {
   wrong_contact: "contato",
 };
 
-const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanelProps) => {
+const DispositionPanel = ({ onDisposition, loading, disabled, hasRivoAgreement }: DispositionPanelProps) => {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const [selected, setSelected] = useState<string | null>(null);
@@ -54,6 +58,10 @@ const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanel
   }, [dispositionList]);
 
   const handleDisposition = async (type: string) => {
+    if (type === "em_dia" && hasRivoAgreement) {
+      toast.error(EM_DIA_BLOCKED_MSG);
+      return;
+    }
     try {
       setSelected(type);
       await onDisposition(type);
@@ -80,12 +88,15 @@ const DispositionPanel = ({ onDisposition, loading, disabled }: DispositionPanel
 
   const renderChip = (d: { key: string; label: string }) => {
     const isSelected = selected === d.key;
+    const blocked = d.key === "em_dia" && !!hasRivoAgreement;
     return (
       <button
         key={d.key}
-        disabled={loading || disabled}
+        disabled={loading || disabled || blocked}
         onClick={() => handleDisposition(d.key)}
+        title={blocked ? EM_DIA_BLOCKED_MSG : undefined}
         className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all disabled:opacity-50
+          ${blocked ? "opacity-40 cursor-not-allowed" : ""}
           ${isSelected
             ? "border-primary bg-primary/5 text-primary"
             : "bg-card border-border text-foreground hover:bg-muted/50"

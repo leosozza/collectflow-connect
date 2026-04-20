@@ -13,6 +13,7 @@ import { Loader2, ClipboardCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
 
 interface DispositionType {
   id: string;
@@ -31,6 +32,9 @@ interface CloseConversationDialogProps {
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
+const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
+const EM_DIA_BLOCKED_TITLE =
+  "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
 const CloseConversationDialog = ({
   open,
@@ -44,6 +48,8 @@ const CloseConversationDialog = ({
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [clientCpf, setClientCpf] = useState<string | null>(null);
+  const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
 
   const loadDispositions = useCallback(async () => {
     const { data } = await supabase
@@ -70,9 +76,35 @@ const CloseConversationDialog = ({
     loadAssignments();
   }, [open, tenantId, loadDispositions, loadAssignments]);
 
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    supabase
+      .from("conversations")
+      .select("client_id")
+      .eq("id", conversationId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const cid = (data as any)?.client_id;
+        if (!cid) {
+          setClientCpf(null);
+          return;
+        }
+        supabase
+          .from("clients")
+          .select("cpf")
+          .eq("id", cid)
+          .maybeSingle()
+          .then(({ data: c }) => setClientCpf(((c as any)?.cpf as string | undefined) || null));
+      });
+  }, [open, conversationId]);
+
   const isCpcCpe = (d: DispositionType) => CPC_CPE_KEYS.includes(d.key);
 
   const handleToggle = async (d: DispositionType) => {
+    if (EM_DIA_KEYS.includes(d.key) && hasAgreement && !assignedIds.has(d.id)) {
+      toast.error(EM_DIA_BLOCKED_TITLE);
+      return;
+    }
     setLoading(true);
     try {
       const isAssigned = assignedIds.has(d.id);
@@ -183,11 +215,17 @@ const CloseConversationDialog = ({
               <div className="flex gap-1.5 flex-wrap">
                 {others.map((d) => {
                   const active = assignedIds.has(d.id);
+                  const blocked = EM_DIA_KEYS.includes(d.key) && hasAgreement && !active;
                   return (
-                    <button key={d.id} disabled={loading} onClick={() => handleToggle(d)}>
+                    <button
+                      key={d.id}
+                      disabled={loading || blocked}
+                      onClick={() => handleToggle(d)}
+                      title={blocked ? EM_DIA_BLOCKED_TITLE : undefined}
+                    >
                       <Badge
                         variant={active ? "default" : "outline"}
-                        className="text-xs cursor-pointer hover:opacity-80"
+                        className={`text-xs hover:opacity-80 ${blocked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                         style={
                           active
                             ? { backgroundColor: d.color, color: "#fff", borderColor: d.color }

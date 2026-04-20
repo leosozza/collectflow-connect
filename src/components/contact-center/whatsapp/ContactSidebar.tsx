@@ -227,6 +227,19 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
 
     const autoAssign = async () => {
       try {
+        // Block auto-assign of "em_dia" if client already has an agreement in Rivo
+        if (targetKey === "em_dia" && linkedClient?.cpf) {
+          const cpfDigits = linkedClient.cpf.replace(/\D/g, "");
+          const { data: existingAgreement } = await supabase
+            .from("agreements")
+            .select("id")
+            .eq("tenant_id", conversation.tenant_id!)
+            .eq("client_cpf", cpfDigits)
+            .limit(1)
+            .maybeSingle();
+          if (existingAgreement) return;
+        }
+
         const { data: dispType } = await supabase
           .from("call_disposition_types")
           .select("id")
@@ -256,7 +269,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
       }
     };
     autoAssign();
-  }, [conversation?.id, linkedClient?.status_cobranca_id, statusCobranca]);
+  }, [conversation?.id, linkedClient?.status_cobranca_id, linkedClient?.cpf, statusCobranca]);
 
   if (!conversation) return null;
 
@@ -361,6 +374,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
           <DispositionSelector
             conversationId={conversation.id}
             tenantId={conversation.tenant_id || ""}
+            clientCpf={linkedClient?.cpf || null}
           />
         )}
 
