@@ -463,12 +463,23 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
     setSubmitting(true);
     try {
-      // Fire address enrichment in background — must NOT block agreement creation.
-      // If MaxSystem is slow/down, the agreement is still saved. Address (when it
-      // arrives) will be available on the next "checkRequiredFields" run.
-      enrichClientAddress(cpf, profile.tenant_id).catch((err) =>
-        console.warn("[address-enrichment] background failed:", err)
-      );
+      // Pre-flight: ensure address fields exist BEFORE creating the agreement,
+      // so that the automatic boleto generation downstream has what it needs.
+      // If anything is missing (CEP/endereço/bairro/cidade/UF/email/phone),
+      // try MaxSystem enrichment first and wait for the result.
+      try {
+        const pre = await checkRequiredFields();
+        if (Object.keys(pre.missing).length > 0) {
+          setEnrichingAddress(true);
+          setAddressStatus("Buscando endereço no MaxSystem...");
+          await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
+        }
+      } catch (enrichErr) {
+        console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);
+      } finally {
+        setEnrichingAddress(false);
+        setAddressStatus("");
+      }
 
       // Build custom installment maps for multiple entradas
       const customDates: Record<string, string> = {};
