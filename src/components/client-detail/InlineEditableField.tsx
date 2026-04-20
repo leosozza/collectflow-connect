@@ -16,6 +16,8 @@ interface InlineEditableFieldProps {
   placeholder?: string;
   onBlurExtra?: (value: string) => void;
   onCepResolved?: (data: ViaCepResult) => void | Promise<void>;
+  /** Aplica destaque temporário (ring) — usado quando o campo foi auto-preenchido. */
+  highlight?: boolean;
 }
 
 const InlineEditableField = ({
