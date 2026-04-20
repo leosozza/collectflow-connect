@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, StickyNote, Zap, X } from "lucide-react";
+import { Send, Paperclip, StickyNote, Zap, X, AlertTriangle } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
 import AudioRecorder from "./AudioRecorder";
 import { QuickReply, ChatMessage } from "@/services/conversationService";
@@ -29,9 +29,10 @@ interface ChatInputProps {
   operatorName?: string;
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;
+  conversationStatus?: "open" | "waiting" | "closed";
 }
 
-const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled, clientInfo, operatorName, replyTo, onCancelReply }: ChatInputProps) => {
+const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quickReplies = [], disabled, clientInfo, operatorName, replyTo, onCancelReply, conversationStatus }: ChatInputProps) => {
   const [text, setText] = useState("");
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [filteredReplies, setFilteredReplies] = useState<QuickReply[]>([]);
@@ -165,6 +166,16 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
         </div>
       )}
 
+      {/* Reopen-on-send warning when conversation is closed */}
+      {conversationStatus === "closed" && text.trim().length > 0 && !isInternalMode && (
+        <div className="flex items-center gap-2 mb-1.5 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 animate-fade-in">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-[11px] text-amber-700 dark:text-amber-300">
+            Você está respondendo a uma conversa fechada. Isso irá reabri-la automaticamente.
+          </span>
+        </div>
+      )}
+
       {/* Internal note indicator */}
       {isInternalMode && (
         <div className="flex items-center gap-1.5 mb-1.5 px-1">
@@ -258,7 +269,13 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           size="icon"
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className={`shrink-0 rounded-full h-10 w-10 ${isInternalMode ? "bg-yellow-500 hover:bg-yellow-600" : "bg-primary hover:bg-primary/90"}`}
+          className={`shrink-0 rounded-full h-10 w-10 ${
+            isInternalMode
+              ? "bg-yellow-500 hover:bg-yellow-600"
+              : conversationStatus === "closed" && text.trim().length > 0
+              ? "bg-amber-500 hover:bg-amber-600 text-white"
+              : "bg-primary hover:bg-primary/90"
+          }`}
         >
           <Send className="w-4 h-4" />
         </Button>

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw, ChevronUp } from "lucide-react";
+import { Phone, User, PanelRightOpen, PanelRightClose, AlertTriangle, Headphones, Loader2, Clock, UserCheck, ArrowRightLeft, Lock, CheckCircle, RotateCcw } from "lucide-react";
 import TransferConversationDialog from "./TransferConversationDialog";
 import CloseConversationDialog from "./CloseConversationDialog";
 import MultiInstanceAlert from "./MultiInstanceAlert";
@@ -78,9 +79,65 @@ const ChatPanel = ({
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
   const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
 
+  // Track previous scroll metrics for infinite scroll up (preserve position)
+  const prevScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const isFetchingOlderRef = useRef(false);
+  const lastConvIdRef = useRef<string | null>(null);
+  const prevMsgCountRef = useRef(0);
+
+  // Auto-scroll to bottom on new messages (only when not loading older)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const convChanged = lastConvIdRef.current !== (conversation?.id || null);
+    if (convChanged) {
+      lastConvIdRef.current = conversation?.id || null;
+      prevMsgCountRef.current = messages.length;
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      return;
+    }
+    // Only auto-scroll when messages were appended at the bottom (not prepended)
+    const grew = messages.length > prevMsgCountRef.current;
+    const wasOlderLoad = !!prevScrollRef.current;
+    prevMsgCountRef.current = messages.length;
+    if (grew && !wasOlderLoad) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, conversation?.id]);
+
+  // Preserve scroll position after older messages are prepended
+  useLayoutEffect(() => {
+    if (!prevScrollRef.current) return;
+    const root = scrollContainerRef.current as unknown as HTMLElement | null;
+    const node = root?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null;
+    if (!node) {
+      prevScrollRef.current = null;
+      return;
+    }
+    const diff = node.scrollHeight - prevScrollRef.current.height;
+    node.scrollTop = prevScrollRef.current.top + diff;
+    prevScrollRef.current = null;
   }, [messages.length]);
+
+  // Infinite scroll up: detect when user scrolls near top
+  useEffect(() => {
+    const root = scrollContainerRef.current as unknown as HTMLElement | null;
+    const node = root?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null;
+    if (!node || !onLoadOlder) return;
+
+    const onScroll = async () => {
+      if (node.scrollTop < 80 && hasMoreOlder && !loadingOlder && !isFetchingOlderRef.current) {
+        isFetchingOlderRef.current = true;
+        prevScrollRef.current = { height: node.scrollHeight, top: node.scrollTop };
+        try {
+          await onLoadOlder();
+        } finally {
+          isFetchingOlderRef.current = false;
+        }
+      }
+    };
+
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => node.removeEventListener("scroll", onScroll);
+  }, [hasMoreOlder, loadingOlder, onLoadOlder, conversation?.id]);
 
   // SLA countdown timer
   useEffect(() => {
@@ -219,7 +276,7 @@ const ChatPanel = ({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="outline" className={`text-[10px] h-4 gap-0.5 cursor-help ${slaColor} border-current`}>
+                      <Badge variant="outline" className={`text-[10px] h-4 gap-0.5 cursor-help ${slaColor} border-current ${slaRemainingMs < ONE_HOUR ? "animate-pulse" : ""}`}>
                         <Clock className="w-2.5 h-2.5" />
                         {slaRemaining}
                       </Badge>
@@ -396,35 +453,17 @@ const ChatPanel = ({
                 aria-hidden={isLocked}
               >
                 <div className="space-y-[1px]">
-                  {hasMoreOlder && onLoadOlder && (
-                    <div className="flex justify-center py-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={loadingOlder}
-                        onClick={async () => {
-                          const root = scrollContainerRef.current as unknown as HTMLElement | null;
-                          const el = root?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
-                          const prevHeight = el?.scrollHeight ?? 0;
-                          const prevTop = el?.scrollTop ?? 0;
-                          await onLoadOlder();
-                          requestAnimationFrame(() => {
-                            const root2 = scrollContainerRef.current as unknown as HTMLElement | null;
-                            const node = root2?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
-                            if (!node) return;
-                            const diff = node.scrollHeight - prevHeight;
-                            node.scrollTop = prevTop + diff;
-                          });
-                        }}
-                        className="gap-1.5 text-xs bg-card/80 hover:bg-card border border-border"
-                      >
-                        {loadingOlder ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        )}
-                        Carregar mensagens anteriores
-                      </Button>
+                  {loadingOlder && (
+                    <div className="space-y-2 py-3 animate-fade-in">
+                      <div className="flex justify-start">
+                        <Skeleton className="h-12 w-2/3 rounded-2xl" />
+                      </div>
+                      <div className="flex justify-end">
+                        <Skeleton className="h-12 w-1/2 rounded-2xl" />
+                      </div>
+                      <div className="flex justify-start">
+                        <Skeleton className="h-12 w-3/5 rounded-2xl" />
+                      </div>
                     </div>
                   )}
                   {messages.map((msg) => (
@@ -496,6 +535,7 @@ const ChatPanel = ({
         operatorName={operatorName}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        conversationStatus={conversation.status as "open" | "waiting" | "closed"}
       />
 
       {conversation && (
