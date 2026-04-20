@@ -1,67 +1,73 @@
 
 
-## Garantir histórico completo de mensagens (sem perdas ao fechar/reabrir conversa)
+## Substituir filtro "Com IA / Com Humano" por filtro de Tabulação
 
 ### Diagnóstico
 
-**1. Tags/disposições — OK (sem alteração necessária)**
-As tags ficam em `conversation_disposition_assignments` (linha por `conversation_id` + `disposition_type_id`). Fechar/reabrir a conversa não mexe nessa tabela — as tags são recarregadas do banco sempre que a conversa é selecionada. **Não há perda.**
+Em `ConversationList.tsx` (linhas 326-336) existe o `Select` "Atendente" com opções **Todos / Com IA / Com Humano**, controlado por `handlerFilter` e propagado server-side via `get_visible_conversations` (`_handler_filter`) e via query direta de admin em `conversationService.ts`.
 
-**2. Mensagens — risco real de perda visual**
-Em `WhatsAppChatLayout.tsx` (linha 362), a carga é:
-```ts
-fetchMessages(selectedConv.id).then((result) => setMessages(result.data))
+As tabulações (dispositions) de WhatsApp já existem na tabela `conversation_disposition_assignments` (FK para `disposition_types`, channel=`whatsapp`) e já são carregadas no `WhatsAppChatLayout` (`dispositionTypes` e `dispositionAssignments`) e exibidas no header do chat. Hoje **não há filtro** por tabulação na lista.
+
+### Mudanças
+
+#### 1. Banco — adicionar suporte server-side ao filtro
+
+Migração: alterar a função `get_visible_conversations` para receber novo parâmetro `_disposition_filter uuid DEFAULT NULL`. Adicionar no bloco `filtered`:
+
+```sql
+AND (
+  _disposition_filter IS NULL
+  OR EXISTS (
+    SELECT 1 FROM public.conversation_disposition_assignments cda
+    WHERE cda.conversation_id = v.conv_id
+      AND cda.disposition_type_id = _disposition_filter
+  )
+)
 ```
-e `fetchMessages` (em `conversationService.ts` linha 227) tem `pageSize=100` por padrão e **só busca a página 1**. Hoje nenhuma conversa passa de 100 mensagens (verificado no banco), então o sintoma ainda não apareceu — mas qualquer conversa que crescer perderá silenciosamente as mensagens mais antigas (são as que ficam de fora, pois a query ordena `created_at desc` e pega as 100 mais recentes).
 
-Não existe nenhum mecanismo de "carregar mais antigas" no `ChatPanel` (busca por `loadMore/hasMore/onLoadMore` retornou zero ocorrências).
+Sem alterações em RLS (a tabela já é acessada via SECURITY DEFINER da RPC).
 
-Ao fechar e reabrir a conversa, essa mesma carga roda de novo — então não se "perde" nada que já existia, mas também nunca exibe mensagens além das 100 mais recentes.
+#### 2. `src/services/conversationService.ts`
 
-**3. Realtime (linhas 467-491) — OK**
-INSERT/UPDATE em `chat_messages` filtrados por `conversation_id` atualizam o estado corretamente, com dedupe por `id`. Sem perda.
+- Em `ConversationFilters`: remover `handlerFilter`, adicionar `dispositionFilter?: string`.
+- No path RPC (não-admin): remover `_handler_filter` da chamada e passar `_disposition_filter`.
+- No path admin (query direta): remover bloco `if (filters.handlerFilter === ...)` e adicionar:
+  ```ts
+  if (filters.dispositionFilter && filters.dispositionFilter !== "all") {
+    const { data: ids } = await supabase
+      .from("conversation_disposition_assignments")
+      .select("conversation_id")
+      .eq("disposition_type_id", filters.dispositionFilter);
+    const convIds = (ids || []).map((r: any) => r.conversation_id);
+    if (convIds.length === 0) return { data: [], count: 0 };
+    query = query.in("id", convIds);
+  }
+  ```
 
-### Correção
+#### 3. `src/components/contact-center/whatsapp/ConversationList.tsx`
 
-**Aumentar o limite imediato + adicionar carregamento incremental ("carregar mensagens anteriores").**
+- Remover `handlerFilter` state e o `<Select>` "Atendente" (linhas 192, 207, 326-336) e o ícone `Bot` do import se não for mais usado em outro lugar.
+- Adicionar `dispositionFilter` state (default `"all"`) e novo `<Select>` no mesmo lugar, ocupando `flex-1`:
+  - Trigger com ícone `Tag` e placeholder "Tabulação".
+  - Itens: `"Todas as tabulações"` + `dispositionTypes.map(dt => <SelectItem value={dt.id}>` exibindo bolinha colorida (`backgroundColor: dt.color`) + `dt.label`.
+  - Só renderizar se `dispositionTypes.length > 0`.
+- O `Select` "Etiqueta" atual (`tagFilter`, linhas 337-355) é cliente-only e ficou pouco usado. **Mantemos o filtro de Etiqueta como está** (não foi pedido remover) — posicionado ao lado do novo filtro de Tabulação.
+  - Observação: se a fila ficar apertada visualmente em larguras menores, podemos esconder Etiqueta quando `tags.length === 0` (já é o caso hoje).
+- Atualizar `useEffect` para enviar `dispositionFilter` em vez de `handlerFilter` no `onFiltersChange`.
 
-#### `src/services/conversationService.ts`
-- Manter `fetchMessages(conversationId, page, pageSize)` mas subir o default da primeira página de **100 → 200** (cobre 99% dos casos sem necessidade de scroll).
-- Adicionar uma variante `fetchMessagesBefore(conversationId, beforeCreatedAt, pageSize)` que busca mensagens com `created_at < beforeCreatedAt` ordenadas desc, limitadas a `pageSize` (ex.: 100), e retorna `{ data, hasMore }`. Cursor por timestamp evita conflito com mensagens chegando em tempo real.
+#### 4. Sem mudanças
 
-#### `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx`
-- Trocar a chamada da linha 362 para usar a nova versão paginada:
-  - Carga inicial: chamar `fetchMessages(id)` (200 mais recentes) e guardar `oldestLoadedAt = messages[0]?.created_at` + `hasMoreOlder = result.hasMore`.
-  - Expor `loadOlderMessages()` que chama `fetchMessagesBefore(id, oldestLoadedAt, 100)`, faz `setMessages((prev) => [...newOlder, ...prev])` (com dedupe por `id`) e atualiza `oldestLoadedAt` + `hasMoreOlder`.
-- Passar `hasMoreOlder` e `onLoadOlder` como props ao `ChatPanel`.
-
-#### `src/components/contact-center/whatsapp/ChatPanel.tsx`
-- Acima da lista de mensagens (no topo do scroll container), renderizar condicionalmente um botão **"Carregar mensagens anteriores"** (variant `ghost`, ícone `ChevronUp`) quando `hasMoreOlder === true`.
-- Ao clicar:
-  1. Guardar `scrollHeight` antes.
-  2. Chamar `onLoadOlder()`.
-  3. Após render, ajustar `scrollTop` para `novoScrollHeight - scrollHeightAntigo` (mantém o usuário na mesma mensagem visível, sem "pular" para o topo).
-- Sem auto-load por scroll (evita complicação de scroll position e race conditions com realtime). Botão explícito é mais previsível.
-
-### Garantia "fechar → reabrir sem perder nada"
-
-- Fechar a conversa só altera `conversations.status` para `closed` — **não toca em `chat_messages` nem em `conversation_disposition_assignments`**.
-- Reabrir (status volta a `open`) é apenas update da mesma coluna.
-- Ao selecionar a conversa novamente, o `useEffect` da linha 357 roda de novo: recarrega as 200 mensagens mais recentes (do banco — fonte da verdade), recarrega disposições/tags via o `useEffect` da linha 175 (que reexecuta porque `conversations` mudou via realtime), e o realtime continua subscrito.
-- Nenhum estado relevante mora apenas em memória.
+- `WhatsAppChatLayout.tsx`: já passa `dispositionTypes` e `dispositionAssignments` para `ConversationList`. Nada a alterar além do tipo de filtros (já é `ConversationFilters`).
+- `ChatPanel.tsx`: nada.
+- Edge functions, realtime, schema das tabelas (apenas a função RPC é recriada).
 
 ### Validação
 
-1. Abrir conversa com >200 mensagens (criar manualmente se necessário) → ver as 200 mais recentes + botão "Carregar mensagens anteriores" no topo.
-2. Clicar no botão → mensagens antigas aparecem acima sem o scroll pular.
-3. Fechar a conversa (botão ✓) → reabrir (botão ↺) → todas as mensagens visíveis antes continuam acessíveis (200 iniciais + botão para carregar o restante). Tags continuam aplicadas.
-4. Durante carregamento de antigas, receber uma mensagem nova em tempo real → mensagem nova aparece no fim normalmente, sem duplicar nem sumir.
-5. Conversa pequena (<200 mensagens) → botão "Carregar anteriores" não aparece.
-
-### Sem impacto
-
-- Schema, RLS, RPCs, edge functions: nada alterado.
-- Realtime subscriptions intactas.
-- Tags/disposições: comportamento atual preservado (já é robusto).
-- Performance: 200 mensagens iniciais é leve; carga incremental sob demanda.
+1. Lista de conversas: o seletor "Atendente / Com IA / Com Humano" não aparece mais.
+2. No mesmo lugar aparece "Tabulação" listando todas as tabulações de WhatsApp ativas do tenant, com bolinha colorida.
+3. Selecionar uma tabulação → lista filtra apenas conversas que possuem aquela tabulação atribuída (validar com paginação infinita: rolar até o fim e confirmar contagem coerente).
+4. Selecionar "Todas as tabulações" → volta a lista completa.
+5. Combinação com outros filtros (status, instância, busca, não lidas) continua funcionando.
+6. Operador comum: filtro respeita visibilidade (só vê conversas que ele já enxergaria sem filtro).
+7. Tenant sem nenhuma tabulação WhatsApp cadastrada: o seletor não é renderizado (sem ocupar espaço inútil).
 
