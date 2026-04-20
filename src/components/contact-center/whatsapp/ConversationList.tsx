@@ -106,12 +106,26 @@ function getInitials(name: string): string {
 
 const SYSTEM_NAME = "temis connect pay";
 
-function ConversationAvatar({ conv }: { conv: Conversation }) {
+function getSlaRingClass(conv: Conversation, isOfficial: boolean): string {
+  if (!isOfficial) return "";
+  if (conv.status === "closed") return "";
+  const deadline = (conv as any).sla_deadline_at;
+  if (!deadline) return "";
+  const remainingMs = new Date(deadline).getTime() - Date.now();
+  if (remainingMs <= 0) return "ring-2 ring-offset-1 ring-red-500 animate-pulse";
+  const ONE_HOUR = 3600000;
+  const FOUR_HOURS = 4 * ONE_HOUR;
+  if (remainingMs < ONE_HOUR) return "ring-2 ring-offset-1 ring-red-500 animate-pulse";
+  if (remainingMs < FOUR_HOURS) return "ring-2 ring-offset-1 ring-orange-500";
+  return "ring-2 ring-offset-1 ring-green-500";
+}
+
+function ConversationAvatar({ conv, slaRingClass }: { conv: Conversation; slaRingClass: string }) {
   const displayName = conv.client_name || conv.remote_name;
   const isSystemName = displayName?.toLowerCase() === SYSTEM_NAME;
   const isUnlinked = !conv.client_id;
 
-  const borderClass = isUnlinked ? "ring-2 ring-yellow-500" : "";
+  const borderClass = isUnlinked ? "ring-2 ring-yellow-500" : slaRingClass;
 
   if (displayName && !isSystemName) {
     const initials = getInitials(displayName);
@@ -323,25 +337,31 @@ const ConversationList = ({
 
         {/* Row 4: Link + Instance filters */}
         <div className="flex gap-1.5">
-          {dispositionTypes.length > 0 && (
-            <Select value={dispositionFilter} onValueChange={setDispositionFilter}>
-              <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
-                <Tag className="w-3 h-3 mr-1 shrink-0" />
-                <SelectValue placeholder="Tabulações" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tabulações</SelectItem>
-                {dispositionTypes.map((dt) => (
-                  <SelectItem key={dt.id} value={dt.id}>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dt.color }} />
-                      {dt.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          {dispositionTypes.length > 0 && (() => {
+            const selectedDisp = dispositionTypes.find(d => d.id === dispositionFilter);
+            return (
+              <Select value={dispositionFilter} onValueChange={setDispositionFilter}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
+                  <Tag
+                    className="w-3 h-3 mr-1 shrink-0"
+                    style={selectedDisp ? { color: selectedDisp.color } : undefined}
+                  />
+                  <SelectValue placeholder="Tabulações" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tabulações</SelectItem>
+                  {dispositionTypes.map((dt) => (
+                    <SelectItem key={dt.id} value={dt.id}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dt.color }} />
+                        {dt.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })()}
           {tags.length > 0 && (
             <Select value={tagFilter} onValueChange={setTagFilter}>
               <SelectTrigger className="h-7 text-[11px] flex-1 bg-card">
@@ -395,6 +415,9 @@ const ConversationList = ({
         ) : (
           conversations.map((conv) => {
             const displayName = conv.client_name || (conv.remote_name?.toLowerCase() !== SYSTEM_NAME ? conv.remote_name : null) || conv.remote_phone;
+            const inst = instances.find((i) => i.id === conv.instance_id);
+            const isOfficial = inst?.provider_category === "official_meta" || inst?.provider_category === "official";
+            const slaRingClass = getSlaRingClass(conv, !!isOfficial);
             return (
               <ContextMenu key={conv.id}>
                 <ContextMenuTrigger asChild>
@@ -405,7 +428,7 @@ const ConversationList = ({
                     }`}
                   >
                     <div className="flex items-center gap-3 w-full min-w-0">
-                      <ConversationAvatar conv={conv} />
+                      <ConversationAvatar conv={conv} slaRingClass={slaRingClass} />
                       
                       <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
                         {/* Row 1: Name + Unread Badge + Time */}
