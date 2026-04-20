@@ -138,13 +138,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   );
 
   const handleCepBlur = useCallback(async () => {
-    const cleanCep = editForm.cep.replace(/\D/g, "");
-    if (cleanCep.length !== 8) return;
     setFetchingCep(true);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      const data = await res.json();
-      if (!data.erro) {
+      const { lookupCep } = await import("@/lib/viaCep");
+      const data = await lookupCep(editForm.cep);
+      if (data) {
         setEditForm(f => ({
           ...f,
           endereco: data.logradouro || f.endereco,
@@ -153,7 +151,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           uf: data.uf || f.uf,
         }));
       }
-    } catch { /* silently fail */ } finally {
+    } finally {
       setFetchingCep(false);
     }
   }, [editForm.cep]);
