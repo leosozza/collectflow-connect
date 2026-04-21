@@ -155,8 +155,11 @@ async function dispatchRecurring(supabase: any, mother: any) {
     console.log(`[recurring] lost race for ${mother.id}: ${lockErr?.message || "already claimed"}`);
     return;
   }
-  // Use the locked snapshot from here on
-  mother = locked;
+  // Merge the locked snapshot with the original `mother` payload from the initial SELECT *.
+  // PostgREST `.update().select()` returns the full row, but we defensively preserve
+  // any field already present on the pre-lock snapshot to avoid subtle regressions.
+  mother = { ...mother, ...locked };
+  console.log(`[recurring] locked ${mother.id} routing_mode=${mother.routing_mode} weights=${JSON.stringify(mother.instance_weights)}`);
 
   // Check max_runs
   if (rule.max_runs != null && (mother.recurrence_run_count || 0) >= rule.max_runs) {
