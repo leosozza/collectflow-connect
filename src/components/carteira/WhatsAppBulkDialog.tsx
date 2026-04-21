@@ -39,6 +39,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import {
   Loader2,
   MessageSquare,
   Users,
@@ -84,6 +95,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
+  const [confirmStartOpen, setConfirmStartOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState("");
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: templates = [] } = useQuery({
@@ -117,6 +130,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setSending(false);
       setCampaignId(null);
       setProgress(null);
+      setConfirmStartOpen(false);
+      setCampaignName("");
       stopPolling();
     }
   }, [open, stopPolling]);
@@ -217,6 +232,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     return errors;
   };
 
+  const buildDefaultName = () => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    return `Disparo carteira ${hh}:${mm}`;
+  };
+
+  const requestStart = () => {
+    if (!tenant?.id || !user?.id) return;
+    const validationErrors = getValidationErrors();
+    if (validationErrors.length > 0) {
+      validationErrors.forEach((e) => toast.error(e));
+      return;
+    }
+    if (!campaignName.trim()) setCampaignName(buildDefaultName());
+    setConfirmStartOpen(true);
+  };
+
   const handleSend = async () => {
     if (!tenant?.id || !user?.id) return;
 
@@ -227,12 +260,14 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     }
 
     const template = getMessageTemplate();
+    setConfirmStartOpen(false);
     setSending(true);
     setStep(4);
 
     try {
       const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
       const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
+      const finalName = campaignName.trim() || buildDefaultName();
 
       const campaign = await createCampaign({
         tenant_id: tenant.id,
@@ -244,6 +279,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         total_unique_recipients: dedup.recipients.length,
         created_by: user.id,
         provider_category: providerCategory,
+        name: finalName,
       });
 
       setCampaignId(campaign.id);
@@ -613,7 +649,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
               </Button>
             )}
             {step === 3 && (
-              <Button onClick={handleSend} disabled={sending || getValidationErrors().length > 0} className="gap-2">
+              <Button onClick={requestStart} disabled={sending || getValidationErrors().length > 0} className="gap-2">
                 <ShieldCheck className="w-4 h-4" />
                 Criar Campanha e Enviar
               </Button>
@@ -621,6 +657,95 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* W2.1 — Bloqueante: confirmação antes de iniciar disparo */}
+      <AlertDialog
+        open={confirmStartOpen}
+        onOpenChange={(v) => {
+          if (sending) return;
+          setConfirmStartOpen(v);
+        }}
+      >
+        <AlertDialogContent
+          onEscapeKeyDown={(e) => {
+            if (sending) e.preventDefault();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Confirmar disparo em lote
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <div className="space-y-1">
+                  <Label htmlFor="campaign-name" className="text-xs">Nome da campanha</Label>
+                  <Input
+                    id="campaign-name"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    placeholder={buildDefaultName()}
+                    disabled={sending}
+                    className="h-8"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="rounded-md border p-2">
+                    <p className="text-xs text-muted-foreground">Destinatários únicos</p>
+                    <p className="text-lg font-semibold text-foreground">{dedup.recipients.length}</p>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <p className="text-xs text-muted-foreground">Tempo estimado</p>
+                    <p className="text-lg font-semibold text-foreground">
+                      ~{providerCategory === "official_meta"
+                        ? Math.ceil(dedup.recipients.length * 2 / 60 + Math.floor(dedup.recipients.length / 50) * 0.5)
+                        : estimateTimeMinutes(dedup.recipients.length)} min
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-2 space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Modo:{" "}
+                    <span className="font-medium text-foreground">
+                      {providerCategory === "official_meta" ? "Oficial Meta" : "Anti-Ban (Não-Oficial)"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Instâncias selecionadas ({selectedInstanceIds.length}):
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedInstanceIds.map((id) => {
+                      const inst = instances.find((i) => i.id === id);
+                      return (
+                        <Badge key={id} variant="outline" className="text-xs">
+                          {inst?.name || id}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs flex gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Após iniciar, o disparo <strong>não pode ser interrompido</strong> pelo painel.
+                    Mensagens já enviadas <strong>não podem ser revertidas</strong>.
+                  </span>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel autoFocus disabled={sending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSend} disabled={sending} className="gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              Confirmar e iniciar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };
