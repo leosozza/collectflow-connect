@@ -336,6 +336,40 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     setConfirmStartOpen(true);
   };
 
+  // Compute scheduled_for ISO based on mode. Returns null for "now".
+  const computeScheduledForIso = (): string | null => {
+    if (scheduleMode === "now") return null;
+    if (scheduleMode === "once") {
+      if (!scheduleDate || !scheduleTime) return null;
+      // Interpret as America/Sao_Paulo (UTC-3, no DST)
+      const [y, mo, d] = scheduleDate.split("-").map((x) => parseInt(x, 10));
+      const [h, mi] = scheduleTime.split(":").map((x) => parseInt(x, 10));
+      const utcMs = Date.UTC(y, (mo || 1) - 1, d || 1, (h || 0) + 3, mi || 0, 0);
+      return new Date(utcMs).toISOString();
+    }
+    return computeNextRunClient(recurrenceRule);
+  };
+
+  const onceSchedValidation = useMemo(() => {
+    if (scheduleMode !== "once") return { valid: true, error: "", outOfWindow: false };
+    if (!scheduleDate || !scheduleTime) return { valid: false, error: "Selecione data e hora", outOfWindow: false };
+    const [y, mo, d] = scheduleDate.split("-").map((x) => parseInt(x, 10));
+    const [h, mi] = scheduleTime.split(":").map((x) => parseInt(x, 10));
+    const utcMs = Date.UTC(y, (mo || 1) - 1, d || 1, (h || 0) + 3, mi || 0, 0);
+    const when = utcMs;
+    const now = Date.now();
+    if (when < now + 5 * 60 * 1000) return { valid: false, error: "Agendamento deve ser pelo menos 5 min no futuro", outOfWindow: false };
+    if (when > now + 30 * 24 * 60 * 60 * 1000) return { valid: false, error: "Agendamento máximo é de 30 dias", outOfWindow: false };
+    const outOfWindow = h < 8 || h >= 20;
+    return { valid: true, error: "", outOfWindow };
+  }, [scheduleMode, scheduleDate, scheduleTime]);
+
+  const recurringValid = useMemo(() => {
+    if (scheduleMode !== "recurring") return true;
+    if (recurrenceRule.frequency === "weekly" && (!recurrenceRule.weekdays || recurrenceRule.weekdays.length === 0)) return false;
+    return !!computeNextRunClient(recurrenceRule);
+  }, [scheduleMode, recurrenceRule]);
+
   const handleSend = async () => {
     if (!tenant?.id || !user?.id) return;
 
@@ -345,10 +379,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       return;
     }
 
+    if (scheduleMode === "once" && !onceSchedValidation.valid) {
+      toast.error(onceSchedValidation.error);
+      return;
+    }
+    if (scheduleMode === "recurring" && !recurringValid) {
+      toast.error("Regra de recorrência inválida");
+      return;
+    }
+
     const template = getMessageTemplate();
+    const scheduledForIso = computeScheduledForIso();
+    const isScheduled = scheduleMode !== "now";
+
     setConfirmStartOpen(false);
-    setSending(true);
-    setStep(4);
+    if (!isScheduled) {
+      setSending(true);
+      setStep(4);
+    }
 
     try {
       const useWeighted = distributionMode === "weighted" && weightsSum === 100;
@@ -370,18 +418,34 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         provider_category: providerCategory,
         name: finalName,
         instance_weights: useWeighted ? weightsArray : null,
+        scheduled_for: scheduledForIso,
+        schedule_type: scheduleMode === "recurring" ? "recurring" : "once",
+        recurrence_rule: scheduleMode === "recurring" ? (recurrenceRule as any) : null,
       });
 
       setCampaignId(campaign.id);
       await createRecipients(campaign.id, tenant.id, distributed, template);
 
+      if (isScheduled) {
+        const when = new Date(scheduledForIso!);
+        const whenLabel = when.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        if (scheduleMode === "recurring") {
+          toast.success(`Recorrência agendada. Primeira execução: ${whenLabel}`);
+        } else {
+          toast.success(`Disparo agendado para ${whenLabel}`);
+        }
+        onClose();
+        return;
+      }
+
       // Fire-and-forget: triggers edge function, polling handles progress/result
       await startCampaign(campaign.id);
-      // sending stays true — polling useEffect will set result + setSending(false) when done
     } catch (err: any) {
       toast.error("Erro ao criar campanha: " + (err.message || ""));
-      setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
-      setSending(false);
+      if (!isScheduled) {
+        setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
+        setSending(false);
+      }
     }
   };
 
