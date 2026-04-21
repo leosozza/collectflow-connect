@@ -6,6 +6,7 @@ import { Client } from "@/services/clientService";
 import {
   deduplicateClients,
   distributeRoundRobin,
+  distributeWeighted,
   fetchEligibleInstances,
   createCampaign,
   createRecipients,
@@ -15,6 +16,7 @@ import {
   pollCampaignProgress,
   EligibleInstance,
   CampaignProgress,
+  InstanceWeight,
 } from "@/services/whatsappCampaignService";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -91,6 +93,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [customMessage, setCustomMessage] = useState("");
   const [useCustom, setUseCustom] = useState(false);
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
+  const [distributionMode, setDistributionMode] = useState<"equal" | "weighted">("equal");
+  const [weightMap, setWeightMap] = useState<Record<string, number>>({});
   const [sending, setSending] = useState(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
@@ -127,6 +131,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setCustomMessage("");
       setUseCustom(false);
       setSelectedInstanceIds([]);
+      setDistributionMode("equal");
+      setWeightMap({});
       setSending(false);
       setCampaignId(null);
       setProgress(null);
