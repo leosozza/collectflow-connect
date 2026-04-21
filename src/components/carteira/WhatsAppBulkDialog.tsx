@@ -641,7 +641,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
           <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
           <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
-          <p><strong>Modo:</strong> Round-robin automático com proteção Anti-Ban</p>
+          <p><strong>Modo:</strong> {distributionMode === "weighted" ? "Distribuição personalizada (por peso)" : "Round-robin (igual)"} com proteção Anti-Ban</p>
         </div>
       </div>
     );
