@@ -336,6 +336,40 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     setConfirmStartOpen(true);
   };
 
+  // Compute scheduled_for ISO based on mode. Returns null for "now".
+  const computeScheduledForIso = (): string | null => {
+    if (scheduleMode === "now") return null;
+    if (scheduleMode === "once") {
+      if (!scheduleDate || !scheduleTime) return null;
+      // Interpret as America/Sao_Paulo (UTC-3, no DST)
+      const [y, mo, d] = scheduleDate.split("-").map((x) => parseInt(x, 10));
+      const [h, mi] = scheduleTime.split(":").map((x) => parseInt(x, 10));
+      const utcMs = Date.UTC(y, (mo || 1) - 1, d || 1, (h || 0) + 3, mi || 0, 0);
+      return new Date(utcMs).toISOString();
+    }
+    return computeNextRunClient(recurrenceRule);
+  };
+
+  const onceSchedValidation = useMemo(() => {
+    if (scheduleMode !== "once") return { valid: true, error: "", outOfWindow: false };
+    if (!scheduleDate || !scheduleTime) return { valid: false, error: "Selecione data e hora", outOfWindow: false };
+    const [y, mo, d] = scheduleDate.split("-").map((x) => parseInt(x, 10));
+    const [h, mi] = scheduleTime.split(":").map((x) => parseInt(x, 10));
+    const utcMs = Date.UTC(y, (mo || 1) - 1, d || 1, (h || 0) + 3, mi || 0, 0);
+    const when = utcMs;
+    const now = Date.now();
+    if (when < now + 5 * 60 * 1000) return { valid: false, error: "Agendamento deve ser pelo menos 5 min no futuro", outOfWindow: false };
+    if (when > now + 30 * 24 * 60 * 60 * 1000) return { valid: false, error: "Agendamento máximo é de 30 dias", outOfWindow: false };
+    const outOfWindow = h < 8 || h >= 20;
+    return { valid: true, error: "", outOfWindow };
+  }, [scheduleMode, scheduleDate, scheduleTime]);
+
+  const recurringValid = useMemo(() => {
+    if (scheduleMode !== "recurring") return true;
+    if (recurrenceRule.frequency === "weekly" && (!recurrenceRule.weekdays || recurrenceRule.weekdays.length === 0)) return false;
+    return !!computeNextRunClient(recurrenceRule);
+  }, [scheduleMode, recurrenceRule]);
+
   const handleSend = async () => {
     if (!tenant?.id || !user?.id) return;
 
@@ -345,10 +379,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       return;
     }
 
+    if (scheduleMode === "once" && !onceSchedValidation.valid) {
+      toast.error(onceSchedValidation.error);
+      return;
+    }
+    if (scheduleMode === "recurring" && !recurringValid) {
+      toast.error("Regra de recorrência inválida");
+      return;
+    }
+
     const template = getMessageTemplate();
+    const scheduledForIso = computeScheduledForIso();
+    const isScheduled = scheduleMode !== "now";
+
     setConfirmStartOpen(false);
-    setSending(true);
-    setStep(4);
+    if (!isScheduled) {
+      setSending(true);
+      setStep(4);
+    }
 
     try {
       const useWeighted = distributionMode === "weighted" && weightsSum === 100;
@@ -370,18 +418,34 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         provider_category: providerCategory,
         name: finalName,
         instance_weights: useWeighted ? weightsArray : null,
+        scheduled_for: scheduledForIso,
+        schedule_type: scheduleMode === "recurring" ? "recurring" : "once",
+        recurrence_rule: scheduleMode === "recurring" ? (recurrenceRule as any) : null,
       });
 
       setCampaignId(campaign.id);
       await createRecipients(campaign.id, tenant.id, distributed, template);
 
+      if (isScheduled) {
+        const when = new Date(scheduledForIso!);
+        const whenLabel = when.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        if (scheduleMode === "recurring") {
+          toast.success(`Recorrência agendada. Primeira execução: ${whenLabel}`);
+        } else {
+          toast.success(`Disparo agendado para ${whenLabel}`);
+        }
+        onClose();
+        return;
+      }
+
       // Fire-and-forget: triggers edge function, polling handles progress/result
       await startCampaign(campaign.id);
-      // sending stays true — polling useEffect will set result + setSending(false) when done
     } catch (err: any) {
       toast.error("Erro ao criar campanha: " + (err.message || ""));
-      setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
-      setSending(false);
+      if (!isScheduled) {
+        setResult({ sent: 0, failed: dedup.recipients.length, errors: [err.message] });
+        setSending(false);
+      }
     }
   };
 
@@ -921,11 +985,93 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                   </div>
                 </div>
 
+                {/* Scheduling block */}
+                <div className="rounded-md border p-2 space-y-2">
+                  <Label className="text-xs">Quando enviar?</Label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { key: "now", label: "Agora", icon: Send },
+                      { key: "once", label: "Uma vez", icon: Calendar },
+                      { key: "recurring", label: "Recorrente", icon: Repeat },
+                    ].map(({ key, label, icon: Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setScheduleMode(key as any)}
+                        disabled={sending}
+                        className={`flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded border transition-colors ${
+                          scheduleMode === key
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background hover:bg-muted border-border"
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {scheduleMode === "once" && (
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Data</Label>
+                          <Input
+                            type="date"
+                            value={scheduleDate}
+                            min={new Date().toISOString().slice(0, 10)}
+                            max={new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)}
+                            onChange={(e) => setScheduleDate(e.target.value)}
+                            disabled={sending}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Hora</Label>
+                          <Input
+                            type="time"
+                            value={scheduleTime}
+                            onChange={(e) => setScheduleTime(e.target.value)}
+                            disabled={sending}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
+                      {!onceSchedValidation.valid && (scheduleDate || scheduleTime) && (
+                        <p className="text-xs text-destructive">{onceSchedValidation.error}</p>
+                      )}
+                      {onceSchedValidation.valid && onceSchedValidation.outOfWindow && (
+                        <div className="flex items-start gap-2 rounded border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>Envios fora da janela 08h–20h têm maior taxa de bloqueio. Tem certeza?</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {scheduleMode === "recurring" && (
+                    <div className="pt-1">
+                      <RecurrenceRuleEditor
+                        value={recurrenceRule}
+                        onChange={setRecurrenceRule}
+                        disabled={sending}
+                      />
+                      {!recurringValid && (
+                        <p className="text-xs text-destructive mt-1">
+                          Regra inválida — verifique dias/horário.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs flex gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
-                    Após iniciar, o disparo <strong>não pode ser interrompido</strong> pelo painel.
-                    Mensagens já enviadas <strong>não podem ser revertidas</strong>.
+                    {scheduleMode === "now"
+                      ? <>Após iniciar, o disparo <strong>não pode ser interrompido</strong> pelo painel. Mensagens já enviadas <strong>não podem ser revertidas</strong>.</>
+                      : <>Ao confirmar, a campanha será agendada. Você poderá <strong>cancelar, pausar ou editar</strong> a qualquer momento na aba Gestão de Campanhas.</>
+                    }
                   </span>
                 </div>
               </div>
@@ -933,9 +1079,18 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel autoFocus disabled={sending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSend} disabled={sending} className="gap-2">
-              <ShieldCheck className="w-4 h-4" />
-              Confirmar e iniciar
+            <AlertDialogAction
+              onClick={handleSend}
+              disabled={
+                sending ||
+                (scheduleMode === "once" && !onceSchedValidation.valid) ||
+                (scheduleMode === "recurring" && !recurringValid)
+              }
+              className="gap-2"
+            >
+              {scheduleMode === "now" && <><ShieldCheck className="w-4 h-4" /> Confirmar e iniciar</>}
+              {scheduleMode === "once" && <><Calendar className="w-4 h-4" /> Agendar disparo</>}
+              {scheduleMode === "recurring" && <><Repeat className="w-4 h-4" /> Agendar recorrência</>}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
