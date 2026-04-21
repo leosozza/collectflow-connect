@@ -5938,9 +5938,68 @@ export type Database = {
           },
         ]
       }
+      whatsapp_campaign_runs: {
+        Row: {
+          child_campaign_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          parent_campaign_id: string
+          recipients_count: number
+          run_at: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          child_campaign_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          parent_campaign_id: string
+          recipients_count?: number
+          run_at?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          child_campaign_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          parent_campaign_id?: string
+          recipients_count?: number
+          run_at?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_runs_child_campaign_id_fkey"
+            columns: ["child_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaign_runs_parent_campaign_id_fkey"
+            columns: ["parent_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaign_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_campaigns: {
         Row: {
           allowed_operator_ids: string[] | null
+          audience_metadata: Json | null
           campaign_type: string
           channel_type: string
           completed_at: string | null
@@ -5956,13 +6015,18 @@ export type Database = {
           name: string | null
           origin_id: string | null
           origin_type: string | null
+          parent_campaign_id: string | null
           processing_locked_at: string | null
           processing_locked_by: string | null
           progress_metadata: Json | null
           provider_category: string
           read_count: number
+          recurrence_rule: Json | null
+          recurrence_run_count: number
           routing_mode: string | null
           rule_id: string | null
+          schedule_type: string
+          scheduled_for: string | null
           selected_instance_ids: string[]
           sent_count: number
           source: string
@@ -5979,6 +6043,7 @@ export type Database = {
         }
         Insert: {
           allowed_operator_ids?: string[] | null
+          audience_metadata?: Json | null
           campaign_type?: string
           channel_type?: string
           completed_at?: string | null
@@ -5994,13 +6059,18 @@ export type Database = {
           name?: string | null
           origin_id?: string | null
           origin_type?: string | null
+          parent_campaign_id?: string | null
           processing_locked_at?: string | null
           processing_locked_by?: string | null
           progress_metadata?: Json | null
           provider_category?: string
           read_count?: number
+          recurrence_rule?: Json | null
+          recurrence_run_count?: number
           routing_mode?: string | null
           rule_id?: string | null
+          schedule_type?: string
+          scheduled_for?: string | null
           selected_instance_ids?: string[]
           sent_count?: number
           source?: string
@@ -6017,6 +6087,7 @@ export type Database = {
         }
         Update: {
           allowed_operator_ids?: string[] | null
+          audience_metadata?: Json | null
           campaign_type?: string
           channel_type?: string
           completed_at?: string | null
@@ -6032,13 +6103,18 @@ export type Database = {
           name?: string | null
           origin_id?: string | null
           origin_type?: string | null
+          parent_campaign_id?: string | null
           processing_locked_at?: string | null
           processing_locked_by?: string | null
           progress_metadata?: Json | null
           provider_category?: string
           read_count?: number
+          recurrence_rule?: Json | null
+          recurrence_run_count?: number
           routing_mode?: string | null
           rule_id?: string | null
+          schedule_type?: string
+          scheduled_for?: string | null
           selected_instance_ids?: string[]
           sent_count?: number
           source?: string
@@ -6054,6 +6130,13 @@ export type Database = {
           workflow_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_parent_campaign_id_fkey"
+            columns: ["parent_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_campaigns_tenant_id_fkey"
             columns: ["tenant_id"]
