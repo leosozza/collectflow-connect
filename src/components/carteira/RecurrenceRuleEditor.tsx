@@ -112,18 +112,22 @@ export default function RecurrenceRuleEditor({ value, onChange, disabled }: Prop
 
       {value.frequency === "monthly" && (
         <div>
-          <Label className="text-xs">Dia do mês (1–28)</Label>
+          <Label className="text-xs">Dia do mês (1–31)</Label>
           <Input
             type="number"
             min={1}
-            max={28}
+            max={31}
             value={value.day_of_month || 1}
             onChange={(e) =>
-              set({ day_of_month: Math.max(1, Math.min(28, Number(e.target.value) || 1)) })
+              set({ day_of_month: Math.max(1, Math.min(31, Number(e.target.value) || 1)) })
             }
             disabled={disabled}
             className="h-8"
+            title="Em meses sem este dia (ex.: 30 em fevereiro), o disparo ocorre no último dia disponível do mês."
           />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Meses sem o dia escolhido usam o último dia disponível.
+          </p>
         </div>
       )}
 
