@@ -872,17 +872,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                     <span className="font-medium text-foreground">
                       {providerCategory === "official_meta" ? "Oficial Meta" : "Anti-Ban (Não-Oficial)"}
                     </span>
+                    {" · "}
+                    <span className="font-medium text-foreground">
+                      {distributionMode === "weighted" ? "Distribuição personalizada" : "Round-robin (igual)"}
+                    </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Instâncias selecionadas ({selectedInstanceIds.length}):
                   </p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-1">
                     {selectedInstanceIds.map((id) => {
                       const inst = instances.find((i) => i.id === id);
+                      const count = distribution[id] || 0;
+                      const pct = dedup.recipients.length > 0 ? Math.round((count / dedup.recipients.length) * 100) : 0;
                       return (
-                        <Badge key={id} variant="outline" className="text-xs">
-                          {inst?.name || id}
-                        </Badge>
+                        <div key={id} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/40">
+                          <span className="truncate">{inst?.name || id}</span>
+                          <span className="font-medium text-foreground shrink-0">{count} msg ({pct}%)</span>
+                        </div>
                       );
                     })}
                   </div>
