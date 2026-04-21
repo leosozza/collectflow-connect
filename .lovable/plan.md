@@ -1,56 +1,89 @@
 
-## Auditoria + Correções do módulo de Agendamento/Recorrência
+## Auditoria final — bugs encontrados antes de liberar uso
 
-Li toda a implementação e rodei a verificação. Encontrei **1 bug crítico que impede o agendamento de funcionar** e mais 4 correções que evitam regressões em cenários específicos.
+### ✅ Validado e funcionando
+- **Cron job**: `wa-campaign-scheduler` está **ativo** (jobid 13), rodando a cada 1 min.
+- **Schema**: todas as colunas (`scheduled_for`, `schedule_type`, `recurrence_rule`, `recurrence_run_count`, `parent_campaign_id`, `instance_weights`) presentes.
+- **Edge function**: respondendo 200 OK, scan=0 (nada pendente, esperado).
+- **Tabela `whatsapp_campaign_runs`**: criada com RLS correta (tenant + service_role).
+- **Lock atômico anti-race**: aplicado corretamente na recorrência.
+- **Anti-ban + distribuição round-robin/weighted**: sólidos, sem mexer.
 
-### 🔴 Bugs encontrados
+---
 
-#### 1. CRÍTICO — Cron job nunca foi criado
-A migration criou as extensões `pg_cron`/`pg_net`, mas **não agendou nada**. Hoje uma campanha com `status='scheduled'` fica parada para sempre porque ninguém chama `dispatch-scheduled-campaigns`.
+### 🔴 Bug 1 (CRÍTICO) — Campanhas agendadas **não terão destinatários**
 
-A instrução oficial do Lovable diz para NÃO colocar o `cron.schedule(...)` em migration (contém service_role/URL específicos do projeto). Deve ser rodado via `psql` / insert direto no banco, **uma única vez**.
+**Onde:** `WhatsAppBulkDialog.tsx` linhas 427–439.
 
-**Fix:** executar via `psql` a chamada `cron.schedule('wa-campaign-scheduler', '* * * * *', ...)` apontando para `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/dispatch-scheduled-campaigns` com `Authorization: Bearer <anon_key>`. O edge usa `service_role` internamente; o cron só precisa disparar o HTTP.
+**O que acontece:** quando `scheduleMode !== "now"`, o código chama `createRecipients(...)` **mas em seguida faz `onClose()` e retorna**. Só que o problema real é outro: em `createCampaign`, o status inicial é `"scheduled"` e o UI até aqui está OK. Porém, quando o cron roda e a função `dispatchRecurring` é chamada, ela clona os **recipients da mãe** (linhas 203–208 do edge). Isso funciona. ✅
 
-#### 2. 🔴 `fireNowScheduledCampaign` não funciona em campanhas `paused`
-O código atualiza `scheduled_for=now()` e aceita `status IN ('scheduled','paused')`, **mas o dispatcher só busca `status='scheduled'`**. Resultado: clicar em "Disparar agora" numa recorrente pausada não faz nada.
+Porém, em `dispatchOneShot`, o status pula direto para `"sending"` e invoca `send-bulk-whatsapp`. OK, também funciona.
 
-**Fix:** forçar `status='scheduled'` no update (além de `scheduled_for=now()`).
+**Mas** — verifiquei em detalhe: o fluxo está correto. Retiro este bug. Na verdade não há falha aqui. ✅
 
-#### 3. 🟠 `AlertDialogDescription` contém `<Input>` e `<Label>` interativos
-O Radix renderiza `AlertDialogDescription` como `<p>` (ou, com `asChild`, herda o role semântico). Colocar Inputs/sliders dentro gera warning de acessibilidade ("Description should not contain interactive elements") e pode quebrar leitores de tela.
+### 🔴 Bug 1 REAL — `day_of_month` até 28 corta dias 29–31
 
-**Fix:** extrair o bloco de agendamento + nome + inputs do `AlertDialogDescription` para fora dele (manter só o título/descrição curta lá). Mover o conteúdo interativo para um `<div>` irmão dentro do `AlertDialogContent`.
+**Onde:** `whatsappCampaignService.ts:566` e `dispatch-scheduled-campaigns/index.ts:66`.
 
-#### 4. 🟡 Janela de envio fecha exatamente às 20h em recorrência
-Comparação `hhmm > rule.window_end` exclui `20:00` (quando janela é 08–20). Se o usuário agenda 20:00, nunca dispara naquele minuto — sempre pula para o próximo dia.
+```ts
+const dom = Math.min(Math.max(rule.day_of_month || 1, 1), 28);
+```
 
-**Fix:** trocar `>` por `>=` apenas quando for estritamente depois do fim, ou usar `>` com comparação correta (manter `>` mas considerar o fim inclusive: `hhmm < window_start || hhmm >= nextMinuteOfEnd`). Solução mais simples: `hhmm < window_start || hhmm > window_end` + permitir o minuto exato do fim → manter `>` mas documentar que `window_end` é exclusivo. Vou padronizar para **inclusivo no início, exclusivo no fim** e deixar comentário.
+Se o usuário escolher recorrência mensal no dia 30, o sistema silenciosamente troca para dia 28 sem avisar. Em vez disso, se o dia não existir no mês (ex.: 30 de fevereiro), deve cair no **último dia do mês**.
 
-#### 5. 🟡 Edge dispatcher pode enfileirar 2 disparos simultâneos numa recorrente
-Em `dispatchRecurring`, entre o `INSERT` da criança e o `UPDATE` da mãe há uma janela onde, se o cron rodar de novo (a cada minuto), a mãe ainda está com `status='scheduled'` e `scheduled_for <= now()` — dispara clone duplicado.
+**Fix:** permitir 1–31 no input e, no cálculo, quando o mês não tiver o dia, disparar no último dia disponível (`min(day_of_month, daysInMonth)`).
 
-**Fix:** no início de `dispatchRecurring`, fazer flip atômico `scheduled_for = null` (ou status temporário `'processing'`) com `WHERE id=? AND status='scheduled' AND scheduled_for <= now()`. Se 0 linhas afetadas, abortar (race perdida). Ao final, gravar o próximo `scheduled_for` e voltar status para `'scheduled'`.
+### 🔴 Bug 2 — Edge descarta campanhas agendadas sem `tenant_id` no audit
 
-### ✅ O que está correto (auditado)
-- Cálculo de timezone America/Sao_Paulo (UTC-3): lógica em `computeNextRun` tanto no edge quanto no client mirror está matematicamente correta.
-- `distributeWeighted`: ajuste de resto e re-shuffle OK.
-- Anti-ban no `send-bulk-whatsapp`: intocado e sólido (8–15s + 120s/15msg por instância).
-- RLS da tabela `whatsapp_campaign_runs`: tenant isolado + service_role com acesso total.
-- Permissões: `admin`/`super_admin` + delegação via `user_permissions` funcionando.
-- UI de gestão (filtro Agendadas/Pausadas, countdown, Ver execuções, Editar regra).
+**Onde:** `dispatch-scheduled-campaigns/index.ts:105-113` e 156-164.
 
-### Arquivos que serão alterados
+O insert em `audit_logs` usa `user_id: campaign.created_by`. Se `created_by` for `null` (ex.: campanha criada por automação antiga), o insert falha e derruba o dispatch. Além disso, a tabela `audit_logs` provavelmente tem RLS/NOT NULL que pode rejeitar. Precisa envolver em `try/catch` — a auditoria não pode bloquear o disparo.
 
-1. **`psql` insert (via exec, NÃO migration)** — cria o cron job `wa-campaign-scheduler` rodando a cada 1 min.
-2. **`src/services/whatsappCampaignService.ts`** — `fireNowScheduledCampaign` força `status='scheduled'`.
-3. **`src/components/carteira/WhatsAppBulkDialog.tsx`** — refatorar `AlertDialogContent` movendo inputs para fora do `AlertDialogDescription`.
-4. **`supabase/functions/dispatch-scheduled-campaigns/index.ts`** — flip atômico anti-race na recorrência + fix de `window_end` inclusivo.
+**Fix:** envolver todos os `insert` em `audit_logs` e `whatsapp_campaign_runs` em `try/catch` que loga mas não propaga erro.
+
+### 🟠 Bug 3 — Campanha filha (child) herda `provider_category`, mas perde `routing_mode`
+
+**Onde:** `dispatch-scheduled-campaigns/index.ts:220-244` (insert do child).
+
+Ao clonar a campanha-mãe na recorrência, o código copia `instance_weights` mas **não copia `routing_mode`**. Se a mãe estava em modo `weighted`, a filha vira o default e ignora os pesos. Isso afeta a distribuição.
+
+**Fix:** adicionar `routing_mode: mother.routing_mode` ao insert do child.
+
+### 🟡 Alerta 1 — Window check compara strings, não horários
+
+**Onde:** `dispatch-scheduled-campaigns/index.ts:191`.
+
+```ts
+if (hhmm < rule.window_start || hhmm > rule.window_end) { ... }
+```
+
+Comparação lexicográfica de strings `"HH:MM"` funciona **só** enquanto o formato é rígido (2 dígitos sempre). Como o editor produz `HH:MM` padronizado, funciona hoje, mas é frágil. Não bloqueia uso — mantenho como está e adiciono comentário.
+
+### 🟡 Alerta 2 — `AlertDialogDescription` ainda contém só texto, mas o conteúdo interativo está em `<div>` irmão **fora** do `<AlertDialogHeader>`. Acessibilidade OK. ✅ Corrigido na iteração anterior.
+
+---
+
+### Arquivos a alterar
+
+1. **`supabase/functions/dispatch-scheduled-campaigns/index.ts`**
+   - Fix day_of_month → usa último dia do mês quando o mês não tem o dia escolhido.
+   - Envolver `audit_logs.insert` e `whatsapp_campaign_runs.insert` em `try/catch`.
+   - Copiar `routing_mode` da mãe para a filha.
+   - Adicionar comentário na window check.
+
+2. **`src/services/whatsappCampaignService.ts`**
+   - Mesmo fix de `day_of_month` em `computeNextRunClient` (mirror do edge).
+
+3. **`src/components/carteira/RecurrenceRuleEditor.tsx`** (verificar — provavelmente limita a 28 no UI)
+   - Permitir 1–31 no seletor mensal + tooltip: "Meses sem o dia usam o último dia disponível".
 
 ### Fora de escopo
-- `send-bulk-whatsapp` (sólido, sem mexer).
-- UI de permissões (já funcional via `UserPermissionsTab`).
-- Timezone multi-região (continua fixo `America/Sao_Paulo`).
+- Anti-ban (sólido).
+- UI de `CampaignManagementTab` (filtros e controles funcionais).
+- Integração `send-bulk-whatsapp` (intocado).
 
-### Próximo passo
-Confirme **"Aplicar correções"** e eu implemento os 4 fixes + crio o cron job.
+### Veredito
+
+**O sistema está usável agora para agendamentos diários, semanais e mensais até dia 28.** As 3 correções acima são refinamentos de robustez que evitam bugs em casos específicos (dia 29–31, recorrência com distribuição por peso, falha silenciosa em audit). Após elas, o módulo está pronto para produção.
+
+Confirme **"Aplicar correções finais"** e implemento os 3 fixes.
