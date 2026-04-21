@@ -130,6 +130,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setSending(false);
       setCampaignId(null);
       setProgress(null);
+      setConfirmStartOpen(false);
+      setCampaignName("");
       stopPolling();
     }
   }, [open, stopPolling]);
