@@ -129,6 +129,24 @@ async function dispatchRecurring(supabase: any, mother: any) {
   const rule = mother.recurrence_rule as RecurrenceRule;
   const now = new Date();
 
+  // Atomic lock: flip scheduled_for to null to prevent concurrent cron runs from re-processing this row.
+  // If 0 rows affected, another invocation already grabbed it — bail out.
+  const { data: locked, error: lockErr } = await supabase
+    .from("whatsapp_campaigns")
+    .update({ scheduled_for: null })
+    .eq("id", mother.id)
+    .eq("status", "scheduled")
+    .lte("scheduled_for", now.toISOString())
+    .select()
+    .maybeSingle();
+
+  if (lockErr || !locked) {
+    console.log(`[recurring] lost race for ${mother.id}: ${lockErr?.message || "already claimed"}`);
+    return;
+  }
+  // Use the locked snapshot from here on
+  mother = locked;
+
   // Check max_runs
   if (rule.max_runs != null && (mother.recurrence_run_count || 0) >= rule.max_runs) {
     await supabase
@@ -165,7 +183,7 @@ async function dispatchRecurring(supabase: any, mother: any) {
     return;
   }
 
-  // Window check
+  // Window check — inclusive start, inclusive end (so 20:00 still fires when window is 08-20)
   if (rule.window_start && rule.window_end) {
     const localNowMs = now.getTime() + -180 * 60000;
     const local = new Date(localNowMs);
