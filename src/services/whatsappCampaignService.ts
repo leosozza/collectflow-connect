@@ -29,6 +29,7 @@ export interface WhatsAppCampaign {
   updated_at: string;
   origin_type?: string;
   progress_metadata?: Record<string, any> | null;
+  instance_weights?: { instanceId: string; weight: number }[] | null;
 }
 
 export interface WhatsAppCampaignRecipient {
