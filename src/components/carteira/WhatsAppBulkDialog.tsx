@@ -272,7 +272,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   );
 
   const canProceedStep1 = useCustom ? customMessage.trim().length > 0 : !!selectedTemplate;
-  const canProceedStep2 = selectedInstanceIds.length > 0 && !isMixed;
+  const weightsValid =
+    distributionMode === "equal" ||
+    (weightsSum === 100 && selectedInstanceIds.every((id) => (weightMap[id] ?? 0) > 0));
+  const canProceedStep2 = selectedInstanceIds.length > 0 && !isMixed && weightsValid;
 
   // Pre-send validation
   const getValidationErrors = (): string[] => {
@@ -281,6 +284,11 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     if (isMixed) errors.push("Não é permitido misturar instâncias oficiais e não-oficiais. Crie campanhas separadas.");
     if (!getMessageTemplate().trim()) errors.push("Defina uma mensagem antes de enviar");
     if (dedup.recipients.length === 0) errors.push("Nenhum destinatário válido encontrado");
+    if (distributionMode === "weighted") {
+      if (weightsSum !== 100) errors.push(`Os pesos devem somar 100% (atual: ${weightsSum}%)`);
+      if (selectedInstanceIds.some((id) => (weightMap[id] ?? 0) <= 0))
+        errors.push("Todas as instâncias selecionadas precisam ter peso maior que 0");
+    }
     return errors;
   };
 
@@ -317,7 +325,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     setStep(4);
 
     try {
-      const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
+      const useWeighted = distributionMode === "weighted" && weightsSum === 100;
+      const distributed = useWeighted
+        ? distributeWeighted(dedup.recipients, weightsArray)
+        : distributeRoundRobin(dedup.recipients, selectedInstanceIds);
       const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
       const finalName = campaignName.trim() || buildDefaultName();
 
@@ -332,6 +343,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         created_by: user.id,
         provider_category: providerCategory,
         name: finalName,
+        instance_weights: useWeighted ? weightsArray : null,
       });
 
       setCampaignId(campaign.id);
