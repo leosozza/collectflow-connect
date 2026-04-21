@@ -1,82 +1,79 @@
 
+## Implementação W2.1 + W2.2 + W2.3
 
-## Validação Fase 2 + Plano das demais melhorias
-
-### Parte A — Validação Fase 2 (confirmação obrigatória de acordo)
-
-Auditei `AgreementCalculator.tsx` linha por linha:
-
-| Item | Status | Evidência |
-|---|---|---|
-| Estado `confirmOpen` adicionado | ✅ | linha 113 |
-| `handleSubmit` agora só abre o diálogo | ✅ | linhas 476-479 (valida + guarda + `setConfirmOpen(true)`) |
-| Lógica real movida para `handleConfirmedSubmit` | ✅ | linha 481 |
-| `AlertDialog` com resumo completo | ✅ | linhas 1175-1279 — Cliente, CPF, Credor, Valor original, Valor proposto, Desconto (R$ + %), Entrada, Parcelas, 1º vencimento, Forma de pagamento |
-| Aviso "fora do padrão" quando aplicável | ✅ | linhas 1248-1254 |
-| Bloqueio contra fechar durante processamento | ✅ | `onOpenChange` (1175) + `onEscapeKeyDown` (1178) |
-| Foco inicial no botão Cancelar (seguro) | ✅ | `autoFocus` na linha 1262 |
-| Botões desabilitados durante processamento | ✅ | linhas 1262, 1266 |
-| Loader visual no botão de confirmar | ✅ | linhas 1273-1275 |
-| Aviso "ação não pode ser desfeita" | ✅ | linha 1257-1259 |
-
-**Resultado:** ✅ Fase 2 totalmente implementada conforme o plano. Nenhuma divergência. Pronto para teste end-to-end.
+Escopo restrito a 3 melhorias do bloco WhatsApp/Campanhas. Não altero Edge Functions — o backend já grava `progress_metadata` com `last_chunk_at`, `batch_resting` e `resting_instance`, então o ETA é calculado no frontend.
 
 ---
 
-### Parte B — Plano das melhorias restantes
+### W2.1 — AlertDialog de confirmação antes de disparar (bloqueante)
 
-Da lista original (Fase 1 + extras), restam 3 itens classificados como "médio esforço" e 2 como "avaliar antes":
+**Arquivo:** `src/components/carteira/WhatsAppBulkDialog.tsx`
 
-#### 🟢 Fase 3 — Médio esforço (recomendo agrupar)
+Hoje o Step 3 ("Revisar") já mostra resumo + estimativa, e o botão "Iniciar Disparo" chama `startCampaign` direto. Vou adicionar uma camada extra de confirmação obrigatória.
 
-**3.1 Indicador visual de campo "vindo do MaxSystem" (item 2.2)**
-- Quando o `onCepResolved` preencher rua/bairro/cidade/UF, aplicar classe CSS `ring-2 ring-emerald-400/60` por 3 segundos nos 4 campos preenchidos.
-- Implementação: adicionar prop `highlight?: boolean` no `InlineEditableField`; controlar via state em `ClientDetailHeader` (`Set<string>` de campos destacados, `setTimeout` de 3s para limpar).
-- Reforça percepção de "o sistema trabalhou por mim".
-
-**3.2 Botão "Buscar dados" manual no diálogo Editar Dados (item 2.3)**
-- Adicionar botão pequeno (ícone Search + texto "Buscar") ao lado do campo CEP no `ClientForm.tsx` / diálogo Editar Dados.
-- Dispara o mesmo lookup do auto-trigger, mas força execução mesmo se o CEP já estiver salvo.
-- Útil quando bairro/rua estão incompletos mas o CEP existe.
-- Estado `looking` local + `Loader2` no botão.
-
-**3.3 Rascunho do AgreementCalculator (item 2.5)**
-- Usar o hook `useSessionStorage` já criado (Fase 1).
-- Salvar `{ entradas, numParcelas, formaPagto, jurosPercent, multaPercent, descontoPercent, calcDate }` em `sessionStorage` com chave `agreement-draft:${cpf}:${credor}` por 30 minutos (timestamp + TTL).
-- Ao montar o componente, se houver rascunho válido, mostrar banner discreto "Restaurar rascunho de HH:mm?" com botões Restaurar / Descartar.
-- Limpar automaticamente após formalização bem-sucedida.
-
-#### 🟡 Avaliar antes de aplicar
-
-**3.4 Atalhos de teclado (item 2.1)**
-- `Esc` para fechar diálogos: já é padrão do shadcn — só precisa garantir que nenhum diálogo bloqueia indevidamente.
-- `Ctrl/Cmd+S` no diálogo Editar Dados: precisa de `useEffect` com listener global escopado ao diálogo aberto.
-- Ordem do `Tab` nos campos de endereço: revisar atributo `tabIndex` ou ordem do JSX.
-- **Risco:** Ctrl+S no navegador abre "Salvar página" — precisamos de `e.preventDefault()` agressivo, e isso pode confundir power-users que usam o atalho do navegador.
-- **Recomendação:** aplicar só `Esc` (já vem grátis) e revisar ordem do Tab. Pular Ctrl+S por enquanto.
-
-**3.5 Item 2.4 (limites de R$10k / 12 parcelas)**
-- ❌ **Cancelado** — substituído pela validação universal da Fase 2. Não há nada a fazer aqui.
+- Novo estado `confirmStartOpen: boolean`.
+- O botão "Iniciar Disparo" do Step 3 passa a abrir o `AlertDialog` em vez de disparar.
+- O `AlertDialog` mostra:
+  - **Nome da campanha** (input novo, opcional — default `Disparo carteira HH:mm`)
+  - **Total de destinatários únicos** (`dedup.recipients.length`)
+  - **Instâncias selecionadas** (lista compacta com nome)
+  - **Modo** (Oficial Meta vs Anti-Ban Não-Oficial)
+  - **Tempo estimado** (já calculado por `estimateTimeMinutes`)
+  - **Aviso vermelho:** "Após iniciar, o disparo não pode ser interrompido pelo painel. Mensagens já enviadas não podem ser revertidas."
+- Botões: **Cancelar** (autoFocus, fecha diálogo, mantém Step 3) / **Confirmar e Iniciar**.
+- `onOpenChange` e `onEscapeKeyDown` bloqueados enquanto `sending===true`.
+- Padrão idêntico ao da Fase 2 (acordos), garantindo consistência de UX.
 
 ---
 
-### Sequência sugerida
+### W2.2 — Pré-visualização de template renderizado com destinatário real
 
-1. **Você testa a Fase 2 end-to-end** (formalizar 1 acordo real, confirmar que o diálogo aparece, o resumo está correto, cancelar mantém formulário, confirmar processa normal).
-2. Se OK, aplicar **Fase 3 inteira (3.1 + 3.2 + 3.3)** numa única rodada.
-3. Decidir depois sobre 3.4 (atalhos).
+**Arquivo:** `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx`
 
-### Arquivos que serão alterados na Fase 3
+Adicionar botão "Pré-visualizar mensagem" no card "Mensagem" (já existe nas linhas 202-214).
 
-- `src/components/client-detail/InlineEditableField.tsx` — prop `highlight`
-- `src/components/client-detail/ClientDetailHeader.tsx` — controlar destaque pós-CEP
-- `src/components/client-detail/ClientForm.tsx` (ou diálogo Editar Dados equivalente) — botão "Buscar dados" manual
-- `src/components/client-detail/AgreementCalculator.tsx` — rascunho via `useSessionStorage`
+- Ao clicar, abre `Dialog` com:
+  - Seletor de destinatário (default: 1 aleatório dos primeiros 50 da campanha — query leve em `whatsapp_campaign_recipients` filtrando pela `campaign_id`, selecionando `representative_client_id, recipient_name, phone, message_body_snapshot`).
+  - Bolha de chat estilo WhatsApp (verde claro, alinhada à direita, com timestamp).
+  - Se `message_body_snapshot` existir, renderiza ele direto (já vem com placeholders resolvidos pelo backend no momento do envio — ou texto bruto se ainda for `pending`).
+  - Se for `pending`, busca dados do cliente em `client_profiles` (nome, valor da próxima parcela, vencimento, credor) e aplica resolução local usando o mesmo padrão de `template-resolver.ts` (`{{nome}}`, `{{cpf}}`, `{{valor_parcela}}`, `{{data_vencimento}}`, `{{credor}}`, `{{valor}}` alias).
+  - Botão "Sortear outro destinatário" para re-selecionar aleatoriamente.
+- Helper local `resolveTemplateClient(message: string, client)` no service `whatsappCampaignService.ts` (espelho do `_shared/template-resolver.ts`, sem dependência de Edge).
+
+---
+
+### W2.3 — Indicador de rate-limit (anti-ban) ativo
+
+**Arquivos:**
+- `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` (exibição)
+- `src/services/campaignManagementService.ts` (já retorna `progress_metadata` via `fetchCampaignDetail`)
+
+Quando `campaign.status === "sending"`, calcular e mostrar painel ao vivo:
+
+- Ler `progress_metadata.last_chunk_at` e `progress_metadata.batch_resting`.
+- Constantes do frontend (espelham o Edge):
+  - Não-oficial: 8-15s entre envios, 120s rest a cada 15.
+  - Oficial: 1-3s entre envios, 30s rest a cada 50.
+- Calcular `nextSendIn = max(0, expectedDelayMs - (now - last_chunk_at))`.
+- Card destacado:
+  - Se `batch_resting`: `"Pausa anti-ban ativa em {resting_instance} — retomando em XX s"` (countdown ao vivo, badge laranja).
+  - Senão: `"Próximo envio em ~XX s"` (badge verde).
+- `useEffect` com `setInterval(1000)` para atualizar countdown; `useQuery` com `refetchInterval: 5000` para atualizar `progress_metadata`.
+- Some quando `status !== "sending"`.
+
+---
+
+### Arquivos alterados
+
+1. `src/components/carteira/WhatsAppBulkDialog.tsx` — AlertDialog de confirmação (W2.1)
+2. `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` — botão preview + painel rate-limit (W2.2 + W2.3)
+3. `src/services/whatsappCampaignService.ts` — helper `resolveTemplateClient` (W2.2)
+4. `src/services/campaignManagementService.ts` — só conferir que `progress_metadata` está sendo retornado (provavelmente já está; ajuste mínimo se faltar)
 
 ### Fora de escopo
-- Score, WhatsApp, discador, APIs, Edge Functions de integração.
-- Refatoração de cache TanStack ou autenticação.
+- Edge Functions (não mexo no `send-bulk-whatsapp`).
+- Pausar/cancelar campanha em andamento.
+- Notificações sonoras ou push.
 
 ### Próximo passo
-Me confirme: **"Aplicar Fase 3"** (3.1 + 3.2 + 3.3) ou prefere escolher itens específicos.
-
+Aplicar os 3 itens em sequência e validar lendo o código depois.
