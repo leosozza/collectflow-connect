@@ -1081,9 +1081,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                     }
                   </span>
                 </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel autoFocus disabled={sending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
