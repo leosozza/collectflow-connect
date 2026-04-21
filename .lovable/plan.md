@@ -1,137 +1,136 @@
 
-## Auditoria do módulo de Disparo + Plano de Melhorias
+## Plano: Agendamento de Disparos (one-shot + recorrente)
 
-### Parte A — Auditoria do estado atual
-
-#### A.1 Anti-ban (boas práticas) — ✅ Bem implementado
-
-Confirmado em `supabase/functions/send-bulk-whatsapp/index.ts`:
-
-| Item | Não-Oficial | Oficial Meta | AI Agent |
-|---|---|---|---|
-| Delay entre mensagens | 8–15s aleatório | 1–3s | 3–6s |
-| Pausa em lote | 120s a cada 15 | 30s a cada 50 | 60s a cada 25 |
-| Aplicação | **Por instância** (não global) | Por instância | Por instância |
-| Lock de campanha | ✅ `try_lock_campaign` evita worker duplicado | ✅ | ✅ |
-| Claim atômico | ✅ `claim_campaign_recipients` (RPC) | ✅ | ✅ |
-| Round-robin entre instâncias | ✅ Loop interleaved (linhas 299–483) | ✅ | ✅ |
-| Checkpoint em `progress_metadata` | ✅ `last_chunk_at`, `batch_resting`, `resting_instance` | ✅ | ✅ |
-| Retomada em timeout | ✅ Reseta `processing` → `pending` | ✅ | ✅ |
-| Bloqueio de mistura oficial+não-oficial | ✅ Bloqueia campanhas `mixed` | ✅ | ✅ |
-
-**Conclusão:** as boas práticas anti-ban estão sólidas. Cada instância tem seu próprio cooldown, e o sistema processa em round-robin para que enquanto uma "descansa" outra envie.
-
-#### A.2 Permissões — ⚠️ Parcial
-
-- O Edge `send-bulk-whatsapp` **já valida** `campanhas_whatsapp.create` (linhas 134–179) — isso é bom.
-- O **frontend** (`CarteiraPage.tsx:629`) gateia o botão por `permissions.canCreateCampanhas`.
-- ❌ **Problema:** o perfil padrão `gerente` em `usePermissions.ts:67` **não tem** `create` em `campanhas_whatsapp` (só `view_all` e `view_metrics`). Então hoje **só admin/super_admin** disparam por padrão — o que está alinhado ao seu pedido, mas não há UI para o admin **delegar** essa permissão a operadores específicos sem mexer em código.
-- Existe a infra: `permission_profiles.permissions` (perfil customizado) e `user_permissions` (override por usuário) — o Edge já lê os dois.
-- ❌ Não há um UI claro de "quem pode disparar" para o admin gerenciar.
-
-#### A.3 Distribuição entre instâncias — ⚠️ Funciona, mas só "igual"
-
-`distributeRoundRobin` em `whatsappCampaignService.ts:127`:
-- Embaralha destinatários e atribui em round-robin: `instanceIds[i % instanceIds.length]`.
-- ✅ Distribui **igual** para todos os números selecionados.
-- ❌ **Não permite peso** — não dá para dizer "número A recebe 60%, B recebe 30%, C recebe 10%".
-- ❌ Não considera "saúde" da instância (idade do número, histórico de bloqueio, capacidade restante).
-
-#### A.4 Pontos finos detectados
-
-- ✅ Confirmação obrigatória antes do envio (W2.1) implementada.
-- ✅ Estimativa de tempo coerente com o backend.
-- ⚠️ A UI mostra "round-robin automático" mas não permite ao admin **ajustar pesos**.
-- ⚠️ O Edge ainda tem o "fluxo legado" (linhas 549–686) para ≤5 destinatários — esse fluxo **não passa por campanha** e usa só a instância default. Funciona, mas seria mais limpo unificar tudo em campanha.
+Inclui tudo do plano anterior + **recorrência** (diária/semanal/mensal) pensada para tenants que operam com Agente de IA 24/7.
 
 ---
 
-### Parte B — Plano de melhorias
+### C.1 Banco — colunas + status + tabela de recorrência
 
-Priorizei pelo seu pedido: **gate de permissão + delegação + distribuição ponderada**. Divido em 3 entregas independentes.
+**Migration em `whatsapp_campaigns`:**
+- `scheduled_for timestamptz` (nullable) — próxima execução.
+- `schedule_type text` — `'once' | 'recurring'` (default `'once'`).
+- `recurrence_rule jsonb` (nullable) — regra da recorrência. Ex.:
+  ```json
+  {
+    "frequency": "daily" | "weekly" | "monthly",
+    "time": "08:00",
+    "weekdays": [1,2,3,4,5],      // se weekly
+    "day_of_month": 10,            // se monthly
+    "window_start": "08:00",       // janela de envio permitida
+    "window_end": "20:00",
+    "end_at": "2026-12-31T23:59:59Z" | null,
+    "max_runs": 30 | null,
+    "skip_weekends": true,
+    "timezone": "America/Sao_Paulo"
+  }
+  ```
+- `recurrence_run_count int default 0` — quantas execuções já rodaram.
+- `parent_campaign_id uuid` (nullable) — FK para campanha "mãe" (instâncias filhas geradas a cada execução).
+- Novo valor de `status`: `'scheduled'`.
+- Índice parcial: `WHERE status = 'scheduled'`.
 
-#### Entrega 1 — Gate "só admin (ou delegado)" com clareza
-
-**Objetivo:** garantir que por padrão só admin dispare, e que admin tenha um lugar claro para delegar a operadores específicos.
-
-1. **Reforço visual no botão de disparo** (`CarteiraPage.tsx`):
-   - Se o usuário não tem `canCreateCampanhas`, esconder botão (já é o comportamento) — manter.
-   - Se tem, adicionar `Tooltip` no botão indicando "Permissão de disparo: ativa".
-
-2. **Permissão padrão por role** (`usePermissions.ts`):
-   - Confirmar `admin`/`super_admin` com `create + start + pause` (já tem).
-   - **Remover** `create` de `gerente`/`supervisor`/`operador` (já não têm — só conferir).
-   - Mensagem de fallback no Edge mantém-se: `403 Forbidden`.
-
-3. **Tela de delegação para admin** (nova):
-   - Criar `WhatsAppDispatchPermissionsPage.tsx` (ou aba dentro de `Configurações > Permissões`).
-   - Lista todos os usuários do tenant (`profiles`) com toggle "Pode disparar campanhas WhatsApp".
-   - Toggle ON: faz `upsert` em `user_permissions` (`module: 'campanhas_whatsapp', actions: ['create','start']`).
-   - Toggle OFF: remove a linha.
-   - Acessível apenas a admin/super_admin (gate por rota).
-
-4. **Indicador no header da campanha**:
-   - Em `CampaignSummaryTab` mostrar `Criada por: <nome>` (já existe `created_by`, só renderizar com join em `profiles`).
-
-#### Entrega 2 — Distribuição ponderada entre números
-
-**Objetivo:** permitir distribuir igual (default) **ou** atribuir percentual customizado por instância.
-
-1. **`WhatsAppBulkDialog.tsx` — Step 2 evoluído:**
-   - Manter checkbox de seleção das instâncias.
-   - Adicionar toggle no topo: **"Distribuição: Igual (round-robin) | Personalizada (por peso)"**.
-   - Modo **Igual** (default): comportamento atual.
-   - Modo **Personalizada**: para cada instância selecionada, slider de 0-100% com soma travada em 100%.
-     - Botão "Equalizar" para resetar.
-     - Mostra ao vivo "X destinatários (~Y%)" por instância.
-     - Validação: soma === 100% e nenhuma instância com 0% se selecionada.
-
-2. **Novo método `distributeWeighted`** em `whatsappCampaignService.ts`:
-   - Input: `recipients`, `[{instanceId, weight}]` com `sum(weight)===100`.
-   - Cálculo: `count_i = round(total * weight_i/100)`; ajusta o último para fechar o total.
-   - Embaralha e atribui blocos sequenciais, depois reembaralha o array final para que envios não saiam "em ordem por instância".
-   - Round-robin existente vira um caso especial onde todos os pesos são iguais.
-
-3. **Persistir o peso na campanha:**
-   - Adicionar coluna `instance_weights jsonb` em `whatsapp_campaigns` (migration).
-   - Preencher na criação (`createCampaign`) — útil para auditoria e relatórios.
-   - O Edge **não precisa mudar** porque a distribuição já é gravada nos `recipients` (`assigned_instance_id`). O Edge só consome o que está atribuído.
-
-4. **No diálogo de confirmação (W2.1):**
-   - Mostrar a distribuição final: `"Instância A: 60 msg (60%) · Instância B: 30 msg (30%)..."` em vez do "round-robin automático".
-
-#### Entrega 3 — Saúde e proteção da instância (opcional, recomendado)
-
-Para tornar a "distribuição inteligente" um diferencial real:
-
-1. **Recomendação automática de pesos** baseada em:
-   - Idade da instância (`whatsapp_instances.created_at`): números mais velhos suportam mais volume.
-   - Volume nas últimas 24h (somar `chat_messages` outbound onde `endpoint_id = inst.id`).
-   - Última falha registrada.
-2. Botão **"Sugerir distribuição"** no Step 2 que pré-preenche os pesos com uma fórmula conservadora (números novos < 1 semana ficam com no máximo 30 msg/dia, antigos com até 200 msg/dia).
-3. **Limite diário por instância** configurável em `whatsapp_instances.daily_send_limit` (nova coluna). O Edge respeita: se a instância já bateu o limite no dia, marca recipients dela como `failed` com motivo "limite diário atingido" (ou pula e redistribui — a escolher).
+**Tabela nova `whatsapp_campaign_runs`** (histórico de execuções da recorrente):
+- `id, parent_campaign_id, child_campaign_id, run_at, status, recipients_count, tenant_id`.
+- RLS padrão por tenant.
 
 ---
 
-### Recomendação de execução
+### C.2 UI — agendamento no AlertDialog de confirmação
 
-Sugiro fazer **Entregas 1 + 2 juntas** numa rodada (cobre 100% do que você pediu) e deixar a **Entrega 3** para validar uso real antes.
+Em `WhatsAppBulkDialog.tsx`, expandir o AlertDialog W2.1:
 
-### Arquivos que serão alterados (Entregas 1 + 2)
+**Toggle principal:** Enviar agora | Agendar uma vez | Recorrente
 
-- `src/pages/CarteiraPage.tsx` — Tooltip no botão.
-- `src/components/carteira/WhatsAppBulkDialog.tsx` — Step 2 com modo igual/ponderado, atualização do diálogo de confirmação.
-- `src/services/whatsappCampaignService.ts` — função `distributeWeighted`, persistência de `instance_weights`.
-- `src/hooks/usePermissions.ts` — auditar e confirmar matriz default.
-- Nova página: `src/pages/admin/WhatsAppDispatchPermissionsPage.tsx` + rota em `App.tsx` + item de menu em Configurações.
-- Migration SQL: `whatsapp_campaigns.instance_weights jsonb` (nullable).
+**Agendar uma vez:**
+- DatePicker (shadcn) + input de hora.
+- Validação: mínimo +5 min, máximo +30 dias.
+- Banner amarelo se hora fora de 08h–20h.
+
+**Recorrente:**
+- Frequência: Diária | Semanal | Mensal.
+- Horário do disparo (ex.: 08:00).
+- Se Semanal: checkboxes dos dias da semana.
+- Se Mensal: seletor de dia do mês (1–28 para evitar meses curtos).
+- Janela de envio permitida (default 08:00–20:00).
+- Toggle "Pular fins de semana".
+- Término: Nunca | Em data | Após N execuções.
+- Preview textual: "Vai rodar toda segunda e quarta às 08:00, até 31/12/2026 (aprox. 70 execuções)."
+
+Botão muda conforme modo: **Criar e Enviar / Agendar Disparo / Agendar Recorrência**.
+
+---
+
+### C.3 Serviço — criação
+
+`whatsappCampaignService.ts`:
+- `createCampaign` aceita `scheduled_for?`, `schedule_type?`, `recurrence_rule?`.
+- Se agendada (one-shot ou recorrente): status inicial `'scheduled'`, **não** chama `startCampaign`.
+- Funções novas:
+  - `cancelScheduledCampaign(id)` — muda para `'cancelled'` + recipients `pending`→`cancelled`.
+  - `rescheduleCampaign(id, newDate)`.
+  - `updateRecurrenceRule(id, newRule)`.
+  - `fireNow(id)` — antecipa execução.
+
+---
+
+### C.4 Cron + Edge Function dispatcher
+
+**`pg_cron` rodando a cada 1 min** chamando `dispatch-scheduled-campaigns`.
+
+**Edge `dispatch-scheduled-campaigns`:**
+1. Busca campanhas com `status='scheduled'` e `scheduled_for <= now()`.
+2. Para **one-shot**: muda status para `'sending'` (atômico) e invoca `send-bulk-whatsapp`.
+3. Para **recorrente**:
+   - Valida `recurrence_rule` (janela, fins de semana, `end_at`, `max_runs`).
+   - Se válida → **clona** a campanha (nova linha com `parent_campaign_id`, status `'sending'`, mesmos destinatários/filtros rematerializados a partir dos critérios originais salvos em `audience_metadata`) e invoca `send-bulk-whatsapp` na cópia.
+   - Registra em `whatsapp_campaign_runs`.
+   - Incrementa `recurrence_run_count` na mãe.
+   - Atualiza `scheduled_for` da mãe para a **próxima ocorrência** calculada pela `recurrence_rule`.
+   - Se `end_at` passou ou `run_count >= max_runs` → marca mãe como `'completed'` e remove do agendador.
+4. Respeita `try_lock_campaign` existente.
+
+---
+
+### C.5 Gestão — listagem e controles
+
+Em `CampaignManagementPage`:
+- **Filtro novo "Agendadas"** + sub-filtro Uma vez / Recorrente.
+- Card mostra:
+  - One-shot: `scheduled_for` + countdown ("em 2h 15min").
+  - Recorrente: regra em linguagem natural + próxima execução + contador `X de Y execuções`.
+- Ações (admin/delegado):
+  - **Cancelar agendamento** (one-shot).
+  - **Pausar/Retomar recorrência** (status `'scheduled'` ↔ `'paused'`).
+  - **Editar regra** (reabre dialog de agendamento).
+  - **Disparar agora** (antecipa execução).
+  - **Ver execuções** (modal com lista de `whatsapp_campaign_runs`).
+
+---
+
+### C.6 Auditoria
+
+`audit_logs`:
+- `scheduled_campaign_created`, `scheduled_campaign_cancelled`, `scheduled_campaign_triggered`.
+- `recurring_campaign_created`, `recurring_campaign_paused`, `recurring_campaign_resumed`, `recurring_campaign_edited`, `recurring_run_executed`, `recurring_campaign_finished`.
+- Metadata: quem fez a ação, regra antes/depois em edições.
+
+---
+
+### Arquivos alterados/criados
+
+- **Migration SQL** — colunas em `whatsapp_campaigns`, tabela `whatsapp_campaign_runs`, índices, RLS, cron job.
+- **Edge Function nova** — `supabase/functions/dispatch-scheduled-campaigns/index.ts` (inclui calculador de próxima ocorrência).
+- `src/services/whatsappCampaignService.ts` — assinaturas novas + helpers de recorrência.
+- `src/components/carteira/WhatsAppBulkDialog.tsx` — UI de agendar/recorrer no AlertDialog.
+- `src/components/contact-center/whatsapp/campaigns/CampaignManagementPage.tsx` — filtros e controles.
+- Componente novo `RecurrenceRuleEditor.tsx` (reutilizável para criação e edição).
+- `src/integrations/supabase/types.ts` — automático via migration.
 
 ### Fora de escopo
-
-- Edge `send-bulk-whatsapp` (não precisa mexer — já consome o que `assigned_instance_id` define).
-- Anti-ban backend (já está sólido).
-- Campanhas mistas oficial+não-oficial (continuam bloqueadas).
+- `send-bulk-whatsapp` (sem mudanças — consome campanhas `sending`).
+- Anti-ban (já sólido).
+- Timezone multi-região (fica fixo `America/Sao_Paulo` nesta entrega).
 
 ### Próximo passo
-
-Confirme **"Aplicar Entregas 1 + 2"** ou se prefere quebrar (ex.: só Entrega 2 primeiro, ou só Entrega 1, ou incluir Entrega 3 já).
+Confirme **"Aplicar agendamento + recorrência"** para implementar.
