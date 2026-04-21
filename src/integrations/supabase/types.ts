@@ -5950,6 +5950,7 @@ export type Database = {
           description: string | null
           failed_count: number
           id: string
+          instance_weights: Json | null
           message_body: string | null
           message_mode: string
           name: string | null
@@ -5987,6 +5988,7 @@ export type Database = {
           description?: string | null
           failed_count?: number
           id?: string
+          instance_weights?: Json | null
           message_body?: string | null
           message_mode?: string
           name?: string | null
@@ -6024,6 +6026,7 @@ export type Database = {
           description?: string | null
           failed_count?: number
           id?: string
+          instance_weights?: Json | null
           message_body?: string | null
           message_mode?: string
           name?: string | null

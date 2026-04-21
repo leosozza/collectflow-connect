@@ -6,6 +6,7 @@ import { Client } from "@/services/clientService";
 import {
   deduplicateClients,
   distributeRoundRobin,
+  distributeWeighted,
   fetchEligibleInstances,
   createCampaign,
   createRecipients,
@@ -15,6 +16,7 @@ import {
   pollCampaignProgress,
   EligibleInstance,
   CampaignProgress,
+  InstanceWeight,
 } from "@/services/whatsappCampaignService";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -91,6 +93,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [customMessage, setCustomMessage] = useState("");
   const [useCustom, setUseCustom] = useState(false);
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
+  const [distributionMode, setDistributionMode] = useState<"equal" | "weighted">("equal");
+  const [weightMap, setWeightMap] = useState<Record<string, number>>({});
   const [sending, setSending] = useState(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
@@ -127,6 +131,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setCustomMessage("");
       setUseCustom(false);
       setSelectedInstanceIds([]);
+      setDistributionMode("equal");
+      setWeightMap({});
       setSending(false);
       setCampaignId(null);
       setProgress(null);
@@ -193,20 +199,66 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
   const dedup = useMemo(() => deduplicateClients(selectedClients), [selectedClients]);
 
+  // Equalize weights whenever the selected set changes (sum to 100, last absorbs remainder)
+  useEffect(() => {
+    if (selectedInstanceIds.length === 0) {
+      setWeightMap({});
+      return;
+    }
+    const n = selectedInstanceIds.length;
+    const base = Math.floor(100 / n);
+    const remainder = 100 - base * n;
+    const next: Record<string, number> = {};
+    selectedInstanceIds.forEach((id, idx) => {
+      next[id] = idx === n - 1 ? base + remainder : base;
+    });
+    setWeightMap(next);
+  }, [selectedInstanceIds]);
+
+  const weightsArray: InstanceWeight[] = useMemo(
+    () => selectedInstanceIds.map((id) => ({ instanceId: id, weight: weightMap[id] ?? 0 })),
+    [selectedInstanceIds, weightMap]
+  );
+
+  const weightsSum = useMemo(
+    () => weightsArray.reduce((s, w) => s + (w.weight || 0), 0),
+    [weightsArray]
+  );
+
   const distribution = useMemo(() => {
     if (selectedInstanceIds.length === 0) return {};
-    const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
+    const distributed =
+      distributionMode === "weighted" && weightsSum === 100
+        ? distributeWeighted(dedup.recipients, weightsArray)
+        : distributeRoundRobin(dedup.recipients, selectedInstanceIds);
     const counts: Record<string, number> = {};
     for (const r of distributed) {
       counts[r.assignedInstanceId] = (counts[r.assignedInstanceId] || 0) + 1;
     }
     return counts;
-  }, [dedup.recipients, selectedInstanceIds]);
+  }, [dedup.recipients, selectedInstanceIds, distributionMode, weightsArray, weightsSum]);
 
   const toggleInstance = (id: string) => {
     setSelectedInstanceIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  const updateWeight = (id: string, value: number) => {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    setWeightMap((prev) => ({ ...prev, [id]: v }));
+  };
+
+  const equalizeWeights = () => {
+    if (selectedInstanceIds.length === 0) return;
+    const n = selectedInstanceIds.length;
+    const base = Math.floor(100 / n);
+    const remainder = 100 - base * n;
+    const next: Record<string, number> = {};
+    selectedInstanceIds.forEach((id, idx) => {
+      next[id] = idx === n - 1 ? base + remainder : base;
+    });
+    setWeightMap(next);
   };
 
   const isMixed = useMemo(
@@ -220,7 +272,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   );
 
   const canProceedStep1 = useCustom ? customMessage.trim().length > 0 : !!selectedTemplate;
-  const canProceedStep2 = selectedInstanceIds.length > 0 && !isMixed;
+  const weightsValid =
+    distributionMode === "equal" ||
+    (weightsSum === 100 && selectedInstanceIds.every((id) => (weightMap[id] ?? 0) > 0));
+  const canProceedStep2 = selectedInstanceIds.length > 0 && !isMixed && weightsValid;
 
   // Pre-send validation
   const getValidationErrors = (): string[] => {
@@ -229,6 +284,11 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     if (isMixed) errors.push("Não é permitido misturar instâncias oficiais e não-oficiais. Crie campanhas separadas.");
     if (!getMessageTemplate().trim()) errors.push("Defina uma mensagem antes de enviar");
     if (dedup.recipients.length === 0) errors.push("Nenhum destinatário válido encontrado");
+    if (distributionMode === "weighted") {
+      if (weightsSum !== 100) errors.push(`Os pesos devem somar 100% (atual: ${weightsSum}%)`);
+      if (selectedInstanceIds.some((id) => (weightMap[id] ?? 0) <= 0))
+        errors.push("Todas as instâncias selecionadas precisam ter peso maior que 0");
+    }
     return errors;
   };
 
@@ -265,7 +325,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     setStep(4);
 
     try {
-      const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
+      const useWeighted = distributionMode === "weighted" && weightsSum === 100;
+      const distributed = useWeighted
+        ? distributeWeighted(dedup.recipients, weightsArray)
+        : distributeRoundRobin(dedup.recipients, selectedInstanceIds);
       const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
       const finalName = campaignName.trim() || buildDefaultName();
 
@@ -280,6 +343,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         created_by: user.id,
         provider_category: providerCategory,
         name: finalName,
+        instance_weights: useWeighted ? weightsArray : null,
       });
 
       setCampaignId(campaign.id);
@@ -396,8 +460,105 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           Você selecionou instâncias oficiais e não-oficiais. Crie campanhas separadas para cada tipo.
         </div>
       )}
+
+      {selectedInstanceIds.length > 0 && !isMixed && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm font-medium">Distribuição</Label>
+            <div className="flex items-center rounded-md border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDistributionMode("equal")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  distributionMode === "equal"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+              >
+                Igual
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistributionMode("weighted")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  distributionMode === "weighted"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+              >
+                Por peso
+              </button>
+            </div>
+          </div>
+
+          {distributionMode === "equal" ? (
+            <p className="text-xs text-muted-foreground">
+              Round-robin: os {dedup.recipients.length} destinatários únicos serão distribuídos igualmente entre {selectedInstanceIds.length} instância(s).
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Ajuste a porcentagem de envios por número (soma deve ser 100%).
+                </p>
+                <Button type="button" variant="ghost" size="sm" onClick={equalizeWeights} className="h-6 text-xs">
+                  Equalizar
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {selectedInstanceIds.map((id) => {
+                  const inst = instances.find((i) => i.id === id);
+                  const w = weightMap[id] ?? 0;
+                  const count = Math.round((dedup.recipients.length * w) / 100);
+                  return (
+                    <div key={id} className="space-y-1 rounded-md border p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate flex-1">{inst?.name || id}</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={w}
+                            onChange={(e) => updateWeight(id, Number(e.target.value) || 0)}
+                            className="h-7 w-16 text-right text-xs"
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={w}
+                        onChange={(e) => updateWeight(id, Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        ~{count} destinatário(s)
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                className={`flex items-center justify-between text-xs px-2 py-1 rounded ${
+                  weightsSum === 100
+                    ? "bg-success/10 text-success"
+                    : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                <span>Soma dos pesos</span>
+                <span className="font-semibold">{weightsSum}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        {selectedInstanceIds.length} instância(s) selecionada(s) — distribuição round-robin automática
+        {selectedInstanceIds.length} instância(s) selecionada(s)
+        {distributionMode === "weighted" ? " — distribuição personalizada" : " — distribuição igual (round-robin)"}
       </p>
     </div>
   );
@@ -480,7 +641,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
           <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
           <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
-          <p><strong>Modo:</strong> Round-robin automático com proteção Anti-Ban</p>
+          <p><strong>Modo:</strong> {distributionMode === "weighted" ? "Distribuição personalizada (por peso)" : "Round-robin (igual)"} com proteção Anti-Ban</p>
         </div>
       </div>
     );
@@ -711,17 +872,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                     <span className="font-medium text-foreground">
                       {providerCategory === "official_meta" ? "Oficial Meta" : "Anti-Ban (Não-Oficial)"}
                     </span>
+                    {" · "}
+                    <span className="font-medium text-foreground">
+                      {distributionMode === "weighted" ? "Distribuição personalizada" : "Round-robin (igual)"}
+                    </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Instâncias selecionadas ({selectedInstanceIds.length}):
                   </p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-1">
                     {selectedInstanceIds.map((id) => {
                       const inst = instances.find((i) => i.id === id);
+                      const count = distribution[id] || 0;
+                      const pct = dedup.recipients.length > 0 ? Math.round((count / dedup.recipients.length) * 100) : 0;
                       return (
-                        <Badge key={id} variant="outline" className="text-xs">
-                          {inst?.name || id}
-                        </Badge>
+                        <div key={id} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/40">
+                          <span className="truncate">{inst?.name || id}</span>
+                          <span className="font-medium text-foreground shrink-0">{count} msg ({pct}%)</span>
+                        </div>
                       );
                     })}
                   </div>
