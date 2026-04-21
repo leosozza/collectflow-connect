@@ -135,6 +135,64 @@ export function distributeRoundRobin(
   }));
 }
 
+// ---- Weighted distribution ----
+// Distributes recipients across instances by integer percentage weights.
+// Input weights must sum to 100. The function rounds per-instance counts,
+// then adjusts the largest bucket so total matches recipients.length.
+// Output is finally shuffled to interleave sends between instances.
+
+export interface InstanceWeight {
+  instanceId: string;
+  weight: number; // 0-100, integer
+}
+
+export function distributeWeighted(
+  recipients: DeduplicatedRecipient[],
+  weights: InstanceWeight[]
+): (DeduplicatedRecipient & { assignedInstanceId: string })[] {
+  const total = recipients.length;
+  if (total === 0 || weights.length === 0) return [];
+
+  const sumWeights = weights.reduce((s, w) => s + (w.weight || 0), 0);
+  if (sumWeights <= 0) {
+    // fallback to round-robin if weights are invalid
+    return distributeRoundRobin(
+      recipients,
+      weights.map((w) => w.instanceId)
+    );
+  }
+
+  // Compute per-instance counts
+  const counts = weights.map((w) => ({
+    instanceId: w.instanceId,
+    count: Math.floor((total * w.weight) / sumWeights),
+  }));
+  let assigned = counts.reduce((s, c) => s + c.count, 0);
+  // Distribute leftover to largest weighted bucket(s) in order
+  const sortedByWeight = [...weights]
+    .map((w, idx) => ({ idx, weight: w.weight }))
+    .sort((a, b) => b.weight - a.weight);
+  let i = 0;
+  while (assigned < total) {
+    counts[sortedByWeight[i % sortedByWeight.length].idx].count += 1;
+    assigned += 1;
+    i += 1;
+  }
+
+  // Shuffle source recipients first
+  const shuffled = [...recipients].sort(() => Math.random() - 0.5);
+  const result: (DeduplicatedRecipient & { assignedInstanceId: string })[] = [];
+  let cursor = 0;
+  for (const c of counts) {
+    for (let k = 0; k < c.count; k++) {
+      result.push({ ...shuffled[cursor], assignedInstanceId: c.instanceId });
+      cursor += 1;
+    }
+  }
+  // Re-shuffle to avoid bursts from a single instance
+  return result.sort(() => Math.random() - 0.5);
+}
+
 // ---- Fetch eligible instances (multi-provider: DB + Gupshup virtual) ----
 
 export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
@@ -233,6 +291,7 @@ export interface CreateCampaignInput {
   created_by: string;
   provider_category?: string;
   name?: string;
+  instance_weights?: InstanceWeight[] | null;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<WhatsAppCampaign> {
@@ -254,6 +313,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       created_by: input.created_by,
       name: input.name || `Disparo Carteira ${new Date().toLocaleDateString("pt-BR")}`,
       origin_type: "OP_CARTEIRA",
+      instance_weights: input.instance_weights ?? null,
     } as any)
     .select()
     .single();
