@@ -460,8 +460,105 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           Você selecionou instâncias oficiais e não-oficiais. Crie campanhas separadas para cada tipo.
         </div>
       )}
+
+      {selectedInstanceIds.length > 0 && !isMixed && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm font-medium">Distribuição</Label>
+            <div className="flex items-center rounded-md border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDistributionMode("equal")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  distributionMode === "equal"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+              >
+                Igual
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistributionMode("weighted")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  distributionMode === "weighted"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
+              >
+                Por peso
+              </button>
+            </div>
+          </div>
+
+          {distributionMode === "equal" ? (
+            <p className="text-xs text-muted-foreground">
+              Round-robin: os {dedup.recipients.length} destinatários únicos serão distribuídos igualmente entre {selectedInstanceIds.length} instância(s).
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Ajuste a porcentagem de envios por número (soma deve ser 100%).
+                </p>
+                <Button type="button" variant="ghost" size="sm" onClick={equalizeWeights} className="h-6 text-xs">
+                  Equalizar
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {selectedInstanceIds.map((id) => {
+                  const inst = instances.find((i) => i.id === id);
+                  const w = weightMap[id] ?? 0;
+                  const count = Math.round((dedup.recipients.length * w) / 100);
+                  return (
+                    <div key={id} className="space-y-1 rounded-md border p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate flex-1">{inst?.name || id}</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={w}
+                            onChange={(e) => updateWeight(id, Number(e.target.value) || 0)}
+                            className="h-7 w-16 text-right text-xs"
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={w}
+                        onChange={(e) => updateWeight(id, Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        ~{count} destinatário(s)
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                className={`flex items-center justify-between text-xs px-2 py-1 rounded ${
+                  weightsSum === 100
+                    ? "bg-success/10 text-success"
+                    : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                <span>Soma dos pesos</span>
+                <span className="font-semibold">{weightsSum}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        {selectedInstanceIds.length} instância(s) selecionada(s) — distribuição round-robin automática
+        {selectedInstanceIds.length} instância(s) selecionada(s)
+        {distributionMode === "weighted" ? " — distribuição personalizada" : " — distribuição igual (round-robin)"}
       </p>
     </div>
   );
