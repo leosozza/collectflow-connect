@@ -14,10 +14,15 @@ import {
   deriveProviderCategory,
   isMixedProviderSelection,
   pollCampaignProgress,
+  computeNextRunClient,
   EligibleInstance,
   CampaignProgress,
   InstanceWeight,
 } from "@/services/whatsappCampaignService";
+import RecurrenceRuleEditor, {
+  RecurrenceRule,
+  describeRecurrenceRule,
+} from "@/components/carteira/RecurrenceRuleEditor";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -64,6 +69,9 @@ import {
   AlertTriangle,
   ShieldCheck,
   Clock,
+  Calendar,
+  Repeat,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -101,6 +109,21 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
   const [confirmStartOpen, setConfirmStartOpen] = useState(false);
   const [campaignName, setCampaignName] = useState("");
+  const [scheduleMode, setScheduleMode] = useState<"now" | "once" | "recurring">("now");
+  const [scheduleDate, setScheduleDate] = useState<string>("");
+  const [scheduleTime, setScheduleTime] = useState<string>("");
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule>({
+    frequency: "daily",
+    time: "08:00",
+    weekdays: [1, 2, 3, 4, 5],
+    day_of_month: 1,
+    window_start: "08:00",
+    window_end: "20:00",
+    skip_weekends: true,
+    end_at: null,
+    max_runs: null,
+    timezone: "America/Sao_Paulo",
+  });
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: templates = [] } = useQuery({
@@ -138,6 +161,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setProgress(null);
       setConfirmStartOpen(false);
       setCampaignName("");
+      setScheduleMode("now");
+      setScheduleDate("");
+      setScheduleTime("");
       stopPolling();
     }
   }, [open, stopPolling]);

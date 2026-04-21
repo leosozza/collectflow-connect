@@ -293,9 +293,13 @@ export interface CreateCampaignInput {
   provider_category?: string;
   name?: string;
   instance_weights?: InstanceWeight[] | null;
+  scheduled_for?: string | null;
+  schedule_type?: "once" | "recurring";
+  recurrence_rule?: Record<string, any> | null;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<WhatsAppCampaign> {
+  const isScheduled = !!input.scheduled_for;
   const { data, error } = await supabase
     .from("whatsapp_campaigns" as any)
     .insert({
@@ -304,7 +308,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       channel_type: "whatsapp",
       provider_category: input.provider_category || "unofficial",
       campaign_type: "manual_human_outreach",
-      status: "draft",
+      status: isScheduled ? "scheduled" : "draft",
       message_mode: input.message_mode,
       message_body: input.message_body,
       template_id: input.template_id,
@@ -315,12 +319,92 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       name: input.name || `Disparo Carteira ${new Date().toLocaleDateString("pt-BR")}`,
       origin_type: "OP_CARTEIRA",
       instance_weights: input.instance_weights ?? null,
+      scheduled_for: input.scheduled_for ?? null,
+      schedule_type: input.schedule_type || "once",
+      recurrence_rule: input.recurrence_rule ?? null,
     } as any)
     .select()
     .single();
 
   if (error) throw error;
   return data as unknown as WhatsAppCampaign;
+}
+
+// ---- Scheduled campaign management ----
+
+export async function cancelScheduledCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "cancelled", scheduled_for: null })
+    .eq("id", campaignId)
+    .in("status", ["scheduled", "paused"]);
+  if (error) throw error;
+
+  await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .update({ status: "cancelled" })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+}
+
+export async function pauseRecurringCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "paused" })
+    .eq("id", campaignId)
+    .eq("status", "scheduled");
+  if (error) throw error;
+}
+
+export async function resumeRecurringCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "scheduled" })
+    .eq("id", campaignId)
+    .eq("status", "paused");
+  if (error) throw error;
+}
+
+export async function rescheduleCampaign(
+  campaignId: string,
+  newScheduledFor: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ scheduled_for: newScheduledFor, status: "scheduled" })
+    .eq("id", campaignId);
+  if (error) throw error;
+}
+
+export async function updateRecurrenceRule(
+  campaignId: string,
+  newRule: Record<string, any>,
+  nextScheduledFor: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ recurrence_rule: newRule, scheduled_for: nextScheduledFor })
+    .eq("id", campaignId);
+  if (error) throw error;
+}
+
+export async function fireNowScheduledCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ scheduled_for: new Date().toISOString() })
+    .eq("id", campaignId)
+    .in("status", ["scheduled", "paused"]);
+  if (error) throw error;
+}
+
+export async function fetchCampaignRuns(parentCampaignId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_campaign_runs" as any)
+    .select("*")
+    .eq("parent_campaign_id", parentCampaignId)
+    .order("run_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as any[];
 }
 
 export async function createRecipients(
@@ -437,4 +521,59 @@ export async function fetchCampaignById(campaignId: string): Promise<WhatsAppCam
     .single();
   if (error) return null;
   return data as unknown as WhatsAppCampaign;
+}
+
+// ---- Recurrence: compute next run (frontend mirror of edge logic) ----
+// Timezone fixed at America/Sao_Paulo (UTC-3, no DST post-2019).
+
+export interface RecurrenceRuleFE {
+  frequency: "daily" | "weekly" | "monthly";
+  time: string; // HH:MM
+  weekdays?: number[];
+  day_of_month?: number;
+  window_start?: string;
+  window_end?: string;
+  end_at?: string | null;
+  max_runs?: number | null;
+  skip_weekends?: boolean;
+  timezone?: string;
+}
+
+export function computeNextRunClient(rule: RecurrenceRuleFE, fromIso?: string): string | null {
+  const TZ_OFFSET_MIN = -180;
+  const [hh, mm] = (rule.time || "08:00").split(":").map((x) => parseInt(x, 10));
+  const from = fromIso ? new Date(fromIso) : new Date();
+
+  const localFromMs = from.getTime() + TZ_OFFSET_MIN * 60000;
+  const localFrom = new Date(localFromMs);
+
+  let candidate = new Date(localFromMs);
+  candidate.setUTCHours(hh, mm, 0, 0);
+  if (candidate <= localFrom) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+
+  for (let i = 0; i < 370; i++) {
+    const day = candidate.getUTCDay();
+    const skipW = rule.skip_weekends && (day === 0 || day === 6);
+    let matches = false;
+    if (!skipW) {
+      if (rule.frequency === "daily") matches = true;
+      else if (rule.frequency === "weekly") {
+        const wds = rule.weekdays && rule.weekdays.length > 0 ? rule.weekdays : [1, 2, 3, 4, 5];
+        matches = wds.includes(day);
+      } else if (rule.frequency === "monthly") {
+        const dom = Math.min(Math.max(rule.day_of_month || 1, 1), 28);
+        matches = candidate.getUTCDate() === dom;
+      }
+    }
+    if (matches) {
+      const utcMs = candidate.getTime() - TZ_OFFSET_MIN * 60000;
+      const next = new Date(utcMs);
+      if (rule.end_at && next > new Date(rule.end_at)) return null;
+      return next.toISOString();
+    }
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+  return null;
 }
