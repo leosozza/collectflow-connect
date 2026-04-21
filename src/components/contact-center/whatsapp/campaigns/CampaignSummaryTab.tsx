@@ -1,10 +1,46 @@
-import { CampaignWithStats, fetchRecipientStatusCounts, fetchInstanceMetrics } from "@/services/campaignManagementService";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CampaignWithStats,
+  fetchRecipientStatusCounts,
+  fetchInstanceMetrics,
+} from "@/services/campaignManagementService";
+import { resolveTemplateClient } from "@/services/whatsappCampaignService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, CheckCircle, XCircle, Users, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Send,
+  CheckCircle,
+  XCircle,
+  Users,
+  TrendingUp,
+  Eye,
+  Shuffle,
+  Clock,
+  Pause,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { useQuery } from "@tanstack/react-query";
 
 const statusLabels: Record<string, string> = {
@@ -35,10 +71,30 @@ const recipientStatusLabels: Record<string, string> = {
   skipped: "Ignorado",
 };
 
-const PIE_COLORS = ["hsl(var(--primary))", "hsl(142 76% 36%)", "hsl(0 84% 60%)", "hsl(45 93% 47%)", "hsl(var(--muted-foreground))"];
+const PIE_COLORS = [
+  "hsl(var(--primary))",
+  "hsl(142 76% 36%)",
+  "hsl(0 84% 60%)",
+  "hsl(45 93% 47%)",
+  "hsl(var(--muted-foreground))",
+];
+
+// W2.3 — anti-ban constants (mirror of supabase/functions/send-bulk-whatsapp)
+const RATE_CONSTANTS = {
+  unofficial: { avgDelayMs: 11500, batchSize: 15, restMs: 120_000 },
+  official_meta: { avgDelayMs: 2000, batchSize: 50, restMs: 30_000 },
+};
 
 interface Props {
   campaign: CampaignWithStats;
+}
+
+interface PreviewRecipient {
+  id: string;
+  recipient_name: string;
+  phone: string;
+  representative_client_id: string;
+  message_body_snapshot: string | null;
 }
 
 export default function CampaignSummaryTab({ campaign }: Props) {
@@ -54,9 +110,10 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     queryFn: () => fetchInstanceMetrics(campaign.id),
   });
 
-  const deliveryRate = campaign.sent_count > 0
-    ? ((campaign.delivered_count / campaign.sent_count) * 100).toFixed(1)
-    : "—";
+  const deliveryRate =
+    campaign.sent_count > 0
+      ? ((campaign.delivered_count / campaign.sent_count) * 100).toFixed(1)
+      : "—";
 
   const pieData = statusCounts.map((s) => ({
     name: recipientStatusLabels[s.status] || s.status,
@@ -68,8 +125,201 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     count: m.recipients,
   }));
 
+  // ----------------- W2.2 — Preview de mensagem -----------------
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewRecipient, setPreviewRecipient] = useState<PreviewRecipient | null>(null);
+  const [previewRendered, setPreviewRendered] = useState<string>("");
+  const [previewSource, setPreviewSource] = useState<"snapshot" | "template" | "empty">("empty");
+
+  async function loadPreview() {
+    setPreviewLoading(true);
+    try {
+      const { data: recipients } = await supabase
+        .from("whatsapp_campaign_recipients" as any)
+        .select("id, recipient_name, phone, representative_client_id, message_body_snapshot")
+        .eq("campaign_id", campaign.id)
+        .limit(50);
+
+      const list = (recipients || []) as unknown as PreviewRecipient[];
+      if (list.length === 0) {
+        setPreviewRecipient(null);
+        setPreviewRendered("Nenhum destinatário encontrado para esta campanha.");
+        setPreviewSource("empty");
+        return;
+      }
+
+      const picked = list[Math.floor(Math.random() * list.length)];
+      setPreviewRecipient(picked);
+
+      // 1) snapshot tem prioridade — já vem com placeholders resolvidos pelo backend
+      if (picked.message_body_snapshot && picked.message_body_snapshot.trim().length > 0) {
+        setPreviewRendered(picked.message_body_snapshot);
+        setPreviewSource("snapshot");
+        return;
+      }
+
+      // 2) fallback: resolver localmente usando dados de client_profiles + clients
+      const baseTemplate = campaign.message_body || "";
+      if (!baseTemplate) {
+        setPreviewRendered("(Mensagem da campanha vazia)");
+        setPreviewSource("empty");
+        return;
+      }
+
+      // Buscar dados do cliente para resolver placeholders
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("cpf, nome_completo, valor_parcela, data_vencimento, credor")
+        .eq("id", picked.representative_client_id)
+        .maybeSingle();
+
+      let profileRow: any = null;
+      if (clientRow?.cpf) {
+        const { data: pr } = await supabase
+          .from("client_profiles")
+          .select("nome_completo")
+          .eq("cpf", clientRow.cpf)
+          .eq("tenant_id", campaign.tenant_id)
+          .maybeSingle();
+        profileRow = pr;
+      }
+
+      const resolved = resolveTemplateClient(baseTemplate, {
+        nome_completo: profileRow?.nome_completo || clientRow?.nome_completo || picked.recipient_name,
+        cpf: clientRow?.cpf,
+        valor_parcela: clientRow?.valor_parcela,
+        data_vencimento: clientRow?.data_vencimento,
+        credor: clientRow?.credor,
+        recipient_name: picked.recipient_name,
+      });
+      setPreviewRendered(resolved);
+      setPreviewSource("template");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function openPreview() {
+    setPreviewOpen(true);
+    loadPreview();
+  }
+
+  // ----------------- W2.3 — Indicador de rate-limit ativo -----------------
+  const isSending = campaign.status === "sending";
+
+  // Re-busca metadata a cada 5s enquanto envia
+  const { data: liveMeta } = useQuery({
+    queryKey: ["campaign-progress-meta", campaign.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_campaigns" as any)
+        .select("status, progress_metadata")
+        .eq("id", campaign.id)
+        .single();
+      return data as any;
+    },
+    enabled: isSending,
+    refetchInterval: 5000,
+  });
+
+  const meta: Record<string, any> | null =
+    liveMeta?.progress_metadata || campaign.progress_metadata || null;
+  const liveStatus: string = liveMeta?.status || campaign.status;
+  const showRateLimit = liveStatus === "sending";
+
+  // Tick de 1s para countdown
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!showRateLimit) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [showRateLimit]);
+
+  const rateInfo = useMemo(() => {
+    if (!showRateLimit || !meta) return null;
+    const cat: "official_meta" | "unofficial" =
+      campaign.provider_category === "official_meta" ? "official_meta" : "unofficial";
+    const constants = RATE_CONSTANTS[cat];
+
+    const lastChunkAt: string | null = meta.last_chunk_at || null;
+    const resting: boolean = !!meta.batch_resting;
+    const restingInstance: string | null = meta.resting_instance || null;
+    const restStartedAt: string | null = meta.batch_resting_started_at || meta.resting_started_at || null;
+
+    const now = Date.now();
+    void tick; // garante recompute a cada segundo
+
+    if (resting) {
+      // Calcula tempo restante de pausa
+      const startedMs = restStartedAt ? new Date(restStartedAt).getTime() : (lastChunkAt ? new Date(lastChunkAt).getTime() : now);
+      const remainingMs = Math.max(0, constants.restMs - (now - startedMs));
+      return {
+        kind: "resting" as const,
+        instanceName: restingInstance,
+        remainingSec: Math.ceil(remainingMs / 1000),
+      };
+    }
+
+    if (lastChunkAt) {
+      const elapsed = now - new Date(lastChunkAt).getTime();
+      const remainingMs = Math.max(0, constants.avgDelayMs - elapsed);
+      return {
+        kind: "next" as const,
+        remainingSec: Math.ceil(remainingMs / 1000),
+      };
+    }
+
+    // Sem dados ainda — exibir delay base
+    return {
+      kind: "next" as const,
+      remainingSec: Math.ceil(constants.avgDelayMs / 1000),
+    };
+  }, [showRateLimit, meta, campaign.provider_category, tick]);
+
   return (
     <div className="p-4 space-y-4">
+      {/* W2.3 — Painel de rate-limit ao vivo */}
+      {showRateLimit && rateInfo && (
+        <Card
+          className={
+            rateInfo.kind === "resting"
+              ? "border-orange-500/40 bg-orange-500/5"
+              : "border-green-500/40 bg-green-500/5"
+          }
+        >
+          <CardContent className="p-3 flex items-center gap-3">
+            {rateInfo.kind === "resting" ? (
+              <Pause className="w-5 h-5 text-orange-600 shrink-0" />
+            ) : (
+              <Clock className="w-5 h-5 text-green-600 shrink-0" />
+            )}
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {rateInfo.kind === "resting"
+                  ? `Pausa anti-ban ativa${rateInfo.instanceName ? ` em ${rateInfo.instanceName}` : ""}`
+                  : "Próximo envio em breve"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {rateInfo.kind === "resting"
+                  ? `Retomando em ${rateInfo.remainingSec}s — protege a instância contra bloqueio`
+                  : `~${rateInfo.remainingSec}s para o próximo disparo`}
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className={
+                rateInfo.kind === "resting"
+                  ? "border-orange-500/50 text-orange-700"
+                  : "border-green-500/50 text-green-700"
+              }
+            >
+              {rateInfo.kind === "resting" ? "Em pausa" : "Em ritmo"}
+            </Badge>
+          </CardContent>
+        </Card>
+      )}
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card>
@@ -103,7 +353,10 @@ export default function CampaignSummaryTab({ campaign }: Props) {
         <Card>
           <CardContent className="p-3 text-center">
             <TrendingUp className="w-5 h-5 mx-auto mb-1 text-yellow-500" />
-            <p className="text-xl font-bold">{deliveryRate}{deliveryRate !== "—" ? "%" : ""}</p>
+            <p className="text-xl font-bold">
+              {deliveryRate}
+              {deliveryRate !== "—" ? "%" : ""}
+            </p>
             <p className="text-xs text-muted-foreground">Taxa de Entrega</p>
           </CardContent>
         </Card>
@@ -125,7 +378,9 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Origem</p>
-            <p className="font-medium">{originLabels[campaign.origin_type || campaign.source] || campaign.source}</p>
+            <p className="font-medium">
+              {originLabels[campaign.origin_type || campaign.source] || campaign.source}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Criado por</p>
@@ -133,23 +388,31 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Criação</p>
-            <p className="font-medium">{format(new Date(campaign.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+            <p className="font-medium">
+              {format(new Date(campaign.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+            </p>
           </div>
           {campaign.started_at && (
             <div>
               <p className="text-muted-foreground text-xs">Início</p>
-              <p className="font-medium">{format(new Date(campaign.started_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+              <p className="font-medium">
+                {format(new Date(campaign.started_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+              </p>
             </div>
           )}
           {campaign.completed_at && (
             <div>
               <p className="text-muted-foreground text-xs">Conclusão</p>
-              <p className="font-medium">{format(new Date(campaign.completed_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+              <p className="font-medium">
+                {format(new Date(campaign.completed_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+              </p>
             </div>
           )}
           <div>
             <p className="text-muted-foreground text-xs">Modo Mensagem</p>
-            <p className="font-medium">{campaign.message_mode === "template" ? "Template" : "Personalizada"}</p>
+            <p className="font-medium">
+              {campaign.message_mode === "template" ? "Template" : "Personalizada"}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Provider</p>
@@ -186,7 +449,14 @@ export default function CampaignSummaryTab({ campaign }: Props) {
             <CardContent className="flex items-center justify-center">
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
@@ -202,8 +472,12 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       {/* Message preview */}
       {campaign.message_body && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Mensagem</CardTitle>
+            <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={openPreview}>
+              <Eye className="w-3.5 h-3.5" />
+              Pré-visualizar
+            </Button>
           </CardHeader>
           <CardContent>
             <pre className="whitespace-pre-wrap text-sm bg-muted p-3 rounded-lg max-h-40 overflow-auto">
@@ -212,6 +486,58 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* W2.2 — Diálogo de pré-visualização (estilo bolha de chat) */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-4 h-4" />
+              Pré-visualização da mensagem
+            </DialogTitle>
+            <DialogDescription>
+              Como ficará a mensagem no WhatsApp do destinatário escolhido.
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewLoading ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">Carregando…</div>
+          ) : (
+            <div className="space-y-3">
+              {previewRecipient && (
+                <div className="text-xs text-muted-foreground flex items-center justify-between">
+                  <span>
+                    Destinatário: <span className="font-medium text-foreground">{previewRecipient.recipient_name}</span> · {previewRecipient.phone}
+                  </span>
+                  {previewSource === "snapshot" ? (
+                    <Badge variant="secondary" className="text-[10px]">snapshot real</Badge>
+                  ) : previewSource === "template" ? (
+                    <Badge variant="outline" className="text-[10px]">simulado</Badge>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Bolha estilo WhatsApp (verde claro, à direita) */}
+              <div className="rounded-lg bg-muted/40 p-4 min-h-[120px] flex">
+                <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-green-100 dark:bg-green-900/40 px-3 py-2 shadow-sm">
+                  <p className="text-sm whitespace-pre-wrap text-foreground">{previewRendered}</p>
+                  <p className="text-[10px] text-muted-foreground text-right mt-1">
+                    {format(new Date(), "HH:mm")} ✓✓
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button variant="outline" size="sm" onClick={loadPreview} disabled={previewLoading} className="gap-1.5">
+              <Shuffle className="w-3.5 h-3.5" />
+              Sortear outro
+            </Button>
+            <Button size="sm" onClick={() => setPreviewOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
