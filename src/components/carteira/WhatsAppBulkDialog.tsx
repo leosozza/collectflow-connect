@@ -95,6 +95,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
+  const [confirmStartOpen, setConfirmStartOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState("");
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: templates = [] } = useQuery({
