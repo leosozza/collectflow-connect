@@ -199,20 +199,66 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
   const dedup = useMemo(() => deduplicateClients(selectedClients), [selectedClients]);
 
+  // Equalize weights whenever the selected set changes (sum to 100, last absorbs remainder)
+  useEffect(() => {
+    if (selectedInstanceIds.length === 0) {
+      setWeightMap({});
+      return;
+    }
+    const n = selectedInstanceIds.length;
+    const base = Math.floor(100 / n);
+    const remainder = 100 - base * n;
+    const next: Record<string, number> = {};
+    selectedInstanceIds.forEach((id, idx) => {
+      next[id] = idx === n - 1 ? base + remainder : base;
+    });
+    setWeightMap(next);
+  }, [selectedInstanceIds]);
+
+  const weightsArray: InstanceWeight[] = useMemo(
+    () => selectedInstanceIds.map((id) => ({ instanceId: id, weight: weightMap[id] ?? 0 })),
+    [selectedInstanceIds, weightMap]
+  );
+
+  const weightsSum = useMemo(
+    () => weightsArray.reduce((s, w) => s + (w.weight || 0), 0),
+    [weightsArray]
+  );
+
   const distribution = useMemo(() => {
     if (selectedInstanceIds.length === 0) return {};
-    const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
+    const distributed =
+      distributionMode === "weighted" && weightsSum === 100
+        ? distributeWeighted(dedup.recipients, weightsArray)
+        : distributeRoundRobin(dedup.recipients, selectedInstanceIds);
     const counts: Record<string, number> = {};
     for (const r of distributed) {
       counts[r.assignedInstanceId] = (counts[r.assignedInstanceId] || 0) + 1;
     }
     return counts;
-  }, [dedup.recipients, selectedInstanceIds]);
+  }, [dedup.recipients, selectedInstanceIds, distributionMode, weightsArray, weightsSum]);
 
   const toggleInstance = (id: string) => {
     setSelectedInstanceIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  const updateWeight = (id: string, value: number) => {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    setWeightMap((prev) => ({ ...prev, [id]: v }));
+  };
+
+  const equalizeWeights = () => {
+    if (selectedInstanceIds.length === 0) return;
+    const n = selectedInstanceIds.length;
+    const base = Math.floor(100 / n);
+    const remainder = 100 - base * n;
+    const next: Record<string, number> = {};
+    selectedInstanceIds.forEach((id, idx) => {
+      next[id] = idx === n - 1 ? base + remainder : base;
+    });
+    setWeightMap(next);
   };
 
   const isMixed = useMemo(
