@@ -30,6 +30,7 @@ export interface CampaignWithStats {
   created_at: string;
   updated_at: string;
   creator_name?: string;
+  progress_metadata?: Record<string, any> | null;
 }
 
 export interface CampaignRecipientWithClient {
