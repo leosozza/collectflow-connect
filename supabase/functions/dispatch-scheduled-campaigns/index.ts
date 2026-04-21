@@ -63,7 +63,12 @@ function computeNextRun(rule: RecurrenceRule, fromIso: string): string | null {
         const wds = rule.weekdays && rule.weekdays.length > 0 ? rule.weekdays : [1, 2, 3, 4, 5];
         matches = wds.includes(day);
       } else if (rule.frequency === "monthly") {
-        const dom = Math.min(Math.max(rule.day_of_month || 1, 1), 28);
+        // Allow 1-31; when month has fewer days, fire on the last day available.
+        const requested = Math.min(Math.max(rule.day_of_month || 1, 1), 31);
+        const year = candidate.getUTCFullYear();
+        const month = candidate.getUTCMonth(); // 0..11
+        const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+        const dom = Math.min(requested, daysInMonth);
         matches = candidate.getUTCDate() === dom;
       }
     }
@@ -101,16 +106,22 @@ async function dispatchOneShot(supabase: any, campaign: any) {
     return;
   }
 
-  // Audit log
-  await supabase.from("audit_logs").insert({
-    tenant_id: campaign.tenant_id,
-    user_id: campaign.created_by,
-    user_name: "system",
-    action: "scheduled_campaign_triggered",
-    entity_type: "whatsapp_campaign",
-    entity_id: campaign.id,
-    details: { scheduled_for: campaign.scheduled_for },
-  });
+  // Audit log (never blocks dispatch if it fails — e.g. null created_by)
+  try {
+    if (campaign.created_by) {
+      await supabase.from("audit_logs").insert({
+        tenant_id: campaign.tenant_id,
+        user_id: campaign.created_by,
+        user_name: "system",
+        action: "scheduled_campaign_triggered",
+        entity_type: "whatsapp_campaign",
+        entity_id: campaign.id,
+        details: { scheduled_for: campaign.scheduled_for },
+      });
+    }
+  } catch (e: any) {
+    console.log(`[one-shot] audit_log insert failed (non-fatal): ${e?.message}`);
+  }
 
   // Invoke send-bulk-whatsapp (fire-and-forget)
   fetch(`${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`, {
@@ -153,15 +164,21 @@ async function dispatchRecurring(supabase: any, mother: any) {
       .from("whatsapp_campaigns")
       .update({ status: "completed", scheduled_for: null })
       .eq("id", mother.id);
-    await supabase.from("audit_logs").insert({
-      tenant_id: mother.tenant_id,
-      user_id: mother.created_by,
-      user_name: "system",
-      action: "recurring_campaign_finished",
-      entity_type: "whatsapp_campaign",
-      entity_id: mother.id,
-      details: { reason: "max_runs_reached", runs: mother.recurrence_run_count },
-    });
+    try {
+      if (mother.created_by) {
+        await supabase.from("audit_logs").insert({
+          tenant_id: mother.tenant_id,
+          user_id: mother.created_by,
+          user_name: "system",
+          action: "recurring_campaign_finished",
+          entity_type: "whatsapp_campaign",
+          entity_id: mother.id,
+          details: { reason: "max_runs_reached", runs: mother.recurrence_run_count },
+        });
+      }
+    } catch (e: any) {
+      console.log(`[recurring] audit insert failed (non-fatal): ${e?.message}`);
+    }
     return;
   }
 
@@ -171,19 +188,26 @@ async function dispatchRecurring(supabase: any, mother: any) {
       .from("whatsapp_campaigns")
       .update({ status: "completed", scheduled_for: null })
       .eq("id", mother.id);
-    await supabase.from("audit_logs").insert({
-      tenant_id: mother.tenant_id,
-      user_id: mother.created_by,
-      user_name: "system",
-      action: "recurring_campaign_finished",
-      entity_type: "whatsapp_campaign",
-      entity_id: mother.id,
-      details: { reason: "end_at_passed" },
-    });
+    try {
+      if (mother.created_by) {
+        await supabase.from("audit_logs").insert({
+          tenant_id: mother.tenant_id,
+          user_id: mother.created_by,
+          user_name: "system",
+          action: "recurring_campaign_finished",
+          entity_type: "whatsapp_campaign",
+          entity_id: mother.id,
+          details: { reason: "end_at_passed" },
+        });
+      }
+    } catch (e: any) {
+      console.log(`[recurring] audit insert failed (non-fatal): ${e?.message}`);
+    }
     return;
   }
 
-  // Window check — inclusive start, inclusive end (so 20:00 still fires when window is 08-20)
+  // Window check — lexicographic comparison of "HH:MM" strings works because
+  // the editor always produces 2-digit zero-padded values. Inclusive on both ends.
   if (rule.window_start && rule.window_end) {
     const localNowMs = now.getTime() + -180 * 60000;
     const local = new Date(localNowMs);
@@ -235,6 +259,7 @@ async function dispatchRecurring(supabase: any, mother: any) {
       created_by: mother.created_by,
       name: `${mother.name || "Recorrente"} — ${new Date().toLocaleString("pt-BR", { timeZone: TZ })}`,
       origin_type: mother.origin_type,
+      routing_mode: mother.routing_mode,
       instance_weights: mother.instance_weights,
       parent_campaign_id: mother.id,
       schedule_type: "once",
@@ -245,14 +270,18 @@ async function dispatchRecurring(supabase: any, mother: any) {
 
   if (childErr || !child) {
     console.error(`[recurring] failed to create child for ${mother.id}:`, childErr?.message);
-    await supabase.from("whatsapp_campaign_runs").insert({
-      tenant_id: mother.tenant_id,
-      parent_campaign_id: mother.id,
-      run_at: new Date().toISOString(),
-      status: "failed",
-      recipients_count: motherRecipients.length,
-      error_message: childErr?.message || "child creation failed",
-    });
+    try {
+      await supabase.from("whatsapp_campaign_runs").insert({
+        tenant_id: mother.tenant_id,
+        parent_campaign_id: mother.id,
+        run_at: new Date().toISOString(),
+        status: "failed",
+        recipients_count: motherRecipients.length,
+        error_message: childErr?.message || "child creation failed",
+      });
+    } catch (e: any) {
+      console.log(`[recurring] run insert failed (non-fatal): ${e?.message}`);
+    }
     return;
   }
 
@@ -274,26 +303,36 @@ async function dispatchRecurring(supabase: any, mother: any) {
       .insert(childRows.slice(i, i + 500));
   }
 
-  // Log the run
-  await supabase.from("whatsapp_campaign_runs").insert({
-    tenant_id: mother.tenant_id,
-    parent_campaign_id: mother.id,
-    child_campaign_id: child.id,
-    run_at: new Date().toISOString(),
-    status: "triggered",
-    recipients_count: motherRecipients.length,
-  });
+  // Log the run (non-blocking)
+  try {
+    await supabase.from("whatsapp_campaign_runs").insert({
+      tenant_id: mother.tenant_id,
+      parent_campaign_id: mother.id,
+      child_campaign_id: child.id,
+      run_at: new Date().toISOString(),
+      status: "triggered",
+      recipients_count: motherRecipients.length,
+    });
+  } catch (e: any) {
+    console.log(`[recurring] run insert failed (non-fatal): ${e?.message}`);
+  }
 
-  // Audit
-  await supabase.from("audit_logs").insert({
-    tenant_id: mother.tenant_id,
-    user_id: mother.created_by,
-    user_name: "system",
-    action: "recurring_run_executed",
-    entity_type: "whatsapp_campaign",
-    entity_id: mother.id,
-    details: { child_campaign_id: child.id, run_count: (mother.recurrence_run_count || 0) + 1 },
-  });
+  // Audit (non-blocking)
+  try {
+    if (mother.created_by) {
+      await supabase.from("audit_logs").insert({
+        tenant_id: mother.tenant_id,
+        user_id: mother.created_by,
+        user_name: "system",
+        action: "recurring_run_executed",
+        entity_type: "whatsapp_campaign",
+        entity_id: mother.id,
+        details: { child_campaign_id: child.id, run_count: (mother.recurrence_run_count || 0) + 1 },
+      });
+    }
+  } catch (e: any) {
+    console.log(`[recurring] audit insert failed (non-fatal): ${e?.message}`);
+  }
 
   // Compute next run and update mother
   const next = computeNextRun(rule, new Date(now.getTime() + 60000).toISOString());

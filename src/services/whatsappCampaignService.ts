@@ -563,7 +563,12 @@ export function computeNextRunClient(rule: RecurrenceRuleFE, fromIso?: string): 
         const wds = rule.weekdays && rule.weekdays.length > 0 ? rule.weekdays : [1, 2, 3, 4, 5];
         matches = wds.includes(day);
       } else if (rule.frequency === "monthly") {
-        const dom = Math.min(Math.max(rule.day_of_month || 1, 1), 28);
+        // Allow 1-31; when the month has fewer days, use the last day of the month.
+        const requested = Math.min(Math.max(rule.day_of_month || 1, 1), 31);
+        const year = candidate.getUTCFullYear();
+        const month = candidate.getUTCMonth();
+        const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+        const dom = Math.min(requested, daysInMonth);
         matches = candidate.getUTCDate() === dom;
       }
     }
