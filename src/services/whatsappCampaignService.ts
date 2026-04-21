@@ -293,9 +293,13 @@ export interface CreateCampaignInput {
   provider_category?: string;
   name?: string;
   instance_weights?: InstanceWeight[] | null;
+  scheduled_for?: string | null;
+  schedule_type?: "once" | "recurring";
+  recurrence_rule?: Record<string, any> | null;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<WhatsAppCampaign> {
+  const isScheduled = !!input.scheduled_for;
   const { data, error } = await supabase
     .from("whatsapp_campaigns" as any)
     .insert({
@@ -304,7 +308,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       channel_type: "whatsapp",
       provider_category: input.provider_category || "unofficial",
       campaign_type: "manual_human_outreach",
-      status: "draft",
+      status: isScheduled ? "scheduled" : "draft",
       message_mode: input.message_mode,
       message_body: input.message_body,
       template_id: input.template_id,
@@ -315,12 +319,92 @@ export async function createCampaign(input: CreateCampaignInput): Promise<WhatsA
       name: input.name || `Disparo Carteira ${new Date().toLocaleDateString("pt-BR")}`,
       origin_type: "OP_CARTEIRA",
       instance_weights: input.instance_weights ?? null,
+      scheduled_for: input.scheduled_for ?? null,
+      schedule_type: input.schedule_type || "once",
+      recurrence_rule: input.recurrence_rule ?? null,
     } as any)
     .select()
     .single();
 
   if (error) throw error;
   return data as unknown as WhatsAppCampaign;
+}
+
+// ---- Scheduled campaign management ----
+
+export async function cancelScheduledCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "cancelled", scheduled_for: null })
+    .eq("id", campaignId)
+    .in("status", ["scheduled", "paused"]);
+  if (error) throw error;
+
+  await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .update({ status: "cancelled" })
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending");
+}
+
+export async function pauseRecurringCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "paused" })
+    .eq("id", campaignId)
+    .eq("status", "scheduled");
+  if (error) throw error;
+}
+
+export async function resumeRecurringCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "scheduled" })
+    .eq("id", campaignId)
+    .eq("status", "paused");
+  if (error) throw error;
+}
+
+export async function rescheduleCampaign(
+  campaignId: string,
+  newScheduledFor: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ scheduled_for: newScheduledFor, status: "scheduled" })
+    .eq("id", campaignId);
+  if (error) throw error;
+}
+
+export async function updateRecurrenceRule(
+  campaignId: string,
+  newRule: Record<string, any>,
+  nextScheduledFor: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ recurrence_rule: newRule, scheduled_for: nextScheduledFor })
+    .eq("id", campaignId);
+  if (error) throw error;
+}
+
+export async function fireNowScheduledCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ scheduled_for: new Date().toISOString() })
+    .eq("id", campaignId)
+    .in("status", ["scheduled", "paused"]);
+  if (error) throw error;
+}
+
+export async function fetchCampaignRuns(parentCampaignId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_campaign_runs" as any)
+    .select("*")
+    .eq("parent_campaign_id", parentCampaignId)
+    .order("run_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as any[];
 }
 
 export async function createRecipients(
