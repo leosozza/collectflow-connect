@@ -927,9 +927,13 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
               <AlertTriangle className="w-5 h-5 text-destructive" />
               Confirmar disparo em lote
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm">
-                <div className="space-y-1">
+            <AlertDialogDescription>
+              Revise os detalhes abaixo antes de confirmar o disparo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 text-sm px-6 pb-2">
+            <div className="space-y-3">
+              <div className="space-y-1">
                   <Label htmlFor="campaign-name" className="text-xs">Nome da campanha</Label>
                   <Input
                     id="campaign-name"
@@ -1074,9 +1078,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
                     }
                   </span>
                 </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel autoFocus disabled={sending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction

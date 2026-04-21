@@ -391,7 +391,7 @@ export async function updateRecurrenceRule(
 export async function fireNowScheduledCampaign(campaignId: string): Promise<void> {
   const { error } = await supabase
     .from("whatsapp_campaigns" as any)
-    .update({ scheduled_for: new Date().toISOString() })
+    .update({ scheduled_for: new Date().toISOString(), status: "scheduled" })
     .eq("id", campaignId)
     .in("status", ["scheduled", "paused"]);
   if (error) throw error;
