@@ -522,3 +522,58 @@ export async function fetchCampaignById(campaignId: string): Promise<WhatsAppCam
   if (error) return null;
   return data as unknown as WhatsAppCampaign;
 }
+
+// ---- Recurrence: compute next run (frontend mirror of edge logic) ----
+// Timezone fixed at America/Sao_Paulo (UTC-3, no DST post-2019).
+
+export interface RecurrenceRuleFE {
+  frequency: "daily" | "weekly" | "monthly";
+  time: string; // HH:MM
+  weekdays?: number[];
+  day_of_month?: number;
+  window_start?: string;
+  window_end?: string;
+  end_at?: string | null;
+  max_runs?: number | null;
+  skip_weekends?: boolean;
+  timezone?: string;
+}
+
+export function computeNextRunClient(rule: RecurrenceRuleFE, fromIso?: string): string | null {
+  const TZ_OFFSET_MIN = -180;
+  const [hh, mm] = (rule.time || "08:00").split(":").map((x) => parseInt(x, 10));
+  const from = fromIso ? new Date(fromIso) : new Date();
+
+  const localFromMs = from.getTime() + TZ_OFFSET_MIN * 60000;
+  const localFrom = new Date(localFromMs);
+
+  let candidate = new Date(localFromMs);
+  candidate.setUTCHours(hh, mm, 0, 0);
+  if (candidate <= localFrom) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+
+  for (let i = 0; i < 370; i++) {
+    const day = candidate.getUTCDay();
+    const skipW = rule.skip_weekends && (day === 0 || day === 6);
+    let matches = false;
+    if (!skipW) {
+      if (rule.frequency === "daily") matches = true;
+      else if (rule.frequency === "weekly") {
+        const wds = rule.weekdays && rule.weekdays.length > 0 ? rule.weekdays : [1, 2, 3, 4, 5];
+        matches = wds.includes(day);
+      } else if (rule.frequency === "monthly") {
+        const dom = Math.min(Math.max(rule.day_of_month || 1, 1), 28);
+        matches = candidate.getUTCDate() === dom;
+      }
+    }
+    if (matches) {
+      const utcMs = candidate.getTime() - TZ_OFFSET_MIN * 60000;
+      const next = new Date(utcMs);
+      if (rule.end_at && next > new Date(rule.end_at)) return null;
+      return next.toISOString();
+    }
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+  return null;
+}
