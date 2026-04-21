@@ -161,7 +161,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setProgress(null);
       setConfirmStartOpen(false);
       setCampaignName("");
-      stopPolling();
+      setScheduleMode("now");
+      setScheduleDate("");
+      setScheduleTime("");
     }
   }, [open, stopPolling]);
 
