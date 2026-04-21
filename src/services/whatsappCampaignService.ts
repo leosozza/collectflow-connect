@@ -341,6 +341,33 @@ export async function fetchCampaignRecipients(campaignId: string): Promise<Whats
   return (data || []) as unknown as WhatsAppCampaignRecipient[];
 }
 
+// ---- Template resolver (frontend mirror of supabase/functions/_shared/template-resolver.ts) ----
+
+const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+export function resolveTemplateClient(
+  template: string,
+  client: Record<string, any>
+): string {
+  if (!template) return "";
+
+  const nome = client.nome_completo || client.recipient_name || "";
+  const cpf = client.cpf || "";
+  const valorParcela = brlFormatter.format(Number(client.valor_parcela) || 0);
+  const dataVencimento = client.data_vencimento
+    ? new Date(String(client.data_vencimento) + "T12:00:00").toLocaleDateString("pt-BR")
+    : "";
+  const credor = client.credor || "";
+
+  return template
+    .replace(/\{\{nome\}\}/g, nome)
+    .replace(/\{\{cpf\}\}/g, cpf)
+    .replace(/\{\{valor_parcela\}\}/g, valorParcela)
+    .replace(/\{\{valor\}\}/g, valorParcela)
+    .replace(/\{\{data_vencimento\}\}/g, dataVencimento)
+    .replace(/\{\{credor\}\}/g, credor);
+}
+
 export async function fetchCampaignById(campaignId: string): Promise<WhatsAppCampaign | null> {
   const { data, error } = await supabase
     .from("whatsapp_campaigns" as any)
