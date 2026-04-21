@@ -14,10 +14,15 @@ import {
   deriveProviderCategory,
   isMixedProviderSelection,
   pollCampaignProgress,
+  computeNextRunClient,
   EligibleInstance,
   CampaignProgress,
   InstanceWeight,
 } from "@/services/whatsappCampaignService";
+import RecurrenceRuleEditor, {
+  RecurrenceRule,
+  describeRecurrenceRule,
+} from "@/components/carteira/RecurrenceRuleEditor";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -64,6 +69,9 @@ import {
   AlertTriangle,
   ShieldCheck,
   Clock,
+  Calendar,
+  Repeat,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
