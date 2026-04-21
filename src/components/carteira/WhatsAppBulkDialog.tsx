@@ -232,6 +232,24 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     return errors;
   };
 
+  const buildDefaultName = () => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    return `Disparo carteira ${hh}:${mm}`;
+  };
+
+  const requestStart = () => {
+    if (!tenant?.id || !user?.id) return;
+    const validationErrors = getValidationErrors();
+    if (validationErrors.length > 0) {
+      validationErrors.forEach((e) => toast.error(e));
+      return;
+    }
+    if (!campaignName.trim()) setCampaignName(buildDefaultName());
+    setConfirmStartOpen(true);
+  };
+
   const handleSend = async () => {
     if (!tenant?.id || !user?.id) return;
 
@@ -242,12 +260,14 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
     }
 
     const template = getMessageTemplate();
+    setConfirmStartOpen(false);
     setSending(true);
     setStep(4);
 
     try {
       const distributed = distributeRoundRobin(dedup.recipients, selectedInstanceIds);
       const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
+      const finalName = campaignName.trim() || buildDefaultName();
 
       const campaign = await createCampaign({
         tenant_id: tenant.id,
@@ -259,6 +279,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         total_unique_recipients: dedup.recipients.length,
         created_by: user.id,
         provider_category: providerCategory,
+        name: finalName,
       });
 
       setCampaignId(campaign.id);
