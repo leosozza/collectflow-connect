@@ -927,8 +927,15 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
               <AlertTriangle className="w-5 h-5 text-destructive" />
               Confirmar disparo em lote
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm">
+            <AlertDialogDescription>
+              Revise os detalhes abaixo antes de confirmar o disparo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="space-y-1 hidden">{/* spacer placeholder */}</div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                {/* original interactive block starts */}
                 <div className="space-y-1">
                   <Label htmlFor="campaign-name" className="text-xs">Nome da campanha</Label>
                   <Input
