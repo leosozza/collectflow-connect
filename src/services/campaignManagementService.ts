@@ -31,6 +31,12 @@ export interface CampaignWithStats {
   updated_at: string;
   creator_name?: string;
   progress_metadata?: Record<string, any> | null;
+  scheduled_for?: string | null;
+  schedule_type?: "once" | "recurring" | null;
+  recurrence_rule?: Record<string, any> | null;
+  recurrence_run_count?: number | null;
+  parent_campaign_id?: string | null;
+  instance_weights?: { instanceId: string; weight: number }[] | null;
 }
 
 export interface CampaignRecipientWithClient {
