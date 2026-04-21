@@ -932,7 +932,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 text-sm px-6 pb-2">
-            <div className="space-y-1">
+            <div className="space-y-3">
+              <div className="space-y-1">
                   <Label htmlFor="campaign-name" className="text-xs">Nome da campanha</Label>
                   <Input
                     id="campaign-name"
