@@ -164,6 +164,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setScheduleMode("now");
       setScheduleDate("");
       setScheduleTime("");
+      stopPolling();
     }
   }, [open, stopPolling]);
 
