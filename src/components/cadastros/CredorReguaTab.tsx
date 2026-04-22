@@ -67,6 +67,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const [instanceId, setInstanceId] = useState<string>("none");
   const [template, setTemplate] = useState(DEFAULT_TEMPLATES.wallet);
   const [filterType, setFilterType] = useState<"all" | RuleType>("all");
+  const [sendTimeStart, setSendTimeStart] = useState("09:00");
+  const [sendTimeEnd, setSendTimeEnd] = useState("18:00");
+  const [minDelay, setMinDelay] = useState("8");
+  const [maxDelay, setMaxDelay] = useState("15");
+  const [dailyCap, setDailyCap] = useState("");
 
   const loadData = useCallback(async () => {
     if (!tenant || !credorId) return;
@@ -100,6 +105,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setDaysOffset("0");
     setInstanceId("none");
     setTemplate(DEFAULT_TEMPLATES.wallet);
+    setSendTimeStart("09:00");
+    setSendTimeEnd("18:00");
+    setMinDelay("8");
+    setMaxDelay("15");
+    setDailyCap("");
     setEditingRule(null);
     setShowForm(false);
   };
@@ -124,6 +134,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setDaysOffset("0");
     setInstanceId("none");
     setTemplate(DEFAULT_TEMPLATES.wallet);
+    setSendTimeStart("09:00");
+    setSendTimeEnd("18:00");
+    setMinDelay("8");
+    setMaxDelay("15");
+    setDailyCap("");
     setShowForm(true);
   };
 
@@ -142,6 +157,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setDaysOffset(rule.days_offset.toString());
     setInstanceId(rule.instance_id || "none");
     setTemplate(rule.message_template);
+    setSendTimeStart((rule.send_time_start || "09:00").slice(0, 5));
+    setSendTimeEnd((rule.send_time_end || "18:00").slice(0, 5));
+    setMinDelay(String(rule.min_delay_seconds ?? 8));
+    setMaxDelay(String(rule.max_delay_seconds ?? 15));
+    setDailyCap(rule.daily_cap ? String(rule.daily_cap) : "");
     setEditingRule(rule);
     setShowForm(true);
   };
@@ -161,6 +181,33 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
       toast.error("Informe o template da mensagem");
       return;
     }
+    // Validações de agendamento e anti-ban
+    const startMin = (() => { const [h,m] = sendTimeStart.split(":").map(Number); return h*60+m; })();
+    const endMin = (() => { const [h,m] = sendTimeEnd.split(":").map(Number); return h*60+m; })();
+    if (!(startMin < endMin)) {
+      toast.error("Horário inicial deve ser menor que o final");
+      return;
+    }
+    const minD = parseInt(minDelay);
+    const maxD = parseInt(maxDelay);
+    if (Number.isNaN(minD) || minD < 3) {
+      toast.error("Delay mínimo precisa ser ≥ 3 segundos");
+      return;
+    }
+    if (Number.isNaN(maxD) || maxD < minD) {
+      toast.error("Delay máximo precisa ser ≥ delay mínimo");
+      return;
+    }
+    let capVal: number | null = null;
+    if (dailyCap.trim() !== "") {
+      const c = parseInt(dailyCap);
+      if (Number.isNaN(c) || c <= 0) {
+        toast.error("Limite diário precisa ser um número > 0 (ou vazio)");
+        return;
+      }
+      capVal = c;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -170,6 +217,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         days_offset: parsedDays,
         message_template: template,
         instance_id: instanceId === "none" ? null : instanceId,
+        send_time_start: `${sendTimeStart}:00`,
+        send_time_end: `${sendTimeEnd}:00`,
+        min_delay_seconds: minD,
+        max_delay_seconds: maxD,
+        daily_cap: capVal,
       };
       console.log("[CredorReguaTab] saving rule payload:", { ...payload, tenant_id: tenant.id, credor_id: credorId, editing: !!editingRule });
       if (editingRule) {
