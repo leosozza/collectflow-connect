@@ -111,8 +111,40 @@ const TelefoniaAtendimentoWrapper = ({
     }
   }, [isLoading, resolvedId, clientPhone, cleanCpf, clientDbId, clientByCpf, clientByPhone]);
 
+  // Loader: while we don't have ANY identifier yet (call just started, polling not done)
+  if (!clientPhone && !cleanCpf && !clientDbId) {
+    return (
+      <div className="p-6 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+        <RefreshCw className="w-4 h-4 animate-spin" />
+        Aguardando dados da chamada...
+      </div>
+    );
+  }
+
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente...</div>;
+  }
+
+  // No client found in CRM but we DO have a phone — auto-navigate to /atendimento?phone=...
+  // so the operator always lands on a working ficha (page handles unknown clients via querystring).
+  if (!resolvedId && clientPhone) {
+    if (!hasOpened.current) {
+      hasOpened.current = true;
+      const params = new URLSearchParams();
+      params.set("phone", clientPhone);
+      if (cleanCpf) params.set("cpf", cleanCpf);
+      if (agentId) params.set("agentId", String(agentId));
+      if (callId) params.set("callId", String(callId));
+      params.set("channel", "call");
+      console.log("[Telefonia] Cliente não encontrado, abrindo ficha por telefone:", clientPhone);
+      navigate(`/atendimento?${params.toString()}`);
+    }
+    return (
+      <div className="p-6 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+        <RefreshCw className="w-4 h-4 animate-spin" />
+        Abrindo ficha de atendimento...
+      </div>
+    );
   }
 
   if (!resolvedId) {
