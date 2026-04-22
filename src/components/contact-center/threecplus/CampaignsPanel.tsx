@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, BarChart3, ListChecks, Phone, AlertTriangle, Webhook } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { extractList, extractObject, normalizeCampaignStatus } from "@/lib/threecplusUtils";
@@ -47,10 +47,7 @@ const CampaignsPanel = () => {
   const [activeTab, setActiveTab] = useState<Record<string, string>>({});
 
   // (Aggressiveness removed — 3CPlus does not honor this setting)
-
-  // Work break group per campaign
-  const [campaignWBG, setCampaignWBG] = useState<Record<string, string>>({});
-  const [savingWBG, setSavingWBG] = useState<string | null>(null);
+  // (Work Break Group selector removed from details — only set during campaign creation)
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -121,16 +118,6 @@ const CampaignsPanel = () => {
       const data = await invoke("list_campaigns");
       const list = extractList(data);
       setCampaigns(list);
-      const wbgMap: Record<string, string> = {};
-      list.forEach((c: any) => {
-        // 3CPlus may return work_break_group_id in multiple shapes
-        const wbgId =
-          c.work_break_group_id ??
-          c.work_break_group?.id ??
-          c.dialer_settings?.work_break_group_id;
-        if (wbgId) wbgMap[String(c.id)] = String(wbgId);
-      });
-      setCampaignWBG(prev => ({ ...prev, ...wbgMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
     } finally {
@@ -144,18 +131,31 @@ const CampaignsPanel = () => {
   const loadCampaignDetails = async (campaignId: string) => {
     setLoadingLists(campaignId);
     try {
-      const [listsRes, agentsRes, totalMetrics, listsMetrics, agentsMetricsRes, qualsRes] = await Promise.all([
+      // Date range = today (used by /statistics + lists metrics endpoints)
+      const today = new Date();
+      const ymd = today.toISOString().split("T")[0];
+      const startDate = `${ymd} 00:00:00`;
+      const endDate = `${ymd} 23:59:59`;
+
+      const [listsRes, agentsRes, statsRes, totalMetrics, listsMetrics, agentsMetricsRes, qualsRes] = await Promise.all([
         invoke("get_campaign_lists", { campaign_id: campaignId }),
         invoke("list_campaign_agents", { campaign_id: campaignId }),
-        invoke("campaign_lists_total_metrics", { campaign_id: campaignId }).catch(() => null),
-        invoke("campaign_lists_metrics", { campaign_id: campaignId }).catch(() => null),
-        invoke("campaign_agents_metrics", { campaign_id: campaignId }).catch(() => null),
+        invoke("campaign_statistics", { campaign_id: campaignId, startDate, endDate }).catch(() => null),
+        invoke("campaign_lists_total_metrics", { campaign_id: campaignId, startDate, endDate }).catch(() => null),
+        invoke("campaign_lists_metrics", { campaign_id: campaignId, startDate, endDate }).catch(() => null),
+        invoke("campaign_agents_metrics", { campaign_id: campaignId, startDate, endDate }).catch(() => null),
         invoke("campaign_qualifications", { campaign_id: campaignId }).catch(() => null),
       ]);
 
       setCampaignLists(prev => ({ ...prev, [campaignId]: extractList(listsRes) }));
       setCampaignAgents(prev => ({ ...prev, [campaignId]: extractList(agentsRes) }));
-      if (totalMetrics) setCampaignMetrics(prev => ({ ...prev, [campaignId]: extractObject(totalMetrics) }));
+
+      // Prefer campaign_statistics (works without mailing); fallback to total_metrics
+      const stats = statsRes && (statsRes as any)?.success !== false ? extractObject(statsRes) : null;
+      const total = totalMetrics && (totalMetrics as any)?.success !== false ? extractObject(totalMetrics) : null;
+      const merged = (stats && Object.keys(stats).length > 0) ? stats : (total || {});
+      setCampaignMetrics(prev => ({ ...prev, [campaignId]: merged }));
+
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
       setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
       setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
@@ -465,30 +465,8 @@ const CampaignsPanel = () => {
                           </Button>
                         </div>
                         {/* Aggressiveness removed — 3CPlus does not honor this setting */}
+                        {/* Work Break Group selector removed — defined only at campaign creation */}
 
-                        {/* Work Break Group Selector */}
-                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-                          <Coffee className="w-5 h-5 text-primary shrink-0" />
-                          <div className="flex-1">
-                            <Label className="text-xs font-medium mb-1 block">Grupo de Intervalos</Label>
-                            <Select
-                              value={campaignWBG[cid] || ""}
-                              onValueChange={(v) => setCampaignWBG(prev => ({ ...prev, [cid]: v }))}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Nenhum grupo selecionado" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {workBreakGroups.map((g: any) => (
-                                  <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <Button size="sm" variant="outline" disabled={savingWBG === cid} onClick={() => handleSaveWorkBreakGroup(cid)} className="shrink-0">
-                            {savingWBG === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
-                          </Button>
-                        </div>
                         <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
                           <div className="flex items-center gap-2">
                             <Webhook className="w-4 h-4 text-primary shrink-0" />
