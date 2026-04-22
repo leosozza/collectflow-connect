@@ -1078,8 +1078,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State: On call → show atendimento (unified)
-    if (isOnCall && (activeCallPhone || mailingCpf || mailingClientId)) {
+    // State: On call → ALWAYS render the atendimento wrapper, even before company_calls
+    // resolves the mailing/phone — the wrapper shows a loader until identifiers arrive.
+    if (isOnCall) {
       return (
         <div className="space-y-0">
           <div className={`flex items-center justify-between px-4 py-2.5 ${statusBgClass(myAgent?.status)} animate-pulse`}>
@@ -1091,7 +1092,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           <TelefoniaAtendimentoWrapper
             clientPhone={activeCallPhone}
             agentId={operatorAgentId!}
-            callId={activeCall?.call_id || myAgent?.call_id || myAgent?.current_call_id}
+            callId={activeCall?.call_id || activeCall?.telephony_id || myAgent?.call_id || myAgent?.current_call_id}
             clientCpf={mailingCpf}
             clientDbId={mailingClientId}
           />
