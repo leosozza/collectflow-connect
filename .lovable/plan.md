@@ -1,74 +1,70 @@
 
 
-## Análise: Gustavo aparece "Em Intervalo: Pausa" no RIVO mas está em TPA na 3CPlus
+## Análise: valor da parcela não muda após edição na tela de Acordos
 
-### Causa raiz
+### Caso da Camila Silva dos Santos Martins
 
-A 3CPlus está retornando para o agente Gustavo `status=3` (paused) no endpoint `/agents/status`, mas internamente ela classifica esse estado como **TPA pós-atendimento** (não uma pausa manual). Por isso:
+Acordo ativo `d825253a` — `entrada_value=246,00`, parcelas 4× R$ 236,61.
+Barbara fez baixa manual da entrada com valor real recebido = **R$ 246,48** (não R$ 246,00 — diferença provável de juros/centavos do PIX) e confirmou.
 
-- O painel da 3CPlus mostra "TPA" (sabe interpretar o contexto pelo `last_call`).
-- O RIVO mostra "Em Intervalo: Pausa (21:24)" porque a lógica em `TelefoniaDashboard.tsx` linha 871 classifica qualquer `status===3` como `isManualPause`, e quando não há `activePauseName` na sessão, atribui o label genérico "Pausa" (linha 861).
-- Ao clicar **Retomar** → backend chama `unpause_agent` → 3CPlus retorna **"O agente não está em intervalo ou não pode ser removido"** (toast visível na screenshot) porque o estado real é TPA, que só sai com `qualify_call`.
+Estado no banco:
+- `agreements.entrada_value` = **246,00** (intacto)
+- `agreements.custom_installment_values["entrada"]` = **inexistente**
+- `manual_payments.amount_paid` = **246,48** (status confirmed)
 
-Resultado: o operador fica preso, sem conseguir tabular nem retomar.
+Resultado na UI: a parcela "Entrada" continua exibida como **R$ 246,00**, porque `buildInstallments` lê `customValues["entrada"] ?? agreement.entrada_value` → 246,00. O valor real (246,48) só aparece dentro do registro de `manual_payments`, nunca substitui o valor agendado da parcela.
 
-### Correção em 3 pontos
+### Causa raiz (3 lugares desconectados)
 
-#### 1. Detectar TPA disfarçada de pausa (`status=3` sem pause real)
+A operação "alterar valor da parcela" hoje vive em **três fluxos isolados** que não se sincronizam entre si:
 
-Em `TelefoniaDashboard.tsx`, alterar `isManualPause` para distinguir pausa real de TPA mascarada:
+1. **PaymentConfirmationTab → botão lápis (`handleEdit`):** edita só `manual_payments.amount_paid`. Propaga delta para `clients.valor_pago` e marca `agreements.completed` — mas **nunca grava o valor novo em `agreements.custom_installment_values[key]`**. A parcela continua com o valor original.
+2. **AgreementInstallments → ícone editar valor (`handleEditValue`):** grava em `custom_installment_values[customKey]` (inclusive `"entrada"`), mas só funciona para parcelas **ainda não pagas**. Não revisa `manual_payments` já confirmados.
+3. **ManualPaymentDialog (operador solicita baixa):** envia `amount_paid` livre, sem obrigar igual ao `installmentValue`. Aceita silenciosamente valores diferentes.
 
-```ts
-// Pausa manual REAL: status 3/6 COM identificação de intervalo conhecida
-// (intervalo selecionado pelo agente OU status === 6 work_break)
-const hasKnownPause = !!sessionStorage.getItem("3cp_active_pause_name");
-const hasFinishedCallPending = !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id");
+Como Barbara confirma uma baixa de R$ 246,48 contra uma parcela agendada de R$ 246,00, a parcela fica "paga" (porque 246,48 ≥ 246,00 − 0,01), mas o valor exibido continua sendo o agendado. Para o operador parece "que o valor não foi alterado".
 
-// status=3 sem pausa conhecida + chamada recente = TPA mascarada (não é pausa)
-const isTPAMasqueradedAsPause = myAgent?.status === 3 && !hasKnownPause && hasFinishedCallPending;
+### Correção proposta
 
-const isManualPause = (myAgent?.status === 6) || (myAgent?.status === 3 && !isTPAMasqueradedAsPause);
+Tornar a confirmação/edição em `PaymentConfirmationTab` **autoritativa sobre o valor da parcela** quando o valor pago divergir do valor agendado. Em ambos `handleConfirm` e `handleEdit`, após gravar em `manual_payments`:
+
+1. Calcular `instValue` da parcela alvo via `buildInstallmentSchedule(agreement)` filtrando por `installment_key`.
+2. Se `Math.abs(amount_paid - instValue) > 0.01`:
+   - Atualizar `agreements.custom_installment_values[installment_key] = amount_paid` (mesma lógica de `updateInstallmentValue`).
+   - Para parcela "entrada" sem múltiplas entradas, atualizar **também** `agreements.entrada_value = amount_paid` (para o `entrada_value` refletir a realidade).
+   - Registrar `client_event` `installment_value_synced` com old/new para auditoria.
+3. Invalidar queries `["client-agreements", cpf]` e `["agreement-cobrancas", ...]` para o detalhe do cliente atualizar imediatamente.
+
+Adicionalmente, no `ManualPaymentDialog` (lado do operador): exibir um aviso amarelo "Valor pago difere do valor da parcela em R$ X,XX — ao confirmar, o valor da parcela será atualizado" quando `amountPaid !== installmentValue`. Sem bloquear, só transparente.
+
+### Caso Camila — correção retroativa
+
+O acordo `d825253a` da Camila já tem o pagamento confirmado com 246,48 mas a parcela mostra 246,00. Após o deploy do fix, qualquer **nova edição via lápis** sincroniza. Para o registro existente, vou rodar uma migração one-shot:
+
+```sql
+-- Backfill: para todo manual_payment confirmed onde amount_paid difere
+-- do valor agendado da parcela em mais de R$ 0,01, gravar em custom_installment_values
+-- e (se entrada única) em entrada_value.
 ```
-
-E o `effectiveACW` (linha 1009) precisa incluir `isTPAMasqueradedAsPause` para forçar o painel de tabulação a aparecer.
-
-#### 2. Header: rotular como TPA quando for o caso
-
-Linha 1300-1310: priorizar `effectiveACW` (já faz). A correção do item 1 garante que `effectiveACW` será `true` no caso do Gustavo, e a barra ficará **"TPA — Pós-atendimento (21:24)"** em vez de "Em Intervalo: Pausa".
-
-#### 3. Botão Retomar inteligente: tentar `qualify_call` antes de `unpause_agent`
-
-Em `handleUnpause` (linha 756): se a tentativa de unpause retornar **"não está em intervalo"**, fazer fallback automático para `qualify_call` com a primeira qualificação disponível (mesma lógica que já existe em `finishFn` linhas 894-932). Isso quebra o loop em que o operador clica "Retomar" e nada acontece.
-
-Adicionar também o auto-trigger: quando o sistema detectar `isTPAMasqueradedAsPause === true` por mais de 3s, abrir automaticamente o painel de qualificação (já existe `disposition modal` — basta chamar `setIsACW(true)`).
-
-### Logs de diagnóstico (já existem)
-
-Linha 1019 já loga `myAgent.status, isPaused, isTPAStatus, effectiveACW, activePauseName`. Após o fix, o console mostrará para o caso do Gustavo:
-```
-status:3 isPaused:true isTPAStatus:false isACW:false 
-effectiveACW:true activePauseName:""
-isTPAMasqueradedAsPause:true
-```
+Com `dry-run` antes do execute, mostrando quantos acordos serão tocados.
 
 ### Arquivos alterados
 
-- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
-  - Adicionar `isTPAMasqueradedAsPause` (após linha 1001).
-  - Ajustar `isManualPause` (linha 871) para excluir TPA mascarada.
-  - Ajustar `effectiveACW` (linha 1009) para incluir TPA mascarada.
-  - Em `handleUnpause` (linha 756): fallback automático para `qualify_call` quando 3CPlus rejeitar com "não está em intervalo".
-  - Auto-abrir painel de tabulação quando TPA mascarada for detectada.
+- `src/components/acordos/PaymentConfirmationTab.tsx` — adicionar sync `manual_payments.amount_paid` → `agreements.custom_installment_values` em `handleConfirm` e `handleEdit`.
+- `src/components/acordos/ManualPaymentDialog.tsx` — alerta visual quando `amountPaid !== installmentValue`.
+- `src/services/agreementService.ts` — extrair helper `syncInstallmentValueFromPayment(agreementId, installmentKey, paidAmount)` reutilizado por confirm/edit.
+- Migração SQL one-shot (backfill) — sincronizar acordos já confirmados com divergência (Camila incluída).
 
-### Validação pós-deploy (peça ao Gustavo)
+### Validação pós-deploy
 
-1. Após receber uma chamada e desligar → barra deve mostrar **"TPA — Pós-atendimento (Xs)"**, não mais "Em Intervalo: Pausa".
-2. Painel de qualificação abre automaticamente com lista de motivos.
-3. Selecionar motivo → tabula via `qualify_call` → volta para "Aguardando ligação" sem ficar preso.
-4. Se em algum momento ainda clicar "Retomar" e a 3CPlus rejeitar → fallback automático tabula a chamada com a primeira qualificação válida (escape).
+1. Abrir acordo da Camila no detalhe → entrada deve aparecer como **R$ 246,48** (não 246,00).
+2. Criar novo acordo de teste, solicitar baixa com valor diferente do agendado, confirmar como admin → parcela exibida com o valor confirmado.
+3. Editar valor de pagamento já confirmado via lápis → parcela atualiza junto.
+4. Solicitar baixa com valor divergente do agendado → diálogo mostra alerta amarelo "Valor difere em R$ X,XX".
 
 ### Fora de escopo
 
-- Mudar config de TPA na 3CPlus (lado do cliente — não temos acesso).
-- Refatorar `TelefoniaDashboard.tsx` em componentes menores.
+- Refatorar `AgreementInstallments` em componentes menores.
+- Mexer no `negociarie_cobrancas` — divergências de boletos PIX são tratadas em outro fluxo.
+- Recriar histórico antigo em `client_events` para edições já feitas antes do fix.
 
