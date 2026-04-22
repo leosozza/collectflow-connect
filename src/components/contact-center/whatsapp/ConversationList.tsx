@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Loader2, ShieldCheck, QrCode } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Loader2, ShieldCheck, QrCode, UserCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
