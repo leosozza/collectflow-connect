@@ -149,8 +149,17 @@ Deno.serve(async (req) => {
           end_time: body.end_time || '18:30',
         };
         if (body.qualification_list_id) campaignPayload.qualification_list = body.qualification_list_id;
-        if (body.work_break_group_id) campaignPayload.work_break_group_id = body.work_break_group_id;
+        if (body.work_break_group_id) {
+          // 3CPlus persists work_break_group_id inside dialer_settings
+          campaignPayload.dialer_settings = {
+            ...(campaignPayload.dialer_settings || {}),
+            work_break_group_id: body.work_break_group_id,
+          };
+          // Keep top-level too for tenants that accept both shapes
+          campaignPayload.work_break_group_id = body.work_break_group_id;
+        }
         reqBody = JSON.stringify(campaignPayload);
+        console.log(`create_campaign payload: ${reqBody}`);
         break;
       }
 
@@ -159,9 +168,16 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, `campaigns/${body.campaign_id}`, authParam);
         method = 'PATCH';
-        // Merge campaign_data with individual fields (e.g. aggressiveness)
+        // Merge campaign_data with individual fields
         const { campaign_id: _cid, campaign_data, action: _a, domain: _d, api_token: _t, ...restFields } = body;
-        const updatePayload = { ...(campaign_data || {}), ...restFields };
+        const updatePayload: Record<string, any> = { ...(campaign_data || {}), ...restFields };
+        // Mirror work_break_group_id into dialer_settings (3CPlus persistence requirement)
+        if (updatePayload.work_break_group_id !== undefined) {
+          updatePayload.dialer_settings = {
+            ...(updatePayload.dialer_settings || {}),
+            work_break_group_id: updatePayload.work_break_group_id,
+          };
+        }
         reqBody = JSON.stringify(updatePayload);
         console.log(`update_campaign payload: ${reqBody}`);
         break;

@@ -9,10 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Slider } from "@/components/ui/slider";
+
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { extractList, extractObject, normalizeCampaignStatus } from "@/lib/threecplusUtils";
@@ -46,9 +46,7 @@ const CampaignsPanel = () => {
   const [loadingLists, setLoadingLists] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, string>>({});
 
-  // Aggressiveness
-  const [aggressiveness, setAggressiveness] = useState<Record<string, number>>({});
-  const [savingAggr, setSavingAggr] = useState<string | null>(null);
+  // (Aggressiveness removed — 3CPlus does not honor this setting)
 
   // Work break group per campaign
   const [campaignWBG, setCampaignWBG] = useState<Record<string, string>>({});
@@ -123,14 +121,15 @@ const CampaignsPanel = () => {
       const data = await invoke("list_campaigns");
       const list = extractList(data);
       setCampaigns(list);
-      const aggrMap: Record<string, number> = {};
       const wbgMap: Record<string, string> = {};
       list.forEach((c: any) => {
-        const n = normalizeCampaignStatus(c);
-        aggrMap[String(c.id)] = n.aggressiveness;
-        if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
+        // 3CPlus may return work_break_group_id in multiple shapes
+        const wbgId =
+          c.work_break_group_id ??
+          c.work_break_group?.id ??
+          c.dialer_settings?.work_break_group_id;
+        if (wbgId) wbgMap[String(c.id)] = String(wbgId);
       });
-      setAggressiveness(prev => ({ ...prev, ...aggrMap }));
       setCampaignWBG(prev => ({ ...prev, ...wbgMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
@@ -138,6 +137,9 @@ const CampaignsPanel = () => {
       setLoading(false);
     }
   };
+
+  const [lastDetailsUpdate, setLastDetailsUpdate] = useState<Record<string, Date>>({});
+  const [detailsTick, setDetailsTick] = useState(0);
 
   const loadCampaignDetails = async (campaignId: string) => {
     setLoadingLists(campaignId);
@@ -157,6 +159,7 @@ const CampaignsPanel = () => {
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
       setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
       setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
+      setLastDetailsUpdate(prev => ({ ...prev, [campaignId]: new Date() }));
     } catch {
       toast.error("Erro ao carregar detalhes da campanha");
     } finally {
@@ -208,17 +211,7 @@ const CampaignsPanel = () => {
     }
   };
 
-  const handleSaveAggressiveness = async (campaignId: string) => {
-    setSavingAggr(campaignId);
-    try {
-      await invoke("update_campaign", { campaign_id: campaignId, aggressiveness: aggressiveness[campaignId] ?? 1 });
-      toast.success("Agressividade atualizada!");
-    } catch {
-      toast.error("Erro ao atualizar agressividade");
-    } finally {
-      setSavingAggr(null);
-    }
-  };
+  // (handleSaveAggressiveness removed — feature deprecated)
 
   const handleSaveWorkBreakGroup = async (campaignId: string) => {
     setSavingWBG(campaignId);
@@ -344,6 +337,21 @@ const CampaignsPanel = () => {
 
   useEffect(() => { if (hasCredentials) loadCampaigns(); }, [domain, apiToken]);
 
+  // Auto-refresh expanded campaign details every 15s
+  useEffect(() => {
+    if (!expandedCampaign) return;
+    const id = setInterval(() => loadCampaignDetails(expandedCampaign), 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedCampaign]);
+
+  // Tick every second to refresh "atualizado há Xs" label
+  useEffect(() => {
+    if (!expandedCampaign) return;
+    const id = setInterval(() => setDetailsTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [expandedCampaign]);
+
   /* ─── Helpers ─── */
 
   const getStatusBadge = (status: string) => {
@@ -444,30 +452,19 @@ const CampaignsPanel = () => {
                       </div>
                     ) : (
                       <>
-                        {/* Refresh button */}
-                        <div className="flex justify-end">
+                        {/* Refresh button + last update */}
+                        <div className="flex justify-end items-center gap-2">
+                          {lastDetailsUpdate[cid] && (
+                            <span className="text-[10px] text-muted-foreground">
+                              Atualizado há {Math.floor((Date.now() - lastDetailsUpdate[cid].getTime()) / 1000)}s
+                              {detailsTick >= 0 ? "" : ""}
+                            </span>
+                          )}
                           <Button variant="outline" size="sm" onClick={() => loadCampaignDetails(cid)} className="gap-2 text-xs">
                             <RefreshCw className="w-3.5 h-3.5" /> Atualizar Detalhes
                           </Button>
                         </div>
-                        {/* Aggressiveness Slider */}
-                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-                          <Gauge className="w-5 h-5 text-primary shrink-0" />
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-xs font-medium">Agressividade</Label>
-                              <span className="text-xs font-bold text-primary">{aggressiveness[cid] ?? 1}</span>
-                            </div>
-                            <Slider
-                              min={1} max={10} step={1}
-                              value={[aggressiveness[cid] ?? 1]}
-                              onValueChange={([v]) => setAggressiveness(prev => ({ ...prev, [cid]: v }))}
-                            />
-                          </div>
-                          <Button size="sm" variant="outline" disabled={savingAggr === cid} onClick={() => handleSaveAggressiveness(cid)} className="shrink-0">
-                            {savingAggr === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
-                          </Button>
-                        </div>
+                        {/* Aggressiveness removed — 3CPlus does not honor this setting */}
 
                         {/* Work Break Group Selector */}
                         <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">

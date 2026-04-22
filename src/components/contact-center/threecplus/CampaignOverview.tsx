@@ -1,7 +1,6 @@
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Pause, Play, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,13 +16,23 @@ interface CampaignOverviewProps {
   domain: string;
   apiToken: string;
   onRefresh: () => void;
+  lastUpdate?: Date | null;
 }
 
-const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: CampaignOverviewProps) => {
+const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh, lastUpdate }: CampaignOverviewProps) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState(true);
+  const [secondsAgo, setSecondsAgo] = useState(0);
   const allExpanded = campaigns.length > 0 && expandedIds.size === campaigns.length;
+
+  useEffect(() => {
+    if (!lastUpdate) return;
+    const tick = () => setSecondsAgo(Math.floor((Date.now() - lastUpdate.getTime()) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lastUpdate]);
 
   const toggleOne = (id: number) => {
     setExpandedIds((prev) => {
@@ -56,28 +65,6 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
     }
   };
 
-  const handleAggressiveness = async (campaignId: number, value: number) => {
-    setActionLoading(`aggr_${campaignId}`);
-    try {
-      const { error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "update_campaign",
-          domain,
-          api_token: apiToken,
-          campaign_id: campaignId,
-          campaign_data: { dialer_settings: { aggressiveness: value } },
-        },
-      });
-      if (error) throw error;
-      toast.success(`Agressividade alterada para ${value}`);
-      onRefresh();
-    } catch {
-      toast.error("Erro ao alterar agressividade");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   if (loading && campaigns.length === 0) {
     return <Skeleton className="h-32 w-full rounded-xl" />;
   }
@@ -92,7 +79,14 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
         <span className="text-sm font-semibold text-foreground">
           Campanhas ({campaigns.length})
         </span>
-        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${!collapsed ? "rotate-180" : ""}`} />
+        <div className="flex items-center gap-3">
+          {lastUpdate && (
+            <span className="text-[10px] text-muted-foreground">
+              Atualizado há {secondsAgo}s
+            </span>
+          )}
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${!collapsed ? "rotate-180" : ""}`} />
+        </div>
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-2">
@@ -106,7 +100,6 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
               <TableHead className="text-xs h-9 w-[180px]">Progresso</TableHead>
               <TableHead className="text-xs h-9 text-center">Agentes</TableHead>
               <TableHead className="text-xs h-9 text-center">Trabalhados</TableHead>
-              <TableHead className="text-xs h-9 w-[160px]">Agressividade</TableHead>
               <TableHead className="text-xs h-9 w-10" />
             </TableRow>
           </TableHeader>
@@ -145,20 +138,6 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                     <TableCell className="py-2 text-center text-sm font-semibold">
                       {n.worked || "—"}
                     </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-xs font-semibold w-4 text-center">{n.aggressiveness}</span>
-                        <Slider
-                          min={1}
-                          max={10}
-                          step={1}
-                          defaultValue={[n.aggressiveness]}
-                          onValueCommit={(v) => handleAggressiveness(c.id, v[0])}
-                          disabled={actionLoading === `aggr_${c.id}`}
-                          className="flex-1"
-                        />
-                      </div>
-                    </TableCell>
                     <TableCell className="py-2" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
@@ -179,7 +158,7 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                   </TableRow>
                   {isExpanded && (
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <TableCell colSpan={8} className="py-3 px-6">
+                      <TableCell colSpan={7} className="py-3 px-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                           <div>
                             <p className="text-xs text-muted-foreground">Status</p>
@@ -192,10 +171,6 @@ const CampaignOverview = ({ campaigns, loading, domain, apiToken, onRefresh }: C
                           <div>
                             <p className="text-xs text-muted-foreground">Trabalhados</p>
                             <p className="font-medium">{n.worked.toLocaleString("pt-BR")}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Agressividade</p>
-                            <p className="font-medium">{n.aggressiveness}</p>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Agentes</p>
