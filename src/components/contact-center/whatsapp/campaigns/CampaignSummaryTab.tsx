@@ -27,7 +27,10 @@ import {
   Shuffle,
   Clock,
   Pause,
+  Play,
+  AlertTriangle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -277,10 +280,59 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     };
   }, [showRateLimit, meta, campaign.provider_category, tick]);
 
+  // ----------------- Detect stalled campaign + manual resume -----------------
+  const lastChunkAtMeta: string | null = (meta as any)?.last_chunk_at || null;
+  const timedOutFlag: boolean = !!(meta as any)?.timed_out;
+  const minutesSinceLastChunk = lastChunkAtMeta
+    ? (Date.now() - new Date(lastChunkAtMeta).getTime()) / 60000
+    : null;
+  const isStalled =
+    isSending &&
+    (timedOutFlag || (minutesSinceLastChunk != null && minutesSinceLastChunk >= 3));
+
+  const [resuming, setResuming] = useState(false);
+  async function handleResume() {
+    if (resuming) return;
+    setResuming(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-bulk-whatsapp", {
+        body: { campaign_id: campaign.id },
+      });
+      if (error) throw error;
+      toast.success("Disparo retomado em segundo plano");
+    } catch (e: any) {
+      toast.error(`Falha ao retomar: ${e?.message || "erro desconhecido"}`);
+    } finally {
+      setTimeout(() => setResuming(false), 4000);
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
+      {/* Banner de campanha travada com retomada manual */}
+      {isStalled && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Disparo pausado pelo limite de execução</p>
+              <p className="text-xs text-muted-foreground">
+                {timedOutFlag
+                  ? "O ciclo anterior atingiu o tempo máximo. O sistema retoma automaticamente em até 1 minuto."
+                  : `Sem progresso há ~${Math.round(minutesSinceLastChunk!)}min. O watchdog deve retomar em breve.`}
+                {" "}Você pode forçar a retomada manualmente.
+              </p>
+            </div>
+            <Button size="sm" onClick={handleResume} disabled={resuming} className="shrink-0">
+              <Play className="w-3.5 h-3.5 mr-1" />
+              {resuming ? "Retomando..." : "Retomar agora"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* W2.3 — Painel de rate-limit ao vivo */}
-      {showRateLimit && rateInfo && (
+      {showRateLimit && rateInfo && !isStalled && (
         <Card
           className={
             rateInfo.kind === "resting"

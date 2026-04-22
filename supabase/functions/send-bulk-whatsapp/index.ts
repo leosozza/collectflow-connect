@@ -511,6 +511,24 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       updated_at: new Date().toISOString(),
     }).eq("id", campaignId);
 
+    // Self-retrigger: fire-and-forget POST to ourselves so processing
+    // resumes immediately instead of waiting up to 1min for the cron
+    // watchdog. The released lock + try_lock_campaign protect against
+    // duplicate workers.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceKey) {
+      console.log(`[Campaign ${campaignId}] Timed out with ${remaining} pending — self-retriggering`);
+      fetch(`${supabaseUrl}/functions/v1/send-bulk-whatsapp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ campaign_id: campaignId }),
+      }).catch((e) => console.log(`[Campaign ${campaignId}] self-retrigger failed:`, e?.message));
+    }
+
     return new Response(
       JSON.stringify({ status: "partial", sent: chunkSent, failed: chunkFailed, totalSent, totalFailed, remaining, errors }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
