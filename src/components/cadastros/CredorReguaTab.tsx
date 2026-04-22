@@ -257,9 +257,19 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           <p className="text-sm font-medium text-foreground">Régua de Cobrança</p>
           <p className="text-xs text-muted-foreground">Configure disparos automáticos antes e depois do vencimento</p>
         </div>
-        <Button size="sm" type="button" onClick={openNew}>
-          <Plus className="w-3 h-3 mr-1" /> Nova Regra
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
+            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="wallet">Carteira</SelectItem>
+              <SelectItem value="agreement">Acordo</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" type="button" onClick={openNew}>
+            <Plus className="w-3 h-3 mr-1" /> Nova Regra
+          </Button>
+        </div>
       </div>
 
       {/* Visual timeline */}
