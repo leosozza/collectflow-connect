@@ -763,11 +763,47 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       const isError = result?.status && result.status >= 400;
       if (isError) {
         const msg = (result.detail || result.message || "").toLowerCase();
+        const isNotInInterval =
+          msg.includes("não está em intervalo") ||
+          msg.includes("nao esta em intervalo") ||
+          msg.includes("not in interval") ||
+          msg.includes("cannot be removed") ||
+          msg.includes("não pode ser removido");
         if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
           // Agent already left pause on server — clear local state gracefully
           setActivePauseName("");
           sessionStorage.removeItem("3cp_active_pause_name");
           toast.info("Pausa já encerrada no servidor");
+        } else if (isNotInInterval) {
+          // TPA masquerading as pause — fallback to qualify_call with first available qualification
+          console.warn("[Telefonia] unpause rejected (not in interval), falling back to qualify_call");
+          const callIdToQualify = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+          const qualId = campaignQualifications.length > 0 ? campaignQualifications[0].id : null;
+          if (callIdToQualify && qualId) {
+            try {
+              const qResult = await invoke("qualify_call", {
+                call_id: callIdToQualify,
+                qualification_id: Number(qualId),
+              });
+              console.log("[Telefonia] fallback qualify_call result:", JSON.stringify(qResult));
+              const qErr = qResult?.status && qResult.status >= 400;
+              if (qErr) {
+                toast.error(qResult.detail || "Não foi possível tabular a chamada");
+              } else {
+                toast.success("Chamada tabulada (TPA encerrada)");
+                setActivePauseName("");
+                setLastCallId(null);
+                sessionStorage.removeItem("3cp_last_call_id");
+                sessionStorage.removeItem("3cp_active_pause_name");
+              }
+            } catch (e: any) {
+              toast.error(e?.message || "Erro ao tabular chamada");
+            }
+          } else {
+            // No call/qualification available — open ACW panel for manual selection
+            setIsACW(true);
+            toast.info("Selecione um motivo para encerrar o TPA");
+          }
         } else {
           toast.error(result.detail || result.message || "Erro ao retomar");
         }
@@ -866,9 +902,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // No longer needed — widget was removed
 
   // Derived telephony state: distinguish TPA from manual pause
-  // Treat status 3 (paused) and 6 (work_break) ALWAYS as manual pause so the "Retomar" button is always available,
-  // even when the operator was paused externally and we don't have a local activePauseName yet.
-  const isManualPause = myAgent?.status === 3 || myAgent?.status === 6 || ["paused", "work_break"].includes(String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_"));
+  // TPA mascarada: a 3CPlus retorna status=3 mas é pós-atendimento (sem intervalo conhecido + chamada recente)
+  const _hasKnownPause = !!activePauseName || !!sessionStorage.getItem("3cp_active_pause_name");
+  const _hasFinishedCallPending = !!sessionStorage.getItem("3cp_last_call_id");
+  const isTPAMasqueradedAsPause = myAgent?.status === 3 && !_hasKnownPause && _hasFinishedCallPending;
+
+  // Pausa manual REAL: status 6 sempre, ou status 3 desde que NÃO seja TPA mascarada
+  const isManualPause = (myAgent?.status === 6 || ["work_break"].includes(String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_")))
+    || (myAgent?.status === 3 && !isTPAMasqueradedAsPause)
+    || (["paused"].includes(String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_")) && !isTPAMasqueradedAsPause);
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
   // No longer needed — pause controls were part of the widget
@@ -1003,10 +1045,10 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // ACW fallback: agent is paused (status 3) or TPA (status 4) with no manual pause name and a finished call exists
   // Skip if qualify was already done from the disposition panel during the call
   const qualifiedFromDisposition = !!sessionStorage.getItem("3cp_qualified_from_disposition");
-  const isACWFallback = (isPaused || isTPAStatus) && !activePauseName && !isACW && !qualifiedFromDisposition && (
+  const isACWFallback = (isPaused || isTPAStatus || isTPAMasqueradedAsPause) && !activePauseName && !isACW && !qualifiedFromDisposition && (
     !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id")
   );
-  const effectiveACW = (isACW || isACWFallback || isTPAStatus) && !qualifiedFromDisposition && !isManualPause;
+  const effectiveACW = (isACW || isACWFallback || isTPAStatus || isTPAMasqueradedAsPause) && !qualifiedFromDisposition && !isManualPause;
 
   // Auto-load qualifications when ACW fallback is detected
   useEffect(() => {
@@ -1014,6 +1056,16 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       loadCampaignQualifications(Number(myCampaignId));
     }
   }, [effectiveACW, campaignQualifications.length, myCampaignId, loadCampaignQualifications]);
+
+  // Auto-open ACW panel when TPA masqueraded as pause is detected for >3s
+  useEffect(() => {
+    if (!isTPAMasqueradedAsPause || isACW) return;
+    const t = setTimeout(() => {
+      console.log("[Telefonia] Auto-opening ACW panel — TPA masquerading as pause detected");
+      setIsACW(true);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [isTPAMasqueradedAsPause, isACW]);
 
   if (isOperatorView && myAgent) {
     console.log("[3CPlus] myAgent status:", myAgent.status, "isOnCall:", isOnCall, "isPaused:", isPaused, "isTPAStatus:", isTPAStatus, "isACW:", isACW, "effectiveACW:", effectiveACW, "activePauseName:", activePauseName);
