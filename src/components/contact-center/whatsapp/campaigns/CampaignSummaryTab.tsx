@@ -443,7 +443,17 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Status</p>
-            <Badge variant="outline">{statusLabels[campaign.status] || campaign.status}</Badge>
+            <Badge variant="outline">{statusLabels[liveStatus] || statusLabels[campaign.status] || campaign.status}</Badge>
+            {isSending && (meta as any)?.batch_resting && (
+              <p className="text-[11px] text-orange-700 mt-1">
+                Aguardando descanso anti-ban (~2 min)
+              </p>
+            )}
+            {isSending && !((meta as any)?.batch_resting) && timedOutFlag && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Reiniciando ciclo automaticamente (até 1 min)
+              </p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Origem</p>

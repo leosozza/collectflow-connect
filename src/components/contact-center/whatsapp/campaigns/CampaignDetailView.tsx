@@ -80,6 +80,23 @@ export default function CampaignDetailView({ campaignId, onBack, onlyOwn, userId
           <p className="text-xs text-muted-foreground">
             {campaign.creator_name} · {new Date(campaign.created_at).toLocaleDateString("pt-BR")}
           </p>
+          {campaign.status === "sending" && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {(() => {
+                const meta: any = campaign.progress_metadata || {};
+                const lastChunk = meta.last_chunk_at ? new Date(meta.last_chunk_at) : null;
+                const lockedBy = campaign.processing_locked_by;
+                const lastChunkTxt = lastChunk
+                  ? `há ${Math.max(0, Math.round((Date.now() - lastChunk.getTime()) / 1000))}s`
+                  : "—";
+                let nextAction = "aguardando worker";
+                if (meta.batch_resting) nextAction = "descanso anti-ban";
+                else if (meta.timed_out) nextAction = "reiniciando ciclo";
+                else if (lockedBy) nextAction = "processando";
+                return `Última atividade: ${lastChunkTxt} · Lock: ${lockedBy ? "ocupado" : "livre"} · ${nextAction}`;
+              })()}
+            </p>
+          )}
         </div>
       </div>
 
