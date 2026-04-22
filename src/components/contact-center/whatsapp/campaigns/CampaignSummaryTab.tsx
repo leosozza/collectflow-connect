@@ -131,10 +131,13 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       ? ((campaign.delivered_count / campaign.sent_count) * 100).toFixed(1)
       : "—";
 
-  const pieData = statusCounts.map((s) => ({
-    name: recipientStatusLabels[s.status] || s.status,
-    value: s.count,
-  }));
+  const pieData = statusCounts
+    .filter((s) => s.status !== "read")
+    .map((s) => ({
+      name: recipientStatusLabels[s.status] || s.status,
+      value: s.count,
+    }));
+
 
   const barData = instanceMetrics.map((m) => ({
     name: m.instance_name,
