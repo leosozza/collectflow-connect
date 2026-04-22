@@ -68,7 +68,7 @@ const FORMATTING_TOOLS = [
 ];
 
 const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
-  const { tenant } = useTenant();
+  const { tenant, tenantUser } = useTenant();
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<any>({});
@@ -78,6 +78,13 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  // Captura o prazo original ao abrir, para detectar reduções no save
+  const [prazoOriginal, setPrazoOriginal] = useState<number | null>(null);
+  const [prazoConfirm, setPrazoConfirm] = useState<{ oldPrazo: number; newPrazo: number; closeAfter: boolean } | null>(null);
+  const [applyingExpire, setApplyingExpire] = useState(false);
+
+  const canApplyExpireNow = !!tenantUser && ["super_admin", "admin", "gerente", "supervisor"].includes(tenantUser.role);
 
   useEffect(() => {
     if (open) {
