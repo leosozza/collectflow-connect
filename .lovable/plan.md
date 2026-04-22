@@ -1,61 +1,61 @@
 
 
-## Plano: reprocessar acordos imediatamente ao reduzir `prazo_dias_acordo`
+## Plano: redesenhar o gráfico "Status dos Destinatários" no padrão rounded donut
 
-### Comportamento
+### Visual alvo (referência da imagem)
 
-Ao salvar o cadastro de um credor com **redução** no campo "Prazo para pagamento do acordo" (ex.: 30 → 10), exibir `AlertDialog`:
+Donut chart com fatias arredondadas, espaçadas, labels numéricos brancos sobre cada fatia, dentro de um Card com título e badge de variação. Mantém o `chart.tsx` atual (sem duplicar para `pie-chart.tsx`).
 
-> Você reduziu o prazo de **30** para **10** dias. Aplicar essa nova regra agora aos acordos vencidos deste credor? Acordos com mais de 10 dias de atraso serão marcados como **Quebra de Acordo** imediatamente.
->
-> [Aplicar somente na próxima rotina] [Aplicar agora]
+### Cores fixas por status (semânticas, não por ordem)
 
-"Aplicar agora" invoca `auto-expire-agreements` restrita ao `credor_id` e mostra toast: *"X acordos expirados, Y clientes movidos para Quebra de Acordo"*.
+| Status     | Cor          | Token                    |
+|------------|--------------|--------------------------|
+| Enviado    | Azul         | `hsl(var(--primary))` (já é laranja RIVO) → usar `hsl(217 91% 60%)` para azul puro |
+| Entregue   | Verde        | `hsl(142 71% 45%)`       |
+| Falhou     | Vermelho     | `hsl(var(--destructive))`|
+| Pendente   | Cinza        | `hsl(var(--muted-foreground))` |
+| Processando| Cinza claro  | `hsl(var(--muted))`      |
+| Lido       | Verde escuro | `hsl(142 71% 35%)`       |
 
-### Mudanças
+Atualizar o mapa `STATUS_PIE_COLORS` em `CampaignSummaryTab.tsx` com essas cores fixas conforme regra do usuário (Falhou=Vermelho, Enviado=Azul, Entregue=Verde, Pendente=Cinza).
 
-**1. `supabase/functions/auto-expire-agreements/index.ts`**
-- Aceitar payload opcional `{ credor_id?, tenant_id? }`.
-- Detectar modo de chamada:
-  - **Cron / system call** (Service Role Key ou sem payload): comportamento atual intacto, processa todos os tenants/credores.
-  - **On-demand** (JWT de usuário + payload): valida via `tenant_users` que o usuário é `admin` ou `gestor` do `tenant_id` do credor; restringe `SELECT` de acordos `overdue` a `credor_id = payload.credor_id`.
-- Retornar JSON: `{ expired_count, clients_updated, errors: [] }`.
-- Em modo on-demand, gravar `audit_logs` com `action = 'auto_expire_agreements_manual'`, `metadata = { credor_id, triggered_by, expired_count }`.
-- CORS + validação Zod no payload.
+### Mudanças de estrutura no `<PieChart>`
 
-**2. UI de cadastro de credores**
-- Após inspeção localizar o componente real (provável `src/components/cadastros/CredorForm.tsx` ou similar dentro de `src/pages/Cadastros`).
-- Capturar `prazoOriginal` no `defaultValues`.
-- No `onSubmit`: salvar credor normalmente. Se `novoPrazo < prazoOriginal` **e** usuário tem role `admin`/`gestor`, abrir `AlertDialog` antes de fechar o modal.
-- Confirmação → `supabase.functions.invoke('auto-expire-agreements', { body: { credor_id, tenant_id } })` → toast com resultado; erro mostra botão "Tentar novamente" sem reverter o salvamento.
-- Aumento de prazo (10 → 30) ou role inferior: salva e fecha sem diálogo.
+No componente `CampaignSummaryTab.tsx`, dentro do Card "Status dos destinatários":
 
-**3. (Opcional) `src/services/cadastrosService.ts`**
-- Wrapper `triggerExpireAgreementsForCredor(credorId, tenantId)` para encapsular o invoke + tratamento de erro.
+1. **Donut arredondado**: trocar o `<Pie>` atual por:
+   - `innerRadius={60}` (donut, não pie sólido)
+   - `outerRadius={100`
+   - `cornerRadius={8}` (cantos arredondados)
+   - `paddingAngle={4}` (espaço entre fatias)
+   - Remover `label` externo do Pie (linhas conectoras saem).
 
-### O que NÃO muda
+2. **LabelList interno**: adicionar `<LabelList dataKey="value" position="inside" fill="#fff" fontSize={12} fontWeight={600} formatter={(v) => v.toString()} />` para mostrar o número dentro da fatia em branco.
 
-- Cron diário 03:00 BRT — assinatura sem payload continua idêntica.
-- Lógica de cálculo `diffDays >= prazo_dias_acordo`, notificações ao operador, transição do cliente para "Quebra de Acordo" via `auto-status-sync` — reaproveitadas.
-- Outros credores não são tocados na execução on-demand.
-- RLS, dashboard, carteira, motor de envio — intactos.
+3. **ChartContainer**: envolver o `<PieChart>` com `<ChartContainer config={chartConfig}>` (já importado de `@/components/ui/chart`) com `className="mx-auto aspect-square max-h-[280px] [&_.recharts-text]:fill-white"`.
+
+4. **Tooltip**: usar `<ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />` para tooltip estilizado consistente com o design system.
+
+5. **Legenda**: manter a legenda atual abaixo (com bullets coloridas e contagem) — já está boa e dá contexto que labels internos não dão.
+
+6. **Card header**: manter título "Status dos destinatários" e adicionar `CardDescription` com período da campanha (ex.: data de criação → última atividade) se disponível no objeto `campaign`.
 
 ### Arquivos alterados
 
-- `supabase/functions/auto-expire-agreements/index.ts`
-- Componente do formulário de credor em `src/components/cadastros/` (nome confirmado na implementação)
-- (Opcional) `src/services/cadastrosService.ts`
+- `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` — ajustar `STATUS_PIE_COLORS`, refatorar `<PieChart>` para donut arredondado com `LabelList` interno e envolver em `ChartContainer`.
+
+### Não muda
+
+- `src/components/ui/chart.tsx` permanece como está (sem criar `pie-chart.tsx` duplicado).
+- Lógica de agregação de status (`recipientStats`), legenda inferior e demais cards do summary tab.
+- Tokens globais do design system.
 
 ### Validação
 
-1. Editar credor 30 → 10 como admin → diálogo aparece; "Aplicar agora" → toast com contagem; Carteira/Dashboard refletem em segundos.
-2. "Aplicar somente na próxima rotina" → modal fecha, nada muda até 03:00 BRT.
-3. Editar 10 → 30 → sem diálogo.
-4. Operador comum edita prazo → sem diálogo (só salva).
-5. Cron diário das 03:00 roda exatamente como hoje.
-
-### Fora de escopo
-
-- Botão global "reaplicar para todos os credores".
-- Reabrir acordos já cancelados quando o prazo for aumentado.
+1. Abrir uma campanha em `/contact-center/whatsapp` → aba Resumo.
+2. Confirmar donut arredondado com gap entre fatias e cantos suaves.
+3. Confirmar cores: Enviado azul, Entregue verde, Falhou vermelho, Pendente cinza.
+4. Confirmar números em branco dentro de cada fatia.
+5. Confirmar tooltip ao passar o mouse mostrando label + valor.
+6. Confirmar legenda inferior continua exibindo contagens.
 
