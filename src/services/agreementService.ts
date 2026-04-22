@@ -577,6 +577,89 @@ export const updateInstallmentValue = async (
   }
 };
 
+/**
+ * Sync the scheduled value of an installment to match the actual paid amount
+ * from a confirmed/edited manual_payment.
+ *
+ * Behavior:
+ * - Fetches the agreement and uses buildInstallmentSchedule to find the target installment
+ *   by installmentKey (or fallback by installment_number when key is missing).
+ * - If |paidAmount - scheduledValue| > 0.01, writes paidAmount into
+ *   agreements.custom_installment_values[installmentKey].
+ * - When the target is the single "entrada" (no other entrada_N keys), also updates
+ *   agreements.entrada_value so it reflects reality.
+ * - Returns { synced, oldValue, newValue } to allow the caller to log the change.
+ */
+export const syncInstallmentValueFromPayment = async (
+  agreementId: string,
+  installmentKey: string | null | undefined,
+  installmentNumber: number,
+  paidAmount: number
+): Promise<{ synced: boolean; oldValue: number; newValue: number; resolvedKey: string | null }> => {
+  try {
+    const { buildInstallmentSchedule } = await import("@/lib/agreementInstallmentClassifier");
+
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("*")
+      .eq("id", agreementId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    if (!agreement) return { synced: false, oldValue: 0, newValue: paidAmount, resolvedKey: null };
+
+    const schedule = buildInstallmentSchedule(agreement as any);
+    // Resolve target installment by key, fallback to installment_number
+    const target =
+      (installmentKey && schedule.find(s => s.key === installmentKey)) ||
+      schedule.find(s => s.number === installmentNumber);
+
+    if (!target) {
+      logger.warn(MODULE, "syncInstallmentValueFromPayment: installment not found", {
+        agreementId, installmentKey, installmentNumber,
+      });
+      return { synced: false, oldValue: 0, newValue: paidAmount, resolvedKey: null };
+    }
+
+    const oldValue = Number(target.value || 0);
+    const diff = Math.abs(paidAmount - oldValue);
+    if (diff <= 0.01) {
+      return { synced: false, oldValue, newValue: paidAmount, resolvedKey: target.key };
+    }
+
+    const currentCustom = ((agreement as any).custom_installment_values || {}) as Record<string, any>;
+    const updatedCustom = { ...currentCustom, [target.key]: paidAmount };
+
+    const updatePayload: any = { custom_installment_values: updatedCustom };
+
+    // For a single-entrada agreement, also update entrada_value
+    if (target.isEntrada) {
+      const otherEntradaKeys = Object.keys(currentCustom).filter(k => {
+        if (k === target.key) return false;
+        if (k === "entrada") return true;
+        return /^entrada_\d+$/.test(k);
+      });
+      if (otherEntradaKeys.length === 0) {
+        updatePayload.entrada_value = paidAmount;
+      }
+    }
+
+    const { error } = await supabase
+      .from("agreements")
+      .update(updatePayload)
+      .eq("id", agreementId);
+    if (error) throw error;
+
+    logger.info(MODULE, "syncInstallmentValueFromPayment: synced", {
+      agreementId, key: target.key, oldValue, newValue: paidAmount,
+    });
+
+    return { synced: true, oldValue, newValue: paidAmount, resolvedKey: target.key };
+  } catch (error) {
+    handleServiceError(error, MODULE);
+    return { synced: false, oldValue: 0, newValue: paidAmount, resolvedKey: null };
+  }
+};
+
 export const reopenAgreement = async (
   id: string,
   userId: string
