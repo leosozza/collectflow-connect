@@ -212,23 +212,7 @@ const CampaignsPanel = () => {
   };
 
   // (handleSaveAggressiveness removed — feature deprecated)
-
-  const handleSaveWorkBreakGroup = async (campaignId: string) => {
-    setSavingWBG(campaignId);
-    try {
-      const wbgId = campaignWBG[campaignId];
-      await invoke("update_campaign", {
-        campaign_id: campaignId,
-        work_break_group_id: wbgId ? Number(wbgId) : null,
-      });
-      toast.success("Grupo de intervalos atualizado!");
-      loadCampaigns();
-    } catch {
-      toast.error("Erro ao atualizar grupo de intervalos");
-    } finally {
-      setSavingWBG(null);
-    }
-  };
+  // (handleSaveWorkBreakGroup removed — group is set only during campaign creation)
 
   const handleDeleteList = async (campaignId: string, listId: string) => {
     try {
