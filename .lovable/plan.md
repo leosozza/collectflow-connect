@@ -1,89 +1,58 @@
 
 
-## Plano: ajustes no módulo Telefonia (3CPlus)
+## Plano: corrigir Telefonia (3CPlus) — 2 problemas
 
-Três correções pontuais no painel de Telefonia, sem mexer no fluxo de atendimento que acabou de ser publicado.
+### Problema 1 — Grupo de Intervalos aparece ao abrir a campanha
 
----
+O usuário foi explícito: **"Grupo de Intervalos" só deve aparecer no formulário de criação**. Hoje o painel expandido (`CampaignsPanel.tsx`, linhas 469-491) mostra de novo o seletor + botão "Salvar" — daí a sensação de que "não foi salvo".
 
-### 1. Remover "Agressividade" da UI
+Causa adicional do "parece vazio": o GET `/campaigns/{id}` retorna o grupo aninhado em `dialer_settings.work_break_group_id` (ou objeto `work_break_group.id`), mas o leitor em `loadCampaigns` só preenche o `campaignWBG[cid]` se algum desses campos existir — e como o seletor é exibido vazio quando a leitura falha, o operador acha que não persistiu.
 
-A 3CPlus expõe o campo `aggressiveness` na API mas a operação real do discador **não respeita** essa configuração para o tenant atual (testes mostram que mover o slider não muda comportamento). Para evitar confusão do operador/admin, remover a UI inteira e o código de suporte.
+**Correção:**
+1. **Remover totalmente o bloco "Grupo de Intervalos"** do detalhe expandido (`CampaignsPanel.tsx` linhas 469-491). Junto, remover:
+   - `handleSaveWorkBreakGroup` (linhas 216-231)
+   - states `campaignWBG` / `savingWBG` (linhas 52-53)
+   - mapeamento `wbgMap` em `loadCampaigns` (linhas 124-133)
+   - import `Coffee` se não usado em outro lugar
+2. Manter o seletor **apenas** no diálogo "Nova Campanha" (já existe — `selectedWorkBreakGroup`).
+3. Manter no `threecplus-proxy` o envio aninhado `dialer_settings.work_break_group_id` no `create_campaign` (já está correto desde a última rodada).
 
-**Arquivos:**
+### Problema 2 — Métricas continuam zeradas mesmo clicando "Atualizar Detalhes"
 
-- `src/components/contact-center/threecplus/CampaignOverview.tsx`
-  - Remover coluna "Agressividade" do `<TableHeader>` e do `<TableBody>` (linhas ~109 e ~148-161).
-  - Remover handler `handleAggressiveness` (linhas 59-79) e import do `Slider`.
-  - Remover linha "Agressividade" do bloco expandido (linhas 196-199).
-  - Ajustar `colSpan={8}` → `colSpan={7}`.
+Logs do edge function provam a causa raiz:
+```
+campaign_lists_total_metrics → 422
+campaign_lists_metrics       → 422
+```
+
+Esses dois endpoints (`/campaigns/{id}/lists/total_metrics` e `/lists/metrics`) **só funcionam quando a campanha tem mailing carregado**. A campanha 257548 ("13.04 Recentes jun-mar") foi criada agora e ainda não tem lista alimentada → 422 Unprocessable → `campaignMetrics[cid]` fica `{}` → todos os cards mostram 0.
+
+A 3CPlus expõe um endpoint mais geral que **funciona mesmo sem mailing**: `GET /campaigns/{id}/statistics?startDate=...&endDate=...` (já existe como `campaign_statistics` no proxy, linhas 267-274, mas **não está sendo chamado** no `loadCampaignDetails`). Ele retorna `total_dialed`, `answered`, `abandoned`, `asr`, `average_talk_time`, `in_queue`, `completed`, `no_answer` — exatamente os campos que o card "Visão Geral" tenta ler.
+
+**Correção:**
+1. Em `loadCampaignDetails` (`CampaignsPanel.tsx` linhas 144-168): adicionar chamada paralela a `campaign_statistics` com `startDate=hoje 00:00:00` e `endDate=hoje 23:59:59`. Usar `extractObject` no resultado para popular `campaignMetrics[cid]`.
+2. Manter `campaign_lists_total_metrics` como fallback (quando houver mailing, ele dá números mais granulares por lista). Se `campaign_statistics` falhar, cair no `total_metrics`. Se ambos falharem, mostrar zero (comportamento atual).
+3. No `threecplus-proxy` (linha 267): silenciar 422 — quando `lists/total_metrics` ou `lists/metrics` retornarem 422, devolver `{ data: {}, success: false, no_mailing: true }` em vez de propagar erro, para evitar ruído no console.
+4. Adicionar logs no proxy: imprimir os primeiros 300 chars da resposta de `campaign_statistics` para validar o shape real do tenant.
+
+### Arquivos alterados
 
 - `src/components/contact-center/threecplus/CampaignsPanel.tsx`
-  - Remover bloco "Aggressiveness Slider" (linhas 453-470) do detalhe expandido.
-  - Remover `handleSaveAggressiveness` (linhas 211-221), states `aggressiveness`/`savingAggr` (linhas 50-51), e mapeamento `aggrMap` em `loadCampaigns` (linhas 126-133).
-  - Remover import `Gauge` e `Slider` se não usados em outro lugar.
-
-- `src/lib/threecplusUtils.ts`
-  - Manter o cálculo no `normalizeCampaignStatus` (não quebra nada), mas pode ser limpo depois — não é bloqueante.
-
----
-
-### 2. Atualização das campanhas (Dashboard + detalhe da campanha)
-
-Dois pontos distintos:
-
-**(a) Dashboard (`CampaignOverview` em `TelefoniaDashboard`)** — auto-refresh existe (30s para admin, 3s para operador), mas as métricas exibidas vêm do enriquecimento por `campaign_statistics` que está mascarado com `try/catch` silencioso. Quando esse endpoint falha, o card mostra os dados antigos sem indicar erro. Correção:
-  - Em `TelefoniaDashboard.tsx` linhas 446-461: logar erro do `campaign_statistics` no console (manter UI silenciosa).
-  - Adicionar timestamp visível "Atualizado há Xs" no header do `CampaignOverview` (já existe `lastUpdate` no parent — passar via prop e exibir).
-  - Reduzir intervalo padrão admin de 30s → **15s** (dashboard de operação ativa precisa ser mais reativo).
-
-**(b) Detalhe expandido da campanha (`CampaignsPanel`)** — aqui não há **nenhum** polling. Os cards "Total Discado / Atendidas / Abandonadas / ASR / Tempo Médio / Na Fila / Completados / Sem Atender" só atualizam ao clicar em "Atualizar Detalhes". Correção:
-  - Em `CampaignsPanel.tsx`: adicionar `useEffect` que dispara `loadCampaignDetails(expandedCampaign)` a cada **15s** enquanto houver campanha expandida.
-  - Mostrar timestamp da última atualização ao lado do botão "Atualizar Detalhes".
-
----
-
-### 3. Grupo de Intervalos não persiste na criação da campanha
-
-**Causa:** o payload enviado em `create_campaign` (proxy linha 152) usa `work_break_group_id`, mas a API REST da 3CPlus para `POST /campaigns` espera o campo dentro de `dialer_settings` (igual a `aggressiveness`). O endpoint aceita o campo top-level sem erro mas **não persiste** — por isso ao reabrir a campanha, o grupo aparece vazio.
-
-**Verificação adicional:** o leitor `loadCampaigns` (CampaignsPanel linhas 128-132) tenta ler `c.work_break_group_id` direto do `list_campaigns`, mas a 3CPlus normalmente retorna esse campo aninhado em `c.dialer_settings.work_break_group_id` ou `c.work_break_group?.id`. Por isso, mesmo se a criação tivesse persistido, o select continuaria vazio.
-
-**Correção (3 pontos):**
-
-- `supabase/functions/threecplus-proxy/index.ts` linha 152: enviar `work_break_group_id` aninhado:
-  ```ts
-  if (body.work_break_group_id) {
-    campaignPayload.dialer_settings = {
-      ...(campaignPayload.dialer_settings || {}),
-      work_break_group_id: body.work_break_group_id,
-    };
-    // manter top-level também por segurança (alguns tenants aceitam)
-    campaignPayload.work_break_group_id = body.work_break_group_id;
-  }
-  ```
-
-- `src/components/contact-center/threecplus/CampaignsPanel.tsx` linha 131: ler de múltiplas fontes:
-  ```ts
-  const wbgId = c.work_break_group_id 
-    ?? c.work_break_group?.id 
-    ?? c.dialer_settings?.work_break_group_id;
-  if (wbgId) wbgMap[String(c.id)] = String(wbgId);
-  ```
-
-- Mesma lógica em `update_campaign` (proxy linhas 157-168): se `work_break_group_id` vier no body, espelhar para `dialer_settings.work_break_group_id`.
-
----
+  - Remover bloco "Grupo de Intervalos" do detalhe expandido + handlers/states associados.
+  - Adicionar `campaign_statistics` à lista de Promises em `loadCampaignDetails`.
+  - Priorizar `campaign_statistics` ao montar `campaignMetrics[cid]`; fallback para `campaign_lists_total_metrics`.
+- `supabase/functions/threecplus-proxy/index.ts`
+  - Tratar 422 em `campaign_lists_total_metrics` / `campaign_lists_metrics` como "sem mailing" (resposta silenciosa).
+  - Adicionar log do shape de `campaign_statistics` para diagnóstico.
 
 ### Validação pós-deploy
 
-1. Painel /telefonia (admin): coluna "Agressividade" sumiu; campanhas atualizam progresso a cada 15s sem clicar.
-2. Expandir campanha: métricas "Total Discado / Atendidas / etc." atualizam sozinhas a cada 15s.
-3. Criar nova campanha selecionando "Grupo de Intervalos" → reabrir a campanha → o grupo aparece pré-selecionado no dropdown.
+1. Abrir campanha existente → **não** aparece mais o seletor "Grupo de Intervalos" no detalhe expandido. Só "Webhook Bidirecional" + abas.
+2. Criar nova campanha selecionando um Grupo → criada com sucesso (já estava funcionando no proxy).
+3. Métricas "Total Discado / Atendidas / ASR / Tempo Médio / Na Fila / etc." passam a refletir os números reais da 3CPlus, atualizando a cada 15s automaticamente — mesmo em campanhas sem mailing carregado (vai mostrar 0 legítimo, não 0 por erro).
 
 ### Fora de escopo
 
-- Mexer no fluxo de chamada/pausa do operador (já publicado e estável).
-- Adicionar polling no dashboard de operador (já está em 3s).
-- Refatorar `CampaignOverview` para componente menor.
+- Mexer no fluxo de chamada/pausa do operador.
+- Adicionar histórico/gráficos das métricas (só estamos consertando o snapshot atual).
 
