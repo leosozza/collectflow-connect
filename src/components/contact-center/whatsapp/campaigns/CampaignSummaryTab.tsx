@@ -57,7 +57,7 @@ const statusLabels: Record<string, string> = {
   draft: "Rascunho",
   sending: "Enviando",
   completed: "Concluída",
-  completed_with_errors: "Concluída c/ erros",
+  completed_with_errors: "Concluída",
   failed: "Falhou",
   paused: "Pausada",
   cancelled: "Cancelada",

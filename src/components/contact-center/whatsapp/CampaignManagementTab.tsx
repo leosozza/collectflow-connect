@@ -98,7 +98,7 @@ const statusLabels: Record<string, string> = {
   scheduled: "Agendada",
   sending: "Enviando",
   completed: "Concluída",
-  completed_with_errors: "Concluída c/ erros",
+  completed_with_errors: "Concluída",
   failed: "Falhou",
   paused: "Pausada",
   cancelled: "Cancelada",
@@ -335,7 +335,7 @@ export default function CampaignManagementTab() {
             <SelectItem value="draft">Rascunho</SelectItem>
             <SelectItem value="sending">Enviando</SelectItem>
             <SelectItem value="completed">Concluída</SelectItem>
-            <SelectItem value="completed_with_errors">Concluída c/ erros</SelectItem>
+            <SelectItem value="completed_with_errors">Concluída</SelectItem>
             <SelectItem value="failed">Falhou</SelectItem>
             <SelectItem value="cancelled">Cancelada</SelectItem>
           </SelectContent>
