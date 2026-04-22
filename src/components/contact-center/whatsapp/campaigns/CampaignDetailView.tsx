@@ -85,7 +85,7 @@ export default function CampaignDetailView({ campaignId, onBack, onlyOwn, userId
               {(() => {
                 const meta: any = campaign.progress_metadata || {};
                 const lastChunk = meta.last_chunk_at ? new Date(meta.last_chunk_at) : null;
-                const lockedBy = campaign.processing_locked_by;
+                const lockedBy = (campaign as any).processing_locked_by;
                 const lastChunkTxt = lastChunk
                   ? `há ${Math.max(0, Math.round((Date.now() - lastChunk.getTime()) / 1000))}s`
                   : "—";
